@@ -1,0 +1,15 @@
+{
+  "name": "shop-manager",
+  "version": "1.0.0",
+  "private": true,
+  "description": "تطبيق إدارة المحل - دمج دفتر الديون وإدارة المواد والأسعار في تطبيق أندرويد واحد (Cordova/Java)",
+  "cordova": {
+    "platforms": [
+      "android"
+    ]
+  },
+  "devDependencies": {
+    "cordova": "^12.0.0",
+    "cordova-android": "^13.0.0"
+  }
+}
