@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap: https://ssl.gstatic.com; style-src * 'self' 'unsafe-inline'; media-src *; img-src * 'self' data: content:;">
+    <title>🏪 إدارة المحل</title>
+    <link rel="icon" href="icons/icon-96x96.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="css/shell.css" />
+</head>
+<body>
+    <div id="appShell">
+        <!-- TOP BAR -->
+        <header class="shell-header">
+            <img src="icons/icon-96x96.png" class="shell-logo" alt="logo" />
+            <h1>إدارة المحل</h1>
+        </header>
+
+        <!-- CONTENT: each sub-app lives in its own sandboxed iframe so nothing collides -->
+        <main class="shell-content">
+            <iframe id="frame-debt" class="app-frame active" src="debt/index.html" title="دفتر الديون"></iframe>
+            <iframe id="frame-materials" class="app-frame" data-src="materials/index.html" title="المواد والأسعار"></iframe>
+        </main>
+
+        <!-- BOTTOM NAV -->
+        <nav class="shell-tabbar">
+            <button class="tab-btn active" data-target="frame-debt">
+                <i class="fas fa-hand-holding-dollar"></i>
+                <span>الديون</span>
+            </button>
+            <button class="tab-btn" data-target="frame-materials">
+                <i class="fas fa-boxes-stacked"></i>
+                <span>المواد والأسعار</span>
+            </button>
+        </nav>
+    </div>
+
+    <script src="cordova.js"></script>
+    <script src="js/shell.js"></script>
+</body>
+</html>
