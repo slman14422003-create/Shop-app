@@ -8,23 +8,27 @@ import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.PersistentCacheSettings
 
 /**
- * The two original web apps each talked to a *different* Firebase project
- * (debt-app -> "slx23m", material-manager -> "abo-slman"). Rather than forcing
- * a risky data migration into one project, both are kept alive here as two
- * named FirebaseApp instances inside this single native app. If you'd rather
- * unify everything into one Firestore database later, that's a follow-up
- * migration, not a rewrite of this app.
+ * UPDATED: both features (الديون / debts and المواد / materials) now share a
+ * single Firebase project - "shop-app-6d35e" - instead of the two separate
+ * legacy projects ("slx23m" for debts, "abo-slman" for materials) that the
+ * app previously juggled as two named FirebaseApp instances. There is no
+ * collision risk between the two features: they already live in disjoint
+ * Firestore collections (see [com.shopmanager.app.data.debts.DebtsRepository]
+ * and [com.shopmanager.app.data.materials.MaterialsRepository]), so pointing
+ * both at one project is a pure simplification - one app, one dashboard, one
+ * set of security rules (see /firebase-rules/firestore.rules), one quota.
  *
- * BUG FIXED (debt-app): the old web config called BOTH
- * `initializeFirestore(..., persistentLocalCache(...))` AND
- * `enableIndexedDbPersistence(...)` on the same instance. Those two calls
- * conflict - the second one throws, is swallowed by a `.catch`, and offline
- * persistence silently misbehaves. Here we configure the cache exactly once.
+ * `debtsDb` and `materialsDb` are both kept below (now returning the *same*
+ * Firestore instance) purely so nothing else in the codebase has to change.
+ *
+ * The values here are the Web SDK config values translated into the native
+ * FirebaseOptions builder - this app never used google-services.json /
+ * the Google Services Gradle plugin, so this manual init is intentional,
+ * not a workaround.
  */
 object FirebaseModule {
 
-    private const val DEBTS_APP_NAME = "debtsApp"
-    private const val MATERIALS_APP_NAME = "materialsApp"
+    private const val APP_NAME = "shopApp"
 
     private var initialized = false
 
@@ -32,27 +36,20 @@ object FirebaseModule {
         if (initialized) return
         initialized = true
 
-        val debtsOptions = FirebaseOptions.Builder()
-            .setApiKey("AIzaSyBSQD0eam2rAczlUqnV4zIUjYey1Yyic_I")
-            .setApplicationId("1:903745007698:web:2c1aa9ab9aed95ad2eaf8b")
-            .setProjectId("slx23m")
-            .setStorageBucket("slx23m.firebasestorage.app")
+        val options = FirebaseOptions.Builder()
+            .setApiKey("AIzaSyAa0vKXHkoiA-odIKucgKXDLMqsbwhdMXw")
+            .setApplicationId("1:583934573941:web:e5ba92706635f06945e73c")
+            .setProjectId("shop-app-6d35e")
+            .setStorageBucket("shop-app-6d35e.firebasestorage.app")
+            .setGcmSenderId("583934573941") // messagingSenderId
             .build()
 
-        val materialsOptions = FirebaseOptions.Builder()
-            .setApiKey("AIzaSyDQbf5LJRCquRsheFYqvEQBQbI_EoXNOFw")
-            .setApplicationId("1:874996942668:web:f31da5ca778fb92845f1e9")
-            .setProjectId("abo-slman")
-            .setStorageBucket("abo-slman.firebasestorage.app")
-            .build()
+        val app = FirebaseApp.initializeApp(context, options, APP_NAME)
 
-        val debtsApp = FirebaseApp.initializeApp(context, debtsOptions, DEBTS_APP_NAME)
-        val materialsApp = FirebaseApp.initializeApp(context, materialsOptions, MATERIALS_APP_NAME)
-
-        // Configure persistent cache exactly once per app (this is the fix for the
-        // "enableIndexedDbPersistence called twice" bug from the web version).
-        configureFirestore(FirebaseFirestore.getInstance(debtsApp))
-        configureFirestore(FirebaseFirestore.getInstance(materialsApp))
+        // Configure the persistent cache exactly once for this app instance
+        // (still guarding against the old "enableIndexedDbPersistence called
+        // twice" bug class from the original web version).
+        configureFirestore(FirebaseFirestore.getInstance(app))
     }
 
     private fun configureFirestore(db: FirebaseFirestore) {
@@ -61,9 +58,9 @@ object FirebaseModule {
             .build()
     }
 
-    val debtsDb: FirebaseFirestore
-        get() = FirebaseFirestore.getInstance(FirebaseApp.getInstance(DEBTS_APP_NAME))
+    private val sharedDb: FirebaseFirestore
+        get() = FirebaseFirestore.getInstance(FirebaseApp.getInstance(APP_NAME))
 
-    val materialsDb: FirebaseFirestore
-        get() = FirebaseFirestore.getInstance(FirebaseApp.getInstance(MATERIALS_APP_NAME))
+    val debtsDb: FirebaseFirestore get() = sharedDb
+    val materialsDb: FirebaseFirestore get() = sharedDb
 }
