@@ -64,12 +64,12 @@ object NotificationHelper {
         NotificationManagerCompat.from(context).cancel(NOTIF_ID_LOW_STOCK)
     }
 
-    fun showNewDebtNotification(context: Context, personName: String, amount: String) {
+    fun showNewDebtNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س") {
         if (!hasPermission(context)) return
         val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("💰 عميل جديد بالديون")
-            .setContentText("$personName — $amount ل.س")
+            .setContentText("$personName — $amount $currencySymbol")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .build()
