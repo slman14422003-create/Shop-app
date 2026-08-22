@@ -37,6 +37,7 @@ import com.shopmanager.app.ui.lock.LockScreen
 import com.shopmanager.app.ui.materials.MaterialCatalogScreen
 import com.shopmanager.app.ui.materials.MaterialsScreen
 import com.shopmanager.app.ui.materials.MaterialsViewModel
+import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SetSystemBarsColor
@@ -60,6 +61,11 @@ class MainActivity : ComponentActivity() {
             val settings = remember { SettingsRepository(applicationContext) }
             var themeMode by remember { mutableStateOf(settings.themeMode) }
             var unlocked by remember { mutableStateOf(!settings.hasPin) }
+
+            // Load the persisted currency symbol into the app-wide holder once,
+            // so every screen (dashboard, debts, materials, notifications)
+            // shows the right currency from the very first frame.
+            LaunchedEffect(Unit) { AppSettingsState.setCurrency(settings.currencySymbol) }
 
             // Android 13+ requires explicit runtime permission to post
             // notifications (needed for the low-stock shopping list and
@@ -176,7 +182,9 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
-                    onThemeChanged = onThemeChanged
+                    onThemeChanged = onThemeChanged,
+                    debtsViewModel = debtsViewModel,
+                    materialsViewModel = materialsViewModel
                 )
             }
             composable(
