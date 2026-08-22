@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
+import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.theme.WarningAmber as WarningAmberColor
 import java.text.NumberFormat
@@ -299,7 +300,7 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
     materials.sortedBy { it.name }.forEach { m ->
         val price = prices[m.name]
         sb.append("• ${m.name}: ${m.quantity} ${m.unit}")
-        if (price != null) sb.append(" — ${nf.format(price)} ل.س")
+        if (price != null) sb.append(" — ${nf.format(price)} ${AppSettingsState.currencySymbol}")
         sb.append("\n")
     }
     return sb.toString()

@@ -7,6 +7,7 @@ import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.settings.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +26,7 @@ data class MaterialsUiState(
 class MaterialsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = MaterialsRepository()
+    private val settings = SettingsRepository(application)
 
     private val section = MutableStateFlow("main")
 
@@ -66,7 +68,9 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                     lastNotifiedLowStock = emptySet()
                 } else if (lowStockNames != lastNotifiedLowStock) {
                     lastNotifiedLowStock = lowStockNames
-                    NotificationHelper.showLowStockNotification(getApplication(), lowStockNames.toList())
+                    if (settings.notificationsEnabled) {
+                        NotificationHelper.showLowStockNotification(getApplication(), lowStockNames.toList())
+                    }
                 }
             }
         }

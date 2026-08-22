@@ -17,10 +17,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
+import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.common.avatarColorFor
 
 /**
@@ -34,6 +36,8 @@ import com.shopmanager.app.ui.common.avatarColorFor
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val settings = remember { SettingsRepository(context) }
     val catalog by viewModel.catalog.collectAsState()
     val message by viewModel.message.collectAsState()
     var search by remember { mutableStateOf("") }
@@ -144,6 +148,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     pickedItem?.let { item ->
         QuantityEntryDialog(
             materialName = item.name,
+            defaultMinQuantity = settings.lowStockThreshold,
             onDismiss = { pickedItem = null },
             onSave = { quantity, unit, minQuantity ->
                 viewModel.addMaterial(item.name, quantity, unit, minQuantity)
@@ -190,12 +195,13 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete:
 @Composable
 private fun QuantityEntryDialog(
     materialName: String,
+    defaultMinQuantity: Double = 0.0,
     onDismiss: () -> Unit,
     onSave: (quantity: Double, unit: String, minQuantity: Double) -> Unit
 ) {
     var quantity by remember { mutableStateOf("") }
     var unit by remember { mutableStateOf(MaterialUnit.KG) }
-    var minQuantity by remember { mutableStateOf("") }
+    var minQuantity by remember { mutableStateOf(defaultMinQuantity.takeIf { it > 0 }?.toString() ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
