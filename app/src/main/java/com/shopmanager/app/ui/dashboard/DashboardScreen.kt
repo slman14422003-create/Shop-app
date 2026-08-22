@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
@@ -62,7 +63,7 @@ fun DashboardScreen(
                 icon = Icons.Default.AttachMoney,
                 color = avatarColorFor(personName),
                 title = personName,
-                subtitle = "دين جديد: ${nf.format(debt.amount)} ل.س",
+                subtitle = "دين جديد: ${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}",
                 timestamp = debt.createdAt
             )
         }
@@ -96,7 +97,7 @@ fun DashboardScreen(
                         icon = Icons.Default.AttachMoney,
                         accentColor = MaterialTheme.colorScheme.primary,
                         title = "إجمالي الديون",
-                        value = "${nf.format(debtsState.totalAmount)} ل.س",
+                        value = "${nf.format(debtsState.totalAmount)} ${AppSettingsState.currencySymbol}",
                         subtitle = "${debtsState.totalPersons} عميل"
                     )
                     StatCard(
@@ -167,7 +168,7 @@ fun DashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(p.name)
-                                Text("${nf.format(p.amount)} ل.س", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                                Text("${nf.format(p.amount)} ${AppSettingsState.currencySymbol}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
