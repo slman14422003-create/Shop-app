@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.avatarColorFor
 import java.text.NumberFormat
 import java.util.Locale
@@ -157,7 +158,7 @@ private fun StatsRow(persons: Int, debts: Int, amount: Double) {
             VerticalDivider()
             StatItem("ديون", debts.toString())
             VerticalDivider()
-            StatItem("الإجمالي (ل.س)", nf.format(amount))
+            StatItem("الإجمالي (${AppSettingsState.currencySymbol})", nf.format(amount))
         }
     }
 }
@@ -220,7 +221,7 @@ private fun PersonRow(person: Person, modifier: Modifier = Modifier, onClick: ()
             Column(Modifier.weight(1f)) {
                 Text(person.name, fontWeight = FontWeight.Medium)
                 Text(
-                    "${nf.format(person.amount)} ل.س",
+                    "${nf.format(person.amount)} ${AppSettingsState.currencySymbol}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -235,10 +236,11 @@ private fun PersonRow(person: Person, modifier: Modifier = Modifier, onClick: ()
 
 private fun buildDebtsShareText(persons: List<Person>, totalAmount: Double): String {
     val nf = NumberFormat.getNumberInstance(Locale("ar"))
+    val currency = AppSettingsState.currencySymbol
     val sb = StringBuilder("💰 كشف الديون\n\n")
     persons.sortedByDescending { it.amount }.forEach { p ->
-        sb.append("• ${p.name}: ${nf.format(p.amount)} ل.س\n")
+        sb.append("• ${p.name}: ${nf.format(p.amount)} $currency\n")
     }
-    sb.append("\nالإجمالي: ${nf.format(totalAmount)} ل.س")
+    sb.append("\nالإجمالي: ${nf.format(totalAmount)} $currency")
     return sb.toString()
 }

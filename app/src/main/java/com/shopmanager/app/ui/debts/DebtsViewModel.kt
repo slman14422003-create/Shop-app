@@ -7,6 +7,7 @@ import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.settings.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +31,7 @@ data class DebtsUiState(
 class DebtsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = DebtsRepository()
+    private val settings = SettingsRepository(application)
 
     private val personsFlow = repo.listenPersons().catch { emit(emptyList()) }
     private val debtsFlow = repo.listenAllDebts().catch { emit(emptyList()) }
@@ -62,9 +64,11 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 if (previous != null) {
                     val newIds = currentIds - previous
                     val newPerson = state.persons.firstOrNull { it.id in newIds }
-                    if (newPerson != null) {
+                    if (newPerson != null && settings.notificationsEnabled) {
                         val nf = NumberFormat.getNumberInstance(Locale("ar"))
-                        NotificationHelper.showNewDebtNotification(getApplication(), newPerson.name, nf.format(newPerson.amount))
+                        NotificationHelper.showNewDebtNotification(
+                            getApplication(), newPerson.name, nf.format(newPerson.amount), settings.currencySymbol
+                        )
                     }
                 }
                 knownPersonIds = currentIds

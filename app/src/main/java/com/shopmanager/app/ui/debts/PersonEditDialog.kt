@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
@@ -13,8 +14,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.ui.common.AppSettingsState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,7 +56,9 @@ fun PersonEditDialog(
                 )
                 OutlinedTextField(
                     value = amount, onValueChange = { amount = it }, enabled = !isSaving,
-                    label = { Text("المبلغ (ل.س)") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    label = { Text("المبلغ (${AppSettingsState.currencySymbol})") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
                 OutlinedTextField(
                     value = date, onValueChange = { date = it }, enabled = !isSaving,
