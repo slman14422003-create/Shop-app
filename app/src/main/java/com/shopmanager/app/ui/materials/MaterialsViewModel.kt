@@ -1,9 +1,12 @@
 package com.shopmanager.app.ui.materials
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.materials.Material
+import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsRepository
+import com.shopmanager.app.data.notifications.NotificationHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +22,7 @@ data class MaterialsUiState(
     val isLoading: Boolean = true
 )
 
-class MaterialsViewModel : ViewModel() {
+class MaterialsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = MaterialsRepository()
 
@@ -37,9 +40,37 @@ class MaterialsViewModel : ViewModel() {
         MaterialsUiState(materials = materials, prices = prices, isLoading = false)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MaterialsUiState())
 
+    val catalog: StateFlow<List<MaterialCatalogItem>> = repo.listenCatalog()
+        .catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
     fun clearMessage() { _message.value = null }
+
+    // Only re-notify when the *set* of low-stock names actually changes -
+    // not on every unrelated Firestore update (e.g. a price edit).
+    private var lastNotifiedLowStock: Set<String> = emptySet()
+
+    init {
+        viewModelScope.launch {
+            NotificationHelper.ensureChannels(getApplication())
+            uiState.collect { state ->
+                if (state.isLoading) return@collect
+                val lowStockNames = state.materials
+                    .filter { it.minQuantity > 0 && it.quantity <= it.minQuantity }
+                    .map { it.name }
+                    .toSet()
+                if (lowStockNames.isEmpty()) {
+                    if (lastNotifiedLowStock.isNotEmpty()) NotificationHelper.cancelLowStockNotification(getApplication())
+                    lastNotifiedLowStock = emptySet()
+                } else if (lowStockNames != lastNotifiedLowStock) {
+                    lastNotifiedLowStock = lowStockNames
+                    NotificationHelper.showLowStockNotification(getApplication(), lowStockNames.toList())
+                }
+            }
+        }
+    }
 
     fun addMaterial(name: String, quantity: Double, unit: String, minQuantity: Double) {
         viewModelScope.launch {
@@ -47,7 +78,7 @@ class MaterialsViewModel : ViewModel() {
                 repo.addMaterial(name, quantity, unit, section.value, minQuantity)
                 _message.value = "تمت إضافة المادة بنجاح"
             } catch (e: Exception) {
-                _message.value = "خطأ أثناء إضافة المادة: ${e.message}"
+                _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
             }
         }
     }
@@ -58,7 +89,7 @@ class MaterialsViewModel : ViewModel() {
                 repo.updateMaterial(id, name, quantity, unit, section.value, minQuantity)
                 _message.value = "تم تعديل المادة بنجاح"
             } catch (e: Exception) {
-                _message.value = "خطأ أثناء التعديل: ${e.message}"
+                _message.value = "تعذر التعديل: ${e.message ?: "تحقق من الاتصال"}"
             }
         }
     }
@@ -80,7 +111,34 @@ class MaterialsViewModel : ViewModel() {
                 repo.setPrice(materialName, price)
                 _message.value = "تم حفظ السعر"
             } catch (e: Exception) {
-                _message.value = "خطأ أثناء حفظ السعر: ${e.message}"
+                _message.value = "تعذر حفظ السعر: ${e.message ?: "تحقق من الاتصال"}"
+            }
+        }
+    }
+
+    fun addCatalogItem(name: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                if (repo.catalogNameExists(name)) {
+                    _message.value = "\"$name\" موجودة بالقائمة مسبقاً"
+                    onDone(false)
+                    return@launch
+                }
+                repo.addCatalogItem(name)
+                onDone(true)
+            } catch (e: Exception) {
+                _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
+                onDone(false)
+            }
+        }
+    }
+
+    fun deleteCatalogItem(id: String) {
+        viewModelScope.launch {
+            try {
+                repo.deleteCatalogItem(id)
+            } catch (e: Exception) {
+                _message.value = "تعذر الحذف: ${e.message}"
             }
         }
     }
