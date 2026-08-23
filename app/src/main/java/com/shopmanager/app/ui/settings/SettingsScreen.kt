@@ -120,7 +120,7 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("تنبيهات نفاد المخزون والديون الجديدة")
+                        Text("تنبيهات قائمة النواقص والديون الجديدة")
                         Text(
                             "أوقفها إذا كنت لا تريد إشعارات على هذا الجهاز",
                             style = MaterialTheme.typography.labelSmall,
