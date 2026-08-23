@@ -72,9 +72,9 @@ fun DashboardScreen(
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val df = remember { SimpleDateFormat("d MMM، HH:mm", Locale("ar")) }
 
-    val lowStock = remember(materialsState.materials) {
-        materialsState.materials.filter { it.minQuantity > 0 && it.quantity <= it.minQuantity }
-    }
+    // Every material in the list is, by definition, a shortage the shop
+    // needs to buy - it's a live shopping list, not a stock count.
+    val shortages = remember(materialsState.materials) { materialsState.materials }
     val topDebtors = remember(debtsState.persons) {
         debtsState.persons.sortedByDescending { it.amount }.take(5)
     }
@@ -97,7 +97,7 @@ fun DashboardScreen(
                 icon = Icons.Default.Spa,
                 color = avatarColorFor(m.name),
                 title = m.name,
-                subtitle = "تحديث المخزون: ${m.quantity} ${m.unit}",
+                subtitle = "نقص مضاف: ${m.quantity} ${m.unit}",
                 timestamp = m.updatedAt
             )
         }
@@ -140,15 +140,15 @@ fun DashboardScreen(
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Inventory2,
-                        accentColor = if (lowStock.isNotEmpty()) WarningAmberColor else MaterialTheme.colorScheme.secondary,
-                        title = "عدد المواد",
+                        accentColor = if (shortages.isNotEmpty()) WarningAmberColor else MaterialTheme.colorScheme.secondary,
+                        title = "قائمة النواقص",
                         valueContent = {
                             AnimatedCounterText(
-                                targetValue = materialsState.materials.size.toDouble(),
+                                targetValue = shortages.size.toDouble(),
                                 format = { it.toInt().toString() }
                             )
                         },
-                        subtitle = if (lowStock.isNotEmpty()) "${lowStock.size} بحاجة تجديد" else "المخزون جيد"
+                        subtitle = if (shortages.isNotEmpty()) "بانتظار الشراء" else "لا يوجد نواقص"
                     )
                 }
             }
@@ -161,10 +161,10 @@ fun DashboardScreen(
                 }
             }
 
-            if (lowStock.isNotEmpty()) {
+            if (shortages.isNotEmpty()) {
                 item {
-                    SectionCard(title = "⚠️ مواد بحاجة لإعادة تعبئة (قائمة السوق)", color = WarningAmberColor) {
-                        lowStock.forEach { m ->
+                    SectionCard(title = "🛒 قائمة مشتريات السوق", color = WarningAmberColor) {
+                        shortages.forEach { m ->
                             Row(
                                 Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
