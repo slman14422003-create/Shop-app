@@ -1,7 +1,10 @@
 package com.shopmanager.app.ui.materials
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -24,12 +28,12 @@ import com.shopmanager.app.data.materials.MaterialUnit
 import com.shopmanager.app.ui.common.avatarColorFor
 
 /**
- * Standalone screen for the shop's fixed spice list ("مبدأ الجرد"): pick a
- * name from a standing catalog instead of typing it every time, then enter
- * the counted weight. New names can be added to the catalog inline the
- * first time they're needed, and removed later if no longer stocked. Saving
- * one item keeps you on this screen so you can go through several in a row,
- * like a real stocktaking pass.
+ * Standalone screen for picking which shortage to add: pick a name from the
+ * shop's standing spice catalog instead of typing it every time, then enter
+ * the quantity needed - like ticking an item off at the market. New names
+ * can be added to the catalog inline the first time they're needed, and
+ * removed later if no longer carried. Saving one item keeps you on this
+ * screen so you can add several shortages in a row.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,15 +150,11 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             materialName = item.name,
             onDismiss = { pickedItem = null },
             onSave = { quantity, unit ->
-                // BUG FIXED / SIMPLIFIED: this dialog used to also ask for a
-                // "حد التنبيه لنفاد الكمية" (min-quantity alert threshold)
-                // every single time. Every material added here is, by the
-                // nature of this stocktaking flow, already something the
-                // shop is short on — so instead of asking, the material is
-                // now flagged as needing restock immediately (minQuantity =
-                // the counted quantity itself). Editing the material later
-                // still lets you raise that threshold once more stock comes in.
-                viewModel.addMaterial(item.name, quantity, unit, minQuantity = quantity)
+                // Every material added here is, by the nature of this list,
+                // something the shop is short on and needs to buy - so it's
+                // simply added with the quantity needed, no threshold or
+                // stock-level bookkeeping involved.
+                viewModel.addMaterial(item.name, quantity, unit)
                 pickedItem = null
             }
         )
@@ -176,8 +176,19 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
 @Composable
 private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete: () -> Unit) {
     val color = remember(item.name) { avatarColorFor(item.name) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "catalogRowScale")
+
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.foundation.LocalIndication.current,
+                onClick = onClick
+            ),
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
     ) {
@@ -212,7 +223,7 @@ private fun QuantityEntryDialog(
             Column {
                 OutlinedTextField(
                     value = quantity, onValueChange = { quantity = it },
-                    label = { Text("الكمية المعدودة") }, modifier = Modifier.fillMaxWidth(),
+                    label = { Text("الكمية المطلوبة") }, modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
                 Text(

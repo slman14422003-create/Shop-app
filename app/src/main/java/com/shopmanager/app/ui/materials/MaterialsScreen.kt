@@ -3,13 +3,20 @@ package com.shopmanager.app.ui.materials
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -21,13 +28,14 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -39,7 +47,6 @@ import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.SwipeToDeleteRow
 import com.shopmanager.app.ui.common.avatarColorFor
-import com.shopmanager.app.ui.theme.WarningAmber as WarningAmberColor
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -61,7 +68,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
 
     val filtered = if (search.isBlank()) state.materials
     else state.materials.filter { it.name.contains(search, ignoreCase = true) }
-    val lowStockCount = state.materials.count { it.minQuantity > 0 && it.quantity <= it.minQuantity }
+    val shortageCount = state.materials.size
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
@@ -110,18 +117,28 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             AnimatedVisibility(
-                visible = lowStockCount > 0,
-                enter = expandVertically(tween(220)) + fadeIn(tween(220)),
-                exit = shrinkVertically(tween(180)) + fadeOut(tween(180))
+                visible = tab == 0 && shortageCount > 0,
+                enter = expandVertically(spring(dampingRatio = 0.8f)) + fadeIn(tween(220)),
+                exit = shrinkVertically(tween(180)) + fadeOut(tween(150))
             ) {
-                Surface(color = WarningAmberColor.copy(alpha = 0.15f), modifier = Modifier.fillMaxWidth()) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .animateContentSize()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.WarningAmber, contentDescription = null, tint = WarningAmberColor)
+                        Icon(
+                            Icons.Default.ShoppingCart, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                         Spacer(Modifier.width(8.dp))
-                        Text("$lowStockCount مادة وصلت لحد النفاد", color = WarningAmberColor)
+                        Text(
+                            "$shortageCount مادة بانتظار الشراء من السوق",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -161,8 +178,8 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
         MaterialEditDialog(
             initial = m,
             onDismiss = { editingMaterial = null },
-            onSave = { name, qty, unit, minQty ->
-                viewModel.updateMaterial(m.id, name, qty, unit, minQty)
+            onSave = { name, qty, unit ->
+                viewModel.updateMaterial(m.id, name, qty, unit)
                 editingMaterial = null
             }
         )
@@ -192,7 +209,7 @@ private fun MaterialsList(
     if (materials.isEmpty()) {
         EmptyState(
             icon = if (searching) Icons.Default.SearchOff else Icons.Default.Inventory2,
-            text = if (searching) "لا توجد نتائج" else "لا توجد مواد بعد\nاضغط \"مادة جديدة\" للبدء"
+            text = if (searching) "لا توجد نتائج" else "لا توجد نواقص حالياً\nاضغط \"مادة جديدة\" لإضافة أول نقص"
         )
         return
     }
@@ -202,46 +219,61 @@ private fun MaterialsList(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(materials, key = { it.id }) { m ->
-            val isLow = m.minQuantity > 0 && m.quantity <= m.minQuantity
-            val avatarColor = if (isLow) WarningAmberColor else avatarColorFor(m.name)
-
             SwipeToDeleteRow(
                 onSwipedToDelete = { onDelete(m) },
-                modifier = Modifier.animateItemPlacement()
+                modifier = Modifier.animateItemPlacement(spring(dampingRatio = 0.85f))
             ) {
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium,
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                if (isLow) Icons.Default.WarningAmber else Icons.Default.Spa,
-                                contentDescription = null, tint = Color.White
-                            )
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(m.name, fontWeight = FontWeight.Medium)
-                            Text(
-                                "${m.quantity} ${m.unit}" + if (isLow) " • منخفض" else "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isLow) WarningAmberColor else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        IconButton(onClick = { onEdit(m) }) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
-                    }
-                }
+                MaterialRow(material = m, onEdit = { onEdit(m) })
             }
         }
         item { Spacer(Modifier.height(72.dp)) }
+    }
+}
+
+@Composable
+private fun MaterialRow(material: Material, onEdit: () -> Unit) {
+    val avatarColor = remember(material.name) { avatarColorFor(material.name) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.98f else 1f,
+        animationSpec = spring(dampingRatio = 0.5f),
+        label = "materialRowScale"
+    )
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                onClick = onEdit
+            ),
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(material.name, fontWeight = FontWeight.Medium)
+                Text(
+                    "الكمية المطلوبة: ${material.quantity} ${material.unit}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
+        }
     }
 }
 

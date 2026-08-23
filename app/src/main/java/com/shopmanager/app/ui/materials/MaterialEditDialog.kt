@@ -25,17 +25,16 @@ import com.shopmanager.app.data.materials.MaterialUnit
 fun MaterialEditDialog(
     initial: Material?,
     onDismiss: () -> Unit,
-    onSave: (name: String, quantity: Double, unit: String, minQuantity: Double) -> Unit
+    onSave: (name: String, quantity: Double, unit: String) -> Unit
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var quantity by remember { mutableStateOf(initial?.quantity?.toString() ?: "") }
     var unit by remember { mutableStateOf(MaterialUnit.fromLabel(initial?.unit ?: MaterialUnit.KG.label)) }
-    var minQuantity by remember { mutableStateOf(initial?.minQuantity?.takeIf { it > 0 }?.toString() ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial == null) "إضافة مادة" else "تعديل المادة") },
+        title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
         text = {
             Column {
                 OutlinedTextField(
@@ -44,7 +43,7 @@ fun MaterialEditDialog(
                 )
                 OutlinedTextField(
                     value = quantity, onValueChange = { quantity = it },
-                    label = { Text("الكمية") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    label = { Text("الكمية المطلوبة") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
 
                 Text(
@@ -55,22 +54,16 @@ fun MaterialEditDialog(
                 )
                 UnitPicker(selected = unit, onSelected = { unit = it })
 
-                OutlinedTextField(
-                    value = minQuantity, onValueChange = { minQuantity = it },
-                    label = { Text("حد التنبيه لنفاد الكمية (اختياري)") },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                )
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 val q = quantity.trim().toDoubleOrNull()
-                val minQ = minQuantity.trim().toDoubleOrNull() ?: 0.0
                 when {
                     name.isBlank() -> error = "يرجى إدخال اسم المادة"
                     q == null || q <= 0 -> error = "يرجى إدخال كمية صحيحة"
-                    else -> onSave(name.trim(), q, unit.label, minQ)
+                    else -> onSave(name.trim(), q, unit.label)
                 }
             }) { Text("حفظ") }
         },

@@ -50,48 +50,48 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     val message: StateFlow<String?> = _message
     fun clearMessage() { _message.value = null }
 
-    // Only re-notify when the *set* of low-stock names actually changes -
-    // not on every unrelated Firestore update (e.g. a price edit).
-    private var lastNotifiedLowStock: Set<String> = emptySet()
+    // Every material on this list is, by definition, something the shop is
+    // short on (a live shopping list) - so we notify about the *whole* list,
+    // not a filtered "low stock" subset. Only re-notify when the set of
+    // names actually changes - not on every unrelated Firestore update
+    // (e.g. a price edit).
+    private var lastNotifiedShortages: Set<String> = emptySet()
 
     init {
         viewModelScope.launch {
             NotificationHelper.ensureChannels(getApplication())
             uiState.collect { state ->
                 if (state.isLoading) return@collect
-                val lowStockNames = state.materials
-                    .filter { it.minQuantity > 0 && it.quantity <= it.minQuantity }
-                    .map { it.name }
-                    .toSet()
-                if (lowStockNames.isEmpty()) {
-                    if (lastNotifiedLowStock.isNotEmpty()) NotificationHelper.cancelLowStockNotification(getApplication())
-                    lastNotifiedLowStock = emptySet()
-                } else if (lowStockNames != lastNotifiedLowStock) {
-                    lastNotifiedLowStock = lowStockNames
+                val shortageNames = state.materials.map { it.name }.toSet()
+                if (shortageNames.isEmpty()) {
+                    if (lastNotifiedShortages.isNotEmpty()) NotificationHelper.cancelShoppingListNotification(getApplication())
+                    lastNotifiedShortages = emptySet()
+                } else if (shortageNames != lastNotifiedShortages) {
+                    lastNotifiedShortages = shortageNames
                     if (settings.notificationsEnabled) {
-                        NotificationHelper.showLowStockNotification(getApplication(), lowStockNames.toList())
+                        NotificationHelper.showShoppingListNotification(getApplication(), shortageNames.toList())
                     }
                 }
             }
         }
     }
 
-    fun addMaterial(name: String, quantity: Double, unit: String, minQuantity: Double) {
+    fun addMaterial(name: String, quantity: Double, unit: String) {
         viewModelScope.launch {
             try {
-                repo.addMaterial(name, quantity, unit, section.value, minQuantity)
-                _message.value = "تمت إضافة المادة بنجاح"
+                repo.addMaterial(name, quantity, unit, section.value)
+                _message.value = "تمت إضافة النقص بنجاح"
             } catch (e: Exception) {
                 _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
             }
         }
     }
 
-    fun updateMaterial(id: String, name: String, quantity: Double, unit: String, minQuantity: Double) {
+    fun updateMaterial(id: String, name: String, quantity: Double, unit: String) {
         viewModelScope.launch {
             try {
-                repo.updateMaterial(id, name, quantity, unit, section.value, minQuantity)
-                _message.value = "تم تعديل المادة بنجاح"
+                repo.updateMaterial(id, name, quantity, unit, section.value)
+                _message.value = "تم تعديل النقص بنجاح"
             } catch (e: Exception) {
                 _message.value = "تعذر التعديل: ${e.message ?: "تحقق من الاتصال"}"
             }
