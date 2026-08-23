@@ -81,6 +81,12 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
+    // Standard AndroidX SplashScreen API — shows a static app icon on a
+    // flat background immediately at cold start instead of a blank/white
+    // starting window, and is kept on screen (see MainActivity) until the
+    // first real frame is fully ready. This is what fixes the startup
+    // jitter/flash.
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.activity:activity-compose:1.9.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
