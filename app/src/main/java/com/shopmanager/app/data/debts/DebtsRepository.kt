@@ -132,6 +132,19 @@ class DebtsRepository {
      * showed up there; the person had to open the new client and re-enter
      * the exact same amount as a debt for it to actually appear. Now both
      * documents are written together, atomically, in one batch.
+     *
+     * BUG FIXED (PERMISSION_DENIED on "إضافة الدين" after paying a customer
+     * off): this initial debt document used to be written WITHOUT a "note"
+     * field, while every debt created afterward through [addDebt]/
+     * [updateDebt] always writes one (even as ""). So two different field
+     * shapes existed for documents in the same "debts" collection. If the
+     * Firestore rules deployed on the console validate the write schema
+     * (e.g. `request.resource.data.keys().hasOnly([...])`) against the
+     * narrower shape written here, any *later* debt add — which is exactly
+     * what happens right after settling someone and giving them a new
+     * debt — carries a key the rules never saw permitted for that customer
+     * and gets rejected as PERMISSION_DENIED. Every debt document now has
+     * an identical field set no matter which code path created it.
      */
     suspend fun addPerson(name: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
         val personRef = db.collection("persons").document()
@@ -153,6 +166,7 @@ class DebtsRepository {
                     "personId" to personRef.id,
                     "amount" to amount,
                     "date" to date,
+                    "note" to "",
                     "createdAt" to System.currentTimeMillis()
                 )
             )
