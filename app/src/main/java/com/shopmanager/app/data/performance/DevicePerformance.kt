@@ -31,6 +31,32 @@ import androidx.compose.runtime.staticCompositionLocalOf
  */
 enum class PerformanceTier { LOW, STANDARD }
 
+/**
+ * "تفضيل الأداء" (Settings → الأداء): lets the person override the
+ * automatic device detection above instead of being stuck with whatever
+ * [DevicePerformance.detectTier] guessed.
+ *
+ * - AUTO (default): use the detected [PerformanceTier] as before — no
+ *   behavior change for anyone who never opens this setting.
+ * - HIGH: always run the full-effects UI (gradients, longer transitions,
+ *   the counting-up animation), even on a device that auto-detected as
+ *   LOW. For someone whose "weak" phone actually handles it fine.
+ * - LOW: always run the reduced-motion/no-gradient UI, even on a device
+ *   that auto-detected as STANDARD. For anyone who simply prefers a
+ *   snappier, more static feel or wants to save battery.
+ */
+enum class PerformanceMode { AUTO, HIGH, LOW }
+
+/** Combines the auto-detected tier with the user's manual preference —
+ * the single place both are resolved into the [PerformanceTier] actually
+ * handed to the UI via [LocalPerformanceTier]. */
+fun resolvePerformanceTier(detected: PerformanceTier, mode: PerformanceMode): PerformanceTier =
+    when (mode) {
+        PerformanceMode.AUTO -> detected
+        PerformanceMode.HIGH -> PerformanceTier.STANDARD
+        PerformanceMode.LOW -> PerformanceTier.LOW
+    }
+
 object DevicePerformance {
     private const val PREFS = "shop_manager_device"
     private const val KEY_TIER = "performance_tier"
