@@ -373,15 +373,18 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
             // so this row looked like it belonged to a different screen.
             // Edit now shares the exact same ActionIconButton (info-blue
             // tint) as the check button above and the delete "×" next to
-            // it, so all three are pixel-identical in size and animation,
-            // with a real gap separating every icon.
+            // it, so all three are pixel-identical in size and animation.
+            // Gap widened to 16dp (see the matching fix on the person
+            // list's check/delete pair) — two same-style filled circles
+            // sitting only 10dp apart still read as one merged shape on
+            // device.
             ActionIconButton(
                 icon = Icons.Default.Edit,
                 tint = InfoBlue,
                 contentDescription = "تعديل",
                 onClick = onEdit
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(16.dp))
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف الدين")
         }
     }

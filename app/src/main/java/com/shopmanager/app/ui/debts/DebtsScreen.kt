@@ -307,6 +307,12 @@ private fun PersonRow(
             // feedback. Settles the person's whole balance in one tap and
             // fires the same "paid" notification. Only shown when there's
             // actually something to settle.
+            //
+            // FIX: 10dp read as touching/merged on-device once the two
+            // 36dp filled circles sat next to each other — their soft
+            // tinted backgrounds made the row look like one blob instead
+            // of two distinct buttons. Widened to a gap that reads
+            // unmistakably as two separate actions.
             if (person.amount > 0) {
                 ActionIconButton(
                     icon = Icons.Default.Check,
@@ -314,10 +320,10 @@ private fun PersonRow(
                     contentDescription = "تسجيل سداد كامل الدين",
                     onClick = onMarkPaid
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(16.dp))
             }
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف العميل")
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(10.dp))
             Icon(
                 Icons.Default.ChevronLeft, contentDescription = null,
                 tint = MaterialTheme.colorScheme.outlineVariant
