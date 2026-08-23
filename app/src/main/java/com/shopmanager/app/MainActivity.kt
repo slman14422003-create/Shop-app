@@ -10,8 +10,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
@@ -38,6 +36,7 @@ import com.shopmanager.app.ui.materials.MaterialCatalogScreen
 import com.shopmanager.app.ui.materials.MaterialsScreen
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.BrandGradientStart
@@ -50,6 +49,7 @@ private const val ROUTE_DEBTS = "debts"
 private const val ROUTE_MATERIALS = "materials"
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
+private const val ROUTE_HELP = "help"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
 class MainActivity : ComponentActivity() {
@@ -158,10 +158,17 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
             navController = navController,
             startDestination = ROUTE_DASHBOARD,
             modifier = androidx.compose.ui.Modifier.padding(padding),
-            enterTransition = { fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 8 } },
-            exitTransition = { fadeOut(tween(180)) },
-            popEnterTransition = { fadeIn(tween(220)) },
-            popExitTransition = { fadeOut(tween(180)) + slideOutHorizontally(tween(180)) { it / 8 } }
+            // PERF: previously combined fadeIn+slideInHorizontally (and the
+            // fade/slide-out equivalents). Layering an offset animation on
+            // top of an alpha animation forces an extra graphicsLayer pass
+            // every frame of every screen transition, which is a real cost
+            // on lower-end devices and was part of why switching tabs/screens
+            // felt laggy. A short plain crossfade reads just as intentional
+            // and is noticeably lighter to composite.
+            enterTransition = { fadeIn(tween(150)) },
+            exitTransition = { fadeOut(tween(120)) },
+            popEnterTransition = { fadeIn(tween(150)) },
+            popExitTransition = { fadeOut(tween(120)) }
         ) {
             composable(ROUTE_DASHBOARD) {
                 DashboardScreen(
@@ -195,7 +202,15 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
                     onBack = { navController.popBackStack() },
                     onThemeChanged = onThemeChanged,
                     debtsViewModel = debtsViewModel,
-                    materialsViewModel = materialsViewModel
+                    materialsViewModel = materialsViewModel,
+                    onOpenHelp = { navController.navigate(ROUTE_HELP) }
+                )
+            }
+            composable(ROUTE_HELP) {
+                WebViewScreen(
+                    url = "file:///android_asset/help.html",
+                    title = "دليل الاستخدام",
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(
