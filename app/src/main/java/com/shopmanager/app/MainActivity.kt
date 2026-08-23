@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -31,7 +33,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.shopmanager.app.data.FirebaseModule
 import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.NotificationHelper
@@ -75,16 +79,58 @@ private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // PERF FIX (startup jitter): installSplashScreen() must run before
+        // super.onCreate(). It puts a static app icon on a flat brand-color
+        // background up immediately — nothing on that screen animates or
+        // recomposes, so there is nothing to jitter while the phone is
+        // still busy underneath.
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
-        FirebaseModule.init(applicationContext)
-        NotificationHelper.ensureChannels(applicationContext)
-        // "وضع لكل هاتف": classified once (cached after that), then used
-        // below to switch off the heavier visual effects on entry-level
-        // hardware — see DevicePerformance for the detection signals.
-        val performanceTier = DevicePerformance.detectTier(applicationContext)
-        BackgroundSyncWorker.schedule(applicationContext)
+
+        var isReady by mutableStateOf(false)
+        var performanceTier by mutableStateOf(PerformanceTier.STANDARD)
+        // Keeps the splash icon up — instead of showing a half-initialized
+        // screen — until performanceTier is known AND Firebase/notification
+        // channels/background-sync scheduling have finished below. Once
+        // this flips true, Compose already has everything it needs for a
+        // single correct first frame; nothing has to change color or
+        // re-layout right after appearing.
+        splashScreen.setKeepOnScreenCondition { !isReady }
+
+        requestSmoothestRefreshRate()
+
+        // PERF FIX (startup jitter): all of Firebase init, notification
+        // channel setup, device-tier detection (disk read), and scheduling
+        // the background sync worker (which — see AndroidManifest.xml and
+        // ShopManagerApplication.kt — is also where WorkManager's Room
+        // database actually gets built the first time) used to run
+        // synchronously on the main thread in onCreate, before Compose
+        // ever got a chance to draw. That's real, measurable main-thread
+        // work stacked right at cold start, which is what showed up as a
+        // few seconds of visible jank/"shaking". None of it needs the main
+        // thread, so it now all runs on a background dispatcher while the
+        // splash screen (above) covers the UI.
+        lifecycleScope.launch(Dispatchers.Default) {
+            FirebaseModule.init(applicationContext)
+            NotificationHelper.ensureChannels(applicationContext)
+            // "وضع لكل هاتف": classified once (cached after that), then
+            // used below to switch off the heavier visual effects on
+            // entry-level hardware — see DevicePerformance for the
+            // detection signals.
+            val tier = DevicePerformance.detectTier(applicationContext)
+            BackgroundSyncWorker.schedule(applicationContext)
+            withContext(Dispatchers.Main) {
+                performanceTier = tier
+                isReady = true
+            }
+        }
 
         setContent {
+            // Nothing to compose until the background init above finishes —
+            // the splash screen is still covering the activity at this
+            // point, so this is invisible to the user, not a blank flash.
+            if (!isReady) return@setContent
+
             val settings = remember { SettingsRepository(applicationContext) }
             var themeMode by remember { mutableStateOf(settings.themeMode) }
             var unlocked by remember { mutableStateOf(!settings.hasPin) }
@@ -139,6 +185,28 @@ class MainActivity : ComponentActivity() {
                 }
             }
             }
+        }
+    }
+
+    /**
+     * "معدل تحديث الشاشة" fix: without this, Android is free to run the
+     * activity's window at a lower refresh rate than the display actually
+     * supports (commonly defaulting to 60Hz even on a 90/120Hz phone for
+     * apps that never state a preference), which makes swipes/animations
+     * look less smooth than the hardware is capable of. This asks for the
+     * highest refresh rate the *current* display reports. On a display
+     * that only supports 60Hz (most entry-level phones, including the
+     * Redmi A10), every mode has the same refresh rate, so this is a
+     * harmless no-op there — it only changes anything on hardware that
+     * actually has a faster mode to give.
+     */
+    private fun requestSmoothestRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay ?: return
+        val bestMode = display.supportedModes.maxByOrNull { it.refreshRate } ?: return
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = bestMode.modeId
         }
     }
 }
