@@ -45,7 +45,7 @@ import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
-import com.shopmanager.app.ui.common.SwipeToDeleteRow
+import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
 import java.text.NumberFormat
 import java.util.Locale
@@ -219,19 +219,19 @@ private fun MaterialsList(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(materials, key = { it.id }) { m ->
-            SwipeToDeleteRow(
-                onSwipedToDelete = { onDelete(m) },
+            MaterialRow(
+                material = m,
+                onEdit = { onEdit(m) },
+                onDelete = { onDelete(m) },
                 modifier = Modifier.animateItemPlacement(spring(dampingRatio = 0.85f))
-            ) {
-                MaterialRow(material = m, onEdit = { onEdit(m) })
-            }
+            )
         }
         item { Spacer(Modifier.height(72.dp)) }
     }
 }
 
 @Composable
-private fun MaterialRow(material: Material, onEdit: () -> Unit) {
+private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val avatarColor = remember(material.name) { avatarColorFor(material.name) }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -242,7 +242,7 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit) {
     )
 
     ElevatedCard(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .scale(scale)
             .clickable(
@@ -273,6 +273,8 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit) {
                 )
             }
             IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
+            Spacer(Modifier.width(2.dp))
+            DeleteIconButton(onClick = onDelete, contentDescription = "حذف المادة")
         }
     }
 }
