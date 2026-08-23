@@ -91,9 +91,37 @@ class DebtsRepository {
         awaitClose { registration.remove() }
     }
 
-    suspend fun personNameExists(name: String): Boolean = withTimeout(WRITE_TIMEOUT_MS) {
+    /**
+     * BUG FIXED: marking a person as paid (the checkmark on the Debts list)
+     * only ever deleted their debts — it never deleted the person, by
+     * design, so their balance can go back up later. But `savePerson()`
+     * used to treat *any* existing name as a hard duplicate and simply
+     * refuse to save, with no way forward. So paying a customer off, then
+     * trying to give them a new debt the normal way (typing their name
+     * again in "عميل جديد"), hit "\"$name\" موجود مسبقاً!" every time and
+     * went nowhere — the person had to already know to scroll down and
+     * open the existing (zero-balance) customer instead. This now returns
+     * the existing person's id (or null) so the caller can route a
+     * same-name save into "add a debt to them" instead of a dead-end error.
+     */
+    suspend fun findPersonIdByName(name: String): String? = withTimeout(WRITE_TIMEOUT_MS) {
         val snapshot = db.collection("persons").whereEqualTo("name", name).get().await()
-        !snapshot.isEmpty
+        snapshot.documents.firstOrNull()?.id
+    }
+
+    /**
+     * One-off, server-sourced re-fetch used by pull-to-refresh. The screens
+     * already stay live via [listenPersons]/[listenAllDebts], so this isn't
+     * needed to see new data — but forcing a real round trip to the server
+     * (bypassing Firestore's local cache) is a cheap way to detect and
+     * recover a snapshot listener that silently stalled after a network
+     * blip, instead of leaving the person pulling down with nothing to show
+     * for it.
+     */
+    suspend fun refreshFromServer() = withTimeout(WRITE_TIMEOUT_MS) {
+        db.collection("persons").get(com.google.firebase.firestore.Source.SERVER).await()
+        db.collection("debts").get(com.google.firebase.firestore.Source.SERVER).await()
+        Unit
     }
 
     /**
