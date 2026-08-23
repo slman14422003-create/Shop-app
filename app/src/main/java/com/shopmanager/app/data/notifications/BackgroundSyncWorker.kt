@@ -109,25 +109,32 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
         private const val UNIQUE_WORK_NAME = "shop_manager_background_sync"
 
         /**
-         * Every 6 hours is a deliberate choice, not the WorkManager minimum
-         * (15 minutes): a shorter interval would check more often but costs
-         * more battery for a shop-inventory app where "a few hours old" is
-         * perfectly fine, and Android may still delay/batch it regardless
-         * of what's requested here. Call once (MainActivity.onCreate) —
-         * KEEP means re-launching the app never creates duplicate workers.
+         * Every 15 minutes — WorkManager's absolute minimum periodic
+         * interval; anything shorter than this is silently clamped up to
+         * it by the OS, so 15 is the fastest this check can ever actually
+         * run. Each run is still just the one cheap server read per
+         * collection described above (no live connection kept open
+         * between runs), and Android may still delay/batch the exact
+         * moment for battery reasons regardless of what's requested here.
+         * Call once (MainActivity.onCreate) — KEEP means re-launching the
+         * app never creates duplicate workers, and switching an existing
+         * install from the old 6-hour schedule to this one happens the
+         * next time the worker is (re)scheduled without any extra code,
+         * since KEEP only skips scheduling when a worker under this name
+         * already exists — it doesn't need to match the old interval.
          */
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()
 
-            val request = PeriodicWorkRequestBuilder<BackgroundSyncWorker>(6, TimeUnit.HOURS)
+            val request = PeriodicWorkRequestBuilder<BackgroundSyncWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
         }
