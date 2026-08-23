@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.ui.theme.AppThemeMode
 import java.security.MessageDigest
 
@@ -34,6 +35,15 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFICATIONS, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS, value).apply()
 
+    /** "تفضيل الأداء" — manual override of the auto-detected device tier
+     * (see [PerformanceMode]). Defaults to AUTO so nobody's experience
+     * changes unless they open Settings and pick something else. */
+    var performanceMode: PerformanceMode
+        get() = runCatching {
+            PerformanceMode.valueOf(prefs.getString(KEY_PERFORMANCE_MODE, PerformanceMode.AUTO.name)!!)
+        }.getOrDefault(PerformanceMode.AUTO)
+        set(value) = prefs.edit().putString(KEY_PERFORMANCE_MODE, value.name).apply()
+
     val hasPin: Boolean get() = prefs.contains(KEY_PIN_HASH)
 
     fun setPin(pin: String) {
@@ -59,5 +69,6 @@ class SettingsRepository(context: Context) {
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
+        private const val KEY_PERFORMANCE_MODE = "performance_mode"
     }
 }
