@@ -13,6 +13,20 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
+
+        // SIZE FIX: Firestore/gRPC ship native .so libraries for four ABIs
+        // (armeabi-v7a, arm64-v8a, x86, x86_64). x86/x86_64 exist only for
+        // emulators — no real phone (not the Redmi A10, not the Samsung
+        // A16, not any real ARM device) uses them, so they were pure dead
+        // weight on every install. Restricting to the two ARM ABIs shrinks
+        // the APK real users download/install without removing anything
+        // that runs on real hardware. (If this app is ever distributed as
+        // an .aab through Play, Play already does this splitting
+        // automatically per-device and this filter is a no-op there — it
+        // only matters for a directly-installed/sideloaded .apk.)
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
     }
 
     buildTypes {
@@ -92,6 +106,11 @@ dependencies {
     implementation("com.google.firebase:firebase-common-ktx")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    // Free periodic background check for new debts / shortage-list changes
+    // (see data/notifications/BackgroundSyncWorker.kt) — no server or paid
+    // Firebase plan needed, unlike a real Cloud-Function-triggered push.
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // In-app WebView (دليل الاستخدام / help screen). androidx.webkit gives
     // access to the WebViewFeature/WebSettingsCompat compat-shims needed to
