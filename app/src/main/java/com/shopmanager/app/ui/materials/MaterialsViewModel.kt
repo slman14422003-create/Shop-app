@@ -50,6 +50,27 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     val message: StateFlow<String?> = _message
     fun clearMessage() { _message.value = null }
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
+    /** Pull-to-refresh: forces a real server round trip and keeps the
+     * spinner up for a minimum, tactile duration either way. */
+    fun refresh() {
+        if (_isRefreshing.value) return
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            val start = System.currentTimeMillis()
+            try {
+                repo.refreshFromServer()
+            } catch (_: Exception) {
+                // Live listeners remain the source of truth.
+            }
+            val elapsed = System.currentTimeMillis() - start
+            if (elapsed < 400) kotlinx.coroutines.delay(400 - elapsed)
+            _isRefreshing.value = false
+        }
+    }
+
     // Every material on this list is, by definition, something the shop is
     // short on (a live shopping list) - so we notify about the *whole* list,
     // not a filtered "low stock" subset. Only re-notify when the set of

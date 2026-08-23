@@ -46,6 +46,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import java.text.NumberFormat
 import java.util.Locale
@@ -55,6 +56,7 @@ import java.util.Locale
 fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () -> Unit = {}) {
     val state by viewModel.uiState.collectAsState()
     val message by viewModel.message.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     var tab by remember { mutableStateOf(0) }
     var search by remember { mutableStateOf("") }
     var editingMaterial by remember { mutableStateOf<Material?>(null) }
@@ -115,7 +117,12 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
             }
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshContent(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.padding(padding)
+        ) {
+        Column(Modifier.fillMaxSize()) {
             AnimatedVisibility(
                 visible = tab == 0 && shortageCount > 0,
                 enter = expandVertically(spring(dampingRatio = 0.8f)) + fadeIn(tween(220)),
@@ -171,6 +178,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                     PricesList(materials = state.materials, prices = state.prices, onSave = viewModel::setPrice)
                 }
             }
+        }
         }
     }
 
