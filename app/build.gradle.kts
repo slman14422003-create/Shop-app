@@ -76,6 +76,21 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // BUILD FIX: "Unable to strip the following libraries, packaging
+        // them as they are: libandroidx.graphics.path.so" — this is AGP
+        // trying to run the NDK's `strip` tool on a prebuilt native lib
+        // that ships inside an AndroidX artifact, but the build machine
+        // (this project has no NDK/JNI code of its own, so no NDK is
+        // installed here or in CI) doesn't have that tool available. AGP
+        // then just packages the lib unstripped and prints it as a
+        // warning — build output still succeeds either way, but the
+        // warning is noise on every build. Telling AGP up front to keep
+        // debug symbols for this lib (rather than attempt-then-fall-back)
+        // skips the failed strip attempt entirely, so the warning is gone
+        // and the packaged .apk is byte-for-byte the same as before.
+        jniLibs {
+            keepDebugSymbols += "**/libandroidx.graphics.path.so"
+        }
     }
 }
 
