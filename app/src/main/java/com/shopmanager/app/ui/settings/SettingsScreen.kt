@@ -31,6 +31,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.debts.DebtsViewModel
+import com.shopmanager.app.data.materials.formatQuantity
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SuccessGreen
@@ -384,7 +385,7 @@ private fun buildBackupText(
     sb.append("\n📦 المواد (${materialsState.materials.size})\n")
     materialsState.materials.sortedBy { it.name }.forEach { m ->
         val price = materialsState.prices[m.name]
-        sb.append("• ${m.name}: ${m.quantity} ${m.unit}")
+        sb.append("• ${m.name}: ${m.quantity.formatQuantity()} ${m.unit}")
         if (price != null) sb.append(" — ${nf.format(price)} $currency")
         sb.append("\n")
     }
