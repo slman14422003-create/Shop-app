@@ -41,7 +41,9 @@ import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.performance.DevicePerformance
 import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.performance.PerformanceTier
+import com.shopmanager.app.data.performance.resolvePerformanceTier
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.dashboard.DashboardScreen
 import com.shopmanager.app.ui.debts.DebtsScreen
@@ -88,7 +90,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         var isReady by mutableStateOf(false)
-        var performanceTier by mutableStateOf(PerformanceTier.STANDARD)
+        var detectedTier by mutableStateOf(PerformanceTier.STANDARD)
         // Keeps the splash icon up — instead of showing a half-initialized
         // screen — until performanceTier is known AND Firebase/notification
         // channels/background-sync scheduling have finished below. Once
@@ -120,7 +122,7 @@ class MainActivity : ComponentActivity() {
             val tier = DevicePerformance.detectTier(applicationContext)
             BackgroundSyncWorker.schedule(applicationContext)
             withContext(Dispatchers.Main) {
-                performanceTier = tier
+                detectedTier = tier
                 isReady = true
             }
         }
@@ -134,6 +136,15 @@ class MainActivity : ComponentActivity() {
             val settings = remember { SettingsRepository(applicationContext) }
             var themeMode by remember { mutableStateOf(settings.themeMode) }
             var unlocked by remember { mutableStateOf(!settings.hasPin) }
+
+            // "تفضيل الأداء": loaded once here (not re-read from disk on
+            // every recomposition), then kept in sync live when changed in
+            // Settings via onPerformancePreferenceChanged below — same
+            // pattern as themeMode/onThemeChanged just above.
+            var performancePreference by remember { mutableStateOf(settings.performanceMode) }
+            val performanceTier by remember {
+                derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference) }
+            }
 
             // Load the persisted currency symbol into the app-wide holder once,
             // so every screen (dashboard, debts, materials, notifications)
@@ -179,7 +190,8 @@ class MainActivity : ComponentActivity() {
                     } else {
                         ShopManagerApp(
                             settings = settings,
-                            onThemeChanged = { themeMode = it }
+                            onThemeChanged = { themeMode = it },
+                            onPerformancePreferenceChanged = { performancePreference = it }
                         )
                     }
                 }
@@ -213,7 +225,11 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThemeMode) -> Unit) {
+private fun ShopManagerApp(
+    settings: SettingsRepository,
+    onThemeChanged: (AppThemeMode) -> Unit,
+    onPerformancePreferenceChanged: (PerformanceMode) -> Unit
+) {
     val navController = rememberNavController()
     // Shared across screens so everyone sees the same live data instead of
     // spinning up duplicate Firestore listeners per screen.
@@ -336,6 +352,7 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
                     onThemeChanged = onThemeChanged,
+                    onPerformancePreferenceChanged = onPerformancePreferenceChanged,
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
                     onOpenHelp = { navController.navigate(ROUTE_HELP) }
