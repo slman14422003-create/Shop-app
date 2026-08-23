@@ -96,14 +96,40 @@ class DebtsRepository {
         !snapshot.isEmpty
     }
 
+    /**
+     * BUG FIXED: adding a new person used to only write the "persons" doc
+     * with an `amount` field — it never created a matching row in the
+     * "debts" collection. Since Person Detail's debt history is driven
+     * entirely by the debts collection, that initial amount silently never
+     * showed up there; the person had to open the new client and re-enter
+     * the exact same amount as a debt for it to actually appear. Now both
+     * documents are written together, atomically, in one batch.
+     */
     suspend fun addPerson(name: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        val data = mapOf(
-            "name" to name,
-            "amount" to amount,
-            "date" to date,
-            "createdAt" to System.currentTimeMillis()
+        val personRef = db.collection("persons").document()
+        val batch = db.batch()
+        batch.set(
+            personRef,
+            mapOf(
+                "name" to name,
+                "amount" to amount,
+                "date" to date,
+                "createdAt" to System.currentTimeMillis()
+            )
         )
-        db.collection("persons").add(data).await()
+        if (amount > 0) {
+            val debtRef = db.collection("debts").document()
+            batch.set(
+                debtRef,
+                mapOf(
+                    "personId" to personRef.id,
+                    "amount" to amount,
+                    "date" to date,
+                    "createdAt" to System.currentTimeMillis()
+                )
+            )
+        }
+        batch.commit().await()
         Unit
     }
 
@@ -145,22 +171,13 @@ class DebtsRepository {
     }
 
     /**
-     * Marks a single debt as paid: removes the debt entry AND lowers the
-     * person's running `amount` total by the same value (clamped at 0, never
-     * negative — protects against any pre-existing mismatch between the
-     * person's stored total and the sum of their individual debt entries).
-     * Done as one atomic transaction so the two documents never go out of
-     * sync even if the app is killed mid-write.
+     * Marks a single debt as paid: removes the debt entry. The person's
+     * displayed total is derived live from the sum of their remaining debts
+     * (see DebtsViewModel), so no separate "update the person's amount"
+     * write is needed here — one less place for the two to drift apart.
      */
-    suspend fun markDebtAsPaid(debtId: String, personId: String, amount: Double) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.runTransaction { txn ->
-            val personRef = db.collection("persons").document(personId)
-            val personSnap = txn.get(personRef)
-            val currentAmount = personSnap.getDouble("amount") ?: 0.0
-            val newAmount = (currentAmount - amount).coerceAtLeast(0.0)
-            txn.update(personRef, "amount", newAmount)
-            txn.delete(db.collection("debts").document(debtId))
-        }.await()
+    suspend fun markDebtAsPaid(debtId: String) = withTimeout(WRITE_TIMEOUT_MS) {
+        db.collection("debts").document(debtId).delete().await()
         Unit
     }
 
