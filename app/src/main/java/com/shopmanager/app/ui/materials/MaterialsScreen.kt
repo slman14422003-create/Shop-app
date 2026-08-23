@@ -5,7 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -46,6 +45,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import java.text.NumberFormat
@@ -125,8 +125,8 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
         Column(Modifier.fillMaxSize()) {
             AnimatedVisibility(
                 visible = tab == 0 && shortageCount > 0,
-                enter = expandVertically(spring(dampingRatio = 0.8f)) + fadeIn(tween(220)),
-                exit = shrinkVertically(tween(180)) + fadeOut(tween(150))
+                enter = expandVertically(MotionSpecs.expandSpring()) + fadeIn(tween(MotionSpecs.expandMillis())),
+                exit = shrinkVertically(tween(MotionSpecs.collapseMillis())) + fadeOut(tween(MotionSpecs.fadeMillis()))
             ) {
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
                     Row(
@@ -231,7 +231,7 @@ private fun MaterialsList(
                 material = m,
                 onEdit = { onEdit(m) },
                 onDelete = { onDelete(m) },
-                modifier = Modifier.animateItemPlacement(spring(dampingRatio = 0.85f))
+                modifier = Modifier.animateItemPlacement(MotionSpecs.reorderSpring())
             )
         }
         item { Spacer(Modifier.height(72.dp)) }
@@ -245,7 +245,7 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = spring(dampingRatio = 0.5f),
+        animationSpec = MotionSpecs.pressSpring(),
         label = "materialRowScale"
     )
 

@@ -2,7 +2,6 @@ package com.shopmanager.app.ui.materials
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -20,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialUnit
+import com.shopmanager.app.ui.common.MotionSpecs
 
 @Composable
 fun MaterialEditDialog(
@@ -91,15 +91,15 @@ fun UnitPicker(selected: MaterialUnit, onSelected: (MaterialUnit) -> Unit, modif
             val isSelected = option == selected
             val bgColor by animateColorAsState(
                 targetValue = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
-                animationSpec = spring(), label = "unitPillBg"
+                animationSpec = MotionSpecs.quickSpring(), label = "unitPillBg"
             )
             val textColor by animateColorAsState(
                 targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                animationSpec = spring(), label = "unitPillText"
+                animationSpec = MotionSpecs.quickSpring(), label = "unitPillText"
             )
             val verticalPad by animateDpAsState(
                 targetValue = if (isSelected) 10.dp else 8.dp,
-                animationSpec = spring(), label = "unitPillPad"
+                animationSpec = MotionSpecs.quickSpring(), label = "unitPillPad"
             )
 
             Box(

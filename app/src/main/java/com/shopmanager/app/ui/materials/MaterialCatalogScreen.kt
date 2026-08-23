@@ -27,6 +27,7 @@ import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.avatarColorFor
 
 /**
@@ -181,7 +182,11 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete:
     val color = remember(item.name) { avatarColorFor(item.name) }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "catalogRowScale")
+    val scale by animateFloatAsState(
+        if (pressed) 0.97f else 1f,
+        animationSpec = MotionSpecs.pressSpring(),
+        label = "catalogRowScale"
+    )
 
     ElevatedCard(
         modifier = Modifier
