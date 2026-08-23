@@ -17,7 +17,27 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // PERF FIX: this was `false`, which meant the release build
+            // shipped completely unshrunk — every class from every
+            // dependency (Compose, Firestore, and especially
+            // material-icons-extended, which alone bundles several
+            // thousand icon classes for icons this app never uses) stayed
+            // in the APK at full size, unobfuscated, un-dead-code-eliminated.
+            // That's a heavier APK to download/install and more classes for
+            // the runtime to load at cold start — exactly what shows up as
+            // "needs a full-spec device" on an entry-level phone with a
+            // slow eMMC and little RAM. The app has no reflection-based
+            // Firestore mapping (every read uses doc.getString()/
+            // getDouble(), never toObject()), so there's nothing here R8
+            // could break by renaming/removing unused classes — safe to
+            // shrink. See proguard-rules.pro for the few explicit keep
+            // rules Firebase itself still needs.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
