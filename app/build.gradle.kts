@@ -52,6 +52,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // SIGNING: an Android APK can't be installed unless it's
+            // signed — a release build with no signingConfig builds fine
+            // but the .apk it produces is unusable. This app has no Play
+            // Store keystore of its own, so release is signed with the
+            // same auto-generated debug key Gradle already uses for the
+            // debug build (both locally and in CI). That's the right
+            // tradeoff for an internal/sideloaded shop app: it makes
+            // `assembleRelease` produce a real installable, shrunk APK
+            // without any keystore secret to manage. It is NOT suitable
+            // if this app is ever published to the Play Store — that
+            // requires generating a dedicated release keystore and
+            // keeping it private (never in the repo).
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
