@@ -35,6 +35,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.theme.SuccessGreen
@@ -140,7 +141,7 @@ fun DebtsScreen(
                 ) {
                     items(filtered, key = { it.id }) { person ->
                         PersonRow(
-                            person, Modifier.animateItemPlacement(),
+                            person, Modifier.animateItemPlacement(MotionSpecs.reorderSpring()),
                             onClick = { onOpenPerson(person.id) },
                             onDelete = { deleteTarget = person },
                             onMarkPaid = { payTarget = person }
@@ -265,7 +266,7 @@ private fun PersonRow(
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.5f),
+        animationSpec = MotionSpecs.pressSpring(),
         label = "personRowScale"
     )
 
