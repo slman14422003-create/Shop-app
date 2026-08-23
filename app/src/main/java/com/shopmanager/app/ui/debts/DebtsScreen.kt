@@ -27,6 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.BrandGradient
+import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.SwipeToDeleteRow
 import com.shopmanager.app.ui.common.avatarColorFor
 import java.text.NumberFormat
 import java.util.Locale
@@ -42,6 +45,7 @@ fun DebtsScreen(
     var search by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<Person?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -58,10 +62,11 @@ fun DebtsScreen(
             TopAppBar(
                 title = { Text("الديون", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = Color.Transparent,
+                    titleContentColor = BrandOnGradient,
+                    actionIconContentColor = BrandOnGradient
                 ),
+                modifier = Modifier.background(BrandGradient.brush()),
                 actions = {
                     IconButton(onClick = {
                         val text = buildDebtsShareText(state.persons, state.totalAmount)
@@ -119,7 +124,11 @@ fun DebtsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filtered, key = { it.id }) { person ->
-                        PersonRow(person, Modifier.animateItemPlacement()) { onOpenPerson(person.id) }
+                        PersonRow(
+                            person, Modifier.animateItemPlacement(),
+                            onClick = { onOpenPerson(person.id) },
+                            onSwipedToDelete = { deleteTarget = person }
+                        )
                     }
                     item { Spacer(Modifier.height(72.dp)) }
                 }
@@ -139,6 +148,18 @@ fun DebtsScreen(
                     if (success) showAddDialog = false
                 }
             }
+        )
+    }
+
+    deleteTarget?.let { person ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("تأكيد الحذف") },
+            text = { Text("هل أنت متأكد من حذف \"${person.name}\" وكل ديونه؟") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.deletePerson(person.id); deleteTarget = null }) { Text("حذف") }
+            },
+            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
     }
 }
@@ -198,38 +219,45 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, te
 }
 
 @Composable
-private fun PersonRow(person: Person, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun PersonRow(
+    person: Person,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    onSwipedToDelete: () -> Unit
+) {
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
 
-    ElevatedCard(
-        modifier = modifier.fillMaxWidth().clickable(onClick = onClick),
-        shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+    SwipeToDeleteRow(onSwipedToDelete = onSwipedToDelete, modifier = modifier) {
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+            shape = MaterialTheme.shapes.medium,
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
         ) {
-            Box(
-                Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
-                contentAlignment = Alignment.Center
+            Row(
+                Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(person.name.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(person.name, fontWeight = FontWeight.Medium)
-                Text(
-                    "${nf.format(person.amount)} ${AppSettingsState.currencySymbol}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                Box(
+                    Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(person.name.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(person.name, fontWeight = FontWeight.Medium)
+                    Text(
+                        "${nf.format(person.amount)} ${AppSettingsState.currencySymbol}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(
+                    Icons.Default.ChevronLeft, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outlineVariant
                 )
             }
-            Icon(
-                Icons.Default.ChevronLeft, contentDescription = null,
-                tint = MaterialTheme.colorScheme.outlineVariant
-            )
         }
     }
 }

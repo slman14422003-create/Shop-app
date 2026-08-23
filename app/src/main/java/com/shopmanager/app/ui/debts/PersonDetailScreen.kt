@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -25,6 +24,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.BrandGradient
+import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.avatarColorFor
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -66,11 +67,12 @@ fun PersonDetailScreen(
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = Color.Transparent,
+                    titleContentColor = BrandOnGradient,
+                    navigationIconContentColor = BrandOnGradient,
+                    actionIconContentColor = BrandOnGradient
                 ),
+                modifier = Modifier.background(BrandGradient.brush()),
                 actions = {
                     IconButton(onClick = { showDeletePersonConfirm = true }) {
                         Icon(Icons.Default.Delete, contentDescription = "حذف العميل")
@@ -193,7 +195,7 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
     Box(
         Modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)))
+            .background(BrandGradient.brush())
             .padding(20.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
