@@ -35,6 +35,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
@@ -48,6 +49,7 @@ fun DebtsScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val message by viewModel.message.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     var search by remember { mutableStateOf("") }
     var showAddDialog by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
@@ -97,7 +99,12 @@ fun DebtsScreen(
             )
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+        PullToRefreshContent(
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier.padding(padding)
+        ) {
+        Column(Modifier.fillMaxSize()) {
             StatsRow(state.totalPersons, state.totalDebts, state.totalAmount)
 
             OutlinedTextField(
@@ -142,6 +149,7 @@ fun DebtsScreen(
                     item { Spacer(Modifier.height(72.dp)) }
                 }
             }
+        }
         }
     }
 

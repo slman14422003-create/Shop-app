@@ -63,6 +63,29 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing
+
+    /** Pull-to-refresh: forces a real server round trip (see repo docs) and
+     * keeps the spinner up for a minimum, tactile duration either way. */
+    fun refresh() {
+        if (_isRefreshing.value) return
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            val start = System.currentTimeMillis()
+            try {
+                repo.refreshFromServer()
+            } catch (_: Exception) {
+                // The live listeners are the source of truth; a failed
+                // manual refresh just means "nothing new from the server
+                // right now", not an error worth surfacing.
+            }
+            val elapsed = System.currentTimeMillis() - start
+            if (elapsed < 400) kotlinx.coroutines.delay(400 - elapsed)
+            _isRefreshing.value = false
+        }
+    }
+
     // null = haven't loaded once yet; used to avoid notifying for the whole
     // existing list the very first time data loads.
     private var knownPersonIds: Set<String>? = null
@@ -95,9 +118,18 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 if (existingId == null) {
-                    if (repo.personNameExists(name)) {
-                        _message.value = "\"$name\" موجود مسبقاً!"
-                        onDone(false)
+                    val existingPersonId = repo.findPersonIdByName(name)
+                    if (existingPersonId != null) {
+                        // Same name already exists (most commonly: this
+                        // customer was paid off earlier, so they're still in
+                        // the list at a zero balance). Route this into
+                        // "add a debt to them" instead of a dead-end
+                        // duplicate error — see findPersonIdByName().
+                        if (amount > 0) {
+                            repo.addDebt(existingPersonId, amount, date)
+                        }
+                        _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
+                        onDone(true)
                         return@launch
                     }
                     repo.addPerson(name, amount, date)
