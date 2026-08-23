@@ -135,4 +135,12 @@ class MaterialsRepository {
         db.collection(catalogCollection).document(id).delete().await()
         Unit
     }
+
+    /** One-off, server-sourced re-fetch used by pull-to-refresh — see
+     * [com.shopmanager.app.data.debts.DebtsRepository.refreshFromServer]. */
+    suspend fun refreshFromServer() = withTimeout(WRITE_TIMEOUT_MS) {
+        db.collection(materialsCollection).get(com.google.firebase.firestore.Source.SERVER).await()
+        db.collection(pricesCollection).get(com.google.firebase.firestore.Source.SERVER).await()
+        Unit
+    }
 }
