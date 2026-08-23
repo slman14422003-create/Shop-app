@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
@@ -36,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.BrandGradient
+import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.SwipeToDeleteRow
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.theme.WarningAmber as WarningAmberColor
 import java.text.NumberFormat
@@ -68,10 +70,11 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                 TopAppBar(
                     title = { Text("المواد والأسعار", fontWeight = FontWeight.Bold) },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                        containerColor = Color.Transparent,
+                        titleContentColor = BrandOnGradient,
+                        actionIconContentColor = BrandOnGradient
                     ),
+                    modifier = Modifier.background(BrandGradient.brush()),
                     actions = {
                         IconButton(onClick = {
                             val text = buildMaterialsShareText(state.materials, state.prices)
@@ -87,8 +90,8 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                 )
                 TabRow(
                     selectedTabIndex = tab,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary
                 ) {
                     Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("المواد") })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("الأسعار") })
@@ -202,35 +205,39 @@ private fun MaterialsList(
             val isLow = m.minQuantity > 0 && m.quantity <= m.minQuantity
             val avatarColor = if (isLow) WarningAmberColor else avatarColorFor(m.name)
 
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth().animateItemPlacement(),
-                shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+            SwipeToDeleteRow(
+                onSwipedToDelete = { onDelete(m) },
+                modifier = Modifier.animateItemPlacement()
             ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium,
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
                 ) {
-                    Box(
-                        Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            if (isLow) Icons.Default.WarningAmber else Icons.Default.Spa,
-                            contentDescription = null, tint = Color.White
-                        )
+                        Box(
+                            Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                if (isLow) Icons.Default.WarningAmber else Icons.Default.Spa,
+                                contentDescription = null, tint = Color.White
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(m.name, fontWeight = FontWeight.Medium)
+                            Text(
+                                "${m.quantity} ${m.unit}" + if (isLow) " • منخفض" else "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (isLow) WarningAmberColor else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        IconButton(onClick = { onEdit(m) }) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(m.name, fontWeight = FontWeight.Medium)
-                        Text(
-                            "${m.quantity} ${m.unit}" + if (isLow) " • منخفض" else "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isLow) WarningAmberColor else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    IconButton(onClick = { onEdit(m) }) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
-                    IconButton(onClick = { onDelete(m) }) { Icon(Icons.Default.Delete, contentDescription = "حذف") }
                 }
             }
         }
