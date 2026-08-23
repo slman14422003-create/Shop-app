@@ -4,6 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.ui.theme.BrandGradientEnd
 import com.shopmanager.app.ui.theme.BrandGradientStart
 
@@ -20,15 +23,33 @@ import com.shopmanager.app.ui.theme.BrandGradientStart
  * `Brush.verticalGradient` on each of those passes was pure waste — this
  * was one of a few small contributors to the sluggish screen-to-screen
  * feel reported after the last redesign.
+ *
+ * PERF (low-end tier): a gradient shader still has to be evaluated per
+ * pixel by the GPU on every draw, and cheap SoCs (the Mali/PowerVR parts
+ * in entry-level phones) with older/thinner GPU driver stacks are exactly
+ * where that shows up as extra frame time on every header. STANDARD-tier
+ * devices keep the real gradient; LOW-tier devices get a flat SolidColor
+ * of the same brand start color instead — same brand look, no per-pixel
+ * shader.
  */
 object BrandGradient {
     val colors = listOf(BrandGradientStart, BrandGradientEnd)
 
     @Composable
-    fun brush(): Brush = remember { Brush.verticalGradient(colors) }
+    fun brush(): Brush {
+        val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
+        return remember(isLowTier) {
+            if (isLowTier) SolidColor(BrandGradientStart) else Brush.verticalGradient(colors)
+        }
+    }
 
     @Composable
-    fun horizontalBrush(): Brush = remember { Brush.horizontalGradient(colors) }
+    fun horizontalBrush(): Brush {
+        val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
+        return remember(isLowTier) {
+            if (isLowTier) SolidColor(BrandGradientStart) else Brush.horizontalGradient(colors)
+        }
+    }
 }
 
 val BrandOnGradient: Color = Color.White
