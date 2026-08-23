@@ -24,6 +24,7 @@ object NotificationHelper {
     private const val CHANNEL_DEBTS = "debts_channel"
     private const val NOTIF_ID_LOW_STOCK = 1001
     private const val NOTIF_ID_DEBT = 1002
+    private const val NOTIF_ID_PAID_BASE = 2000
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -75,5 +76,25 @@ object NotificationHelper {
             .build()
 
         NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBT, notification)
+    }
+
+    /**
+     * Fired when a debt is marked paid (the checkmark button next to each
+     * debt in Person Detail). Uses a rotating id derived from the debt id so
+     * paying off several debts in a row shows several notifications instead
+     * of each one silently replacing the last.
+     */
+    fun showDebtPaidNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س", debtId: String = "") {
+        if (!hasPermission(context)) return
+        val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("✅ تم سداد دين")
+            .setContentText("$personName وفى $amount $currencySymbol")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+
+        val id = NOTIF_ID_PAID_BASE + (debtId.hashCode() and 0xFFF)
+        NotificationManagerCompat.from(context).notify(id, notification)
     }
 }
