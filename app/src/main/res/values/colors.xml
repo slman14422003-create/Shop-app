@@ -1,0 +1,7 @@
+<resources>
+    <!-- Same value as BrandGradientStart in ui/theme/Color.kt — kept as an
+         XML resource too because the splash screen and window background
+         below are drawn before any Compose/Kotlin code runs, so they
+         can't reference the Compose Color value directly. -->
+    <color name="brand_indigo">#4F46E5</color>
+</resources>
