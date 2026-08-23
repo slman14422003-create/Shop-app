@@ -17,12 +17,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
-import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.common.avatarColorFor
 
 /**
@@ -36,8 +34,6 @@ import com.shopmanager.app.ui.common.avatarColorFor
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
-    val context = LocalContext.current
-    val settings = remember { SettingsRepository(context) }
     val catalog by viewModel.catalog.collectAsState()
     val message by viewModel.message.collectAsState()
     var search by remember { mutableStateOf("") }
@@ -148,10 +144,17 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     pickedItem?.let { item ->
         QuantityEntryDialog(
             materialName = item.name,
-            defaultMinQuantity = settings.lowStockThreshold,
             onDismiss = { pickedItem = null },
-            onSave = { quantity, unit, minQuantity ->
-                viewModel.addMaterial(item.name, quantity, unit, minQuantity)
+            onSave = { quantity, unit ->
+                // BUG FIXED / SIMPLIFIED: this dialog used to also ask for a
+                // "حد التنبيه لنفاد الكمية" (min-quantity alert threshold)
+                // every single time. Every material added here is, by the
+                // nature of this stocktaking flow, already something the
+                // shop is short on — so instead of asking, the material is
+                // now flagged as needing restock immediately (minQuantity =
+                // the counted quantity itself). Editing the material later
+                // still lets you raise that threshold once more stock comes in.
+                viewModel.addMaterial(item.name, quantity, unit, minQuantity = quantity)
                 pickedItem = null
             }
         )
@@ -195,13 +198,11 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete:
 @Composable
 private fun QuantityEntryDialog(
     materialName: String,
-    defaultMinQuantity: Double = 0.0,
     onDismiss: () -> Unit,
-    onSave: (quantity: Double, unit: String, minQuantity: Double) -> Unit
+    onSave: (quantity: Double, unit: String) -> Unit
 ) {
     var quantity by remember { mutableStateOf("") }
     var unit by remember { mutableStateOf(MaterialUnit.KG) }
-    var minQuantity by remember { mutableStateOf(defaultMinQuantity.takeIf { it > 0 }?.toString() ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -220,23 +221,16 @@ private fun QuantityEntryDialog(
                     modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
                 )
                 UnitPicker(selected = unit, onSelected = { unit = it })
-                OutlinedTextField(
-                    value = minQuantity, onValueChange = { minQuantity = it },
-                    label = { Text("حد التنبيه لنفاد الكمية (اختياري)") },
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                    singleLine = true
-                )
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
         confirmButton = {
             TextButton(onClick = {
                 val q = quantity.trim().toDoubleOrNull()
-                val minQ = minQuantity.trim().toDoubleOrNull() ?: 0.0
                 if (q == null || q <= 0) {
                     error = "أدخل كمية صحيحة"
                 } else {
-                    onSave(q, unit.label, minQ)
+                    onSave(q, unit.label)
                 }
             }) { Text("حفظ") }
         },
