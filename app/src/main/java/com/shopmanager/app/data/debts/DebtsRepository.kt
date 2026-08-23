@@ -148,6 +148,22 @@ class DebtsRepository {
         Unit
     }
 
+    /**
+     * Settles a person's whole outstanding balance from the main debts list
+     * (the checkmark on each person row): deletes every one of their debts
+     * in one batch, same as marking each individual debt as paid one by
+     * one, but without deleting the person itself.
+     */
+    suspend fun markAllDebtsAsPaid(personId: String) = withTimeout(WRITE_TIMEOUT_MS) {
+        val debts = db.collection("debts").whereEqualTo("personId", personId).get().await()
+        val batch = db.batch()
+        for (doc in debts.documents) {
+            batch.delete(db.collection("debts").document(doc.id))
+        }
+        batch.commit().await()
+        Unit
+    }
+
     suspend fun addDebt(personId: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
         val data = mapOf(
             "personId" to personId,
