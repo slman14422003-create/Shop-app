@@ -20,7 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.graphicsLayer
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -310,7 +310,7 @@ private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, 
 
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        modifier = modifier.scale(scale),
         interactionSource = interactionSource,
         shape = MaterialTheme.shapes.large,
         contentPadding = PaddingValues(vertical = 12.dp)
