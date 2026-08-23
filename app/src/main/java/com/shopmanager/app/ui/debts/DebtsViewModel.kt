@@ -140,4 +140,22 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+
+    /** Marks [debt] as paid: removes it, lowers the person's total, and (if enabled) notifies. */
+    fun markDebtAsPaid(debt: Debt, personName: String) {
+        viewModelScope.launch {
+            try {
+                repo.markDebtAsPaid(debt.id, debt.personId, debt.amount)
+                _message.value = "تم تسجيل السداد ✅"
+                if (settings.notificationsEnabled) {
+                    val nf = NumberFormat.getNumberInstance(Locale("ar"))
+                    NotificationHelper.showDebtPaidNotification(
+                        getApplication(), personName, nf.format(debt.amount), settings.currencySymbol, debt.id
+                    )
+                }
+            } catch (e: Exception) {
+                _message.value = "تعذر تسجيل السداد: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+            }
+        }
+    }
 }

@@ -4,9 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
@@ -27,6 +29,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -49,6 +52,7 @@ fun PersonDetailScreen(
     var date by remember { mutableStateOf(today()) }
     var showDeletePersonConfirm by remember { mutableStateOf(false) }
     var deleteDebtTarget by remember { mutableStateOf<String?>(null) }
+    var payDebtTarget by remember { mutableStateOf<Debt?>(null) }
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
 
@@ -151,7 +155,8 @@ fun PersonDetailScreen(
                             amount = debt.amount.toString()
                             date = debt.date
                         },
-                        onDelete = { deleteDebtTarget = debt.id }
+                        onDelete = { deleteDebtTarget = debt.id },
+                        onMarkPaid = { payDebtTarget = debt }
                     )
                 }
             }
@@ -186,6 +191,22 @@ fun PersonDetailScreen(
                 }) { Text("حذف") }
             },
             dismissButton = { TextButton(onClick = { deleteDebtTarget = null }) { Text("إلغاء") } }
+        )
+    }
+
+    payDebtTarget?.let { debt ->
+        AlertDialog(
+            onDismissRequest = { payDebtTarget = null },
+            icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
+            title = { Text("تأكيد السداد") },
+            text = { Text("هل \"${person.name}\" وفى ${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف هذا الدين من السجل وإرسال إشعار.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.markDebtAsPaid(debt, person.name)
+                    payDebtTarget = null
+                }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { payDebtTarget = null }) { Text("إلغاء") } }
         )
     }
 }
@@ -276,7 +297,7 @@ private fun AddDebtCard(
 }
 
 @Composable
-private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: () -> Unit, onMarkPaid: () -> Unit) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = MaterialTheme.shapes.medium,
@@ -286,6 +307,18 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
             Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Mark-as-paid: a circular check button. Tapping it asks for
+            // confirmation, then removes the debt and fires a "paid" notification.
+            IconButton(
+                onClick = onMarkPaid,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(SuccessGreen.copy(alpha = 0.15f))
+            ) {
+                Icon(Icons.Default.Check, contentDescription = "تسجيل السداد", tint = SuccessGreen, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     "${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}",
