@@ -40,6 +40,7 @@ import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.theme.AppThemeMode
+import com.shopmanager.app.ui.theme.BrandGradientStart
 import com.shopmanager.app.ui.theme.SetSystemBarsColor
 import com.shopmanager.app.ui.theme.ShopManagerTheme
 import com.shopmanager.app.ui.theme.rememberIsDarkTheme
@@ -81,13 +82,21 @@ class MainActivity : ComponentActivity() {
 
             ShopManagerTheme(themeMode = themeMode) {
                 // Status bar (and nav bar) painted with the app's own brand
-                // color instead of the bare system default, with icon
-                // contrast that adapts automatically to light/dark theme.
+                // color instead of the bare system default.
+                //
+                // FIX: this used to read MaterialTheme.colorScheme.primary,
+                // which in the *dark* scheme is intentionally a pale tone
+                // (Indigo80) meant for text/icon contrast on dark surfaces —
+                // not for painting a full status bar. That's what caused the
+                // jarring bright-purple bar sitting on top of an otherwise
+                // dark app. It now always uses the app's brand color, which
+                // stays a deep indigo in every theme, so the status bar
+                // always gets white icons and never clashes with dark mode.
                 val isDark = rememberIsDarkTheme(themeMode)
                 SetSystemBarsColor(
-                    statusBarColor = MaterialTheme.colorScheme.primary,
+                    statusBarColor = BrandGradientStart,
                     navigationBarColor = MaterialTheme.colorScheme.surface,
-                    statusBarDarkIcons = isDark,
+                    statusBarDarkIcons = false,
                     navigationBarDarkIcons = !isDark
                 )
 
@@ -158,7 +167,9 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
                 DashboardScreen(
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
-                    onOpenSettings = { navController.navigate(ROUTE_SETTINGS) }
+                    onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
+                    onNavigateToDebts = { navigateTopLevel(navController, ROUTE_DEBTS) },
+                    onNavigateToMaterials = { navigateTopLevel(navController, ROUTE_MATERIALS) }
                 )
             }
             composable(ROUTE_DEBTS) {
