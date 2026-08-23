@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
@@ -20,11 +21,17 @@ import com.shopmanager.app.data.performance.PerformanceTier
  *
  * PERF (low-end tier): the count-up itself is what's expensive, not the
  * number — animateFloatAsState recomposes this Text on every animation
- * frame for 600ms. On a LOW-tier device that's ~36 extra recompositions
- * per total that changes, on top of everything else already redrawing.
- * Dropping the duration to 0 keeps one code path (no separate "static
- * text" branch to maintain) while making it settle in a single frame,
- * same as if there were no animation at all.
+ * frame for its duration. On a LOW-tier device that's extra recompositions
+ * on top of everything else already redrawing, so LOW settles in a single
+ * frame (duration 0), same as if there were no animation at all.
+ *
+ * FIX (feel): STANDARD/HIGH previously used a flat/linear tween, which is
+ * what a count-up looks like when it's "just" animating rather than
+ * feeling designed — it starts and ends at the same constant speed with
+ * no ease-out, so the final digits change at the same pace as the middle
+ * ones and the stop reads as abrupt. FastOutSlowInEasing (Material's
+ * standard easing curve) starts fast and settles gently instead, which is
+ * what makes the same animation read as smooth rather than mechanical.
  */
 @Composable
 fun AnimatedCounterText(
@@ -37,7 +44,10 @@ fun AnimatedCounterText(
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     val animated by animateFloatAsState(
         targetValue = targetValue.toFloat(),
-        animationSpec = tween(durationMillis = if (isLowTier) 0 else 600),
+        animationSpec = tween(
+            durationMillis = if (isLowTier) 0 else 500,
+            easing = FastOutSlowInEasing
+        ),
         label = "counter"
     )
     Text(format(animated.toDouble()), modifier = modifier, style = style, fontWeight = fontWeight)
