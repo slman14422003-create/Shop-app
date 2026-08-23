@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
+import com.shopmanager.app.data.materials.formatQuantity
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
@@ -153,6 +154,15 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
             Crossfade(targetState = tab, label = "materialsTab") { selectedTab ->
                 if (selectedTab == 0) {
                     Column {
+                        // Requested total: how much of each unit is currently
+                        // on the shortage list, added up across every entry
+                        // (not just what's visible after a search filter) -
+                        // e.g. "٥ كيلو، ٣ لوقية". Units are never summed
+                        // together across each other since a كيلو and a
+                        // لوقية aren't the same physical amount.
+                        if (state.materials.isNotEmpty()) {
+                            MaterialsTotalsSummary(state.materials)
+                        }
                         OutlinedTextField(
                             value = search,
                             onValueChange = { search = it },
@@ -275,7 +285,7 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
             Column(Modifier.weight(1f)) {
                 Text(material.name, fontWeight = FontWeight.Medium)
                 Text(
-                    "الكمية المطلوبة: ${material.quantity} ${material.unit}",
+                    "الكمية المطلوبة: ${material.quantity.formatQuantity()} ${material.unit}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -332,6 +342,51 @@ private fun PricesList(materials: List<Material>, prices: Map<String, Double>, o
     }
 }
 
+/**
+ * "عدد الحجم بالمواد المدخلة بشكل كلي": total quantity per unit across every
+ * material currently on the shortage list, e.g. "٥ كيلو  •  ٣ لوقية". Kept
+ * as separate per-unit totals rather than one blended number, since a كيلو
+ * and a لوقية are different physical amounts and adding their raw numbers
+ * together would be a meaningless total.
+ */
+@Composable
+private fun MaterialsTotalsSummary(materials: List<Material>) {
+    val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
+    val totalsByUnit = remember(materials) {
+        materials.groupBy { it.unit }
+            .mapValues { (_, items) -> items.sumOf { it.quantity } }
+            .toList()
+            .sortedByDescending { it.second }
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "الإجمالي:",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                totalsByUnit.joinToString("  •  ") { (unit, total) ->
+                    "${nf.format(total)} $unit"
+                },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+}
+
 @Composable
 private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -348,7 +403,7 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
     val sb = StringBuilder("📦 قائمة المواد\n\n")
     materials.sortedBy { it.name }.forEach { m ->
         val price = prices[m.name]
-        sb.append("• ${m.name}: ${m.quantity} ${m.unit}")
+        sb.append("• ${m.name}: ${m.quantity.formatQuantity()} ${m.unit}")
         if (price != null) sb.append(" — ${nf.format(price)} ${AppSettingsState.currencySymbol}")
         sb.append("\n")
     }

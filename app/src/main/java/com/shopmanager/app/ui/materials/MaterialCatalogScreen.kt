@@ -220,7 +220,12 @@ private fun QuantityEntryDialog(
     onDismiss: () -> Unit,
     onSave: (quantity: Double, unit: String) -> Unit
 ) {
-    var quantity by remember { mutableStateOf("") }
+    // FIX: same free-typed-decimal issue as MaterialEditDialog (see its
+    // comment) - this is the dialog actually used every time a new
+    // shortage is added from the catalog, so it needed the identical fix:
+    // a whole-number stepper instead of a text field that could take
+    // "1.5" for a كيلو entry, plus the two new نص كيلو / ربع كيلو units.
+    var quantity by remember { mutableStateOf(1) }
     var unit by remember { mutableStateOf(MaterialUnit.KG) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -229,15 +234,20 @@ private fun QuantityEntryDialog(
         title = { Text(materialName) },
         text = {
             Column {
-                OutlinedTextField(
-                    value = quantity, onValueChange = { quantity = it },
-                    label = { Text("الكمية المطلوبة") }, modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
+                Text(
+                    "الكمية المطلوبة", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                QuantityStepper(
+                    value = quantity,
+                    unitLabel = unit.label,
+                    onValueChange = { quantity = it.coerceAtLeast(1) }
                 )
                 Text(
                     "الوحدة", style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
+                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
                 )
                 UnitPicker(selected = unit, onSelected = { unit = it })
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
@@ -245,11 +255,10 @@ private fun QuantityEntryDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                val q = quantity.trim().toDoubleOrNull()
-                if (q == null || q <= 0) {
+                if (quantity <= 0) {
                     error = "أدخل كمية صحيحة"
                 } else {
-                    onSave(q, unit.label)
+                    onSave(quantity.toDouble(), unit.label)
                 }
             }) { Text("حفظ") }
         },
