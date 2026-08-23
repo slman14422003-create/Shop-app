@@ -52,7 +52,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
+    // FIX: bumped from 2024.06.00 (material3 1.2.x) so the app can use the
+    // stable Material3 pull-to-refresh API (PullToRefreshBox), which only
+    // shipped starting material3 1.3.0. Used for the new Facebook-style
+    // pull-down-to-refresh gesture, applied consistently across Home,
+    // Debts, and Materials (see ui/common/PullToRefreshContent.kt).
+    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
