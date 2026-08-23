@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>دليل الاستخدام</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --brand-start: #4F46E5;
+    --brand-end: #7C3AED;
+    --bg: #FAFAFC;
+    --card: #FFFFFF;
+    --text: #1B1B24;
+    --muted: #5B5876;
+    --border: #EEEEF5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121218;
+      --card: #1B1B24;
+      --text: #F1F0FA;
+      --muted: #C7C5D6;
+      --border: #2A2A38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    line-height: 1.7;
+    padding-bottom: 32px;
+  }
+  header {
+    background: linear-gradient(180deg, var(--brand-start), var(--brand-end));
+    color: #fff;
+    padding: 28px 20px 24px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; opacity: 0.9; font-size: 14px; }
+  main { padding: 16px; max-width: 640px; margin: 0 auto; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .card h2 {
+    font-size: 16px;
+    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card p, .card li { color: var(--muted); font-size: 14px; margin: 4px 0; }
+  .card ul { padding-inline-start: 20px; margin: 6px 0; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: rgba(124,58,237,0.15);
+    font-size: 15px;
+  }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>👋 دليل استخدام إدارة المحل</h1>
+    <p>كل ما تحتاج معرفته لتشغيل تطبيقك بأفضل شكل</p>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2><span class="badge">🏠</span> الرئيسية</h2>
+      <p>تعرض إجمالي الديون، عدد المواد، آخر النشاطات، والمواد التي بحاجة لإعادة تعبئة. زرّي "عميل جديد" و"مادة جديدة" ينقلانك مباشرة للإضافة.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">💰</span> الديون</h2>
+      <ul>
+        <li>اضغط على أي عميل لعرض سجل ديونه بالتفصيل.</li>
+        <li>اسحب أي عميل لليسار لحذفه (بعد تأكيد).</li>
+        <li>ضمن صفحة العميل، اضغط ✓ الأخضر جنب أي دين لتسجيله كمسدّد — يتم حذفه من السجل وإرسال إشعار تلقائي بأن العميل وفى دينه.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">📦</span> المواد والأسعار</h2>
+      <p>تبويب "المواد" لإدارة الكميات، وتبويب "الأسعار" لتحديث سعر كل مادة. المواد التي وصلت للحد الأدنى تظهر باللون البرتقالي وتُضاف تلقائيًا لقائمة "بحاجة لإعادة تعبئة" بالرئيسية.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">⚙️</span> الإعدادات</h2>
+      <ul>
+        <li><b>المظهر:</b> فاتح / داكن / حسب النظام.</li>
+        <li><b>العملة:</b> غيّرها لتنعكس بكل الشاشات فورًا.</li>
+        <li><b>الإشعارات:</b> إيقاف/تشغيل تنبيهات نفاد المخزون والديون الجديدة.</li>
+        <li><b>الحماية:</b> قفل التطبيق برمز PIN محلي على هذا الجهاز.</li>
+        <li><b>نسخة احتياطية:</b> تصدير كل بياناتك كنص جاهز للمشاركة.</li>
+      </ul>
+    </div>
+
+    <footer>هذه الصفحة تعمل بدون اتصال بالإنترنت داخل التطبيق.</footer>
+  </main>
+</body>
+</html>
