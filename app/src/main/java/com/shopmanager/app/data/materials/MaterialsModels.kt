@@ -2,12 +2,21 @@ package com.shopmanager.app.data.materials
 
 /**
  * Fixed unit choices for a spice shop (بزورية) - weight is always picked from
- * these four, never free-typed. "unit" is still stored in Firestore as a
+ * these six, never free-typed. "unit" is still stored in Firestore as a
  * plain string (the Arabic label) so it stays backward-compatible with any
  * existing documents.
+ *
+ * FIX: previously only كيلو/لوقية/نص لوقية/ربع لوقية existed, so a half-kilo
+ * or quarter-kilo shortage had to be typed as a decimal quantity (e.g. "0.5"
+ * with unit كيلو). نص كيلو and ربع كيلو are now their own units, same as the
+ * لوقية fractions, so quantity can always stay a whole number (see
+ * MaterialEditDialog's stepper) - you pick the size, then just count how
+ * many of it.
  */
 enum class MaterialUnit(val label: String) {
     KG("كيلو"),
+    HALF_KG("نص كيلو"),
+    QUARTER_KG("ربع كيلو"),
     OKE("لوقية"),
     HALF_OKE("نص لوقية"),
     QUARTER_OKE("ربع لوقية");
@@ -42,3 +51,14 @@ data class MaterialCatalogItem(
     val id: String = "",
     val name: String = ""
 )
+
+/**
+ * Quantity is always entered as a whole number now (see MaterialEditDialog's
+ * stepper), but is still stored/typed as Double for backward compatibility
+ * with existing Firestore documents. Plain `.toString()` on a Double prints
+ * a trailing ".0" (e.g. "1.0 كيلو"), which never made sense for a whole-unit
+ * count - this trims it to "1 كيلو" while still showing real decimals for
+ * any older document that predates the stepper.
+ */
+fun Double.formatQuantity(): String =
+    if (this == this.toLong().toDouble()) this.toLong().toString() else this.toString()
