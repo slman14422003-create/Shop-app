@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
@@ -42,6 +44,7 @@ private val CURRENCY_OPTIONS = listOf("ل.س", "$", "SAR", "AED", "TRY")
 fun SettingsScreen(
     onBack: () -> Unit,
     onThemeChanged: (AppThemeMode) -> Unit,
+    onPerformancePreferenceChanged: (PerformanceMode) -> Unit = {},
     debtsViewModel: DebtsViewModel? = null,
     materialsViewModel: MaterialsViewModel? = null,
     onOpenHelp: () -> Unit = {}
@@ -53,6 +56,7 @@ fun SettingsScreen(
     var showSetPinDialog by remember { mutableStateOf(false) }
     var currency by remember { mutableStateOf(settings.currencySymbol) }
     var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
+    var performanceMode by remember { mutableStateOf(settings.performanceMode) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -144,6 +148,39 @@ fun SettingsScreen(
                             settings.notificationsEnabled = it
                         }
                     )
+                }
+            }
+
+            // الأداء (performance) — lets the person override the
+            // automatic per-device detection with an explicit choice, so a
+            // phone that got misclassified (or someone who just prefers a
+            // snappier/more static feel) isn't stuck with it.
+            SettingsSection(title = "الأداء", icon = Icons.Default.Speed) {
+                Text(
+                    "يتحكم بحدّة التأثيرات البصرية (التدرجات اللونية والانميشن). اختر \"تلقائي\" ليقرر التطبيق حسب قوة جهازك.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                listOf(
+                    PerformanceMode.AUTO to "تلقائي (حسب الجهاز)",
+                    PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
+                    PerformanceMode.LOW to "منخفض (أداء أعلى وبطارية أطول)"
+                ).forEach { (mode, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = performanceMode == mode,
+                            onClick = {
+                                performanceMode = mode
+                                settings.performanceMode = mode
+                                onPerformancePreferenceChanged(mode)
+                            }
+                        )
+                        Text(label)
+                    }
                 }
             }
 
