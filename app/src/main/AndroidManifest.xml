@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
+        android:name=".ShopManagerApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -13,11 +15,38 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ShopManager">
 
+        <!--
+          PERF FIX (startup jitter): androidx.work auto-registers a
+          ContentProvider (WorkManagerInitializer) that runs before
+          Application.onCreate on EVERY cold start, unconditionally, the
+          moment the work-runtime-ktx dependency exists in the app —
+          whether or not a worker is ever scheduled yet. That provider
+          builds WorkManager's Room database on the spot, on the main
+          thread. On a fast phone that's invisible; on a slow eMMC/2GB
+          device it's real main-thread time competing with the very
+          first Compose frames — exactly what shows up as the app
+          "shaking" for the first couple of seconds. Removing this
+          default initializer moves that same setup to run lazily
+          instead (see ShopManagerApplication + MainActivity, where it
+          now happens off the main thread, after the splash screen is
+          already covering the UI).
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@style/Theme.ShopManager">
+            android:theme="@style/Theme.ShopManager.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
