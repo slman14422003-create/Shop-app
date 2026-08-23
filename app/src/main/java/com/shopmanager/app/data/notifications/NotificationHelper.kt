@@ -12,17 +12,19 @@ import androidx.core.app.NotificationManagerCompat
 
 /**
  * Local (on-device) notifications - no server/FCM setup required. Two kinds:
- * - "shopping list": which materials are low/out of stock and need buying
- *   from the market (re-shown, not re-created, whenever the low-stock set
- *   actually changes - not on every unrelated Firestore update).
+ * - "shopping list": which materials are currently on the shortage list and
+ *   need buying from the market. Every material added to the list is, by
+ *   definition, something the shop is short on (re-shown, not re-created,
+ *   whenever the set of names actually changes - not on every unrelated
+ *   Firestore update).
  * - "new debt": a new customer/debt appeared (useful if a second device or
  *   employee adds one).
  */
 object NotificationHelper {
 
-    private const val CHANNEL_LOW_STOCK = "low_stock_channel"
+    private const val CHANNEL_SHOPPING_LIST = "low_stock_channel"
     private const val CHANNEL_DEBTS = "debts_channel"
-    private const val NOTIF_ID_LOW_STOCK = 1001
+    private const val NOTIF_ID_SHOPPING_LIST = 1001
     private const val NOTIF_ID_DEBT = 1002
     private const val NOTIF_ID_PAID_BASE = 2000
 
@@ -30,7 +32,7 @@ object NotificationHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
             manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_LOW_STOCK, "قائمة المشتريات (نفاد المخزون)", NotificationManager.IMPORTANCE_DEFAULT)
+                NotificationChannel(CHANNEL_SHOPPING_LIST, "قائمة النواقص والمشتريات", NotificationManager.IMPORTANCE_DEFAULT)
             )
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL_DEBTS, "تنبيهات الديون", NotificationManager.IMPORTANCE_DEFAULT)
@@ -44,25 +46,25 @@ object NotificationHelper {
             PackageManager.PERMISSION_GRANTED
     }
 
-    fun showLowStockNotification(context: Context, missingNames: List<String>) {
-        if (!hasPermission(context) || missingNames.isEmpty()) return
-        val body = if (missingNames.size <= 4) missingNames.joinToString("، ")
-        else missingNames.take(4).joinToString("، ") + " و${missingNames.size - 4} أخرى"
+    fun showShoppingListNotification(context: Context, shortageNames: List<String>) {
+        if (!hasPermission(context) || shortageNames.isEmpty()) return
+        val body = if (shortageNames.size <= 4) shortageNames.joinToString("، ")
+        else shortageNames.take(4).joinToString("، ") + " و${shortageNames.size - 4} أخرى"
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_LOW_STOCK)
+        val notification = NotificationCompat.Builder(context, CHANNEL_SHOPPING_LIST)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle("🛒 قائمة مشتريات: ${missingNames.size} مادة ناقصة")
+            .setContentTitle("🛒 قائمة مشتريات: ${shortageNames.size} مادة ناقصة")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .build()
 
-        NotificationManagerCompat.from(context).notify(NOTIF_ID_LOW_STOCK, notification)
+        NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_LIST, notification)
     }
 
-    fun cancelLowStockNotification(context: Context) {
-        NotificationManagerCompat.from(context).cancel(NOTIF_ID_LOW_STOCK)
+    fun cancelShoppingListNotification(context: Context) {
+        NotificationManagerCompat.from(context).cancel(NOTIF_ID_SHOPPING_LIST)
     }
 
     fun showNewDebtNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س") {
