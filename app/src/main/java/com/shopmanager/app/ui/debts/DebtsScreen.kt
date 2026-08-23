@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,7 +34,7 @@ import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
-import com.shopmanager.app.ui.common.SwipeToDeleteRow
+import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
@@ -132,7 +135,7 @@ fun DebtsScreen(
                         PersonRow(
                             person, Modifier.animateItemPlacement(),
                             onClick = { onOpenPerson(person.id) },
-                            onSwipedToDelete = { deleteTarget = person },
+                            onDelete = { deleteTarget = person },
                             onMarkPaid = { payTarget = person }
                         )
                     }
@@ -245,58 +248,72 @@ private fun PersonRow(
     person: Person,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    onSwipedToDelete: () -> Unit,
+    onDelete: () -> Unit,
     onMarkPaid: () -> Unit
 ) {
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (pressed) 0.98f else 1f,
+        animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.5f),
+        label = "personRowScale"
+    )
 
-    SwipeToDeleteRow(onSwipedToDelete = onSwipedToDelete, modifier = modifier) {
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-            shape = MaterialTheme.shapes.medium,
-            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .scale(scale)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = androidx.compose.foundation.LocalIndication.current,
+                onClick = onClick
+            ),
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Box(
+                Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(person.name.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(person.name, fontWeight = FontWeight.Medium)
-                    Text(
-                        "${nf.format(person.amount)} ${AppSettingsState.currencySymbol}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                // Mark-as-paid: same circular check affordance as the debt
-                // record screen, but settles the person's whole balance in
-                // one tap and fires the same "paid" notification. Only
-                // shown when there's actually something to settle.
-                if (person.amount > 0) {
-                    IconButton(
-                        onClick = onMarkPaid,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(CircleShape)
-                            .background(SuccessGreen.copy(alpha = 0.15f))
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = "تسجيل سداد كامل الدين", tint = SuccessGreen, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                }
-                Icon(
-                    Icons.Default.ChevronLeft, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.outlineVariant
+                Text(person.name.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(person.name, fontWeight = FontWeight.Medium)
+                Text(
+                    "${nf.format(person.amount)} ${AppSettingsState.currencySymbol}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            // Mark-as-paid: same circular check affordance as the debt
+            // record screen, but settles the person's whole balance in
+            // one tap and fires the same "paid" notification. Only
+            // shown when there's actually something to settle.
+            if (person.amount > 0) {
+                IconButton(
+                    onClick = onMarkPaid,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(SuccessGreen.copy(alpha = 0.15f))
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "تسجيل سداد كامل الدين", tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            DeleteIconButton(onClick = onDelete, contentDescription = "حذف العميل")
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                Icons.Default.ChevronLeft, contentDescription = null,
+                tint = MaterialTheme.colorScheme.outlineVariant
+            )
         }
     }
 }

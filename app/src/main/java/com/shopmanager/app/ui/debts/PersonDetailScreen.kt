@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.PriceCheck
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -50,6 +51,7 @@ fun PersonDetailScreen(
     var editingDebt by remember { mutableStateOf<Debt?>(null) }
     var amount by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(today()) }
+    var note by remember { mutableStateOf("") }
     var showDeletePersonConfirm by remember { mutableStateOf(false) }
     var deleteDebtTarget by remember { mutableStateOf<String?>(null) }
     var payDebtTarget by remember { mutableStateOf<Debt?>(null) }
@@ -105,15 +107,18 @@ fun PersonDetailScreen(
                     isEditing = editingDebt != null,
                     amount = amount,
                     date = date,
+                    note = note,
                     onAmountChange = { amount = it },
                     onDateChange = { date = it },
-                    onCancelEdit = { editingDebt = null; amount = ""; date = today() },
+                    onNoteChange = { note = it },
+                    onCancelEdit = { editingDebt = null; amount = ""; date = today(); note = "" },
                     onSubmit = {
                         val a = amount.trim().toDoubleOrNull()
                         if (a != null && a > 0 && date.isNotBlank()) {
-                            viewModel.addOrUpdateDebt(editingDebt?.id, person.id, a, date)
+                            viewModel.addOrUpdateDebt(editingDebt?.id, person.id, a, date, note.trim())
                             amount = ""
                             date = today()
+                            note = ""
                             editingDebt = null
                         }
                     }
@@ -154,6 +159,7 @@ fun PersonDetailScreen(
                             editingDebt = debt
                             amount = debt.amount.toString()
                             date = debt.date
+                            note = debt.note
                         },
                         onDelete = { deleteDebtTarget = debt.id },
                         onMarkPaid = { payDebtTarget = debt }
@@ -247,8 +253,10 @@ private fun AddDebtCard(
     isEditing: Boolean,
     amount: String,
     date: String,
+    note: String,
     onAmountChange: (String) -> Unit,
     onDateChange: (String) -> Unit,
+    onNoteChange: (String) -> Unit,
     onCancelEdit: () -> Unit,
     onSubmit: () -> Unit
 ) {
@@ -282,6 +290,16 @@ private fun AddDebtCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = note, onValueChange = onNoteChange,
+                label = { Text("ملاحظة (اختياري)") },
+                leadingIcon = { Icon(Icons.Default.Notes, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                minLines = 1,
+                maxLines = 3,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth()
+            )
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 if (isEditing) {
@@ -326,6 +344,25 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(debt.date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (debt.note.isNotBlank()) {
+                    Row(
+                        Modifier.padding(top = 2.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            Icons.Default.Notes, contentDescription = null,
+                            modifier = Modifier.size(13.dp).padding(top = 2.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            debt.note,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 2
+                        )
+                    }
+                }
             }
             IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
             IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف") }

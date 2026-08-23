@@ -127,14 +127,14 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun debtsForPerson(personId: String) = repo.listenDebtsForPerson(personId)
 
-    fun addOrUpdateDebt(existingId: String?, personId: String, amount: Double, date: String) {
+    fun addOrUpdateDebt(existingId: String?, personId: String, amount: Double, date: String, note: String = "") {
         viewModelScope.launch {
             try {
                 if (existingId == null) {
-                    repo.addDebt(personId, amount, date)
+                    repo.addDebt(personId, amount, date, note)
                     _message.value = "تم إضافة الدين"
                 } else {
-                    repo.updateDebt(existingId, amount, date)
+                    repo.updateDebt(existingId, amount, date, note)
                     _message.value = "تم تعديل الدين"
                 }
             } catch (e: Exception) {
