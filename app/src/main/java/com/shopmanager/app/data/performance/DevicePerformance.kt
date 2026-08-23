@@ -56,11 +56,19 @@ object DevicePerformance {
         val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
         val cores = Runtime.getRuntime().availableProcessors()
         val osFlaggedLowRam = activityManager?.isLowRamDevice == true
+        val lowRam = totalRamMb in 1..LOW_RAM_THRESHOLD_MB
+        val lowCores = cores in 1..LOW_CORE_THRESHOLD
 
-        val tier = if (osFlaggedLowRam ||
-            (totalRamMb in 1..LOW_RAM_THRESHOLD_MB) ||
-            cores in 1..LOW_CORE_THRESHOLD
-        ) {
+        // BUG FIXED (device detection): this used to flag LOW the moment
+        // *any one* signal tripped — including just "quad-core", which
+        // also matches plenty of perfectly capable phones with a small
+        // number of very fast cores. That misclassified real mid-range
+        // devices as low-end (visible as "the app doesn't seem to apply
+        // the right mode for this phone"). isLowRamDevice is Android/the
+        // OEM's own explicit low-RAM flag, so it's trusted on its own;
+        // otherwise RAM *and* core count both have to point the same way
+        // before a device is treated as entry-level.
+        val tier = if (osFlaggedLowRam || (lowRam && lowCores)) {
             PerformanceTier.LOW
         } else {
             PerformanceTier.STANDARD
@@ -68,6 +76,14 @@ object DevicePerformance {
 
         prefs.edit().putString(KEY_TIER, tier.name).apply()
         return tier
+    }
+
+    /** Clears the cached classification so the next detectTier() call
+     * re-measures from scratch. Not wired to any screen yet — available
+     * if a "recheck device" option in Settings is ever added, so a
+     * misclassification doesn't require a reinstall to fix. */
+    fun resetCachedTier(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_TIER).apply()
     }
 }
 
