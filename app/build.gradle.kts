@@ -67,4 +67,13 @@ dependencies {
     implementation("com.google.firebase:firebase-common-ktx")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
+    // In-app WebView (دليل الاستخدام / help screen). androidx.webkit gives
+    // access to the WebViewFeature/WebSettingsCompat compat-shims needed to
+    // correctly force-dark WebView content and check per-feature support
+    // across API levels (the plain android.webkit APIs for this only
+    // stabilized piecemeal from API 29 through 33, so a raw SDK check alone
+    // is not reliable on Android 11/12 devices — this library picks the
+    // right mechanism at runtime).
+    implementation("androidx.webkit:webkit:1.11.0")
 }
