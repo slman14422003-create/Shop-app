@@ -36,9 +36,22 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     private val personsFlow = repo.listenPersons().catch { emit(emptyList()) }
     private val debtsFlow = repo.listenAllDebts().catch { emit(emptyList()) }
 
+    /**
+     * BUG FIXED: `persons.amount` used to be a separately-maintained field
+     * that only ever got set once at creation (and, previously, via a manual
+     * edit) — it was never recalculated when a debt was added, edited,
+     * deleted, or paid off. So it silently drifted away from the real sum of
+     * that person's debts (visible as "أكبر الديون" showing numbers that
+     * didn't match the person's own debt history). Every displayed total
+     * now comes from summing `debts` grouped by personId, computed live
+     * alongside everything else — there's no separate field left to fall
+     * out of sync.
+     */
     val uiState: StateFlow<DebtsUiState> = combine(personsFlow, debtsFlow) { persons, debts ->
+        val totalsByPerson = debts.groupBy { it.personId }.mapValues { (_, list) -> list.sumOf { it.amount } }
+        val enrichedPersons = persons.map { it.copy(amount = totalsByPerson[it.id] ?: 0.0) }
         DebtsUiState(
-            persons = persons,
+            persons = enrichedPersons,
             debts = debts,
             totalPersons = persons.size,
             totalDebts = debts.size,
@@ -141,11 +154,11 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Marks [debt] as paid: removes it, lowers the person's total, and (if enabled) notifies. */
+    /** Marks [debt] as paid: removes it (the person's total then updates automatically) and (if enabled) notifies. */
     fun markDebtAsPaid(debt: Debt, personName: String) {
         viewModelScope.launch {
             try {
-                repo.markDebtAsPaid(debt.id, debt.personId, debt.amount)
+                repo.markDebtAsPaid(debt.id)
                 _message.value = "تم تسجيل السداد ✅"
                 if (settings.notificationsEnabled) {
                     val nf = NumberFormat.getNumberInstance(Locale("ar"))

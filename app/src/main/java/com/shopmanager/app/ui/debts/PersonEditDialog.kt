@@ -56,7 +56,7 @@ fun PersonEditDialog(
                 )
                 OutlinedTextField(
                     value = amount, onValueChange = { amount = it }, enabled = !isSaving,
-                    label = { Text("المبلغ (${AppSettingsState.currencySymbol})") },
+                    label = { Text(if (initial == null) "الدين الأولي (${AppSettingsState.currencySymbol})" else "المبلغ (${AppSettingsState.currencySymbol})") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
