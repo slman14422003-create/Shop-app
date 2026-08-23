@@ -1,6 +1,9 @@
 package com.shopmanager.app.ui.dashboard
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -17,18 +20,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.BrandGradient
+import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.WarningAmber as WarningAmberColor
 import java.text.SimpleDateFormat
 import java.text.NumberFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -40,12 +47,25 @@ private data class ActivityRow(
     val timestamp: Long
 )
 
+private fun timeBasedGreeting(): String {
+    val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when {
+        hour < 5 -> "سهرانين لهلق؟ 🌙"
+        hour < 12 -> "صباح الخير ☀️"
+        hour < 17 -> "أهلاً بك 👋"
+        hour < 21 -> "مساء الخير 🌇"
+        else -> "مساء النور 🌙"
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     debtsViewModel: DebtsViewModel,
     materialsViewModel: MaterialsViewModel,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onNavigateToDebts: () -> Unit = {},
+    onNavigateToMaterials: () -> Unit = {}
 ) {
     val debtsState by debtsViewModel.uiState.collectAsState()
     val materialsState by materialsViewModel.uiState.collectAsState()
@@ -54,6 +74,7 @@ fun DashboardScreen(
 
     val lowStock = materialsState.materials.filter { it.minQuantity > 0 && it.quantity <= it.minQuantity }
     val topDebtors = debtsState.persons.sortedByDescending { it.amount }.take(5)
+    val isLoading = debtsState.isLoading || materialsState.isLoading
 
     val recentActivity = remember(debtsState.debts, debtsState.persons, materialsState.materials) {
         val personsById = debtsState.persons.associateBy { it.id }
@@ -88,6 +109,13 @@ fun DashboardScreen(
             item { DashboardHeader(onOpenSettings = onOpenSettings) }
 
             item {
+                QuickActionsRow(
+                    onAddPerson = onNavigateToDebts,
+                    onAddMaterial = onNavigateToMaterials
+                )
+            }
+
+            item {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -97,7 +125,12 @@ fun DashboardScreen(
                         icon = Icons.Default.AttachMoney,
                         accentColor = MaterialTheme.colorScheme.primary,
                         title = "إجمالي الديون",
-                        value = "${nf.format(debtsState.totalAmount)} ${AppSettingsState.currencySymbol}",
+                        valueContent = {
+                            AnimatedCounterText(
+                                targetValue = debtsState.totalAmount,
+                                format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" }
+                            )
+                        },
                         subtitle = "${debtsState.totalPersons} عميل"
                     )
                     StatCard(
@@ -105,9 +138,22 @@ fun DashboardScreen(
                         icon = Icons.Default.Inventory2,
                         accentColor = if (lowStock.isNotEmpty()) WarningAmberColor else MaterialTheme.colorScheme.secondary,
                         title = "عدد المواد",
-                        value = materialsState.materials.size.toString(),
+                        valueContent = {
+                            AnimatedCounterText(
+                                targetValue = materialsState.materials.size.toDouble(),
+                                format = { it.toInt().toString() }
+                            )
+                        },
                         subtitle = if (lowStock.isNotEmpty()) "${lowStock.size} بحاجة تجديد" else "المخزون جيد"
                     )
+                }
+            }
+
+            if (isLoading && debtsState.persons.isEmpty() && materialsState.materials.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(strokeWidth = 3.dp)
+                    }
                 }
             }
 
@@ -164,11 +210,27 @@ fun DashboardScreen(
                     SectionCard(title = "أكبر الديون") {
                         topDebtors.forEach { p ->
                             Row(
-                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(p.name)
-                                Text("${nf.format(p.amount)} ${AppSettingsState.currencySymbol}", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+                                Box(
+                                    Modifier.size(28.dp).clip(MaterialTheme.shapes.small).background(avatarColorFor(p.name)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        p.name.firstOrNull()?.uppercase() ?: "?",
+                                        color = Color.White,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text(p.name, modifier = Modifier.weight(1f))
+                                Text(
+                                    "${nf.format(p.amount)} ${AppSettingsState.currencySymbol}",
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
                         }
                     }
@@ -199,26 +261,63 @@ fun DashboardScreen(
 
 @Composable
 private fun DashboardHeader(onOpenSettings: () -> Unit) {
+    val greeting = remember { timeBasedGreeting() }
     Box(
         Modifier
             .fillMaxWidth()
-            .background(
-                Brush.verticalGradient(
-                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
-                )
-            )
+            .background(BrandGradient.brush())
             .padding(20.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("أهلاً بك 👋", color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelLarge)
+                Text(greeting, color = BrandOnGradient.copy(alpha = 0.85f), style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(2.dp))
-                Text("إدارة المحل", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+                Text("إدارة المحل", color = BrandOnGradient, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             }
             IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = Color.White)
+                Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = BrandOnGradient)
             }
         }
+    }
+}
+
+@Composable
+private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        QuickActionButton(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Default.PersonAdd,
+            label = "عميل جديد",
+            onClick = onAddPerson
+        )
+        QuickActionButton(
+            modifier = Modifier.weight(1f),
+            icon = Icons.Default.Inventory2,
+            label = "مادة جديدة",
+            onClick = onAddMaterial
+        )
+    }
+}
+
+@Composable
+private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, label: String, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, label = "quickActionScale")
+
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.graphicsLayer { scaleX = scale; scaleY = scale },
+        interactionSource = interactionSource,
+        shape = MaterialTheme.shapes.large,
+        contentPadding = PaddingValues(vertical = 12.dp)
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge)
     }
 }
 
@@ -228,7 +327,7 @@ private fun StatCard(
     icon: ImageVector,
     accentColor: Color,
     title: String,
-    value: String,
+    valueContent: @Composable () -> Unit,
     subtitle: String
 ) {
     ElevatedCard(modifier = modifier, shape = MaterialTheme.shapes.large) {
@@ -242,7 +341,7 @@ private fun StatCard(
             Spacer(Modifier.height(10.dp))
             Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            valueContent()
             Spacer(Modifier.height(2.dp))
             Text(subtitle, style = MaterialTheme.typography.labelSmall)
         }
