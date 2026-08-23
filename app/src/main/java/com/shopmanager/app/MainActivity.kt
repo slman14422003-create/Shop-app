@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -125,6 +126,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThemeMode) -> Unit) {
     val navController = rememberNavController()
@@ -139,6 +141,7 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
     val pagerState = rememberPagerState(initialPage = PAGE_DEBTS) { 2 }
     val pagerScope = rememberCoroutineScope()
 
+    @OptIn(ExperimentalFoundationApi::class)
     fun openPager(page: Int) {
         navigateTopLevel(navController, ROUTE_MAIN_PAGER)
         pagerScope.launch { pagerState.animateScrollToPage(page) }
