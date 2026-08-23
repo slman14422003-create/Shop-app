@@ -43,7 +43,6 @@ class MaterialsRepository {
                             quantity = doc.getDouble("quantity") ?: 0.0,
                             unit = doc.getString("unit") ?: MaterialUnit.KG.label,
                             section = doc.getString("section") ?: "main",
-                            minQuantity = doc.getDouble("minQuantity") ?: 0.0,
                             updatedAt = doc.getLong("timestamp") ?: 0L
                         )
                     }
@@ -86,28 +85,26 @@ class MaterialsRepository {
         awaitClose { registration.remove() }
     }
 
-    suspend fun addMaterial(name: String, quantity: Double, unit: String, section: String, minQuantity: Double) =
+    suspend fun addMaterial(name: String, quantity: Double, unit: String, section: String) =
         withTimeout(WRITE_TIMEOUT_MS) {
             val data = mapOf(
                 "name" to name,
                 "quantity" to quantity,
                 "unit" to unit,
                 "section" to section,
-                "minQuantity" to minQuantity,
                 "timestamp" to System.currentTimeMillis()
             )
             db.collection(materialsCollection).add(data).await()
             Unit
         }
 
-    suspend fun updateMaterial(id: String, name: String, quantity: Double, unit: String, section: String, minQuantity: Double) =
+    suspend fun updateMaterial(id: String, name: String, quantity: Double, unit: String, section: String) =
         withTimeout(WRITE_TIMEOUT_MS) {
             val data = mapOf(
                 "name" to name,
                 "quantity" to quantity,
                 "unit" to unit,
                 "section" to section,
-                "minQuantity" to minQuantity,
                 "timestamp" to System.currentTimeMillis()
             )
             db.collection(materialsCollection).document(id).update(data).await()

@@ -20,13 +20,20 @@ enum class MaterialUnit(val label: String) {
     }
 }
 
+/**
+ * A "material" here is a shortage entry, not a stock count: every row in
+ * this list is by definition something the shop is out of and needs to buy
+ * (a live shopping list), like adding "فلفل اسود، الكمية 2" when the shop is
+ * out of black pepper. There is deliberately no "current stock" or
+ * "low-stock threshold" concept - an item simply stays on the list until
+ * it's bought and removed.
+ */
 data class Material(
     val id: String = "",
     val name: String = "",
     val quantity: Double = 0.0,
     val unit: String = MaterialUnit.KG.label,
     val section: String = "main",
-    val minQuantity: Double = 0.0,
     val updatedAt: Long = 0L
 )
 
