@@ -24,16 +24,12 @@ class SettingsRepository(context: Context) {
         get() = AppThemeMode.valueOf(prefs.getString(KEY_THEME, AppThemeMode.SYSTEM.name)!!)
         set(value) = prefs.edit().putString(KEY_THEME, value.name).apply()
 
-    var lowStockThreshold: Double
-        get() = prefs.getFloat(KEY_LOW_STOCK, 5f).toDouble()
-        set(value) = prefs.edit().putFloat(KEY_LOW_STOCK, value.toFloat()).apply()
-
     /** Currency label shown across the app (money amounts, share text, notifications). */
     var currencySymbol: String
         get() = prefs.getString(KEY_CURRENCY, "ل.س") ?: "ل.س"
         set(value) = prefs.edit().putString(KEY_CURRENCY, value.ifBlank { "ل.س" }).apply()
 
-    /** Master switch for the low-stock / new-debt local notifications. */
+    /** Master switch for the shortage-list / new-debt local notifications. */
     var notificationsEnabled: Boolean
         get() = prefs.getBoolean(KEY_NOTIFICATIONS, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS, value).apply()
@@ -61,7 +57,6 @@ class SettingsRepository(context: Context) {
     companion object {
         private const val KEY_THEME = "theme_mode"
         private const val KEY_PIN_HASH = "pin_hash"
-        private const val KEY_LOW_STOCK = "low_stock_threshold"
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
     }
