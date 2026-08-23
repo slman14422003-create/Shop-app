@@ -29,6 +29,7 @@ import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
@@ -69,6 +70,8 @@ fun DashboardScreen(
 ) {
     val debtsState by debtsViewModel.uiState.collectAsState()
     val materialsState by materialsViewModel.uiState.collectAsState()
+    val debtsRefreshing by debtsViewModel.isRefreshing.collectAsState()
+    val materialsRefreshing by materialsViewModel.isRefreshing.collectAsState()
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val df = remember { SimpleDateFormat("d MMM، HH:mm", Locale("ar")) }
 
@@ -105,8 +108,13 @@ fun DashboardScreen(
     }
 
     Scaffold { padding ->
+        PullToRefreshContent(
+            isRefreshing = debtsRefreshing || materialsRefreshing,
+            onRefresh = { debtsViewModel.refresh(); materialsViewModel.refresh() },
+            modifier = Modifier.padding(padding)
+        ) {
         LazyColumn(
-            Modifier.fillMaxSize().padding(padding),
+            Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -259,6 +267,7 @@ fun DashboardScreen(
                     }
                 }
             }
+        }
         }
     }
 }
