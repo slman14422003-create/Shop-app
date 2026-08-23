@@ -29,6 +29,7 @@ import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.debts.DebtsViewModel
@@ -319,7 +320,11 @@ private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit) 
 private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, label: String, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, label = "quickActionScale")
+    val scale by animateFloatAsState(
+        if (pressed) 0.96f else 1f,
+        animationSpec = MotionSpecs.pressSpring(),
+        label = "quickActionScale"
+    )
 
     OutlinedButton(
         onClick = onClick,
