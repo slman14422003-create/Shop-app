@@ -72,8 +72,12 @@ fun DashboardScreen(
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val df = remember { SimpleDateFormat("d MMM، HH:mm", Locale("ar")) }
 
-    val lowStock = materialsState.materials.filter { it.minQuantity > 0 && it.quantity <= it.minQuantity }
-    val topDebtors = debtsState.persons.sortedByDescending { it.amount }.take(5)
+    val lowStock = remember(materialsState.materials) {
+        materialsState.materials.filter { it.minQuantity > 0 && it.quantity <= it.minQuantity }
+    }
+    val topDebtors = remember(debtsState.persons) {
+        debtsState.persons.sortedByDescending { it.amount }.take(5)
+    }
     val isLoading = debtsState.isLoading || materialsState.isLoading
 
     val recentActivity = remember(debtsState.debts, debtsState.persons, materialsState.materials) {
