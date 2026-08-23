@@ -9,9 +9,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -290,17 +292,28 @@ private fun ShopManagerApp(
             navController = navController,
             startDestination = ROUTE_MAIN_PAGER,
             modifier = androidx.compose.ui.Modifier.padding(padding),
-            // PERF: previously combined fadeIn+slideInHorizontally (and the
-            // fade/slide-out equivalents). Layering an offset animation on
-            // top of an alpha animation forces an extra graphicsLayer pass
-            // every frame of every screen transition, which is a real cost
-            // on lower-end devices and was part of why switching tabs/screens
-            // felt laggy. A short plain crossfade reads just as intentional
-            // and is noticeably lighter to composite.
-            enterTransition = { if (isLowTier) EnterTransition.None else fadeIn(tween(150)) },
-            exitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(120)) },
-            popEnterTransition = { if (isLowTier) EnterTransition.None else fadeIn(tween(150)) },
-            popExitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(120)) }
+            // PERF/FEEL: LOW tier keeps this at zero cost (no transition at
+            // all — the fastest a screen change can be). STANDARD/HIGH pairs
+            // a fade with a short, subtle horizontal slide instead of the
+            // previous plain crossfade: a one-shot ~200ms transition (not a
+            // continuous per-frame cost like the Pager's own drag below) is
+            // cheap enough to afford the extra graphicsLayer pass, and it's
+            // what actually reads as a "smooth, designed" transition instead
+            // of a flat fade that can feel like something's missing.
+            // FastOutSlowInEasing (Material's standard curve) so it eases
+            // out at the end instead of stopping abruptly.
+            enterTransition = {
+                if (isLowTier) EnterTransition.None
+                else fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { fullWidth -> fullWidth / 8 }
+            },
+            exitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(160, easing = FastOutSlowInEasing)) },
+            popEnterTransition = {
+                if (isLowTier) EnterTransition.None
+                else fadeIn(tween(220, easing = FastOutSlowInEasing)) +
+                    slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { fullWidth -> -fullWidth / 8 }
+            },
+            popExitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(160, easing = FastOutSlowInEasing)) }
         ) {
             composable(ROUTE_MAIN_PAGER) {
                 // A single swipeable surface for Home, Debts, and Materials:
