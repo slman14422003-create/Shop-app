@@ -9,7 +9,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -31,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
@@ -300,24 +300,24 @@ private fun PersonRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            // Mark-as-paid: same circular check affordance as the debt
-            // record screen, but settles the person's whole balance in
-            // one tap and fires the same "paid" notification. Only
-            // shown when there's actually something to settle.
+            // Mark-as-paid: same shared circular action button as every
+            // other check/edit/delete affordance in the app (see
+            // ActionIconButton) so it's pixel-identical to the delete "×"
+            // right next to it instead of a couple dp larger with no press
+            // feedback. Settles the person's whole balance in one tap and
+            // fires the same "paid" notification. Only shown when there's
+            // actually something to settle.
             if (person.amount > 0) {
-                IconButton(
-                    onClick = onMarkPaid,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(SuccessGreen.copy(alpha = 0.15f))
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = "تسجيل سداد كامل الدين", tint = SuccessGreen, modifier = Modifier.size(18.dp))
-                }
-                Spacer(Modifier.width(8.dp))
+                ActionIconButton(
+                    icon = Icons.Default.Check,
+                    tint = SuccessGreen,
+                    contentDescription = "تسجيل سداد كامل الدين",
+                    onClick = onMarkPaid
+                )
+                Spacer(Modifier.width(10.dp))
             }
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف العميل")
-            Spacer(Modifier.width(2.dp))
+            Spacer(Modifier.width(6.dp))
             Icon(
                 Icons.Default.ChevronLeft, contentDescription = null,
                 tint = MaterialTheme.colorScheme.outlineVariant

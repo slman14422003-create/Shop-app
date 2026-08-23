@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -26,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
@@ -327,17 +327,15 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
             Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Mark-as-paid: a circular check button. Tapping it asks for
-            // confirmation, then removes the debt and fires a "paid" notification.
-            IconButton(
-                onClick = onMarkPaid,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(SuccessGreen.copy(alpha = 0.15f))
-            ) {
-                Icon(Icons.Default.Check, contentDescription = "تسجيل السداد", tint = SuccessGreen, modifier = Modifier.size(18.dp))
-            }
+            // Mark-as-paid: shared circular action button (see
+            // ActionIconButton) — tapping it asks for confirmation, then
+            // removes the debt and fires a "paid" notification.
+            ActionIconButton(
+                icon = Icons.Default.Check,
+                tint = SuccessGreen,
+                contentDescription = "تسجيل السداد",
+                onClick = onMarkPaid
+            )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -373,19 +371,17 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
             // every other action in the app (the check button right above,
             // and DeleteIconButton on the person list and materials list) —
             // so this row looked like it belonged to a different screen.
-            // Edit now gets the same circular treatment (info-blue tint) as
-            // a visual pair with the check button, delete reuses the app's
-            // shared DeleteIconButton, and a real gap separates every icon.
-            IconButton(
-                onClick = onEdit,
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(InfoBlue.copy(alpha = 0.12f))
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = InfoBlue, modifier = Modifier.size(18.dp))
-            }
-            Spacer(Modifier.width(8.dp))
+            // Edit now shares the exact same ActionIconButton (info-blue
+            // tint) as the check button above and the delete "×" next to
+            // it, so all three are pixel-identical in size and animation,
+            // with a real gap separating every icon.
+            ActionIconButton(
+                icon = Icons.Default.Edit,
+                tint = InfoBlue,
+                contentDescription = "تعديل",
+                onClick = onEdit
+            )
+            Spacer(Modifier.width(10.dp))
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف الدين")
         }
     }

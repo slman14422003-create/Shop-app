@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -33,8 +34,15 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = DebtsRepository()
     private val settings = SettingsRepository(application)
 
-    private val personsFlow = repo.listenPersons().catch { emit(emptyList()) }
-    private val debtsFlow = repo.listenAllDebts().catch { emit(emptyList()) }
+    // PERF: Firestore's snapshot listener can re-fire with metadata-only
+    // changes (e.g. local write acknowledged by the server) that produce an
+    // identical list. Without distinctUntilChanged, each of those re-runs
+    // the groupBy/sum below and pushes a new UI state, which the whole
+    // screen recomposes for even though nothing the person can see changed
+    // — a real contributor to the app feeling heavier than it should,
+    // especially right after a write.
+    private val personsFlow = repo.listenPersons().catch { emit(emptyList()) }.distinctUntilChanged()
+    private val debtsFlow = repo.listenAllDebts().catch { emit(emptyList()) }.distinctUntilChanged()
 
     /**
      * BUG FIXED: `persons.amount` used to be a separately-maintained field
