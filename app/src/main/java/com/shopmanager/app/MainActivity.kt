@@ -10,13 +10,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -24,6 +29,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import kotlinx.coroutines.launch
 import com.shopmanager.app.data.FirebaseModule
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.settings.SettingsRepository
@@ -45,8 +51,12 @@ import com.shopmanager.app.ui.theme.ShopManagerTheme
 import com.shopmanager.app.ui.theme.rememberIsDarkTheme
 
 private const val ROUTE_DASHBOARD = "dashboard"
-private const val ROUTE_DEBTS = "debts"
-private const val ROUTE_MATERIALS = "materials"
+// Debts and Materials live together as two pages of one swipeable
+// HorizontalPager (see MainPagerScreen below) instead of two separate nav
+// destinations, so the person can flick right/left between them.
+private const val ROUTE_MAIN_PAGER = "mainPager"
+private const val PAGE_DEBTS = 0
+private const val PAGE_MATERIALS = 1
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
 private const val ROUTE_HELP = "help"
@@ -123,10 +133,22 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
     val debtsViewModel: DebtsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val materialsViewModel: MaterialsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
+    // Hoisted above the NavHost (rather than inside the pager's own
+    // composable) so it survives navigating away to Settings/Help and back,
+    // and so the bottom bar can read/drive the current page directly.
+    val pagerState = rememberPagerState(initialPage = PAGE_DEBTS) { 2 }
+    val pagerScope = rememberCoroutineScope()
+
+    fun openPager(page: Int) {
+        navigateTopLevel(navController, ROUTE_MAIN_PAGER)
+        pagerScope.launch { pagerState.animateScrollToPage(page) }
+    }
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val bottomBarRoutes = setOf(ROUTE_DASHBOARD, ROUTE_DEBTS, ROUTE_MATERIALS)
+    val bottomBarRoutes = setOf(ROUTE_DASHBOARD, ROUTE_MAIN_PAGER)
     val showBottomBar = currentRoute in bottomBarRoutes
+    val onMainPager = currentRoute == ROUTE_MAIN_PAGER
 
     Scaffold(
         bottomBar = {
@@ -139,14 +161,14 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
                         label = { Text("الرئيسية") }
                     )
                     NavigationBarItem(
-                        selected = currentRoute == ROUTE_DEBTS,
-                        onClick = { navigateTopLevel(navController, ROUTE_DEBTS) },
+                        selected = onMainPager && pagerState.currentPage == PAGE_DEBTS,
+                        onClick = { openPager(PAGE_DEBTS) },
                         icon = { Icon(Icons.Default.AttachMoney, contentDescription = null) },
                         label = { Text("الديون") }
                     )
                     NavigationBarItem(
-                        selected = currentRoute == ROUTE_MATERIALS,
-                        onClick = { navigateTopLevel(navController, ROUTE_MATERIALS) },
+                        selected = onMainPager && pagerState.currentPage == PAGE_MATERIALS,
+                        onClick = { openPager(PAGE_MATERIALS) },
                         icon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
                         label = { Text("المواد والأسعار") }
                     )
@@ -175,21 +197,46 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
                     onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
-                    onNavigateToDebts = { navigateTopLevel(navController, ROUTE_DEBTS) },
-                    onNavigateToMaterials = { navigateTopLevel(navController, ROUTE_MATERIALS) }
+                    onNavigateToDebts = { openPager(PAGE_DEBTS) },
+                    onNavigateToMaterials = { openPager(PAGE_MATERIALS) }
                 )
             }
-            composable(ROUTE_DEBTS) {
-                DebtsScreen(
-                    viewModel = debtsViewModel,
-                    onOpenPerson = { personId -> navController.navigate("personDetail/$personId") }
-                )
-            }
-            composable(ROUTE_MATERIALS) {
-                MaterialsScreen(
-                    viewModel = materialsViewModel,
-                    onAddNew = { navController.navigate(ROUTE_MATERIAL_CATALOG) }
-                )
+            composable(ROUTE_MAIN_PAGER) {
+                // A single swipeable surface for the Debts and Materials
+                // screens: flicking right or left moves between them,
+                // exactly like switching the tabs below, just smoother.
+                // Each row's own delete action is a tap (see
+                // DeleteIconButton) rather than a horizontal swipe, so it
+                // never fights this page-swipe gesture over the same axis.
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                val pageOffset =
+                                    (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                                val fraction = pageOffset.coerceIn(-1f, 1f)
+                                alpha = 1f - (kotlin.math.abs(fraction) * 0.35f)
+                                val scale = 1f - (kotlin.math.abs(fraction) * 0.08f)
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                    ) {
+                        when (page) {
+                            PAGE_DEBTS -> DebtsScreen(
+                                viewModel = debtsViewModel,
+                                onOpenPerson = { personId -> navController.navigate("personDetail/$personId") }
+                            )
+                            else -> MaterialsScreen(
+                                viewModel = materialsViewModel,
+                                onAddNew = { navController.navigate(ROUTE_MATERIAL_CATALOG) }
+                            )
+                        }
+                    }
+                }
             }
             composable(ROUTE_MATERIAL_CATALOG) {
                 MaterialCatalogScreen(
