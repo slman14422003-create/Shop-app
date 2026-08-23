@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.data.materials.formatQuantity
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
@@ -101,7 +102,7 @@ fun DashboardScreen(
                 icon = Icons.Default.Spa,
                 color = avatarColorFor(m.name),
                 title = m.name,
-                subtitle = "نقص مضاف: ${m.quantity} ${m.unit}",
+                subtitle = "نقص مضاف: ${m.quantity.formatQuantity()} ${m.unit}",
                 timestamp = m.updatedAt
             )
         }
@@ -179,7 +180,7 @@ fun DashboardScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(m.name)
-                                Text("${m.quantity} ${m.unit}", color = WarningAmberColor, fontWeight = FontWeight.Medium)
+                                Text("${m.quantity.formatQuantity()} ${m.unit}", color = WarningAmberColor, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
