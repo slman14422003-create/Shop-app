@@ -29,7 +29,9 @@ import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.theme.InfoBlue
 import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -364,8 +366,27 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
                     }
                 }
             }
-            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف") }
+            // FIX: these two used to be bare default IconButtons sitting
+            // directly next to each other with no gap, so their 48dp touch
+            // targets ran into one another and made mis-taps easy. They
+            // also didn't match the circular, tinted affordance used for
+            // every other action in the app (the check button right above,
+            // and DeleteIconButton on the person list and materials list) —
+            // so this row looked like it belonged to a different screen.
+            // Edit now gets the same circular treatment (info-blue tint) as
+            // a visual pair with the check button, delete reuses the app's
+            // shared DeleteIconButton, and a real gap separates every icon.
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(InfoBlue.copy(alpha = 0.12f))
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = InfoBlue, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(8.dp))
+            DeleteIconButton(onClick = onDelete, contentDescription = "حذف الدين")
         }
     }
 }
