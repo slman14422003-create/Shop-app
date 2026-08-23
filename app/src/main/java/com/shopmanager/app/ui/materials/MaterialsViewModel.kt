@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -30,13 +31,17 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val section = MutableStateFlow("main")
 
+    // PERF: same fix as DebtsViewModel — Firestore's listener can re-fire
+    // with a list that's identical to the last one (e.g. a local write
+    // getting server-acknowledged). distinctUntilChanged stops that from
+    // recomputing/recomposing the whole screen for no visible change.
     private val materialsFlow = channelFlow {
         section.collect { s ->
             repo.listenMaterials(s).collect { send(it) }
         }
-    }.catch { emit(emptyList()) }
+    }.catch { emit(emptyList()) }.distinctUntilChanged()
 
-    private val pricesFlow = repo.listenPrices().catch { emit(emptyMap()) }
+    private val pricesFlow = repo.listenPrices().catch { emit(emptyMap()) }.distinctUntilChanged()
 
     val uiState: StateFlow<MaterialsUiState> = combine(materialsFlow, pricesFlow) { materials, prices ->
         MaterialsUiState(materials = materials, prices = prices, isLoading = false)
@@ -44,6 +49,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
 
     val catalog: StateFlow<List<MaterialCatalogItem>> = repo.listenCatalog()
         .catch { emit(emptyList()) }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _message = MutableStateFlow<String?>(null)
