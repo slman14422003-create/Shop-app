@@ -13,5 +13,6 @@ data class Debt(
     val personId: String = "",
     val amount: Double = 0.0,
     val date: String = "",
+    val note: String = "",
     val createdAt: Long = 0L
 )

@@ -164,19 +164,20 @@ class DebtsRepository {
         Unit
     }
 
-    suspend fun addDebt(personId: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
+    suspend fun addDebt(personId: String, amount: Double, date: String, note: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
         val data = mapOf(
             "personId" to personId,
             "amount" to amount,
             "date" to date,
+            "note" to note,
             "createdAt" to System.currentTimeMillis()
         )
         db.collection("debts").add(data).await()
         Unit
     }
 
-    suspend fun updateDebt(id: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        val data = mapOf("amount" to amount, "date" to date)
+    suspend fun updateDebt(id: String, amount: Double, date: String, note: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
+        val data = mapOf("amount" to amount, "date" to date, "note" to note)
         db.collection("debts").document(id).update(data).await()
         Unit
     }
@@ -202,6 +203,7 @@ class DebtsRepository {
         personId = getString("personId") ?: "",
         amount = getDouble("amount") ?: 0.0,
         date = getString("date") ?: "",
+        note = getString("note") ?: "",
         createdAt = getLong("createdAt") ?: 0L
     )
 }
