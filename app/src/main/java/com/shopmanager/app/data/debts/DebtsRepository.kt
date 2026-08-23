@@ -144,6 +144,26 @@ class DebtsRepository {
         Unit
     }
 
+    /**
+     * Marks a single debt as paid: removes the debt entry AND lowers the
+     * person's running `amount` total by the same value (clamped at 0, never
+     * negative — protects against any pre-existing mismatch between the
+     * person's stored total and the sum of their individual debt entries).
+     * Done as one atomic transaction so the two documents never go out of
+     * sync even if the app is killed mid-write.
+     */
+    suspend fun markDebtAsPaid(debtId: String, personId: String, amount: Double) = withTimeout(WRITE_TIMEOUT_MS) {
+        db.runTransaction { txn ->
+            val personRef = db.collection("persons").document(personId)
+            val personSnap = txn.get(personRef)
+            val currentAmount = personSnap.getDouble("amount") ?: 0.0
+            val newAmount = (currentAmount - amount).coerceAtLeast(0.0)
+            txn.update(personRef, "amount", newAmount)
+            txn.delete(db.collection("debts").document(debtId))
+        }.await()
+        Unit
+    }
+
     private fun com.google.firebase.firestore.DocumentSnapshot.toDebt() = Debt(
         id = id,
         personId = getString("personId") ?: "",
