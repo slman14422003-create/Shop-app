@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.*
@@ -38,7 +39,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onThemeChanged: (AppThemeMode) -> Unit,
     debtsViewModel: DebtsViewModel? = null,
-    materialsViewModel: MaterialsViewModel? = null
+    materialsViewModel: MaterialsViewModel? = null,
+    onOpenHelp: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsRepository(context) }
@@ -192,6 +194,12 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(onClick = onOpenHelp, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("دليل الاستخدام")
+                }
             }
 
             Spacer(Modifier.height(8.dp))
