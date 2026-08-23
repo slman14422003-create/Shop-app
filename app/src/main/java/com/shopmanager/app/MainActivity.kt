@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,7 +33,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.launch
 import com.shopmanager.app.data.FirebaseModule
+import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.performance.DevicePerformance
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.dashboard.DashboardScreen
 import com.shopmanager.app.ui.debts.DebtsScreen
@@ -72,6 +78,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         FirebaseModule.init(applicationContext)
         NotificationHelper.ensureChannels(applicationContext)
+        // "وضع لكل هاتف": classified once (cached after that), then used
+        // below to switch off the heavier visual effects on entry-level
+        // hardware — see DevicePerformance for the detection signals.
+        val performanceTier = DevicePerformance.detectTier(applicationContext)
+        BackgroundSyncWorker.schedule(applicationContext)
 
         setContent {
             val settings = remember { SettingsRepository(applicationContext) }
@@ -95,6 +106,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
             ShopManagerTheme(themeMode = themeMode) {
                 // Status bar (and nav bar) painted with the app's own brand
                 // color instead of the bare system default.
@@ -126,6 +138,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+            }
         }
     }
 }
@@ -154,6 +167,14 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute == ROUTE_MAIN_PAGER
+
+    // PERF (low-end tier): a fade still allocates a graphicsLayer and runs
+    // a compositor pass every frame of the transition. That's cheap on a
+    // Samsung A16-class device but is exactly the kind of per-frame cost
+    // that shows up as stutter on a 2GB/quad-core phone like the Redmi
+    // A10. On LOW tier screens simply swap with no transition at all.
+    val performanceTier = LocalPerformanceTier.current
+    val isLowTier = performanceTier == PerformanceTier.LOW
 
     Scaffold(
         bottomBar = {
@@ -192,10 +213,10 @@ private fun ShopManagerApp(settings: SettingsRepository, onThemeChanged: (AppThe
             // on lower-end devices and was part of why switching tabs/screens
             // felt laggy. A short plain crossfade reads just as intentional
             // and is noticeably lighter to composite.
-            enterTransition = { fadeIn(tween(150)) },
-            exitTransition = { fadeOut(tween(120)) },
-            popEnterTransition = { fadeIn(tween(150)) },
-            popExitTransition = { fadeOut(tween(120)) }
+            enterTransition = { if (isLowTier) EnterTransition.None else fadeIn(tween(150)) },
+            exitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(120)) },
+            popEnterTransition = { if (isLowTier) EnterTransition.None else fadeIn(tween(150)) },
+            popExitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(120)) }
         ) {
             composable(ROUTE_MAIN_PAGER) {
                 // A single swipeable surface for Home, Debts, and Materials:
