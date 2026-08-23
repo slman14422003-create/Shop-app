@@ -154,6 +154,28 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Settles a person's whole balance from the main debts list (the
+     * checkmark on the person row): removes all their debts and fires the
+     * same "paid" notification as marking one debt as paid.
+     */
+    fun markPersonAsPaid(person: Person) {
+        viewModelScope.launch {
+            try {
+                repo.markAllDebtsAsPaid(person.id)
+                _message.value = "تم تسجيل سداد \"${person.name}\" ✅"
+                if (settings.notificationsEnabled) {
+                    val nf = NumberFormat.getNumberInstance(Locale("ar"))
+                    NotificationHelper.showDebtPaidNotification(
+                        getApplication(), person.name, nf.format(person.amount), settings.currencySymbol, person.id
+                    )
+                }
+            } catch (e: Exception) {
+                _message.value = "تعذر تسجيل السداد: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+            }
+        }
+    }
+
     /** Marks [debt] as paid: removes it (the person's total then updates automatically) and (if enabled) notifies. */
     fun markDebtAsPaid(debt: Debt, personName: String) {
         viewModelScope.launch {

@@ -7,8 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.People
@@ -31,6 +33,7 @@ import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.SwipeToDeleteRow
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -46,8 +49,10 @@ fun DebtsScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Person?>(null) }
+    var payTarget by remember { mutableStateOf<Person?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -127,7 +132,8 @@ fun DebtsScreen(
                         PersonRow(
                             person, Modifier.animateItemPlacement(),
                             onClick = { onOpenPerson(person.id) },
-                            onSwipedToDelete = { deleteTarget = person }
+                            onSwipedToDelete = { deleteTarget = person },
+                            onMarkPaid = { payTarget = person }
                         )
                     }
                     item { Spacer(Modifier.height(72.dp)) }
@@ -160,6 +166,22 @@ fun DebtsScreen(
                 TextButton(onClick = { viewModel.deletePerson(person.id); deleteTarget = null }) { Text("حذف") }
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
+        )
+    }
+
+    payTarget?.let { person ->
+        AlertDialog(
+            onDismissRequest = { payTarget = null },
+            icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
+            title = { Text("تأكيد السداد") },
+            text = { Text("هل \"${person.name}\" وفى ${nf.format(person.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف كل ديونه من السجل وإرسال إشعار.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.markPersonAsPaid(person)
+                    payTarget = null
+                }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { payTarget = null }) { Text("إلغاء") } }
         )
     }
 }
@@ -223,7 +245,8 @@ private fun PersonRow(
     person: Person,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
-    onSwipedToDelete: () -> Unit
+    onSwipedToDelete: () -> Unit,
+    onMarkPaid: () -> Unit
 ) {
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
@@ -252,6 +275,22 @@ private fun PersonRow(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+                // Mark-as-paid: same circular check affordance as the debt
+                // record screen, but settles the person's whole balance in
+                // one tap and fires the same "paid" notification. Only
+                // shown when there's actually something to settle.
+                if (person.amount > 0) {
+                    IconButton(
+                        onClick = onMarkPaid,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(SuccessGreen.copy(alpha = 0.15f))
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "تسجيل سداد كامل الدين", tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
                 }
                 Icon(
                     Icons.Default.ChevronLeft, contentDescription = null,
