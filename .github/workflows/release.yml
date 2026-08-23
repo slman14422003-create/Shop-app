@@ -29,13 +29,24 @@ jobs:
         with:
           gradle-version: '8.7'
 
+      # FIX: this used to only ever run `assembleDebug`, so every GitHub
+      # Release only ever shipped the debug build — larger, unshrunk,
+      # unobfuscated, and noticeably slower on entry-level phones (see
+      # app/build.gradle.kts). `assembleRelease` now also runs, signed
+      # with the CI-generated debug key (see build.gradle.kts's signing
+      # comment) so it's a real installable APK, just smaller and faster.
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon
 
-      - name: Locate APK
+      - name: Build release APK
+        run: gradle assembleRelease --no-daemon
+
+      - name: Locate APKs
         run: |
-          APK_PATH=$(find app/build/outputs/apk -name "*.apk" | head -n 1)
-          cp "$APK_PATH" shop-manager.apk
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          cp "$DEBUG_APK" shop-manager-debug.apk
+          cp "$RELEASE_APK" shop-manager-release.apk
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -44,7 +55,13 @@ jobs:
           name: إصدار ${{ github.run_number }}
           body: |
             بناء تلقائي لتطبيق إدارة المحل (تطبيق أندرويد أصلي بلغة Kotlin) بعد آخر تحديث على main.
-            APK غير موقّع (debug) - يُثبَّت مباشرة بعد تفعيل "مصادر غير معروفة" على الجهاز.
-          files: shop-manager.apk
+
+            📦 **shop-manager-release.apk** ← هاي النسخة المستخدمة تنزّلها عادةً: أصغر حجماً وأسرع بالتشغيل (مضغوطة/محسّنة عبر R8).
+            🛠️ **shop-manager-debug.apk** ← نسخة تجريبية أكبر حجماً وأبطأ شوي، للاختبار فقط.
+
+            كلا الملفين موقّعين (بنفس مفتاح CI) وجاهزين للتثبيت المباشر بعد تفعيل "مصادر غير معروفة" على الجهاز.
+          files: |
+            shop-manager-release.apk
+            shop-manager-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
