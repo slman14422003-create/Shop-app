@@ -3,6 +3,7 @@ package com.shopmanager.app.ui.settings
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -68,7 +69,7 @@ import java.util.Locale
 
 private val CURRENCY_OPTIONS = listOf("ل.س", "$", "SAR", "AED", "TRY")
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
