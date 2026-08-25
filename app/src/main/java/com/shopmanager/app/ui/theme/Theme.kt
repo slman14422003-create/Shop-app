@@ -3,45 +3,13 @@ package com.shopmanager.app.ui.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
-
-private val LightColors = lightColorScheme(
-    primary = Indigo40,
-    onPrimary = Color.White,
-    primaryContainer = Indigo80,
-    onPrimaryContainer = Indigo40,
-    secondary = Violet40,
-    onSecondary = Color.White,
-    secondaryContainer = Violet80,
-    background = LightBackground,
-    surface = LightSurface,
-    surfaceVariant = LightSurfaceVariant,
-    onSurfaceVariant = LightOnSurfaceVariant,
-    error = DangerRed,
-)
-
-private val DarkColors = darkColorScheme(
-    primary = Indigo80,
-    onPrimary = Color(0xFF1A1650),
-    primaryContainer = Indigo40,
-    onPrimaryContainer = Color.White,
-    secondary = Violet80,
-    onSecondary = Color(0xFF2B1466),
-    secondaryContainer = Violet40,
-    background = DarkBackground,
-    surface = DarkSurface,
-    surfaceVariant = DarkSurfaceVariant,
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    error = Color(0xFFFF6B6B),
-)
 
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
@@ -83,10 +51,20 @@ fun rememberIsDarkTheme(themeMode: AppThemeMode): Boolean {
  * instead of following the system locale.
  */
 @Composable
-fun ShopManagerTheme(themeMode: AppThemeMode = AppThemeMode.SYSTEM, content: @Composable () -> Unit) {
+fun ShopManagerTheme(
+    themeMode: AppThemeMode = AppThemeMode.SYSTEM,
+    colorPalette: AppColorPalette = AppColorPalette.INDIGO,
+    content: @Composable () -> Unit
+) {
     val useDark = rememberIsDarkTheme(themeMode)
-    val colors = if (useDark) DarkColors else LightColors
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    val paletteColors = remember(colorPalette) { paletteColorsFor(colorPalette) }
+    val colors = remember(paletteColors, useDark) {
+        if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
+    }
+    CompositionLocalProvider(
+        LocalLayoutDirection provides LayoutDirection.Rtl,
+        LocalBrandGradientColors provides remember(paletteColors) { listOf(paletteColors.gradientStart, paletteColors.gradientEnd) }
+    ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
     }
 }
