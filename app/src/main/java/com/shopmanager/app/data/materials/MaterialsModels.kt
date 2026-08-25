@@ -2,7 +2,7 @@ package com.shopmanager.app.data.materials
 
 /**
  * Fixed unit choices for a spice shop (بزورية) - weight is always picked from
- * these six, never free-typed. "unit" is still stored in Firestore as a
+ * these options, never free-typed. "unit" is still stored in Firestore as a
  * plain string (the Arabic label) so it stays backward-compatible with any
  * existing documents.
  *
@@ -12,6 +12,13 @@ package com.shopmanager.app.data.materials
  * لوقية fractions, so quantity can always stay a whole number (see
  * MaterialEditDialog's stepper) - you pick the size, then just count how
  * many of it.
+ *
+ * FIX: not everything on the shortage list is sold by weight (e.g. "بيض"
+ * counted by the piece, or a shortage that's simply "2" of something with no
+ * size at all). NONE covers that: its label is the empty string, so the
+ * quantity is shown and stored on its own with nothing appended (see
+ * formatQuantity / Material.quantityLabel) instead of being forced into one
+ * of the weight units.
  */
 enum class MaterialUnit(val label: String) {
     KG("كيلو"),
@@ -19,11 +26,13 @@ enum class MaterialUnit(val label: String) {
     QUARTER_KG("ربع كيلو"),
     OKE("لوقية"),
     HALF_OKE("نص لوقية"),
-    QUARTER_OKE("ربع لوقية");
+    QUARTER_OKE("ربع لوقية"),
+    NONE("");
 
     companion object {
         fun fromLabel(label: String): MaterialUnit = when (label) {
             "كغ", "كيلو" -> KG
+            "" -> NONE
             else -> entries.find { it.label == label } ?: KG
         }
     }
@@ -62,3 +71,13 @@ data class MaterialCatalogItem(
  */
 fun Double.formatQuantity(): String =
     if (this == this.toLong().toDouble()) this.toLong().toString() else this.toString()
+
+/**
+ * Quantity + unit as shown to a person ("2 نص كيلو"), used everywhere a
+ * material's amount is displayed (list rows, share text, notifications).
+ * When the unit is NONE (empty label - a plain count like "بيض: 6") there is
+ * no unit word to append, so this returns just the number instead of
+ * leaving a trailing space.
+ */
+fun Material.quantityLabel(): String =
+    if (unit.isBlank()) quantity.formatQuantity() else "${quantity.formatQuantity()} $unit"
