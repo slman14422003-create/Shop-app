@@ -1,8 +1,10 @@
 package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -78,4 +80,30 @@ object MotionSpecs {
 
     @Composable
     fun fadeMillis(): Int = if (isLowTier()) 60 else 150
+
+    /**
+     * Springy "pop in" for anything that appears on top of existing
+     * content without pushing it (dialogs, one-off banners like the
+     * server-outage restore prompt, snackbars) — a little overshoot then
+     * settle, so it reads as arriving with some life rather than just
+     * being switched on. Same LOW-tier treatment as every other spec here:
+     * near-instant with no bounce, never fully disabled.
+     */
+    @Composable
+    fun popInSpring(): FiniteAnimationSpec<Float> = if (isLowTier()) {
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
+    } else {
+        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+    }
+
+    /**
+     * Smooth content fade+slide for anything that swaps in place (a
+     * status line changing, a list of local backups loading in) —
+     * FastOutSlowInEasing is Material's own standard curve: quick to
+     * start, easing gently to a stop, which is what makes a transition
+     * read as "smooth" rather than linear/mechanical.
+     */
+    @Composable
+    fun contentTween(): FiniteAnimationSpec<Float> =
+        tween(durationMillis = if (isLowTier()) 90 else 260, easing = FastOutSlowInEasing)
 }
