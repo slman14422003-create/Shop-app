@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
-import com.shopmanager.app.data.materials.formatQuantity
+import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
@@ -315,7 +315,7 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
             Column(Modifier.weight(1f)) {
                 Text(material.name, fontWeight = FontWeight.Medium)
                 Text(
-                    "الكمية المطلوبة: ${material.quantity.formatQuantity()} ${material.unit}",
+                    "الكمية المطلوبة: ${material.quantityLabel()}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -388,7 +388,7 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
     val sb = StringBuilder("📦 قائمة المواد\n\n")
     materials.sortedBy { it.name }.forEach { m ->
         val price = prices[m.name]
-        sb.append("• ${m.name}: ${m.quantity.formatQuantity()} ${m.unit}")
+        sb.append("• ${m.name}: ${m.quantityLabel()}")
         if (price != null) sb.append(" — ${nf.format(price)} ${AppSettingsState.currencySymbol}")
         sb.append("\n")
     }

@@ -99,6 +99,13 @@ fun MaterialEditDialog(
  * being counted. The number itself can also be tapped and typed directly -
  * non-digit characters are filtered out as they're typed, so there is no
  * path to a decimal value.
+ *
+ * FIX: quantity and unit used to be able to smear together into one string
+ * ("1 نص" instead of a clean "1" next to a separately-picked "نص كيلو"). The
+ * number field here only ever holds the digits of the quantity; the unit
+ * word is a separate, non-editable label next to it (and disappears
+ * entirely for [MaterialUnit.NONE], whose label is blank) so the two can
+ * never merge into one typed value.
  */
 @Composable
 fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit) {
@@ -134,30 +141,46 @@ fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit)
             onClick = { onValueChange(value + 1) }
         )
 
-        Text(
-            unitLabel,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (unitLabel.isNotBlank()) {
+            Text(
+                unitLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
 /**
- * Custom pill-style segmented picker for the fixed weight units of a spice
- * shop (كيلو / نص كيلو / ربع كيلو / لوقية / نص لوقية / ربع لوقية).
- * Deliberately not a system Spinner/DropdownMenu or a free-text field -
- * matches the app's own rounded shapes and brand color, with a smoothly
- * animated selection pill.
+ * The text shown ON the picker pill for each unit. Every weight unit shows
+ * its own label as-is; [MaterialUnit.NONE] has an empty stored label (so a
+ * saved quantity like "6" has nothing appended to it - see
+ * [com.shopmanager.app.data.materials.quantityLabel]), but the pill itself
+ * still needs something to display, hence "بدون" here instead of the blank
+ * stored value.
+ */
+private val MaterialUnit.pickerLabel: String
+    get() = if (this == MaterialUnit.NONE) "بدون" else label
+
+/**
+ * Custom pill-style segmented picker for the fixed quantity units of a
+ * spice shop (كيلو / نص كيلو / ربع كيلو / لوقية / نص لوقية / ربع لوقية),
+ * plus a "بدون" option for shortages that aren't measured by weight at all
+ * (e.g. "بيض: 6" - just a plain count). Deliberately not a system
+ * Spinner/DropdownMenu or a free-text field - matches the app's own rounded
+ * shapes and brand color, with a smoothly animated selection pill.
  *
- * FIX: with the two new نص كيلو / ربع كيلو units this is now six options,
+ * FIX: with the two new نص كيلو / ربع كيلو units this is six weight options,
  * not four - laid out as two rows of three (كيلو-family on top, لوقية-family
  * below) instead of one cramped six-wide row, so every label still has room
- * to breathe on a phone screen.
+ * to breathe on a phone screen. بدون sits on its own row underneath, full
+ * width, since it's a different kind of choice ("no unit at all") rather
+ * than another weight size.
  */
 @Composable
 fun UnitPicker(selected: MaterialUnit, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
-    val rows = listOf(
+    val weightRows = listOf(
         listOf(MaterialUnit.KG, MaterialUnit.HALF_KG, MaterialUnit.QUARTER_KG),
         listOf(MaterialUnit.OKE, MaterialUnit.HALF_OKE, MaterialUnit.QUARTER_OKE)
     )
@@ -169,45 +192,49 @@ fun UnitPicker(selected: MaterialUnit, onSelected: (MaterialUnit) -> Unit, modif
             .padding(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        rows.forEach { row ->
+        weightRows.forEach { row ->
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 row.forEach { option ->
-                    val isSelected = option == selected
-                    val bgColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
-                        animationSpec = MotionSpecs.quickSpring(), label = "unitPillBg"
-                    )
-                    val textColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        animationSpec = MotionSpecs.quickSpring(), label = "unitPillText"
-                    )
-                    val verticalPad by animateDpAsState(
-                        targetValue = if (isSelected) 10.dp else 8.dp,
-                        animationSpec = MotionSpecs.quickSpring(), label = "unitPillPad"
-                    )
-
-                    Box(
-                        Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(11.dp))
-                            .background(bgColor)
-                            .clickable(onClick = { onSelected(option) })
-                            .padding(vertical = verticalPad),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            option.label,
-                            color = textColor,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            style = MaterialTheme.typography.labelLarge,
-                            textAlign = TextAlign.Center
-                        )
-                    }
+                    UnitPill(option = option, isSelected = option == selected, onSelected = onSelected, modifier = Modifier.weight(1f))
                 }
             }
         }
+        UnitPill(option = MaterialUnit.NONE, isSelected = selected == MaterialUnit.NONE, onSelected = onSelected, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun UnitPill(option: MaterialUnit, isSelected: Boolean, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
+    val bgColor by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+        animationSpec = MotionSpecs.quickSpring(), label = "unitPillBg"
+    )
+    val textColor by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = MotionSpecs.quickSpring(), label = "unitPillText"
+    )
+    val verticalPad by animateDpAsState(
+        targetValue = if (isSelected) 10.dp else 8.dp,
+        animationSpec = MotionSpecs.quickSpring(), label = "unitPillPad"
+    )
+
+    Box(
+        modifier
+            .clip(RoundedCornerShape(11.dp))
+            .background(bgColor)
+            .clickable(onClick = { onSelected(option) })
+            .padding(vertical = verticalPad),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            option.pickerLabel,
+            color = textColor,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center
+        )
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,8 +45,8 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     val catalog by viewModel.catalog.collectAsState()
     val message by viewModel.message.collectAsState()
     var search by remember { mutableStateOf("") }
-    var newItemName by remember { mutableStateOf("") }
     var isAddingCatalogItem by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
     var pickedItem by remember { mutableStateOf<MaterialCatalogItem?>(null) }
     var deleteTarget by remember { mutableStateOf<MaterialCatalogItem?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
@@ -69,11 +70,26 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 ),
                 modifier = Modifier.background(BrandGradient.brush())
             )
+        },
+        // FIX: adding a new catalog name used to be a permanently-visible
+        // text field + button squeezed in above the list, competing with
+        // search for the top of the screen. It's now a floating "+" button
+        // at the bottom - same pattern as MaterialsScreen's own FAB - that
+        // opens a small, focused dialog just for typing the one new name.
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { showAddDialog = true },
+                icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                text = { Text("مادة جديدة", fontWeight = FontWeight.SemiBold) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+            )
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Text(
-                "اضغط على اسم المادة لإدخال الكمية، أو أضف اسمًا جديدًا للقائمة الثابتة",
+                "اضغط على اسم المادة لإدخال الكمية، أو أضف اسمًا جديدًا من الزر بالأسفل",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -82,42 +98,11 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             OutlinedTextField(
                 value = search,
                 onValueChange = { search = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("بحث بالقائمة...") },
                 singleLine = true,
                 shape = MaterialTheme.shapes.medium
             )
-
-            Row(
-                Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = newItemName,
-                    onValueChange = { newItemName = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("مادة جديدة للقائمة الثابتة...") },
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium
-                )
-                Spacer(Modifier.width(8.dp))
-                FilledIconButton(
-                    enabled = newItemName.isNotBlank() && !isAddingCatalogItem,
-                    onClick = {
-                        isAddingCatalogItem = true
-                        viewModel.addCatalogItem(newItemName.trim()) { success ->
-                            isAddingCatalogItem = false
-                            if (success) newItemName = ""
-                        }
-                    }
-                ) {
-                    if (isAddingCatalogItem) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.Add, contentDescription = "إضافة للقائمة")
-                    }
-                }
-            }
 
             if (filtered.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -125,7 +110,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                         Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.outlineVariant)
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (catalog.isEmpty()) "القائمة فاضية، أضف أول مادة من الأعلى" else "لا توجد نتائج",
+                            if (catalog.isEmpty()) "القائمة فاضية، أضف أول مادة من الزر بالأسفل" else "لا توجد نتائج",
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -143,10 +128,24 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                             onDelete = { deleteTarget = item }
                         )
                     }
-                    item { Spacer(Modifier.height(24.dp)) }
+                    item { Spacer(Modifier.height(88.dp)) }
                 }
             }
         }
+    }
+
+    if (showAddDialog) {
+        AddCatalogItemDialog(
+            isSaving = isAddingCatalogItem,
+            onDismiss = { showAddDialog = false },
+            onSave = { name ->
+                isAddingCatalogItem = true
+                viewModel.addCatalogItem(name) { success ->
+                    isAddingCatalogItem = false
+                    if (success) showAddDialog = false
+                }
+            }
+        )
     }
 
     pickedItem?.let { item ->
@@ -212,6 +211,55 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete:
             IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف من القائمة") }
         }
     }
+}
+
+/**
+ * Focused dialog opened by the floating "+" button, just for typing one new
+ * standing-list name. Enter on the keyboard saves too, so adding several
+ * names in a row (type, Enter, type, Enter...) doesn't need reaching for
+ * the button each time.
+ */
+@Composable
+private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    AlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = { Text("مادة جديدة للقائمة الثابتة") },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                placeholder = { Text("اسم المادة...") },
+                singleLine = true,
+                enabled = !isSaving,
+                shape = MaterialTheme.shapes.medium,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = { if (name.isNotBlank() && !isSaving) onSave(name.trim()) }
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank() && !isSaving,
+                onClick = { onSave(name.trim()) }
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("إضافة")
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving) { Text("إلغاء") } }
+    )
 }
 
 @Composable
