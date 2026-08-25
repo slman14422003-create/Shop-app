@@ -82,7 +82,21 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     // not a filtered "low stock" subset. Only re-notify when the set of
     // names actually changes - not on every unrelated Firestore update
     // (e.g. a price edit).
-    private var lastNotifiedShortages: Set<String> = emptySet()
+    //
+    // BUG FIXED (notification fired on every app open): this used to start
+    // at emptySet() instead of null. That meant the very first emission
+    // after opening the app - which is just the *existing* shortage list
+    // loading from Firestore, not a new addition - always looked
+    // "different from empty" and fired a shopping-list notification. Open
+    // the app once with 3 items already on the list and you'd immediately
+    // get a "3 مواد ناقصة" notification, every single time, even though
+    // nothing had actually changed since last time. null now means "haven't
+    // seen a real list yet" (same pattern as knownPersonIds in
+    // DebtsViewModel): the first load only seeds the baseline silently, and
+    // a notification only fires on every load *after* that one, when the
+    // set of names genuinely changes - i.e. someone actually adding or
+    // clearing a shortage, in this session or from another device.
+    private var lastNotifiedShortages: Set<String>? = null
 
     init {
         viewModelScope.launch {
@@ -90,15 +104,15 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             uiState.collect { state ->
                 if (state.isLoading) return@collect
                 val shortageNames = state.materials.map { it.name }.toSet()
-                if (shortageNames.isEmpty()) {
-                    if (lastNotifiedShortages.isNotEmpty()) NotificationHelper.cancelShoppingListNotification(getApplication())
-                    lastNotifiedShortages = emptySet()
-                } else if (shortageNames != lastNotifiedShortages) {
-                    lastNotifiedShortages = shortageNames
-                    if (settings.notificationsEnabled) {
+                val previous = lastNotifiedShortages
+                if (previous != null && shortageNames != previous) {
+                    if (shortageNames.isEmpty()) {
+                        NotificationHelper.cancelShoppingListNotification(getApplication())
+                    } else if (settings.notificationsEnabled) {
                         NotificationHelper.showShoppingListNotification(getApplication(), shortageNames.toList())
                     }
                 }
+                lastNotifiedShortages = shortageNames
             }
         }
     }
