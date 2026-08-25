@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.shopmanager.app.data.FirebaseModule
+import com.shopmanager.app.data.backup.DailyBackupWorker
 import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.performance.DevicePerformance
@@ -123,6 +124,10 @@ class MainActivity : ComponentActivity() {
             // detection signals.
             val tier = DevicePerformance.detectTier(applicationContext)
             BackgroundSyncWorker.schedule(applicationContext)
+            // Silent, fully local daily backup — no notification, ever
+            // (see DailyBackupWorker/BackupManager). Scheduled here, off
+            // the main thread, same as BackgroundSyncWorker above.
+            DailyBackupWorker.schedule(applicationContext)
             withContext(Dispatchers.Main) {
                 detectedTier = tier
                 isReady = true
