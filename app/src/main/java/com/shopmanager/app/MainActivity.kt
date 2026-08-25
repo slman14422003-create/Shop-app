@@ -59,10 +59,11 @@ import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.settings.SettingsScreen
+import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
-import com.shopmanager.app.ui.theme.BrandGradientStart
 import com.shopmanager.app.ui.theme.SetSystemBarsColor
 import com.shopmanager.app.ui.theme.ShopManagerTheme
+import com.shopmanager.app.ui.theme.paletteColorsFor
 import com.shopmanager.app.ui.theme.rememberIsDarkTheme
 
 // FIX: Home used to be its own NavHost destination, separate from the
@@ -142,6 +143,7 @@ class MainActivity : ComponentActivity() {
 
             val settings = remember { SettingsRepository(applicationContext) }
             var themeMode by remember { mutableStateOf(settings.themeMode) }
+            var colorPalette by remember { mutableStateOf(settings.colorPalette) }
             var unlocked by remember { mutableStateOf(!settings.hasPin) }
 
             // "تفضيل الأداء": loaded once here (not re-read from disk on
@@ -171,21 +173,23 @@ class MainActivity : ComponentActivity() {
             }
 
             CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
-            ShopManagerTheme(themeMode = themeMode) {
+            ShopManagerTheme(themeMode = themeMode, colorPalette = colorPalette) {
                 // Status bar (and nav bar) painted with the app's own brand
                 // color instead of the bare system default.
                 //
                 // FIX: this used to read MaterialTheme.colorScheme.primary,
                 // which in the *dark* scheme is intentionally a pale tone
-                // (Indigo80) meant for text/icon contrast on dark surfaces —
-                // not for painting a full status bar. That's what caused the
-                // jarring bright-purple bar sitting on top of an otherwise
-                // dark app. It now always uses the app's brand color, which
-                // stays a deep indigo in every theme, so the status bar
-                // always gets white icons and never clashes with dark mode.
+                // (e.g. Indigo80) meant for text/icon contrast on dark
+                // surfaces — not for painting a full status bar. That's what
+                // caused the jarring bright-purple bar sitting on top of an
+                // otherwise dark app. It now always uses the selected
+                // palette's brand gradient-start color, which stays deep in
+                // every theme, so the status bar always gets white icons and
+                // never clashes with dark mode.
                 val isDark = rememberIsDarkTheme(themeMode)
+                val statusBarColor = remember(colorPalette) { paletteColorsFor(colorPalette).gradientStart }
                 SetSystemBarsColor(
-                    statusBarColor = BrandGradientStart,
+                    statusBarColor = statusBarColor,
                     navigationBarColor = MaterialTheme.colorScheme.surface,
                     statusBarDarkIcons = false,
                     navigationBarDarkIcons = !isDark
@@ -198,6 +202,7 @@ class MainActivity : ComponentActivity() {
                         ShopManagerApp(
                             settings = settings,
                             onThemeChanged = { themeMode = it },
+                            onColorPaletteChanged = { colorPalette = it },
                             onPerformancePreferenceChanged = { performancePreference = it }
                         )
                     }
@@ -235,6 +240,7 @@ class MainActivity : ComponentActivity() {
 private fun ShopManagerApp(
     settings: SettingsRepository,
     onThemeChanged: (AppThemeMode) -> Unit,
+    onColorPaletteChanged: (AppColorPalette) -> Unit,
     onPerformancePreferenceChanged: (PerformanceMode) -> Unit
 ) {
     val navController = rememberNavController()
@@ -370,6 +376,7 @@ private fun ShopManagerApp(
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
                     onThemeChanged = onThemeChanged,
+                    onColorPaletteChanged = onColorPaletteChanged,
                     onPerformancePreferenceChanged = onPerformancePreferenceChanged,
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
