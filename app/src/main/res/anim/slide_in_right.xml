@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Smooth "enter" transition: a short fade-in combined with a subtle slide
+  from the right — matches the RTL layout direction forced app-wide (see
+  ShopManagerTheme in Theme.kt), so this reads as "sliding in from where
+  content naturally starts" instead of the LTR default. Distance is kept
+  small (12% of width) and the curve uses decelerate_interpolator so it
+  eases to a stop instead of arriving abruptly — a soft landing, not a
+  snap. Used for window/activity-level transitions (see themes.xml); the
+  in-app screen/tab transitions themselves are handled in Compose
+  (MainActivity's NavHost enter/exitTransition, HorizontalPager) since this
+  is a Compose-first app.
+-->
+<set xmlns:android="http://schemas.android.com/apk/res/android">
+    <translate
+        android:fromXDelta="12%"
+        android:toXDelta="0%"
+        android:duration="260"
+        android:interpolator="@android:interpolator/decelerate_cubic" />
+    <alpha
+        android:fromAlpha="0.0"
+        android:toAlpha="1.0"
+        android:duration="220" />
+</set>

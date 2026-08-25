@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Plain, cheap fade-in — used where a slide would be too busy (e.g. the
+     task-switcher thumbnail returning to the app). Kept separate from
+     slide_in_right.xml so call sites can pick "flexible" (slide+fade) or
+     "minimal" (fade only) per situation instead of one fixed motion
+     everywhere. -->
+<alpha xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromAlpha="0.0"
+    android:toAlpha="1.0"
+    android:duration="200"
+    android:interpolator="@android:interpolator/decelerate_quad" />
