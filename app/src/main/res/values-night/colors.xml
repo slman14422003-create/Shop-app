@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Night-mode overrides — picked up automatically whenever the device is in
+  dark mode, no Kotlin code needed to select this file. Brand/semantic
+  colors stay identical to values/colors.xml (a brand color shouldn't
+  change with theme — see BrandGradientStart's own comment in Color.kt),
+  only the *surface* tones below are swapped for the dark-mode equivalents
+  from Color.kt's DarkBackground/DarkSurface/DarkSurfaceVariant. This is
+  what lets the window background (see themes.xml) match Compose's actual
+  dark surface instead of staying a fixed color regardless of theme — one
+  less possible flash of the wrong tone during the splash → first-frame
+  handoff when the app is opened in dark mode.
+-->
+<resources>
+    <color name="brand_indigo">#4F46E5</color>
+    <color name="brand_violet">#7C3AED</color>
+
+    <color name="success_green">#16A34A</color>
+    <color name="warning_amber">#F59E0B</color>
+    <color name="danger_red">#DC2626</color>
+    <color name="info_blue">#2563EB</color>
+
+    <color name="surface_light">#1B1B24</color>
+    <color name="background_light">#121218</color>
+    <color name="surface_variant_light">#2A2A38</color>
+
+    <color name="ripple_brand">#40C7D2FE</color>
+    <color name="edge_glow_brand">#C7D2FE</color>
+</resources>
