@@ -83,6 +83,7 @@ private const val PAGE_MATERIALS = 2
 private const val ROUTE_SETTINGS = "settings"
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
 private const val ROUTE_HELP = "help"
+private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
 class MainActivity : ComponentActivity() {
@@ -424,13 +425,21 @@ private fun ShopManagerApp(
                     onPerformancePreferenceChanged = onPerformancePreferenceChanged,
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
-                    onOpenHelp = { navController.navigate(ROUTE_HELP) }
+                    onOpenHelp = { navController.navigate(ROUTE_HELP) },
+                    onOpenPrivacyPolicy = { navController.navigate(ROUTE_PRIVACY) }
                 )
             }
             composable(ROUTE_HELP) {
                 WebViewScreen(
                     url = "file:///android_asset/help.html",
                     title = "دليل الاستخدام",
+                    onBack = { navController.popBackStack() }
+                )
+            }
+            composable(ROUTE_PRIVACY) {
+                WebViewScreen(
+                    url = "file:///android_asset/privacy.html",
+                    title = "سياسة الخصوصية",
                     onBack = { navController.popBackStack() }
                 )
             }
