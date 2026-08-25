@@ -35,13 +35,21 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     // with a list that's identical to the last one (e.g. a local write
     // getting server-acknowledged). distinctUntilChanged stops that from
     // recomputing/recomposing the whole screen for no visible change.
+    // See DebtsViewModel.hasSyncError — same idea: a real listener error
+    // (not just a legitimately empty collection) flips this, so Settings
+    // can offer restoring the last local daily backup.
+    private val _hasSyncError = MutableStateFlow(false)
+    val hasSyncError: StateFlow<Boolean> = _hasSyncError
+
     private val materialsFlow = channelFlow {
         section.collect { s ->
             repo.listenMaterials(s).collect { send(it) }
         }
-    }.catch { emit(emptyList()) }.distinctUntilChanged()
+    }.catch { _hasSyncError.value = true; emit(emptyList()) }.distinctUntilChanged()
 
-    private val pricesFlow = repo.listenPrices().catch { emit(emptyMap()) }.distinctUntilChanged()
+    private val pricesFlow = repo.listenPrices()
+        .catch { _hasSyncError.value = true; emit(emptyMap()) }
+        .distinctUntilChanged()
 
     val uiState: StateFlow<MaterialsUiState> = combine(materialsFlow, pricesFlow) { materials, prices ->
         MaterialsUiState(materials = materials, prices = prices, isLoading = false)
