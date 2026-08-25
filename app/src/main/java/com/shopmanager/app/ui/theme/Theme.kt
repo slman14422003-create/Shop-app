@@ -11,12 +11,21 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 
+/**
+ * iOS-style continuous, generously-rounded corners (closer to SwiftUI's
+ * default card/sheet/button radii than Material's usual tighter defaults)
+ * so cards, dialogs, buttons and sheets across the whole app read as soft
+ * and "squircle"-like instead of sharply cut. Bumped up from the previous
+ * 6/10/14/20/28 scale for a noticeably friendlier, more premium feel while
+ * keeping the same five-step Material shape system every screen already
+ * pulls from via MaterialTheme.shapes, so this single change cascades app-wide.
+ */
 private val AppShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(32.dp),
 )
 
 enum class AppThemeMode { SYSTEM, LIGHT, DARK }

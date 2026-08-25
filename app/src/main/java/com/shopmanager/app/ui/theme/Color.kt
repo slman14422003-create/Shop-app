@@ -46,6 +46,83 @@ val Berry40 = Color(0xFFC026D3)
 val Pink80 = Color(0xFFFBCFE8)
 val Pink40 = Color(0xFFDB2777)
 
+// --- Extended palette (15 additional hue pairs → 20 palettes total) ---
+
+// Crimson
+val Crimson80 = Color(0xFFFECACA)
+val Crimson40 = Color(0xFFDC2626)
+val CrimsonOnDark = Color(0xFF4A0404)
+
+// Amber
+val Amber80 = Color(0xFFFDE68A)
+val Amber40 = Color(0xFFD97706)
+val AmberOnDark = Color(0xFF4A2E00)
+
+// Gold
+val Gold80 = Color(0xFFFEF08A)
+val Gold40 = Color(0xFFCA8A04)
+val GoldOnDark = Color(0xFF3E2A00)
+
+// Lime
+val Lime80 = Color(0xFFD9F99D)
+val Lime40 = Color(0xFF65A30D)
+val LimeOnDark = Color(0xFF253C00)
+
+// Forest
+val Forest80 = Color(0xFFBBF7D0)
+val Forest40 = Color(0xFF15803D)
+val ForestOnDark = Color(0xFF052E12)
+
+// Sky
+val Sky80 = Color(0xFFBAE6FD)
+val Sky40 = Color(0xFF0284C7)
+val SkyOnDark = Color(0xFF012A4A)
+
+// Cobalt
+val Cobalt80 = Color(0xFF93C5FD)
+val Cobalt40 = Color(0xFF1D4ED8)
+val CobaltOnDark = Color(0xFF0B1F66)
+
+// Lavender
+val Lavender80 = Color(0xFFE9D5FF)
+val Lavender40 = Color(0xFF8B5CF6)
+val LavenderOnDark = Color(0xFF2E1065)
+
+// Orchid
+val Orchid80 = Color(0xFFF0ABFC)
+val Orchid40 = Color(0xFFA21CAF)
+val OrchidOnDark = Color(0xFF3B0764)
+
+// Slate
+val Slate80 = Color(0xFFCBD5E1)
+val Slate40 = Color(0xFF475569)
+val SlateOnDark = Color(0xFF1E293B)
+
+// Ruby
+val Ruby80 = Color(0xFFFDA4AF)
+val Ruby40 = Color(0xFFBE123C)
+val RubyOnDark = Color(0xFF4C0519)
+
+// Peach
+val Peach80 = Color(0xFFFDBA74)
+val Peach40 = Color(0xFFF97316)
+val PeachOnDark = Color(0xFF431407)
+
+// Plum
+val Plum80 = Color(0xFFEAB8F7)
+val Plum40 = Color(0xFF86198F)
+val PlumOnDark = Color(0xFF4A044E)
+
+// Steel
+val Steel80 = Color(0xFF7DD3FC)
+val Steel40 = Color(0xFF0E7490)
+val SteelOnDark = Color(0xFF042F2E)
+
+// Graphite
+val Graphite80 = Color(0xFF94A3B8)
+val Graphite40 = Color(0xFF334155)
+val GraphiteOnDark = Color(0xFF0F172A)
+
 // Semantic
 val SuccessGreen = Color(0xFF16A34A)
 val WarningAmber = Color(0xFFF59E0B)
