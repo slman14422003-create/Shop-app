@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <!--
       UI FIX (startup jitter/flash): before this, MainActivity used the
       bare `Theme.ShopManager` from the very first frame — meaning the
@@ -24,6 +24,20 @@
         <item name="postSplashScreenTheme">@style/Theme.ShopManager</item>
     </style>
 
+    <!--
+      Window-level enter/exit transition (task switcher return, and any
+      future second Activity): a soft fade+slide in, a quicker fade+slide
+      out — see res/anim/. This is the one place a *window* transition can
+      live in an app built almost entirely with Jetpack Compose; every
+      in-app screen/tab transition itself is a Compose animation (see
+      MainActivity's NavHost enter/exitTransition and MotionSpecs.kt), not
+      an XML one — this style only covers the outer window edges.
+    -->
+    <style name="Theme.ShopManager.WindowAnimations" parent="android:Animation">
+        <item name="android:windowEnterAnimation">@anim/slide_in_right</item>
+        <item name="android:windowExitAnimation">@anim/slide_out_left</item>
+    </style>
+
     <!-- windowBackground now matches the brand color instead of the
          Material default white: if there's ever a one-frame gap between
          the splash screen handing off and Compose's first pixel, the
@@ -31,5 +45,14 @@
          white flash. -->
     <style name="Theme.ShopManager" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/brand_indigo</item>
+        <item name="android:windowAnimationStyle">@style/Theme.ShopManager.WindowAnimations</item>
+
+        <!-- Ripple/touch-feedback tint on every tap, and the color of the
+             glow shown at scroll edges/over-scroll — both previously the
+             platform default grey, now tied to the brand palette (see
+             colors.xml) so even the smallest, most frequent touch
+             feedback in the app reads as part of one cohesive design. -->
+        <item name="android:colorControlHighlight">@color/ripple_brand</item>
+        <item name="android:colorEdgeEffect" tools:targetApi="s">@color/edge_glow_brand</item>
     </style>
 </resources>

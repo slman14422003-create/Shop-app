@@ -1,7 +1,34 @@
 <resources>
-    <!-- Same value as BrandGradientStart in ui/theme/Color.kt — kept as an
-         XML resource too because the splash screen and window background
-         below are drawn before any Compose/Kotlin code runs, so they
-         can't reference the Compose Color value directly. -->
+    <!-- Brand — same values as ui/theme/Color.kt (BrandGradientStart/End),
+         kept here too because the splash screen / window background below
+         are drawn before any Compose/Kotlin code runs and can't reference
+         a Compose Color directly. Mirroring the exact hex keeps the splash
+         → first Compose frame handoff seamless (no color jump). -->
     <color name="brand_indigo">#4F46E5</color>
+    <color name="brand_violet">#7C3AED</color>
+
+    <!-- Semantic — mirrors Color.kt's SuccessGreen/WarningAmber/DangerRed/
+         InfoBlue so anything drawn outside Compose (notification tint,
+         adaptive icon, future widgets) stays visually consistent with the
+         in-app palette instead of picking its own colors. -->
+    <color name="success_green">#16A34A</color>
+    <color name="warning_amber">#F59E0B</color>
+    <color name="danger_red">#DC2626</color>
+    <color name="info_blue">#2563EB</color>
+
+    <!-- Light-mode surfaces — same values as Color.kt's LightBackground/
+         LightSurface/LightSurfaceVariant, used by the window background
+         and any XML-drawn chrome before Compose takes over. -->
+    <color name="surface_light">#FFFFFF</color>
+    <color name="background_light">#FAFAFC</color>
+    <color name="surface_variant_light">#F1F0FA</color>
+
+    <!-- Ripple / touch-feedback tint and scroll edge-glow color — both
+         previously left at the Android default (a flat grey/black), which
+         read as generic/off-brand on every tap and every over-scroll.
+         Tying them to the brand color instead makes even the smallest,
+         most frequent touch feedback in the app feel like part of one
+         cohesive design instead of stock platform chrome. -->
+    <color name="ripple_brand">#334F46E5</color>
+    <color name="edge_glow_brand">#4F46E5</color>
 </resources>
