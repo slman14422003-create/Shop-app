@@ -7,8 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
-import com.shopmanager.app.ui.theme.BrandGradientEnd
-import com.shopmanager.app.ui.theme.BrandGradientStart
+import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 
 /**
  * The single brand gradient used everywhere a "header" appears: dashboard
@@ -33,21 +32,21 @@ import com.shopmanager.app.ui.theme.BrandGradientStart
  * shader.
  */
 object BrandGradient {
-    val colors = listOf(BrandGradientStart, BrandGradientEnd)
-
     @Composable
     fun brush(): Brush {
+        val colors = LocalBrandGradientColors.current
         val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
-        return remember(isLowTier) {
-            if (isLowTier) SolidColor(BrandGradientStart) else Brush.verticalGradient(colors)
+        return remember(isLowTier, colors) {
+            if (isLowTier) SolidColor(colors.first()) else Brush.verticalGradient(colors)
         }
     }
 
     @Composable
     fun horizontalBrush(): Brush {
+        val colors = LocalBrandGradientColors.current
         val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
-        return remember(isLowTier) {
-            if (isLowTier) SolidColor(BrandGradientStart) else Brush.horizontalGradient(colors)
+        return remember(isLowTier, colors) {
+            if (isLowTier) SolidColor(colors.first()) else Brush.horizontalGradient(colors)
         }
     }
 }
