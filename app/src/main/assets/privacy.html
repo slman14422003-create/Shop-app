@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>سياسة الخصوصية</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --brand-start: #4F46E5;
+    --brand-end: #7C3AED;
+    --bg: #FAFAFC;
+    --card: #FFFFFF;
+    --text: #1B1B24;
+    --muted: #5B5876;
+    --border: #EEEEF5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121218;
+      --card: #1B1B24;
+      --text: #F1F0FA;
+      --muted: #C7C5D6;
+      --border: #2A2A38;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    line-height: 1.7;
+    padding-bottom: 32px;
+  }
+  header {
+    background: linear-gradient(180deg, var(--brand-start), var(--brand-end));
+    color: #fff;
+    padding: 28px 20px 24px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; opacity: 0.9; font-size: 14px; }
+  main { padding: 16px; max-width: 640px; margin: 0 auto; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+  }
+  .card h2 {
+    font-size: 16px;
+    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card p, .card li { color: var(--muted); font-size: 14px; margin: 4px 0; }
+  .card ul { padding-inline-start: 20px; margin: 6px 0; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: rgba(124,58,237,0.15);
+    font-size: 15px;
+  }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🔒 سياسة الخصوصية</h1>
+    <p>ما يخزّنه تطبيق إدارة المحل ولماذا</p>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2><span class="badge">📋</span> البيانات التي يتم تخزينها</h2>
+      <p>لتشغيل التطبيق (سجل الديون، قائمة المواد الناقصة، الأسعار)، يتم تخزين:</p>
+      <ul>
+        <li>أسماء العملاء ومبالغ ديونهم وتاريخ كل عملية.</li>
+        <li>أسماء المواد وكمياتها ووحداتها ضمن قائمة النواقص والقائمة الثابتة.</li>
+        <li>أسعار المواد التي تدخلها.</li>
+        <li>إعداداتك في التطبيق (العملة، المظهر، رمز القفل، تفضيل الإشعارات).</li>
+      </ul>
+      <p>هذه البيانات خاصة بمحلك وحده، ولا يتم جمع أي معلومات عنك شخصيًا (لا اسمك، ولا رقم هاتفك، ولا موقعك).</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">☁️</span> أين تُخزَّن</h2>
+      <p>البيانات تُحفظ على خوادم Firebase (Google) لمزامنتها بين أجهزتك، بالإضافة إلى نسخة احتياطية محلية يومية صامتة على جهازك نفسه لا تُرسل لأي مكان.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">🔑</span> رمز القفل (PIN)</h2>
+      <p>إذا فعّلت قفل التطبيق، يُخزَّن رمز الـPIN على جهازك فقط، ولا يُرسل أو يُخزَّن على أي خادم.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">🚫</span> المشاركة مع أطراف أخرى</h2>
+      <p>لا يشارك التطبيق بياناتك مع أي طرف ثالث لأغراض إعلانية أو تسويقية، ولا يحتوي على إعلانات أو أدوات تتبع.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">🔔</span> الإشعارات</h2>
+      <p>تُستخدم الإشعارات فقط لتنبيهك داخل جهازك بسداد دين أو نقص مادة أو عميل جديد، ولا تُستخدم لأي غرض آخر.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="badge">🗑️</span> حذف البيانات</h2>
+      <p>يمكنك حذف أي عميل أو مادة في أي وقت من داخل التطبيق. حذف العنصر يزيله نهائيًا من السجل.</p>
+    </div>
+
+    <footer>تطوير: سلمان — هذه الصفحة تعمل بدون اتصال بالإنترنت داخل التطبيق.</footer>
+  </main>
+</body>
+</html>
