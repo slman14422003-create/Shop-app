@@ -240,6 +240,68 @@ class DebtsRepository {
         Unit
     }
 
+    /**
+     * One-off, all-at-once read of every person and debt — used only for
+     * the daily local backup snapshot (see BackupManager); the rest of the
+     * app always uses the live listeners above.
+     */
+    suspend fun fetchAllForBackup(): Pair<List<Person>, List<Debt>> = withTimeout(WRITE_TIMEOUT_MS) {
+        val personsSnap = db.collection("persons").get().await()
+        val debtsSnap = db.collection("debts").get().await()
+        val persons = personsSnap.documents.map { doc ->
+            Person(
+                id = doc.id,
+                name = doc.getString("name") ?: "",
+                amount = doc.getDouble("amount") ?: 0.0,
+                date = doc.getString("date") ?: "",
+                createdAt = doc.getLong("createdAt") ?: 0L
+            )
+        }
+        val debts = debtsSnap.documents.map { it.toDebt() }
+        persons to debts
+    }
+
+    /**
+     * Restores a full local backup snapshot back into Firestore: wipes
+     * every existing "persons"/"debts" document and rewrites the
+     * backed-up ones with their original document ids (so person <-> debt
+     * links by id keep working and nothing re-orders). Batched in chunks
+     * of 400 to stay under Firestore's 500-operation batch limit. Only
+     * ever called after explicit confirmation from Settings, or from the
+     * one-tap "server unavailable, restore local backup" prompt — never
+     * silently.
+     */
+    suspend fun restoreFromBackup(persons: List<Person>, debts: List<Debt>) = withTimeout(60_000L) {
+        val existingPersons = db.collection("persons").get().await()
+        val existingDebts = db.collection("debts").get().await()
+
+        val deletes = existingPersons.documents.map { db.collection("persons").document(it.id) } +
+            existingDebts.documents.map { db.collection("debts").document(it.id) }
+        deletes.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().await()
+        }
+
+        val personWrites = persons.filter { it.id.isNotBlank() }.map {
+            db.collection("persons").document(it.id) to mapOf(
+                "name" to it.name, "amount" to it.amount, "date" to it.date, "createdAt" to it.createdAt
+            )
+        }
+        val debtWrites = debts.filter { it.id.isNotBlank() }.map {
+            db.collection("debts").document(it.id) to mapOf(
+                "personId" to it.personId, "amount" to it.amount, "date" to it.date,
+                "note" to it.note, "createdAt" to it.createdAt
+            )
+        }
+        (personWrites + debtWrites).chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { (ref, data) -> batch.set(ref, data) }
+            batch.commit().await()
+        }
+        Unit
+    }
+
     private fun com.google.firebase.firestore.DocumentSnapshot.toDebt() = Debt(
         id = id,
         personId = getString("personId") ?: "",
