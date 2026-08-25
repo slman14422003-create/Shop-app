@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.shopmanager.app.data.performance.PerformanceMode
+import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
 import java.security.MessageDigest
 
@@ -24,6 +25,16 @@ class SettingsRepository(context: Context) {
     var themeMode: AppThemeMode
         get() = AppThemeMode.valueOf(prefs.getString(KEY_THEME, AppThemeMode.SYSTEM.name)!!)
         set(value) = prefs.edit().putString(KEY_THEME, value.name).apply()
+
+    /** "لوحة الألوان" — the accent color pair used for the header gradient,
+     * status bar, and Material primary/secondary colors. Defaults to the
+     * original Indigo/Violet look so nobody's app changes color unless they
+     * open Settings and pick something else. */
+    var colorPalette: AppColorPalette
+        get() = runCatching {
+            AppColorPalette.valueOf(prefs.getString(KEY_COLOR_PALETTE, AppColorPalette.INDIGO.name)!!)
+        }.getOrDefault(AppColorPalette.INDIGO)
+        set(value) = prefs.edit().putString(KEY_COLOR_PALETTE, value.name).apply()
 
     /** Currency label shown across the app (money amounts, share text, notifications). */
     var currencySymbol: String
@@ -66,6 +77,7 @@ class SettingsRepository(context: Context) {
 
     companion object {
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_COLOR_PALETTE = "color_palette"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
