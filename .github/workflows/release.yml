@@ -15,11 +15,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
+      # JDK: bumped from 17 to 21 (the current LTS release — 17's successor,
+      # 21 is a Long-Term-Support build so it keeps getting security/stability
+      # patches for years, unlike a short-term feature release). AGP 8.5.2 +
+      # Gradle 8.7 + Kotlin 1.9.24 (see build.gradle.kts) all officially
+      # support running on JDK 21, so this is a safe bump with no other
+      # version changes required.
+      - name: Setup JDK 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
