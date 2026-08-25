@@ -15,7 +15,9 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,6 +27,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.data.backup.BackupManager
+import com.shopmanager.app.data.debts.DebtsRepository
+import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.common.AppSettingsState
@@ -35,7 +40,9 @@ import com.shopmanager.app.data.materials.formatQuantity
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SuccessGreen
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
 import java.util.Locale
 
 private val CURRENCY_OPTIONS = listOf("ل.س", "$", "SAR", "AED", "TRY")
@@ -60,6 +67,36 @@ fun SettingsScreen(
     var performanceMode by remember { mutableStateOf(settings.performanceMode) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
 
+    // النسخ الاحتياطي التلقائي المحلي — silent daily local backup, restore
+    // only from here or from the automatic "server unavailable" prompt.
+    val scope = rememberCoroutineScope()
+    val debtsRepoForBackup = remember { DebtsRepository() }
+    val materialsRepoForBackup = remember { MaterialsRepository() }
+    var backups by remember { mutableStateOf(BackupManager.listBackups(context)) }
+    var pendingRestore by remember { mutableStateOf<BackupManager.BackupInfo?>(null) }
+    var isRestoring by remember { mutableStateOf(false) }
+    var restoreStatus by remember { mutableStateOf<String?>(null) }
+
+    val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
+    val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
+    var dismissedServerErrorBanner by remember { mutableStateOf(false) }
+
+    fun runRestore(backup: BackupManager.BackupInfo) {
+        isRestoring = true
+        restoreStatus = null
+        scope.launch {
+            try {
+                BackupManager.restore(backup, debtsRepoForBackup, materialsRepoForBackup)
+                restoreStatus = "تمت الاستعادة بنجاح ✅"
+                dismissedServerErrorBanner = true
+            } catch (e: Exception) {
+                restoreStatus = "تعذرت الاستعادة: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+            } finally {
+                isRestoring = false
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -82,6 +119,42 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // تنبيه تلقائي: يظهر فقط إذا تعذر تحميل البيانات من الخادم
+            // (وليس لمجرد أن القائمة فارغة فعليًا) وتوجد نسخة محلية يمكن
+            // العودة إليها. لا يوجد استرجاع صامت تلقائي أبدًا — هذا زر
+            // بلمسة واحدة، ليس عملية تحدث من دون علم صاحب المحل.
+            if ((debtsSyncError || materialsSyncError) && backups.isNotEmpty() && !dismissedServerErrorBanner) {
+                ElevatedCard(
+                    Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "تعذّر الاتصال بالخادم",
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "يمكنك استعادة آخر نسخة احتياطية محلية (${formatBackupDate(backups.first().createdAt)}) لحين عودة الاتصال.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Row {
+                            Button(onClick = { pendingRestore = backups.first() }) { Text("استعادة الآن") }
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { dismissedServerErrorBanner = true }) { Text("لاحقاً") }
+                        }
+                    }
+                }
+            }
+
             // المظهر (appearance)
             SettingsSection(title = "المظهر", icon = Icons.Default.Palette) {
                 AppThemeMode.entries.forEach { mode ->
@@ -233,6 +306,56 @@ fun SettingsScreen(
                 }
             }
 
+            // النسخ الاحتياطي التلقائي المحلي (silent daily local backup) — new feature
+            SettingsSection(title = "النسخ الاحتياطي التلقائي", icon = Icons.Default.SettingsBackupRestore) {
+                Text(
+                    "يأخذ التطبيق نسخة كاملة من بياناتك على هذا الجهاز كل يوم تلقائيًا وبصمت (بدون أي إشعار)، احتياطًا لفقدان البيانات. لا تُستعاد هذه النسخة إلا من هنا، أو إذا تعذّر الاتصال بالخادم.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                if (backups.isEmpty()) {
+                    Text(
+                        "لا توجد نسخة بعد — ستُنشأ تلقائيًا خلال أول يوم من استخدام التطبيق.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Text(
+                        "آخر نسخة: ${formatBackupDate(backups.first().createdAt)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    backups.take(5).forEach { backup ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(formatBackupDate(backup.createdAt), style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    "${backup.personsCount} عميل، ${backup.materialsCount} مادة",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            OutlinedButton(onClick = { pendingRestore = backup }, enabled = !isRestoring) {
+                                Text("استعادة")
+                            }
+                        }
+                    }
+                }
+                restoreStatus?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.labelSmall)
+                }
+                if (isRestoring) {
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                }
+            }
+
             // حول التطبيق (about) — new, a small personal touch
             SettingsSection(title = "حول التطبيق", icon = Icons.Default.Info) {
                 Text("إدارة المحل — الإصدار 1.0.0", style = MaterialTheme.typography.bodyMedium)
@@ -262,6 +385,27 @@ fun SettingsScreen(
                 hasPin = true
                 showSetPinDialog = false
             }
+        )
+    }
+
+    pendingRestore?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { pendingRestore = null },
+            title = { Text("استعادة نسخة احتياطية؟") },
+            text = {
+                Text(
+                    "سيتم استبدال كل الديون والعملاء والمواد والأسعار الحالية بمحتوى نسخة ${formatBackupDate(backup.createdAt)}. " +
+                        "لا يمكن التراجع عن هذا بعد التنفيذ."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = backup
+                    pendingRestore = null
+                    runRestore(target)
+                }) { Text("استعادة") }
+            },
+            dismissButton = { TextButton(onClick = { pendingRestore = null }) { Text("إلغاء") } }
         )
     }
 
@@ -366,6 +510,11 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
 }
+
+private fun formatBackupDate(timestampMillis: Long): String =
+    runCatching {
+        SimpleDateFormat("yyyy/MM/dd — HH:mm", Locale("ar")).format(java.util.Date(timestampMillis))
+    }.getOrDefault("—")
 
 private fun buildBackupText(
     debtsState: com.shopmanager.app.ui.debts.DebtsUiState,
