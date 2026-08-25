@@ -68,13 +68,18 @@ android {
         }
     }
 
+    // JAVA VERSION: bumped from 17 to 21 (current LTS — AGP 8.5.2 / Gradle
+    // 8.7 / Kotlin 1.9.24, see the root build.gradle.kts and CI workflow,
+    // all officially support building with and targeting JDK 21). minSdk 24
+    // is unaffected: D8 still desugars whatever the target device's runtime
+    // can't run natively, exactly as it did for Java 17 language features.
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "21"
     }
 
     buildFeatures {
