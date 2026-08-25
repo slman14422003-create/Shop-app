@@ -6,15 +6,16 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,11 +26,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.shopmanager.app.data.materials.formatQuantity
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.GradientIconButton
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -274,24 +277,41 @@ fun DashboardScreen(
     }
 }
 
+/**
+ * Large-title header, iOS-style: a bold oversized title with a small
+ * secondary greeting above it, sitting on a flat brand-gradient panel with
+ * softly rounded bottom corners instead of a hard-edged bar. The settings
+ * affordance is a solid opaque circular button ([GradientIconButton]) — no
+ * translucency/blur — which is what was reading as dated before (a plain
+ * unstyled gear glyph floating directly on the gradient with no shape of
+ * its own).
+ */
 @Composable
 private fun DashboardHeader(onOpenSettings: () -> Unit) {
     val greeting = remember { timeBasedGreeting() }
     Box(
         Modifier
             .fillMaxWidth()
-            .background(BrandGradient.brush())
-            .padding(20.dp)
+            .background(BrandGradient.brush(), RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(greeting, color = BrandOnGradient.copy(alpha = 0.85f), style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.height(2.dp))
-                Text("إدارة المحل", color = BrandOnGradient, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    greeting,
+                    color = BrandOnGradient.copy(alpha = 0.78f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "إدارة المحل",
+                    color = BrandOnGradient,
+                    style = MaterialTheme.typography.headlineSmall.copy(fontSize = 27.sp, lineHeight = 33.sp),
+                    fontWeight = FontWeight.Bold
+                )
             }
-            IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = BrandOnGradient)
-            }
+            GradientIconButton(icon = Icons.Rounded.Settings, contentDescription = "الإعدادات", onClick = onOpenSettings)
         }
     }
 }
