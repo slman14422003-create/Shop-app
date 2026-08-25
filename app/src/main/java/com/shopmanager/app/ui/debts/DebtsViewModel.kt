@@ -95,27 +95,43 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // null = haven't loaded once yet; used to avoid notifying for the whole
-    // existing list the very first time data loads.
-    private var knownPersonIds: Set<String>? = null
+    // existing list the very first time data loads (same pattern as
+    // MaterialsViewModel.lastNotifiedShortages).
+    //
+    // BUG FIXED (missing notification): this used to track *person* ids,
+    // so it only ever fired for a brand-new customer. Adding a new debt to
+    // an *existing* customer from Person Detail — "إضافة دين" on someone
+    // already in the list, which is the far more common case day to day —
+    // never notified anything, in-app or otherwise. Tracking debt ids
+    // instead of person ids catches both: a new customer's first debt (one
+    // new debt id) and a new debt on an existing customer (also one new
+    // debt id), with one consistent code path instead of two different,
+    // incompletely-covered ones. Also now handles more than one new debt
+    // appearing between two updates (e.g. from another device) instead of
+    // only ever notifying about the first.
+    private var knownDebtIds: Set<String>? = null
 
     init {
         viewModelScope.launch {
             NotificationHelper.ensureChannels(getApplication())
             uiState.collect { state ->
                 if (state.isLoading) return@collect
-                val currentIds = state.persons.map { it.id }.toSet()
-                val previous = knownPersonIds
+                val currentDebtIds = state.debts.map { it.id }.toSet()
+                val previous = knownDebtIds
                 if (previous != null) {
-                    val newIds = currentIds - previous
-                    val newPerson = state.persons.firstOrNull { it.id in newIds }
-                    if (newPerson != null && settings.notificationsEnabled) {
+                    val newDebtIds = currentDebtIds - previous
+                    if (newDebtIds.isNotEmpty() && settings.notificationsEnabled) {
+                        val personsById = state.persons.associateBy { it.id }
                         val nf = NumberFormat.getNumberInstance(Locale("ar"))
-                        NotificationHelper.showNewDebtNotification(
-                            getApplication(), newPerson.name, nf.format(newPerson.amount), settings.currencySymbol
-                        )
+                        state.debts.filter { it.id in newDebtIds }.forEach { debt ->
+                            val personName = personsById[debt.personId]?.name ?: "عميل"
+                            NotificationHelper.showNewDebtNotification(
+                                getApplication(), personName, nf.format(debt.amount), settings.currencySymbol
+                            )
+                        }
                     }
                 }
-                knownPersonIds = currentIds
+                knownDebtIds = currentDebtIds
             }
         }
     }
@@ -133,10 +149,20 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         // the list at a zero balance). Route this into
                         // "add a debt to them" instead of a dead-end
                         // duplicate error — see findPersonIdByName().
+                        //
+                        // BUG FIXED (misleading message): the "تمت إضافة
+                        // الدين لسجله" (debt added to their record) message
+                        // used to show unconditionally here, even when
+                        // amount was 0 — where addDebt() below it is never
+                        // actually called. Someone re-adding an existing
+                        // name with no amount would be told a debt was
+                        // added when nothing was written at all.
                         if (amount > 0) {
                             repo.addDebt(existingPersonId, amount, date)
+                            _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
+                        } else {
+                            _message.value = "\"$name\" موجود مسبقاً بالفعل"
                         }
-                        _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
                         onDone(true)
                         return@launch
                     }
