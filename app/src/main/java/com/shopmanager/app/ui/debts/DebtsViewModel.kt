@@ -41,8 +41,19 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     // screen recomposes for even though nothing the person can see changed
     // — a real contributor to the app feeling heavier than it should,
     // especially right after a write.
-    private val personsFlow = repo.listenPersons().catch { emit(emptyList()) }.distinctUntilChanged()
-    private val debtsFlow = repo.listenAllDebts().catch { emit(emptyList()) }.distinctUntilChanged()
+    // Flips true if a live listener ever errors out (as opposed to just
+    // legitimately returning an empty list) — surfaced below as
+    // [hasSyncError] so Settings can offer restoring the last local daily
+    // backup (see BackupManager) instead of silently showing "no data".
+    private val _hasSyncError = MutableStateFlow(false)
+    val hasSyncError: StateFlow<Boolean> = _hasSyncError
+
+    private val personsFlow = repo.listenPersons()
+        .catch { _hasSyncError.value = true; emit(emptyList()) }
+        .distinctUntilChanged()
+    private val debtsFlow = repo.listenAllDebts()
+        .catch { _hasSyncError.value = true; emit(emptyList()) }
+        .distinctUntilChanged()
 
     /**
      * BUG FIXED: `persons.amount` used to be a separately-maintained field
