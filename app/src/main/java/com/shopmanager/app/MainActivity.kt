@@ -1,6 +1,7 @@
 package com.shopmanager.app
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -41,6 +42,7 @@ import kotlinx.coroutines.withContext
 import com.shopmanager.app.data.FirebaseModule
 import com.shopmanager.app.data.backup.DailyBackupWorker
 import com.shopmanager.app.data.notifications.BackgroundSyncWorker
+import com.shopmanager.app.data.notifications.NotificationAction
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.performance.DevicePerformance
 import com.shopmanager.app.data.performance.LocalPerformanceTier
@@ -84,6 +86,14 @@ private const val ROUTE_HELP = "help"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
 class MainActivity : ComponentActivity() {
+    // Class-level (not inside setContent) so onNewIntent below - fired when
+    // the app is already running and a *second* notification is tapped -
+    // can update it too. A local `remember { mutableStateOf(...) }` created
+    // inside setContent would only ever be initialized once, from the
+    // Intent MainActivity happened to start with, and would never see a
+    // later Intent onNewIntent hands us.
+    private var pendingNotificationAction by mutableStateOf<NotificationAction?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // PERF FIX (startup jitter): installSplashScreen() must run before
         // super.onCreate(). It puts a static app icon on a flat brand-color
@@ -92,6 +102,11 @@ class MainActivity : ComponentActivity() {
         // still busy underneath.
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // Cold start via a notification tap (app wasn't running): the
+        // Activity's very first Intent already carries the extras
+        // NotificationHelper attached. Read it once, up front.
+        pendingNotificationAction = NotificationAction.from(intent)
 
         var isReady by mutableStateOf(false)
         var detectedTier by mutableStateOf(PerformanceTier.STANDARD)
@@ -203,13 +218,29 @@ class MainActivity : ComponentActivity() {
                             settings = settings,
                             onThemeChanged = { themeMode = it },
                             onColorPaletteChanged = { colorPalette = it },
-                            onPerformancePreferenceChanged = { performancePreference = it }
+                            onPerformancePreferenceChanged = { performancePreference = it },
+                            pendingNotificationAction = pendingNotificationAction,
+                            onConsumeNotificationAction = { pendingNotificationAction = null }
                         )
                     }
                 }
             }
             }
         }
+    }
+
+    /**
+     * Warm start: the app is already running (this Activity instance is
+     * still alive) and a notification is tapped. `android:launchMode=
+     * "singleTop"` on MainActivity (see AndroidManifest.xml) is what
+     * routes the tap here instead of spinning up a whole new Activity
+     * instance - without it, this override would simply never fire and
+     * the tap would silently do nothing while the app was open/backgrounded.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingNotificationAction = NotificationAction.from(intent)
     }
 
     /**
@@ -241,7 +272,9 @@ private fun ShopManagerApp(
     settings: SettingsRepository,
     onThemeChanged: (AppThemeMode) -> Unit,
     onColorPaletteChanged: (AppColorPalette) -> Unit,
-    onPerformancePreferenceChanged: (PerformanceMode) -> Unit
+    onPerformancePreferenceChanged: (PerformanceMode) -> Unit,
+    pendingNotificationAction: NotificationAction? = null,
+    onConsumeNotificationAction: () -> Unit = {}
 ) {
     val navController = rememberNavController()
     // Shared across screens so everyone sees the same live data instead of
@@ -259,6 +292,17 @@ private fun ShopManagerApp(
     fun openPager(page: Int) {
         navigateTopLevel(navController, ROUTE_MAIN_PAGER)
         pagerScope.launch { pagerState.animateScrollToPage(page) }
+    }
+
+    // Tapping a notification should land on the screen it's about, not just
+    // pop a dialog over whatever tab happened to be open. Debts stay on the
+    // الديون tab, the shopping-list one jumps to المواد والأسعار.
+    LaunchedEffect(pendingNotificationAction) {
+        when (pendingNotificationAction) {
+            is NotificationAction.DebtPaid, is NotificationAction.NewDebt -> openPager(PAGE_DEBTS)
+            is NotificationAction.ShoppingList -> openPager(PAGE_MATERIALS)
+            null -> {}
+        }
     }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -405,6 +449,39 @@ private fun ShopManagerApp(
                     )
                 }
             }
+        }
+    }
+
+    // The confirmation dialog a tapped notification opens the app to show
+    // ("تم تسديد الدين", "عميل جديد", "قائمة المشتريات"). Rendered as a
+    // sibling of the Scaffold above (an AlertDialog is its own system
+    // window, not part of that layout) so it appears on top regardless of
+    // which tab openPager() just switched to.
+    pendingNotificationAction?.let { action ->
+        when (action) {
+            is NotificationAction.DebtPaid -> AlertDialog(
+                onDismissRequest = onConsumeNotificationAction,
+                title = { Text("✅ تم سداد دين") },
+                text = { Text("${action.personName} وفى ${action.amount} ${action.currency}") },
+                confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
+            )
+            is NotificationAction.NewDebt -> AlertDialog(
+                onDismissRequest = onConsumeNotificationAction,
+                title = { Text("💰 عميل جديد بالديون") },
+                text = { Text("${action.personName} — ${action.amount} ${action.currency}") },
+                confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
+            )
+            is NotificationAction.ShoppingList -> AlertDialog(
+                onDismissRequest = onConsumeNotificationAction,
+                title = { Text("🛒 قائمة المشتريات") },
+                text = {
+                    Text(
+                        if (action.materialNames.isEmpty()) "لا توجد مواد ناقصة حالياً"
+                        else action.materialNames.joinToString("، ")
+                    )
+                },
+                confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
+            )
         }
     }
 }
