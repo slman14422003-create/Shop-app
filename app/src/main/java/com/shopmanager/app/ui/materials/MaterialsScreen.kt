@@ -1,15 +1,8 @@
 package com.shopmanager.app.ui.materials
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -19,6 +12,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
@@ -26,9 +21,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.formatQuantity
@@ -46,6 +41,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.GradientIconButton
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -71,49 +67,32 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
 
     val filtered = if (search.isBlank()) state.materials
     else state.materials.filter { it.name.contains(search, ignoreCase = true) }
-    val shortageCount = state.materials.size
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text("المواد والأسعار", fontWeight = FontWeight.Bold) },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        titleContentColor = BrandOnGradient,
-                        actionIconContentColor = BrandOnGradient
-                    ),
-                    modifier = Modifier.background(BrandGradient.brush()),
-                    actions = {
-                        IconButton(onClick = {
-                            val text = buildMaterialsShareText(state.materials, state.prices)
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, text)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
-                        }) {
-                            Icon(Icons.Default.Share, contentDescription = "مشاركة")
-                        }
+            MaterialsHeader(
+                tab = tab,
+                onTabChange = { tab = it },
+                onShare = {
+                    val text = buildMaterialsShareText(state.materials, state.prices)
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
                     }
-                )
-                TabRow(
-                    selectedTabIndex = tab,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("المواد") })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("الأسعار") })
+                    context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
                 }
-            }
+            )
         },
         floatingActionButton = {
             if (tab == 0) {
                 ExtendedFloatingActionButton(
                     onClick = onAddNew,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("مادة جديدة") }
+                    text = { Text("مادة جديدة", fontWeight = FontWeight.SemiBold) },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
                 )
             }
         }
@@ -123,70 +102,42 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
             onRefresh = viewModel::refresh,
             modifier = Modifier.padding(padding)
         ) {
-        Column(Modifier.fillMaxSize()) {
-            AnimatedVisibility(
-                visible = tab == 0 && shortageCount > 0,
-                enter = expandVertically(MotionSpecs.expandSpring()) + fadeIn(tween(MotionSpecs.expandMillis())),
-                exit = shrinkVertically(tween(MotionSpecs.collapseMillis())) + fadeOut(tween(MotionSpecs.fadeMillis()))
-            ) {
-                Surface(color = MaterialTheme.colorScheme.primaryContainer, modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .animateContentSize()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.ShoppingCart, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+        Crossfade(targetState = tab, label = "materialsTab") { selectedTab ->
+            if (selectedTab == 0) {
+                // Kept deliberately minimal: just the search field above the
+                // list, and materials below it - no extra banners competing
+                // for attention. The "مادة جديدة" action lives only in the
+                // floating button at the bottom of the screen.
+                Column(Modifier.fillMaxSize()) {
+                    OutlinedTextField(
+                        value = search,
+                        onValueChange = { search = it },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                        placeholder = { Text("بحث عن مادة...") },
+                        leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                        trailingIcon = {
+                            if (search.isNotEmpty()) {
+                                IconButton(onClick = { search = "" }) { Icon(Icons.Default.Clear, null) }
+                            }
+                        },
+                        singleLine = true,
+                        shape = CircleShape,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "$shortageCount مادة بانتظار الشراء من السوق",
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                    )
+                    MaterialsList(
+                        materials = filtered,
+                        searching = search.isNotBlank(),
+                        onEdit = { editingMaterial = it },
+                        onDelete = { deleteTarget = it }
+                    )
                 }
-            }
-
-            Crossfade(targetState = tab, label = "materialsTab") { selectedTab ->
-                if (selectedTab == 0) {
-                    Column {
-                        // Requested total: how much of each unit is currently
-                        // on the shortage list, added up across every entry
-                        // (not just what's visible after a search filter) -
-                        // e.g. "٥ كيلو، ٣ لوقية". Units are never summed
-                        // together across each other since a كيلو and a
-                        // لوقية aren't the same physical amount.
-                        if (state.materials.isNotEmpty()) {
-                            MaterialsTotalsSummary(state.materials)
-                        }
-                        OutlinedTextField(
-                            value = search,
-                            onValueChange = { search = it },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                            placeholder = { Text("بحث عن مادة...") },
-                            leadingIcon = { Icon(Icons.Default.Search, null) },
-                            trailingIcon = {
-                                if (search.isNotEmpty()) {
-                                    IconButton(onClick = { search = "" }) { Icon(Icons.Default.Clear, null) }
-                                }
-                            },
-                            singleLine = true,
-                            shape = MaterialTheme.shapes.medium
-                        )
-                        MaterialsList(
-                            materials = filtered,
-                            searching = search.isNotBlank(),
-                            onEdit = { editingMaterial = it },
-                            onDelete = { deleteTarget = it }
-                        )
-                    }
-                } else {
-                    PricesList(materials = state.materials, prices = state.prices, onSave = viewModel::setPrice)
-                }
+            } else {
+                PricesList(materials = state.materials, prices = state.prices, onSave = viewModel::setPrice)
             }
         }
         }
@@ -213,6 +164,85 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
+    }
+}
+
+/**
+ * Large-title header matching [com.shopmanager.app.ui.dashboard.DashboardScreen]'s
+ * new look: bold oversized title + opaque circular share button on a flat
+ * brand-gradient panel with rounded bottom corners, and a pill-shaped
+ * segmented control for the المواد/الأسعار tabs instead of Material's
+ * underlined [TabRow] - the underline style read as mismatched sitting
+ * right below a solid gradient block. The whole thing is one continuous
+ * panel so title, actions and tabs read as one cohesive header instead of
+ * two stacked bars.
+ */
+@Composable
+private fun MaterialsHeader(tab: Int, onTabChange: (Int) -> Unit, onShare: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(BrandGradient.brush(), RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            .padding(horizontal = 20.dp, vertical = 18.dp)
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "المواد والأسعار",
+                modifier = Modifier.weight(1f),
+                color = BrandOnGradient,
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
+                fontWeight = FontWeight.Bold
+            )
+            GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
+        }
+        Spacer(Modifier.height(16.dp))
+        SegmentedTabs(
+            selectedIndex = tab,
+            options = listOf("المواد", "الأسعار"),
+            onSelect = onTabChange
+        )
+    }
+}
+
+/** iOS-style pill segmented control: one rounded track, a solid white
+ * "thumb" behind whichever segment is selected, no divider lines. */
+@Composable
+private fun SegmentedTabs(selectedIndex: Int, options: List<String>, onSelect: (Int) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White.copy(alpha = 0.16f))
+            .padding(4.dp)
+    ) {
+        options.forEachIndexed { index, label ->
+            val selected = index == selectedIndex
+            val bgColor by animateFloatAsState(
+                targetValue = if (selected) 1f else 0f,
+                animationSpec = MotionSpecs.quickSpring(),
+                label = "segmentSelection"
+            )
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(Color.White.copy(alpha = 0.95f * bgColor))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { onSelect(index) }
+                    )
+                    .padding(vertical = 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    label,
+                    color = if (selected) MaterialTheme.colorScheme.primary else BrandOnGradient,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
+                )
+            }
+        }
     }
 }
 
@@ -339,51 +369,6 @@ private fun PricesList(materials: List<Material>, prices: Map<String, Double>, o
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             shape = MaterialTheme.shapes.medium
         ) { Text("حفظ كل الأسعار") }
-    }
-}
-
-/**
- * "عدد الحجم بالمواد المدخلة بشكل كلي": total quantity per unit across every
- * material currently on the shortage list, e.g. "٥ كيلو  •  ٣ لوقية". Kept
- * as separate per-unit totals rather than one blended number, since a كيلو
- * and a لوقية are different physical amounts and adding their raw numbers
- * together would be a meaningless total.
- */
-@Composable
-private fun MaterialsTotalsSummary(materials: List<Material>) {
-    val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
-    val totalsByUnit = remember(materials) {
-        materials.groupBy { it.unit }
-            .mapValues { (_, items) -> items.sumOf { it.quantity } }
-            .toList()
-            .sortedByDescending { it.second }
-    }
-
-    Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "الإجمالي:",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                totalsByUnit.joinToString("  •  ") { (unit, total) ->
-                    "${nf.format(total)} $unit"
-                },
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
     }
 }
 
