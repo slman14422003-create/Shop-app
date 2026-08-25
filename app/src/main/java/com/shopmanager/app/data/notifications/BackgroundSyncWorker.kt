@@ -59,21 +59,35 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
         }
     }
 
+    /**
+     * BUG FIXED (missing background notification): this used to diff the
+     * "persons" collection, so it only ever caught a brand-new customer —
+     * same gap as the old in-app DebtsViewModel logic (see its comment).
+     * A new debt added to an *existing* customer while the app is fully
+     * closed never surfaced here either. Diffing the "debts" collection
+     * itself instead catches both cases the same way the in-app check now
+     * does, so a phone that's been closed for a while and gets woken up by
+     * this worker reports the same things the live in-app listener would
+     * have.
+     */
     private suspend fun checkNewDebts(settings: SettingsRepository) {
         val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val db = FirebaseModule.debtsDb
-        val snapshot = db.collection("persons").get(Source.SERVER).await()
+        val personsSnapshot = db.collection("persons").get(Source.SERVER).await()
+        val debtsSnapshot = db.collection("debts").get(Source.SERVER).await()
+        val personNamesById = personsSnapshot.documents.associate { it.id to (it.getString("name") ?: "عميل") }
 
-        val knownIds = prefs.getStringSet(KEY_KNOWN_PERSONS, null)
+        val knownIds = prefs.getStringSet(KEY_KNOWN_DEBTS, null)
         // First run ever: just seed the known set silently, nothing to
-        // compare against yet (otherwise every existing customer would
-        // fire a "new debt" notification the first time this runs).
+        // compare against yet (otherwise every existing debt would fire a
+        // "new debt" notification the first time this runs).
         if (knownIds != null) {
-            for (doc in snapshot.documents) {
+            for (doc in debtsSnapshot.documents) {
                 if (doc.id !in knownIds) {
-                    val name = doc.getString("name") ?: continue
+                    val personId = doc.getString("personId") ?: continue
                     val amount = doc.getDouble("amount") ?: 0.0
                     if (amount > 0) {
+                        val name = personNamesById[personId] ?: "عميل"
                         NotificationHelper.showNewDebtNotification(
                             applicationContext, name, formatAmount(amount), settings.currencySymbol
                         )
@@ -82,7 +96,8 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
             }
         }
         prefs.edit()
-            .putStringSet(KEY_KNOWN_PERSONS, snapshot.documents.map { it.id }.toSet())
+            .putStringSet(KEY_KNOWN_DEBTS, debtsSnapshot.documents.map { it.id }.toSet())
+            .remove(KEY_KNOWN_PERSONS) // no longer used — replaced by KEY_KNOWN_DEBTS above
             .apply()
     }
 
@@ -105,6 +120,7 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
     companion object {
         private const val PREFS = "shop_manager_sync"
         private const val KEY_KNOWN_PERSONS = "known_person_ids"
+        private const val KEY_KNOWN_DEBTS = "known_debt_ids"
         private const val KEY_KNOWN_MATERIALS = "known_material_names"
         private const val UNIQUE_WORK_NAME = "shop_manager_background_sync"
 
