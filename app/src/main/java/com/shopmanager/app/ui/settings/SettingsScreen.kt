@@ -1,6 +1,13 @@
 package com.shopmanager.app.ui.settings
 
 import android.content.Intent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +42,7 @@ import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.data.materials.formatQuantity
 import com.shopmanager.app.ui.materials.MaterialsViewModel
@@ -123,7 +131,18 @@ fun SettingsScreen(
             // (وليس لمجرد أن القائمة فارغة فعليًا) وتوجد نسخة محلية يمكن
             // العودة إليها. لا يوجد استرجاع صامت تلقائي أبدًا — هذا زر
             // بلمسة واحدة، ليس عملية تحدث من دون علم صاحب المحل.
-            if ((debtsSyncError || materialsSyncError) && backups.isNotEmpty() && !dismissedServerErrorBanner) {
+            //
+            // ANIMATION: pops in with a springy scale+fade (MotionSpecs.
+            // popInSpring) instead of just appearing — a sudden "error"
+            // card popping onto the screen instantly reads as jarring;
+            // easing it in makes the same information feel considered
+            // rather than alarming. Fades+shrinks back out the same way
+            // when dismissed or resolved.
+            AnimatedVisibility(
+                visible = (debtsSyncError || materialsSyncError) && backups.isNotEmpty() && !dismissedServerErrorBanner,
+                enter = fadeIn(MotionSpecs.contentTween()) + scaleIn(MotionSpecs.popInSpring(), initialScale = 0.92f) + expandVertically(),
+                exit = fadeOut(MotionSpecs.contentTween()) + scaleOut(MotionSpecs.popInSpring(), targetScale = 0.92f) + shrinkVertically()
+            ) {
                 ElevatedCard(
                     Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
@@ -350,9 +369,15 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.labelSmall)
                 }
-                if (isRestoring) {
-                    Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                AnimatedVisibility(
+                    visible = isRestoring,
+                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(),
+                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically()
+                ) {
+                    Column {
+                        Spacer(Modifier.height(8.dp))
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
                 }
             }
 
