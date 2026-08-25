@@ -3,12 +3,15 @@ package com.shopmanager.app.data.notifications
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.shopmanager.app.MainActivity
 
 /**
  * Local (on-device) notifications - no server/FCM setup required. Two kinds:
@@ -46,6 +49,31 @@ object NotificationHelper {
             PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * BUG FIXED (tapping a notification did nothing): none of the three
+     * notifications below ever set a `contentIntent`, so tapping them had
+     * no effect at all - not an OEM (Xiaomi/Samsung) quirk, just a missing
+     * PendingIntent. Every notification now opens [MainActivity] carrying
+     * its own [NotificationAction] (via [NotificationAction.applyExtras]),
+     * which the Activity reads in `onCreate`/`onNewIntent` and turns into
+     * the matching confirmation dialog ("تم تسديد الدين"، إلخ) or
+     * navigation. `requestCode` must be unique per *distinct* notification
+     * (not shared across all of them) or Android reuses/overwrites a
+     * previous PendingIntent's extras instead of building a fresh one -
+     * the same `id` each notification is posted under is reused here for
+     * exactly that reason.
+     */
+    private fun buildContentIntent(context: Context, requestCode: Int, action: NotificationAction): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            action.applyExtras(this)
+        }
+        return PendingIntent.getActivity(
+            context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     fun showShoppingListNotification(context: Context, shortageNames: List<String>) {
         if (!hasPermission(context) || shortageNames.isEmpty()) return
         val body = if (shortageNames.size <= 4) shortageNames.joinToString("، ")
@@ -58,6 +86,7 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
+            .setContentIntent(buildContentIntent(context, NOTIF_ID_SHOPPING_LIST, NotificationAction.ShoppingList(shortageNames)))
             .build()
 
         NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_LIST, notification)
@@ -75,6 +104,7 @@ object NotificationHelper {
             .setContentText("$personName — $amount $currencySymbol")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
+            .setContentIntent(buildContentIntent(context, NOTIF_ID_DEBT, NotificationAction.NewDebt(personName, amount, currencySymbol)))
             .build()
 
         NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBT, notification)
@@ -88,15 +118,16 @@ object NotificationHelper {
      */
     fun showDebtPaidNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س", debtId: String = "") {
         if (!hasPermission(context)) return
+        val id = NOTIF_ID_PAID_BASE + (debtId.hashCode() and 0xFFF)
         val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("✅ تم سداد دين")
             .setContentText("$personName وفى $amount $currencySymbol")
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
+            .setContentIntent(buildContentIntent(context, id, NotificationAction.DebtPaid(personName, amount, currencySymbol)))
             .build()
 
-        val id = NOTIF_ID_PAID_BASE + (debtId.hashCode() and 0xFFF)
         NotificationManagerCompat.from(context).notify(id, notification)
     }
 }
