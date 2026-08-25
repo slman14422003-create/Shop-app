@@ -56,7 +56,7 @@ import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.debts.DebtsViewModel
-import com.shopmanager.app.data.materials.formatQuantity
+import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
@@ -78,7 +78,8 @@ fun SettingsScreen(
     onPerformancePreferenceChanged: (PerformanceMode) -> Unit = {},
     debtsViewModel: DebtsViewModel? = null,
     materialsViewModel: MaterialsViewModel? = null,
-    onOpenHelp: () -> Unit = {}
+    onOpenHelp: () -> Unit = {},
+    onOpenPrivacyPolicy: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsRepository(context) }
@@ -431,11 +432,23 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Text(
+                    "تطوير: سلمان",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = onOpenHelp, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("دليل الاستخدام")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onOpenPrivacyPolicy, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("سياسة الخصوصية")
                 }
             }
 
@@ -665,7 +678,7 @@ private fun buildBackupText(
     sb.append("\n📦 المواد (${materialsState.materials.size})\n")
     materialsState.materials.sortedBy { it.name }.forEach { m ->
         val price = materialsState.prices[m.name]
-        sb.append("• ${m.name}: ${m.quantity.formatQuantity()} ${m.unit}")
+        sb.append("• ${m.name}: ${m.quantityLabel()}")
         if (price != null) sb.append(" — ${nf.format(price)} $currency")
         sb.append("\n")
     }
