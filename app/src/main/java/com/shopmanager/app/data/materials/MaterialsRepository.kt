@@ -143,4 +143,76 @@ class MaterialsRepository {
         db.collection(pricesCollection).get(com.google.firebase.firestore.Source.SERVER).await()
         Unit
     }
+
+    /**
+     * One-off, all-at-once read of materials + prices + catalog — used
+     * only for the daily local backup snapshot (see BackupManager); the
+     * rest of the app always uses the live listeners above.
+     */
+    suspend fun fetchAllForBackup(): Triple<List<Material>, Map<String, Double>, List<MaterialCatalogItem>> =
+        withTimeout(WRITE_TIMEOUT_MS) {
+            val materialsSnap = db.collection(materialsCollection).get().await()
+            val pricesSnap = db.collection(pricesCollection).get().await()
+            val catalogSnap = db.collection(catalogCollection).get().await()
+
+            val materials = materialsSnap.documents.map { doc ->
+                Material(
+                    id = doc.id,
+                    name = doc.getString("name") ?: "",
+                    quantity = doc.getDouble("quantity") ?: 0.0,
+                    unit = doc.getString("unit") ?: MaterialUnit.KG.label,
+                    section = doc.getString("section") ?: "main",
+                    updatedAt = doc.getLong("timestamp") ?: 0L
+                )
+            }
+            val prices = pricesSnap.documents.associate { it.id to (it.getDouble("price") ?: 0.0) }
+            val catalog = catalogSnap.documents.map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "") }
+            Triple(materials, prices, catalog)
+        }
+
+    /**
+     * Restores a full local backup snapshot back into Firestore, wiping
+     * every existing document in the three collections first and
+     * rewriting the backed-up ones with their original ids. Batched in
+     * chunks of 400 to stay under Firestore's 500-operation batch limit.
+     * Only ever called after explicit confirmation — see
+     * [com.shopmanager.app.data.debts.DebtsRepository.restoreFromBackup].
+     */
+    suspend fun restoreFromBackup(
+        materials: List<Material>,
+        prices: Map<String, Double>,
+        catalog: List<MaterialCatalogItem>
+    ) = withTimeout(60_000L) {
+        val existingMaterials = db.collection(materialsCollection).get().await()
+        val existingPrices = db.collection(pricesCollection).get().await()
+        val existingCatalog = db.collection(catalogCollection).get().await()
+
+        val deletes = existingMaterials.documents.map { db.collection(materialsCollection).document(it.id) } +
+            existingPrices.documents.map { db.collection(pricesCollection).document(it.id) } +
+            existingCatalog.documents.map { db.collection(catalogCollection).document(it.id) }
+        deletes.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().await()
+        }
+
+        val materialWrites = materials.filter { it.id.isNotBlank() }.map {
+            db.collection(materialsCollection).document(it.id) to mapOf(
+                "name" to it.name, "quantity" to it.quantity, "unit" to it.unit,
+                "section" to it.section, "timestamp" to it.updatedAt
+            )
+        }
+        val priceWrites = prices.map { (name, price) ->
+            db.collection(pricesCollection).document(name) to mapOf("price" to price)
+        }
+        val catalogWrites = catalog.filter { it.id.isNotBlank() }.map {
+            db.collection(catalogCollection).document(it.id) to mapOf("name" to it.name)
+        }
+        (materialWrites + priceWrites + catalogWrites).chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { (ref, data) -> batch.set(ref, data) }
+            batch.commit().await()
+        }
+        Unit
+    }
 }
