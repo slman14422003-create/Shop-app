@@ -9,12 +9,16 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
@@ -29,6 +33,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -46,8 +51,10 @@ import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.data.materials.formatQuantity
 import com.shopmanager.app.ui.materials.MaterialsViewModel
+import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SuccessGreen
+import com.shopmanager.app.ui.theme.paletteColorsFor
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -60,6 +67,7 @@ private val CURRENCY_OPTIONS = listOf("ل.س", "$", "SAR", "AED", "TRY")
 fun SettingsScreen(
     onBack: () -> Unit,
     onThemeChanged: (AppThemeMode) -> Unit,
+    onColorPaletteChanged: (AppColorPalette) -> Unit = {},
     onPerformancePreferenceChanged: (PerformanceMode) -> Unit = {},
     debtsViewModel: DebtsViewModel? = null,
     materialsViewModel: MaterialsViewModel? = null,
@@ -68,6 +76,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settings = remember { SettingsRepository(context) }
     var themeMode by remember { mutableStateOf(settings.themeMode) }
+    var colorPalette by remember { mutableStateOf(settings.colorPalette) }
     var hasPin by remember { mutableStateOf(settings.hasPin) }
     var showSetPinDialog by remember { mutableStateOf(false) }
     var currency by remember { mutableStateOf(settings.currencySymbol) }
@@ -194,6 +203,30 @@ fun SettingsScreen(
                                 AppThemeMode.SYSTEM -> "حسب النظام"
                                 AppThemeMode.LIGHT -> "فاتح"
                                 AppThemeMode.DARK -> "داكن"
+                            }
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "لوحة الألوان",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    AppColorPalette.entries.forEach { palette ->
+                        ColorPaletteSwatch(
+                            palette = palette,
+                            selected = colorPalette == palette,
+                            onClick = {
+                                colorPalette = palette
+                                settings.colorPalette = palette
+                                onColorPaletteChanged(palette)
                             }
                         )
                     }
@@ -444,6 +477,49 @@ fun SettingsScreen(
                 AppSettingsState.setCurrency(selected)
                 showCurrencyDialog = false
             }
+        )
+    }
+}
+
+/**
+ * One tappable swatch per [AppColorPalette] — a small circle split
+ * diagonally between the palette's two brand-gradient colors so the person
+ * can see the actual hue pair before picking it, plus a checkmark and label
+ * on the currently-selected one. Kept as a fixed circle+ring instead of a
+ * RadioButton row (like the theme-mode picker above it) because color is
+ * inherently visual — reading "نيلي" vs "زمردي" as text doesn't tell you
+ * what either looks like, seeing the swatch does.
+ */
+@Composable
+private fun ColorPaletteSwatch(palette: AppColorPalette, selected: Boolean, onClick: () -> Unit) {
+    val colors = remember(palette) { paletteColorsFor(palette) }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .background(
+                    Brush.linearGradient(listOf(colors.gradientStart, colors.gradientEnd)),
+                    CircleShape
+                )
+                .border(
+                    width = if (selected) 2.5.dp else 1.dp,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                    shape = CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            palette.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
