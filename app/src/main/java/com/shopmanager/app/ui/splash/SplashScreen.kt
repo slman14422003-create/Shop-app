@@ -1,6 +1,5 @@
 package com.shopmanager.app.ui.splash
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -180,7 +179,7 @@ private fun SplashChecklist(steps: List<SplashStepState>) {
                         .background(Color.White.copy(alpha = if (step.done) 0.95f else 0.16f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    AnimatedVisibility(visible = step.done, enter = scaleIn() + fadeIn()) {
+                    androidx.compose.animation.AnimatedVisibility(visible = step.done, enter = scaleIn() + fadeIn()) {
                         Icon(
                             Icons.Filled.Check,
                             contentDescription = null,
@@ -188,7 +187,7 @@ private fun SplashChecklist(steps: List<SplashStepState>) {
                             modifier = Modifier.size(13.dp)
                         )
                     }
-                    AnimatedVisibility(visible = !step.done, enter = fadeIn(), exit = fadeOut()) {
+                    androidx.compose.animation.AnimatedVisibility(visible = !step.done, enter = fadeIn(), exit = fadeOut()) {
                         CircularProgressIndicator(
                             strokeWidth = 1.5.dp,
                             color = Color.White.copy(alpha = 0.55f),
