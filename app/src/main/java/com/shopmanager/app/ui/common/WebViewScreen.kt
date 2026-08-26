@@ -64,17 +64,23 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text(title, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        val wv = webViewRef
-                        if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
-                    }) { Icon(Icons.Default.ArrowBack, contentDescription = null) }
+                    GlassIconButton(
+                        icon = Icons.Default.ArrowBack,
+                        contentDescription = "رجوع",
+                        onClick = {
+                            val wv = webViewRef
+                            if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
+                        },
+                        modifier = Modifier.padding(start = 8.dp),
+                        size = 36.dp
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.background(BrandGradient.brush())
+                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape)
             )
         }
     ) { padding ->
