@@ -52,8 +52,9 @@ import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.GlassIconButton
+import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.data.materials.quantityLabel
@@ -126,13 +127,21 @@ fun SettingsScreen(
         topBar = {
             TopAppBar(
                 title = { Text("الإعدادات", fontWeight = FontWeight.Bold) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+                navigationIcon = {
+                    GlassIconButton(
+                        icon = Icons.Default.ArrowBack,
+                        contentDescription = "رجوع",
+                        onClick = onBack,
+                        modifier = Modifier.padding(start = 8.dp),
+                        size = 36.dp
+                    )
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.background(BrandGradient.brush())
+                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape)
             )
         }
     ) { padding ->
