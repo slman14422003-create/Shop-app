@@ -30,9 +30,9 @@ import androidx.compose.ui.unit.sp
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GradientIconButton
+import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -292,7 +292,7 @@ private fun DashboardHeader(onOpenSettings: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
-            .background(BrandGradient.brush(), RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            .liquidGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
             .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
