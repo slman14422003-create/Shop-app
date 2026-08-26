@@ -38,10 +38,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.GradientIconButton
+import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -182,7 +182,7 @@ private fun MaterialsHeader(tab: Int, onTabChange: (Int) -> Unit, onShare: () ->
     Column(
         Modifier
             .fillMaxWidth()
-            .background(BrandGradient.brush(), RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            .liquidGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
