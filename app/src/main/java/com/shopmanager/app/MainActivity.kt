@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -37,6 +38,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.shopmanager.app.data.FirebaseModule
@@ -61,12 +63,15 @@ import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.settings.SettingsScreen
+import com.shopmanager.app.ui.splash.AppSplashScreen
+import com.shopmanager.app.ui.splash.SplashStepState
 import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SetSystemBarsColor
 import com.shopmanager.app.ui.theme.ShopManagerTheme
 import com.shopmanager.app.ui.theme.paletteColorsFor
 import com.shopmanager.app.ui.theme.rememberIsDarkTheme
+
 
 // FIX: Home used to be its own NavHost destination, separate from the
 // Debts/Materials HorizontalPager, so swiping only ever worked between
@@ -86,6 +91,13 @@ private const val ROUTE_HELP = "help"
 private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
+// The in-app liquid-glass splash (see AppSplashScreen) shows each real
+// init step ticking off, but a fast device can blow through all four in
+// well under 150ms — too quick to read as anything but a flash. This is
+// the one artificial delay in the whole startup path, and only long
+// enough to keep the animation legible.
+private const val SPLASH_MIN_DISPLAY_MS = 900L
+
 class MainActivity : ComponentActivity() {
     // Class-level (not inside setContent) so onNewIntent below - fired when
     // the app is already running and a *second* notification is tapped -
@@ -95,6 +107,14 @@ class MainActivity : ComponentActivity() {
     // later Intent onNewIntent hands us.
     private var pendingNotificationAction by mutableStateOf<NotificationAction?>(null)
 
+    // Real per-step progress for the splash checklist — flipped from the
+    // background init coroutine in onCreate below as each step actually
+    // finishes, not simulated/faked for show.
+    private var stepFirebaseReady by mutableStateOf(false)
+    private var stepNotificationsReady by mutableStateOf(false)
+    private var stepTierReady by mutableStateOf(false)
+    private var stepSyncScheduled by mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // PERF FIX (startup jitter): installSplashScreen() must run before
         // super.onCreate(). It puts a static app icon on a flat brand-color
@@ -103,6 +123,7 @@ class MainActivity : ComponentActivity() {
         // still busy underneath.
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        val splashStartTime = System.currentTimeMillis()
 
         // Cold start via a notification tap (app wasn't running): the
         // Activity's very first Intent already carries the extras
@@ -111,13 +132,17 @@ class MainActivity : ComponentActivity() {
 
         var isReady by mutableStateOf(false)
         var detectedTier by mutableStateOf(PerformanceTier.STANDARD)
-        // Keeps the splash icon up — instead of showing a half-initialized
-        // screen — until performanceTier is known AND Firebase/notification
-        // channels/background-sync scheduling have finished below. Once
-        // this flips true, Compose already has everything it needs for a
-        // single correct first frame; nothing has to change color or
-        // re-layout right after appearing.
-        splashScreen.setKeepOnScreenCondition { !isReady }
+        // Tracks only whether Compose has produced its first frame — NOT
+        // whether init is done. The static system splash now only needs to
+        // bridge the gap until Compose can draw *something*; from that
+        // first frame on, AppSplashScreen (rendered below, in Compose) is
+        // what actually covers the screen and shows real init progress, so
+        // there's no reason to keep the frozen system icon up any longer
+        // than that. (Approximated via a LaunchedEffect(Unit) in setContent
+        // — not pixel-exact to the true first draw, but close enough that
+        // the handoff is invisible in practice.)
+        var composeSplashAttached by mutableStateOf(false)
+        splashScreen.setKeepOnScreenCondition { !composeSplashAttached }
 
         requestSmoothestRefreshRate()
 
@@ -131,32 +156,39 @@ class MainActivity : ComponentActivity() {
         // work stacked right at cold start, which is what showed up as a
         // few seconds of visible jank/"shaking". None of it needs the main
         // thread, so it now all runs on a background dispatcher while the
-        // splash screen (above) covers the UI.
+        // splash screen (system, then in-app — see above) covers the UI.
         lifecycleScope.launch(Dispatchers.Default) {
             FirebaseModule.init(applicationContext)
+            withContext(Dispatchers.Main) { stepFirebaseReady = true }
+
             NotificationHelper.ensureChannels(applicationContext)
+            withContext(Dispatchers.Main) { stepNotificationsReady = true }
+
             // "وضع لكل هاتف": classified once (cached after that), then
             // used below to switch off the heavier visual effects on
             // entry-level hardware — see DevicePerformance for the
             // detection signals.
             val tier = DevicePerformance.detectTier(applicationContext)
+            withContext(Dispatchers.Main) { stepTierReady = true }
+
             BackgroundSyncWorker.schedule(applicationContext)
             // Silent, fully local daily backup — no notification, ever
             // (see DailyBackupWorker/BackupManager). Scheduled here, off
             // the main thread, same as BackgroundSyncWorker above.
             DailyBackupWorker.schedule(applicationContext)
+            withContext(Dispatchers.Main) { stepSyncScheduled = true }
+
+            val elapsed = System.currentTimeMillis() - splashStartTime
+            if (elapsed < SPLASH_MIN_DISPLAY_MS) delay(SPLASH_MIN_DISPLAY_MS - elapsed)
+
             withContext(Dispatchers.Main) {
                 detectedTier = tier
                 isReady = true
             }
+
         }
 
         setContent {
-            // Nothing to compose until the background init above finishes —
-            // the splash screen is still covering the activity at this
-            // point, so this is invisible to the user, not a blank flash.
-            if (!isReady) return@setContent
-
             val settings = remember { SettingsRepository(applicationContext) }
             var themeMode by remember { mutableStateOf(settings.themeMode) }
             var colorPalette by remember { mutableStateOf(settings.colorPalette) }
@@ -171,24 +203,23 @@ class MainActivity : ComponentActivity() {
                 derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference) }
             }
 
-            // Load the persisted currency symbol into the app-wide holder once,
-            // so every screen (dashboard, debts, materials, notifications)
-            // shows the right currency from the very first frame.
-            LaunchedEffect(Unit) { AppSettingsState.setCurrency(settings.currencySymbol) }
+            // Dismiss the static system splash screen as soon as Compose has
+            // a frame ready to draw — see the composeSplashAttached comment
+            // above. From here on AppSplashScreen below is what the person
+            // actually sees while the background init finishes.
+            LaunchedEffect(Unit) { composeSplashAttached = true }
 
-            // Android 13+ requires explicit runtime permission to post
-            // notifications (needed for the low-stock shopping list and
-            // new-debt alerts).
-            val notificationPermissionLauncher = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { }
-            LaunchedEffect(Unit) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
+            val splashSteps = remember(
+                stepFirebaseReady, stepNotificationsReady, stepTierReady, stepSyncScheduled
+            ) {
+                listOf(
+                    SplashStepState("الاتصال بقاعدة البيانات", stepFirebaseReady),
+                    SplashStepState("تهيئة الإشعارات", stepNotificationsReady),
+                    SplashStepState("ضبط الأداء لهذا الجهاز", stepTierReady),
+                    SplashStepState("جدولة المزامنة والنسخ الاحتياطي", stepSyncScheduled)
+                )
             }
 
-            CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
             ShopManagerTheme(themeMode = themeMode, colorPalette = colorPalette) {
                 // Status bar (and nav bar) painted with the app's own brand
                 // color instead of the bare system default.
@@ -206,26 +237,64 @@ class MainActivity : ComponentActivity() {
                 val statusBarColor = remember(colorPalette) { paletteColorsFor(colorPalette).gradientStart }
                 SetSystemBarsColor(
                     statusBarColor = statusBarColor,
-                    navigationBarColor = MaterialTheme.colorScheme.surface,
+                    // While the splash is showing there's no MaterialTheme
+                    // surface color underneath it yet worth matching — the
+                    // nav bar stays the same brand color as the splash
+                    // itself so there's no visible seam at the bottom edge.
+                    navigationBarColor = if (isReady) MaterialTheme.colorScheme.surface else statusBarColor,
                     statusBarDarkIcons = false,
-                    navigationBarDarkIcons = !isDark
+                    navigationBarDarkIcons = if (isReady) !isDark else false
                 )
 
                 Surface {
-                    if (!unlocked) {
-                        LockScreen(settings = settings, onUnlocked = { unlocked = true })
-                    } else {
-                        ShopManagerApp(
-                            settings = settings,
-                            onThemeChanged = { themeMode = it },
-                            onColorPaletteChanged = { colorPalette = it },
-                            onPerformancePreferenceChanged = { performancePreference = it },
-                            pendingNotificationAction = pendingNotificationAction,
-                            onConsumeNotificationAction = { pendingNotificationAction = null }
-                        )
+                    // A one-time crossfade from the in-app splash into the
+                    // real UI once isReady flips true — smoother than the
+                    // hard cut a plain `if` would give, and it only ever
+                    // runs once per cold start so it's not worth gating
+                    // behind the LOW-tier "skip animations" convention used
+                    // for the Pager/route transitions elsewhere in this file.
+                    Crossfade(targetState = isReady, label = "splashToApp") { ready ->
+                        if (!ready) {
+                            AppSplashScreen(steps = splashSteps)
+                        } else {
+                            CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
+                                // Load the persisted currency symbol into the
+                                // app-wide holder once, so every screen
+                                // (dashboard, debts, materials, notifications)
+                                // shows the right currency from the very
+                                // first frame of the real app.
+                                LaunchedEffect(Unit) { AppSettingsState.setCurrency(settings.currencySymbol) }
+
+                                // Android 13+ requires explicit runtime
+                                // permission to post notifications (needed
+                                // for the low-stock shopping list and
+                                // new-debt alerts). Requested once the real
+                                // UI is up, not while the splash is showing.
+                                val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                                    ActivityResultContracts.RequestPermission()
+                                ) { }
+                                LaunchedEffect(Unit) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                }
+
+                                if (!unlocked) {
+                                    LockScreen(settings = settings, onUnlocked = { unlocked = true })
+                                } else {
+                                    ShopManagerApp(
+                                        settings = settings,
+                                        onThemeChanged = { themeMode = it },
+                                        onColorPaletteChanged = { colorPalette = it },
+                                        onPerformancePreferenceChanged = { performancePreference = it },
+                                        pendingNotificationAction = pendingNotificationAction,
+                                        onConsumeNotificationAction = { pendingNotificationAction = null }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
             }
         }
     }
