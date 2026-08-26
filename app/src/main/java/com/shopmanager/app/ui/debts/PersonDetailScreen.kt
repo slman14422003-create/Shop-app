@@ -27,7 +27,8 @@ import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.BrandGradient
+import com.shopmanager.app.ui.common.GlassIconButton
+import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -72,7 +73,13 @@ fun PersonDetailScreen(
             TopAppBar(
                 title = { Text(person.name, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    GlassIconButton(
+                        icon = Icons.Default.ArrowBack,
+                        contentDescription = "رجوع",
+                        onClick = onBack,
+                        modifier = Modifier.padding(start = 8.dp),
+                        size = 36.dp
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
@@ -80,11 +87,15 @@ fun PersonDetailScreen(
                     navigationIconContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.background(BrandGradient.brush()),
+                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape),
                 actions = {
-                    IconButton(onClick = { showDeletePersonConfirm = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "حذف العميل")
-                    }
+                    GlassIconButton(
+                        icon = Icons.Default.Delete,
+                        contentDescription = "حذف العميل",
+                        onClick = { showDeletePersonConfirm = true },
+                        modifier = Modifier.padding(end = 8.dp),
+                        size = 36.dp
+                    )
                 }
             )
         }
@@ -224,7 +235,7 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
     Box(
         Modifier
             .fillMaxWidth()
-            .background(BrandGradient.brush())
+            .liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape)
             .padding(20.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -32,9 +32,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.GlassIconButton
+import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -77,18 +78,22 @@ fun DebtsScreen(
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.background(BrandGradient.brush()),
+                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape),
                 actions = {
-                    IconButton(onClick = {
-                        val text = buildDebtsShareText(state.persons, state.totalAmount)
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, text)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "مشاركة كشف الديون"))
-                    }) {
-                        Icon(Icons.Default.Share, contentDescription = "مشاركة")
-                    }
+                    GlassIconButton(
+                        icon = Icons.Default.Share,
+                        contentDescription = "مشاركة",
+                        onClick = {
+                            val text = buildDebtsShareText(state.persons, state.totalAmount)
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            context.startActivity(Intent.createChooser(intent, "مشاركة كشف الديون"))
+                        },
+                        modifier = Modifier.padding(end = 8.dp),
+                        size = 36.dp
+                    )
                 }
             )
         },
