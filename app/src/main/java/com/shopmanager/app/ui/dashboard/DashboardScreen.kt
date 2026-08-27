@@ -2,10 +2,12 @@ package com.shopmanager.app.ui.dashboard
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
@@ -20,6 +22,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -53,6 +56,14 @@ private data class ActivityRow(
     val timestamp: Long
 )
 
+/** لوحة المسؤول السرية: fixed PIN gate for the tiny hidden admin button on
+ * this screen's header (see DashboardHeader/AdminAccessDot below). Not
+ * related to the app-lock PIN in Settings — that one is user-chosen and
+ * protects the whole app; this one is a fixed developer password that
+ * only unlocks the developer/admin panel. Change this constant if the
+ * password ever needs to rotate — it's the single place it's defined. */
+private const val ADMIN_PANEL_PASSWORD = "1442"
+
 private fun timeBasedGreeting(): String {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     return when {
@@ -71,8 +82,10 @@ fun DashboardScreen(
     materialsViewModel: MaterialsViewModel,
     onOpenSettings: () -> Unit,
     onNavigateToDebts: () -> Unit = {},
-    onNavigateToMaterials: () -> Unit = {}
+    onNavigateToMaterials: () -> Unit = {},
+    onOpenAdmin: () -> Unit = {}
 ) {
+    var showAdminPinDialog by remember { mutableStateOf(false) }
     val debtsState by debtsViewModel.uiState.collectAsState()
     val materialsState by materialsViewModel.uiState.collectAsState()
     val debtsRefreshing by debtsViewModel.isRefreshing.collectAsState()
@@ -133,7 +146,12 @@ fun DashboardScreen(
             contentPadding = PaddingValues(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item { DashboardHeader(onOpenSettings = onOpenSettings) }
+            item {
+                DashboardHeader(
+                    onOpenSettings = onOpenSettings,
+                    onAdminTap = { showAdminPinDialog = true }
+                )
+            }
 
             item {
                 QuickActionsRow(
@@ -312,6 +330,21 @@ fun DashboardScreen(
         }
         }
     }
+
+    if (showAdminPinDialog) {
+        AdminPinDialog(
+            onDismiss = { showAdminPinDialog = false },
+            onSubmit = { entered ->
+                if (entered == ADMIN_PANEL_PASSWORD) {
+                    showAdminPinDialog = false
+                    onOpenAdmin()
+                    true
+                } else {
+                    false
+                }
+            }
+        )
+    }
 }
 
 /**
@@ -324,7 +357,7 @@ fun DashboardScreen(
  * its own).
  */
 @Composable
-private fun DashboardHeader(onOpenSettings: () -> Unit) {
+private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit = {}) {
     val greeting = remember { timeBasedGreeting() }
     Box(
         Modifier
@@ -358,7 +391,72 @@ private fun DashboardHeader(onOpenSettings: () -> Unit) {
             }
             GradientIconButton(icon = Icons.Rounded.Settings, contentDescription = "الإعدادات", onClick = onOpenSettings)
         }
+
+        // نقطة الوصول السرية للوحة المسؤول: a tiny, near-invisible dot
+        // tucked in the header's bottom corner — deliberately not an icon
+        // (no gear/wrench glyph that invites curiosity), just low-opacity
+        // decoration to anyone who isn't specifically looking for it. A
+        // regular user scrolls right past this; only someone who already
+        // knows it's there taps it.
+        Box(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(2.dp)
+                .size(18.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onAdminTap
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                Modifier
+                    .size(5.dp)
+                    .alpha(0.35f)
+                    .background(BrandOnGradient, CircleShape)
+            )
+        }
     }
+}
+
+@Composable
+private fun AdminPinDialog(onDismiss: () -> Unit, onSubmit: (String) -> Boolean) {
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("دخول لوحة المطوّر") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it.filter { c -> c.isDigit() }.take(8); error = false },
+                    label = { Text("كلمة المرور") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = error
+                )
+                if (error) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "كلمة المرور غير صحيحة",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (!onSubmit(pin)) error = true }) { Text("دخول") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 @Composable
