@@ -463,7 +463,19 @@ private fun PricesList(materials: List<Material>, prices: Map<String, Double>, o
                         Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(m.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                        // BUG FIXED: a long material name had no line/overflow
+                        // limit, so it could wrap to 2+ lines while the price
+                        // field next to it stayed a single line — the row's
+                        // vertical centering then looked broken/misaligned for
+                        // exactly the longer names. Ellipsis keeps every row
+                        // the same height regardless of name length.
+                        Text(
+                            m.name,
+                            modifier = Modifier.weight(1f),
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                         OutlinedTextField(
                             value = edited[m.name] ?: prices[m.name]?.toString() ?: "",
                             onValueChange = { edited[m.name] = it },
