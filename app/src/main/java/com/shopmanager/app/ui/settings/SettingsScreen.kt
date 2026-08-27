@@ -124,6 +124,15 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        // This screen sits outside the main pager (no shared bottom nav
+        // bar of its own), so the outer app Scaffold already reserves the
+        // real bottom/horizontal safe-area space for it one level up, in
+        // NavHost's own padding. Leaving this Scaffold's contentWindowInsets
+        // at its default would apply that same system inset a *second*
+        // time here, pushing content up with an unnecessary empty gap
+        // above the true bottom edge. The TopAppBar below still handles
+        // the status bar inset entirely on its own, independent of this.
+        contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text("الإعدادات", fontWeight = FontWeight.Bold) },
