@@ -38,8 +38,28 @@ android {
         applicationId = "com.shopmanager.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        // "رابط التحديثات = GitHub Release تلقائياً": versionCode used to
+        // be a hardcoded "1" forever while release.yml tagged each build
+        // v1.0.<run_number> — so the tag kept climbing but the app never
+        // actually knew its own build number, and update-checking had
+        // nothing real to compare against. GITHUB_RUN_NUMBER is an env var
+        // GitHub Actions sets automatically on every workflow run (see
+        // release.yml) — reused here as versionCode too, so the *same*
+        // number is both this build's Android versionCode and the digit at
+        // the end of its git tag. A local (non-CI) build has no such env
+        // var, so it falls back to 1, same as before.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "1.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+
+        // GITHUB_REPOSITORY is another env var GitHub Actions sets
+        // automatically ("owner/repo") — baked into BuildConfig so
+        // UpdateChecker can build the GitHub Releases API URL itself with
+        // no manifest URL ever needing to be typed in by hand anywhere
+        // (see AdminPanelScreen's "رابط التحديثات" field, which now shows
+        // this as a read-only default instead of a blank field to fill
+        // in). Blank on a local/non-CI build — see the empty-string
+        // handling already in UpdateChecker.
+        buildConfigField("String", "GITHUB_REPO", "\"${System.getenv("GITHUB_REPOSITORY") ?: ""}\"")
 
         // SIZE FIX: Firestore/gRPC ship native .so libraries for four ABIs
         // (armeabi-v7a, arm64-v8a, x86, x86_64). x86/x86_64 exist only for
@@ -123,6 +143,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
