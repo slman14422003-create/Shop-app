@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,17 +42,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.quantityLabel
-import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.GradientIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
-import java.text.NumberFormat
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,6 +64,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     var showClearAllConfirm by remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val brandColor = LocalBrandGradientColors.current.first().toArgb()
 
     LaunchedEffect(message) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
@@ -92,10 +91,15 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                 showClearAll = tab == 0 && state.materials.isNotEmpty(),
                 onClearAll = { showClearAllConfirm = true },
                 onShare = {
-                    val text = buildMaterialsShareText(state.materials, state.prices)
+                    // FIX: now shares a single formatted PNG report image
+                    // (see MaterialsReportImage) instead of a plain-text
+                    // message, so the layout looks the same and stays
+                    // readable in whichever app the person shares it to.
+                    val uri = MaterialsReportImage.generate(context, state.materials, state.prices, brandColor)
                     val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, text)
+                        type = "image/png"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
                     context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
                 }
@@ -242,11 +246,20 @@ private fun MaterialsHeader(
             // actually something to clear - deletes every material on the
             // list in one confirmed action (see MaterialsScreen's
             // showClearAllConfirm dialog / MaterialsViewModel.deleteAllMaterials).
+            //
+            // FIX (icons touching): this used to sit right next to the
+            // share button with only a small fixed Spacer between them,
+            // which read as the two circular buttons glued together. Both
+            // now sit in their own Row with real breathing room
+            // (spacedBy) between them instead of a single thin gap.
             if (showClearAll) {
-                GradientIconButton(icon = Icons.Default.DeleteSweep, contentDescription = "مسح كل المواد", onClick = onClearAll)
-                Spacer(Modifier.width(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    GradientIconButton(icon = Icons.Default.DeleteSweep, contentDescription = "مسح كل المواد", onClick = onClearAll)
+                    GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
+                }
+            } else {
+                GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
             }
-            GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
         }
         Spacer(Modifier.height(16.dp))
         SegmentedTabs(
@@ -478,16 +491,4 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, te
             Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
-}
-
-private fun buildMaterialsShareText(materials: List<Material>, prices: Map<String, Double>): String {
-    val nf = NumberFormat.getNumberInstance(Locale("ar"))
-    val sb = StringBuilder("📦 قائمة المواد\n\n")
-    materials.sortedBy { it.name }.forEach { m ->
-        val price = prices[m.name]
-        sb.append("• ${m.name}: ${m.quantityLabel()}")
-        if (price != null) sb.append(" — ${nf.format(price)} ${AppSettingsState.currencySymbol}")
-        sb.append("\n")
-    }
-    return sb.toString()
 }

@@ -47,6 +47,16 @@ fun MaterialEditDialog(
     var unit by remember { mutableStateOf(MaterialUnit.fromLabel(initial?.unit ?: MaterialUnit.KG.label)) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    // FIX: a fixed fraction size (نص كيلو، ربع كيلو، لوقية، نص لوقية، ربع
+    // لوقية) is already exactly one of itself the moment it's picked -
+    // "2 نص كيلو" isn't a size anyone actually orders in, they'd just pick
+    // كيلو instead. So the quantity stepper only makes sense for كيلو
+    // (where "2 كيلو" is a normal amount) and بدون (a plain count with no
+    // size at all, like "بيض: 6"). Switching to any of the other units
+    // hides the stepper and pins quantity to 1 so no stale count "1
+    // نص كيلو من 3" -> tapping "نص كيلو" would carry a leftover count.
+    val showQuantityStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
@@ -63,11 +73,22 @@ fun MaterialEditDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
                 )
-                QuantityStepper(
-                    value = quantity,
-                    unitLabel = unit.label,
-                    onValueChange = { quantity = it.coerceAtLeast(1) }
-                )
+                if (showQuantityStepper) {
+                    QuantityStepper(
+                        value = quantity,
+                        unitLabel = unit.label,
+                        onValueChange = { quantity = it.coerceAtLeast(1) }
+                    )
+                } else {
+                    // Quantity is implicitly 1 for a fixed fraction size -
+                    // nothing to step, so this just confirms what will be
+                    // saved instead of showing a stepper with nothing to do.
+                    Text(
+                        unit.label,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
 
                 Text(
                     "الوحدة",
@@ -75,7 +96,13 @@ fun MaterialEditDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
                 )
-                UnitPicker(selected = unit, onSelected = { unit = it })
+                UnitPicker(
+                    selected = unit,
+                    onSelected = {
+                        unit = it
+                        if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
+                    }
+                )
 
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
