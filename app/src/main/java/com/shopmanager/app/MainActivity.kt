@@ -17,8 +17,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -28,7 +32,9 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -64,12 +70,10 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
-import com.shopmanager.app.ui.splash.SplashStepState
 import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SetSystemBarsColor
 import com.shopmanager.app.ui.theme.ShopManagerTheme
-import com.shopmanager.app.ui.theme.paletteColorsFor
 import com.shopmanager.app.ui.theme.rememberIsDarkTheme
 
 
@@ -91,12 +95,12 @@ private const val ROUTE_HELP = "help"
 private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
-// The in-app liquid-glass splash (see AppSplashScreen) shows each real
-// init step ticking off, but a fast device can blow through all four in
-// well under 150ms — too quick to read as anything but a flash. This is
-// the one artificial delay in the whole startup path, and only long
-// enough to keep the animation legible.
-private const val SPLASH_MIN_DISPLAY_MS = 900L
+// The in-app liquid-glass splash (see AppSplashScreen) is a calm branded
+// moment, not a progress readout — on a fast device real init can finish
+// in well under 200ms, too quick to register as anything but a flicker.
+// This is the one artificial delay in the whole startup path, just long
+// enough for the splash to actually be seen before it crossfades away.
+private const val SPLASH_MIN_DISPLAY_MS = 1500L
 
 class MainActivity : ComponentActivity() {
     // Class-level (not inside setContent) so onNewIntent below - fired when
@@ -107,14 +111,6 @@ class MainActivity : ComponentActivity() {
     // later Intent onNewIntent hands us.
     private var pendingNotificationAction by mutableStateOf<NotificationAction?>(null)
 
-    // Real per-step progress for the splash checklist — flipped from the
-    // background init coroutine in onCreate below as each step actually
-    // finishes, not simulated/faked for show.
-    private var stepFirebaseReady by mutableStateOf(false)
-    private var stepNotificationsReady by mutableStateOf(false)
-    private var stepTierReady by mutableStateOf(false)
-    private var stepSyncScheduled by mutableStateOf(false)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         // PERF FIX (startup jitter): installSplashScreen() must run before
         // super.onCreate(). It puts a static app icon on a flat brand-color
@@ -123,6 +119,19 @@ class MainActivity : ComponentActivity() {
         // still busy underneath.
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // "زجاجي بالكامل" (full glass, edge-to-edge): let this Activity's
+        // window draw behind both system bars instead of the OS reserving
+        // a solid, separately-colored strip for them. Combined with
+        // transparent status/nav bar colors (see SetSystemBarsColor below),
+        // this is what lets every liquid-glass header bleed all the way up
+        // to the true top of the screen with no hard seam under the status
+        // bar icons — previously the status bar was an opaque flat color
+        // sitting directly above the gradient/glass header, and that flat
+        // color meeting the header's glossy top edge was exactly the
+        // visible dividing line.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         val splashStartTime = System.currentTimeMillis()
 
         // Cold start via a notification tap (app wasn't running): the
@@ -159,24 +168,19 @@ class MainActivity : ComponentActivity() {
         // splash screen (system, then in-app — see above) covers the UI.
         lifecycleScope.launch(Dispatchers.Default) {
             FirebaseModule.init(applicationContext)
-            withContext(Dispatchers.Main) { stepFirebaseReady = true }
-
             NotificationHelper.ensureChannels(applicationContext)
-            withContext(Dispatchers.Main) { stepNotificationsReady = true }
 
             // "وضع لكل هاتف": classified once (cached after that), then
             // used below to switch off the heavier visual effects on
             // entry-level hardware — see DevicePerformance for the
             // detection signals.
             val tier = DevicePerformance.detectTier(applicationContext)
-            withContext(Dispatchers.Main) { stepTierReady = true }
 
             BackgroundSyncWorker.schedule(applicationContext)
             // Silent, fully local daily backup — no notification, ever
             // (see DailyBackupWorker/BackupManager). Scheduled here, off
             // the main thread, same as BackgroundSyncWorker above.
             DailyBackupWorker.schedule(applicationContext)
-            withContext(Dispatchers.Main) { stepSyncScheduled = true }
 
             val elapsed = System.currentTimeMillis() - splashStartTime
             if (elapsed < SPLASH_MIN_DISPLAY_MS) delay(SPLASH_MIN_DISPLAY_MS - elapsed)
@@ -209,40 +213,28 @@ class MainActivity : ComponentActivity() {
             // actually sees while the background init finishes.
             LaunchedEffect(Unit) { composeSplashAttached = true }
 
-            val splashSteps = remember(
-                stepFirebaseReady, stepNotificationsReady, stepTierReady, stepSyncScheduled
-            ) {
-                listOf(
-                    SplashStepState("الاتصال بقاعدة البيانات", stepFirebaseReady),
-                    SplashStepState("تهيئة الإشعارات", stepNotificationsReady),
-                    SplashStepState("ضبط الأداء لهذا الجهاز", stepTierReady),
-                    SplashStepState("جدولة المزامنة والنسخ الاحتياطي", stepSyncScheduled)
-                )
-            }
-
             ShopManagerTheme(themeMode = themeMode, colorPalette = colorPalette) {
-                // Status bar (and nav bar) painted with the app's own brand
-                // color instead of the bare system default.
-                //
-                // FIX: this used to read MaterialTheme.colorScheme.primary,
-                // which in the *dark* scheme is intentionally a pale tone
-                // (e.g. Indigo80) meant for text/icon contrast on dark
-                // surfaces — not for painting a full status bar. That's what
-                // caused the jarring bright-purple bar sitting on top of an
-                // otherwise dark app. It now always uses the selected
-                // palette's brand gradient-start color, which stays deep in
-                // every theme, so the status bar always gets white icons and
-                // never clashes with dark mode.
+                // "زجاجي بالكامل" (fully glass): the status bar is now
+                // always fully transparent (see the edge-to-edge window
+                // setup in onCreate above and SetSystemBarsColor below) —
+                // there's no separate OS-painted strip to keep color-synced
+                // with the app any more, so whatever is actually behind it
+                // (the splash gradient, or a screen's own liquid-glass
+                // header) just shows straight through with no seam between
+                // "system bar" and "app content". Only the icon *color*
+                // still needs picking per screen: the splash and every
+                // glass header (once unlocked) are dark enough for white
+                // icons; the plain PIN lock screen instead follows the
+                // ordinary light/dark surface color like any other screen.
                 val isDark = rememberIsDarkTheme(themeMode)
-                val statusBarColor = remember(colorPalette) { paletteColorsFor(colorPalette).gradientStart }
                 SetSystemBarsColor(
-                    statusBarColor = statusBarColor,
                     // While the splash is showing there's no MaterialTheme
                     // surface color underneath it yet worth matching — the
-                    // nav bar stays the same brand color as the splash
-                    // itself so there's no visible seam at the bottom edge.
-                    navigationBarColor = if (isReady) MaterialTheme.colorScheme.surface else statusBarColor,
-                    statusBarDarkIcons = false,
+                    // nav bar stays transparent too, so it's the same
+                    // continuous brand gradient as the rest of the splash
+                    // instead of a mismatched solid strip at the bottom edge.
+                    navigationBarColor = if (isReady) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    statusBarDarkIcons = isReady && !unlocked && !isDark,
                     navigationBarDarkIcons = if (isReady) !isDark else false
                 )
 
@@ -255,7 +247,7 @@ class MainActivity : ComponentActivity() {
                     // for the Pager/route transitions elsewhere in this file.
                     Crossfade(targetState = isReady, label = "splashToApp") { ready ->
                         if (!ready) {
-                            AppSplashScreen(steps = splashSteps)
+                            AppSplashScreen()
                         } else {
                             CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
                                 // Load the persisted currency symbol into the
@@ -388,6 +380,18 @@ private fun ShopManagerApp(
     val isLowTier = performanceTier == PerformanceTier.LOW
 
     Scaffold(
+        // Edge-to-edge: this outer Scaffold has no topBar of its own — the
+        // real per-screen header lives inside NavHost below (either a real
+        // TopAppBar, which pads itself for the status bar automatically,
+        // or DashboardScreen/MaterialsScreen's own liquid-glass header,
+        // which does the same manually). If this Scaffold also reserved
+        // top inset space here, every screen would get pushed down a
+        // second time, leaving a plain gap above its header instead of the
+        // glass bleeding up to the true top of the screen. Bottom/
+        // horizontal safe-area insets are kept, since screens with no
+        // bottomBar of their own (Settings, person detail, etc.) still
+        // need them to avoid sitting behind the gesture/nav bar.
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar {
