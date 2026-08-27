@@ -42,6 +42,22 @@
                 tools:node="remove" />
         </provider>
 
+        <!--
+          Used by MaterialsReportImage to share the generated PNG report
+          image (see the "مشاركة" button on the materials screen) - lets
+          the share-sheet target app read the file from our cache dir
+          without exposing any other app storage.
+        -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
