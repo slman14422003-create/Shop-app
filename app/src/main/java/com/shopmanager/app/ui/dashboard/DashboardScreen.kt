@@ -155,7 +155,8 @@ fun DashboardScreen(
                         valueContent = {
                             AnimatedCounterText(
                                 targetValue = debtsState.totalAmount,
-                                format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" }
+                                format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
+                                animate = !debtsState.isLoading
                             )
                         },
                         subtitle = "${debtsState.totalPersons} عميل"
@@ -168,7 +169,8 @@ fun DashboardScreen(
                         valueContent = {
                             AnimatedCounterText(
                                 targetValue = shortages.size.toDouble(),
-                                format = { it.toInt().toString() }
+                                format = { it.toInt().toString() },
+                                animate = !materialsState.isLoading
                             )
                         },
                         subtitle = if (shortages.isNotEmpty()) "بانتظار الشراء" else "لا يوجد نواقص"
