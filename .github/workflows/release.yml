@@ -77,15 +77,41 @@ jobs:
       # `workflow_dispatch` runs (no "before" SHA) and first-ever pushes
       # (before = all-zeros) fall back to the last 15 commits so the step
       # never produces an empty changelog.
+      #
+      # BUG FIXED (notes were full of build/CI/debug noise, not features):
+      # this used to dump EVERY commit subject verbatim, including ones
+      # that have nothing to do with what a shop owner actually sees in the
+      # app — "Setup Android SDK", "bump Gradle", "fix release workflow",
+      # "assembleDebug tweak", merge commits, README/gitignore edits — so
+      # the in-app "ما الجديد" dialog read like a build log instead of a
+      # changelog. Two changes fix that at the source instead of just
+      # reformatting the same noise:
+      #   1) `git log --grep` with a blocklist (-v inverts it) drops any
+      #      commit whose subject matches common CI/build/debug/meta
+      #      patterns (ci, workflow, gradle, jdk, keystore, signing,
+      #      proguard/r8, "assemble*", debug/release apk, changelog itself,
+      #      merge, chore, docs-only, README/.gitignore) case-insensitively
+      #      — so only commits that actually describe user-facing behavior
+      #      survive.
+      #   2) The trailing " (%h)" short-hash suffix is dropped from the
+      #      format string — a commit hash means nothing to someone reading
+      #      "what's new" on their phone, it was pure noise.
+      # If everything in the range happens to be internal/build commits,
+      # the filtered log is legitimately empty — falls back to the same
+      # honest generic line as before rather than showing nothing.
       - name: Generate changelog
         id: changelog
         run: |
+          NOISE_PATTERN='^(ci|chore|docs|build|test|merge)(\(.*\))?:|\b(ci|workflow|github action|gradle|jdk|keystore|signing|proguard|r8|assemble(debug|release)?|debug apk|release apk|changelog|readme|gitignore)\b'
           BEFORE_SHA="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
-            LOG=$(git log "${BEFORE_SHA}..${{ github.sha }}" --no-merges --pretty=format:'- %s (%h)')
+            RANGE="${BEFORE_SHA}..${{ github.sha }}"
           else
-            LOG=$(git log -15 --no-merges --pretty=format:'- %s (%h)')
+            RANGE="-15"
           fi
+          LOG=$(git log $RANGE --no-merges --pretty=format:'%s' \
+            | grep -viE "$NOISE_PATTERN" \
+            | sed 's/^/- /')
           if [ -z "$LOG" ]; then
             LOG="- تحسينات وإصلاحات عامة"
           fi
