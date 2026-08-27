@@ -33,7 +33,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -69,6 +68,8 @@ import com.shopmanager.app.ui.materials.MaterialCatalogScreen
 import com.shopmanager.app.ui.materials.MaterialsScreen
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.BottomNavItem
+import com.shopmanager.app.ui.common.FloatingBottomNav
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
@@ -400,52 +401,30 @@ private fun ShopManagerApp(
         // bottomBar of their own (Settings, person detail, etc.) still
         // need them to avoid sitting behind the gesture/nav bar.
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
+        // "الشريط السفلي العائم" (One UI 8.5-style floating bottom nav):
+        // this used to be an edge-to-edge NavigationBar pinned flush to the
+        // bottom of the screen (matched to colorScheme.background to avoid
+        // a seam with the content above it — see the old comment this
+        // replaced). FloatingBottomNav (ui/common/FloatingBottomNav.kt) is
+        // a self-contained glass capsule with its own margin on every
+        // side, so it floats above whatever's behind it instead of sitting
+        // flush against the edge — no seam-matching needed here any more
+        // because there's no shared edge left to seam against. Left
+        // transparent/background-less on purpose so the app's own
+        // background color shows through the margins around the capsule,
+        // which is what makes it read as floating rather than just a
+        // smaller bar.
         bottomBar = {
             if (showBottomBar) {
-                // BUG FIXED FOR REAL THIS TIME (hairline/black strip above
-                // the bottom nav bar): two earlier attempts here both
-                // treated this as an *elevation* problem (tonalElevation
-                // overlay, double bottom-inset padding) and both were only
-                // half right, because the actual mismatch was never the
-                // elevation tint — it was that NavigationBar was pinned to
-                // colorScheme.surface while every screen's own canvas
-                // (DashboardScreen/DebtsScreen/MaterialsScreen's Scaffold,
-                // and this app's Material color scheme itself — see
-                // Palette.kt) deliberately uses colorScheme.background, a
-                // *different, slightly darker* color from surface (used
-                // for cards/bars). tonalElevation=0 removed the tint but
-                // could never fix a mismatch between two different base
-                // colors — content ends in `background`, the bar began in
-                // `surface`, and that boundary is exactly where the line
-                // was. Matching the bar to `background` — the same color
-                // the content directly above it actually is — removes the
-                // seam at the source instead of tuning it closer. The
-                // system navigation bar color (SetSystemBarsColor above)
-                // is matched to `background` too so every layer along that
-                // bottom edge is the same pixel value.
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    tonalElevation = 0.dp
-                ) {
-                    NavigationBarItem(
-                        selected = pagerState.currentPage == PAGE_DASHBOARD,
-                        onClick = { openPager(PAGE_DASHBOARD) },
-                        icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                        label = { Text("الرئيسية") }
-                    )
-                    NavigationBarItem(
-                        selected = pagerState.currentPage == PAGE_DEBTS,
-                        onClick = { openPager(PAGE_DEBTS) },
-                        icon = { Icon(Icons.Default.AttachMoney, contentDescription = null) },
-                        label = { Text("الديون") }
-                    )
-                    NavigationBarItem(
-                        selected = pagerState.currentPage == PAGE_MATERIALS,
-                        onClick = { openPager(PAGE_MATERIALS) },
-                        icon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
-                        label = { Text("المواد والأسعار") }
-                    )
-                }
+                FloatingBottomNav(
+                    items = listOf(
+                        BottomNavItem(Icons.Default.Home, "الرئيسية"),
+                        BottomNavItem(Icons.Default.AttachMoney, "الديون"),
+                        BottomNavItem(Icons.Default.Inventory2, "المواد والأسعار")
+                    ),
+                    selectedIndex = pagerState.currentPage,
+                    onSelect = { page -> openPager(page) }
+                )
             }
         }
     ) { padding ->
