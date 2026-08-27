@@ -3,6 +3,7 @@ package com.shopmanager.app.ui.materials
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsRepository
@@ -134,6 +135,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repo.addMaterial(name, quantity, unit, section.value)
                 _message.value = "تمت إضافة النقص بنجاح"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
             }
@@ -145,6 +147,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repo.updateMaterial(id, name, quantity, unit, section.value)
                 _message.value = "تم تعديل النقص بنجاح"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذر التعديل: ${e.message ?: "تحقق من الاتصال"}"
             }
@@ -156,6 +159,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repo.deleteMaterial(id)
                 _message.value = "تم حذف المادة بنجاح"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "خطأ أثناء الحذف: ${e.message}"
             }
@@ -175,6 +179,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repo.deleteMaterials(ids)
                 _message.value = "تم حذف كل المواد (${ids.size})"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذر حذف المواد: ${e.message ?: "تحقق من الاتصال"}"
             }
@@ -186,6 +191,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 repo.setPrice(materialName, price)
                 _message.value = "تم حفظ السعر"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذر حفظ السعر: ${e.message ?: "تحقق من الاتصال"}"
             }
@@ -201,6 +207,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                     return@launch
                 }
                 repo.addCatalogItem(name)
+                InstantBackupWorker.requestNow(getApplication())
                 onDone(true)
             } catch (e: Exception) {
                 _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
@@ -213,6 +220,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 repo.deleteCatalogItem(id)
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذر الحذف: ${e.message}"
             }

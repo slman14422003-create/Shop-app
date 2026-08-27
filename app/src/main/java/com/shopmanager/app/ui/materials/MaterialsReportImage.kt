@@ -11,9 +11,9 @@ import androidx.core.content.FileProvider
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.Formatters
 import java.io.File
 import java.io.FileOutputStream
-import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,7 +49,6 @@ object MaterialsReportImage {
         prices: Map<String, Double>,
         brandColor: Int
     ): Uri {
-        val nf = NumberFormat.getNumberInstance(Locale("ar"))
         val sorted = materials.sortedBy { it.name }
         val height = (HEADER_HEIGHT + sorted.size.coerceAtLeast(1) * ROW_HEIGHT + FOOTER_HEIGHT + PADDING)
             .toInt()
@@ -118,7 +117,7 @@ object MaterialsReportImage {
                 val price = prices[m.name]
                 if (price != null) {
                     canvas.drawText(
-                        "${nf.format(price)} ${AppSettingsState.currencySymbol}",
+                        "${Formatters.number(price)} ${AppSettingsState.currencySymbol}",
                         PADDING, rowTop + 60f, pricePaint
                     )
                 }

@@ -399,10 +399,14 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
         label = "materialRowScale"
     )
 
+    // BUG FIXED: same black-shadow-bar issue as PersonRow in
+    // DebtsScreen.kt — see the comment there. Scale moved off the
+    // ElevatedCard's own modifier chain onto a plain wrapping Box so it
+    // never shares a graphics layer with the card's shadow.
+    Box(modifier.fillMaxWidth().scale(scale)) {
     ElevatedCard(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .scale(scale)
             .clickable(
                 interactionSource = interactionSource,
                 indication = LocalIndication.current,
@@ -434,6 +438,7 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
             Spacer(Modifier.width(2.dp))
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف المادة")
         }
+    }
     }
 }
 
