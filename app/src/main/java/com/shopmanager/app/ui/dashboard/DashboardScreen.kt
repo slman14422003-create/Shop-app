@@ -25,10 +25,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shopmanager.app.data.materials.quantityLabel
+import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandOnGradient
@@ -84,6 +86,13 @@ fun DashboardScreen(
     onOpenAdmin: () -> Unit = {}
 ) {
     var showAdminPinDialog by remember { mutableStateOf(false) }
+    // SECURITY FIX: "1442" is a fixed 4-digit password with no attempt
+    // limit at all previously — trivially brute-forceable (10,000 tries
+    // max, no delay) directly from this dialog's keypad. Same escalating
+    // lockout as the main app-lock PIN now, via the shared throttle — see
+    // PinAttemptThrottle and AdminPinDialog below.
+    val context = LocalContext.current
+    val adminThrottle = remember { PinAttemptThrottle(context, "shop_manager_admin_throttle") }
     val debtsState by debtsViewModel.uiState.collectAsState()
     val materialsState by materialsViewModel.uiState.collectAsState()
     val debtsRefreshing by debtsViewModel.isRefreshing.collectAsState()
@@ -331,13 +340,18 @@ fun DashboardScreen(
 
     if (showAdminPinDialog) {
         AdminPinDialog(
+            throttle = adminThrottle,
             onDismiss = { showAdminPinDialog = false },
             onSubmit = { entered ->
-                if (entered == ADMIN_PANEL_PASSWORD) {
+                if (adminThrottle.isLocked()) {
+                    false
+                } else if (entered == ADMIN_PANEL_PASSWORD) {
+                    adminThrottle.registerSuccess()
                     showAdminPinDialog = false
                     onOpenAdmin()
                     true
                 } else {
+                    adminThrottle.registerFailure()
                     false
                 }
             }
@@ -360,7 +374,12 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
     Box(
         Modifier
             .fillMaxWidth()
-            .liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            // "زجاج سائل بشكل مذهل": this is the single most-seen surface
+            // in the app (the very first thing drawn every time it opens),
+            // so it's the one header that opts into the extra animated
+            // sheen sweep on top of the shared drift highlight every glass
+            // panel already has — see liquidGlassSurface's `sheen` param.
+            .liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp), sheen = true)
             // The glass panel (background/border above) already fills this
             // Box's full bounds, which now extend up behind the
             // transparent status bar; this only pushes the *content*
@@ -409,9 +428,22 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
 }
 
 @Composable
-private fun AdminPinDialog(onDismiss: () -> Unit, onSubmit: (String) -> Boolean) {
+private fun AdminPinDialog(
+    throttle: com.shopmanager.app.data.security.PinAttemptThrottle,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Boolean
+) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
+    var lockRemaining by remember { mutableLongStateOf(throttle.lockRemainingSeconds()) }
+    val isLocked = lockRemaining > 0
+
+    LaunchedEffect(isLocked) {
+        while (lockRemaining > 0) {
+            kotlinx.coroutines.delay(1000)
+            lockRemaining = throttle.lockRemainingSeconds()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -423,6 +455,7 @@ private fun AdminPinDialog(onDismiss: () -> Unit, onSubmit: (String) -> Boolean)
                     onValueChange = { pin = it.filter { c -> c.isDigit() }.take(8); error = false },
                     label = { Text("كلمة المرور") },
                     singleLine = true,
+                    enabled = !isLocked,
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                         keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
@@ -430,7 +463,14 @@ private fun AdminPinDialog(onDismiss: () -> Unit, onSubmit: (String) -> Boolean)
                     modifier = Modifier.fillMaxWidth(),
                     isError = error
                 )
-                if (error) {
+                if (isLocked) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "محاولات كثيرة خاطئة — حاول بعد $lockRemaining ثانية",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                } else if (error) {
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "كلمة المرور غير صحيحة",
@@ -441,7 +481,12 @@ private fun AdminPinDialog(onDismiss: () -> Unit, onSubmit: (String) -> Boolean)
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (!onSubmit(pin)) error = true }) { Text("دخول") }
+            TextButton(enabled = !isLocked, onClick = {
+                if (!onSubmit(pin)) {
+                    error = true
+                    lockRemaining = throttle.lockRemainingSeconds()
+                }
+            }) { Text("دخول") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
