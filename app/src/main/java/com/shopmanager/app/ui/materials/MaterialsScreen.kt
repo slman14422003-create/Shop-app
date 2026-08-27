@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -29,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -69,6 +72,15 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     else state.materials.filter { it.name.contains(search, ignoreCase = true) }
 
     Scaffold(
+        // Edge-to-edge: the status bar is transparent (see
+        // SetSystemBarsColor/MainActivity) and this screen's own
+        // MaterialsHeader below draws its liquid-glass panel all the way
+        // up to the true top of the window and pads its *content* down
+        // manually — so this Scaffold must not also reserve top space
+        // itself, or the header would get pushed down a second time
+        // leaving a plain gap above it. Bottom/horizontal safe-area insets
+        // (gesture nav bar, cutouts) are kept as-is.
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             MaterialsHeader(
@@ -183,6 +195,13 @@ private fun MaterialsHeader(tab: Int, onTabChange: (Int) -> Unit, onShare: () ->
         Modifier
             .fillMaxWidth()
             .liquidGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            // The glass panel itself (background/border above) already
+            // fills this Column's full bounds, which now extend up behind
+            // the transparent status bar; this only pushes the *content*
+            // (title/tabs) down far enough to clear the status bar icons,
+            // so there's no seam between the bar and the panel — it's one
+            // continuous glass surface from the true top of the screen.
+            .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -204,15 +223,29 @@ private fun MaterialsHeader(tab: Int, onTabChange: (Int) -> Unit, onShare: () ->
     }
 }
 
-/** iOS-style pill segmented control: one rounded track, a solid white
- * "thumb" behind whichever segment is selected, no divider lines. */
+/**
+ * iOS-style pill segmented control, redone as an actual "liquid glass"
+ * thumb instead of a flat opaque-white rectangle.
+ *
+ * FIX: the previous selected-segment background was plain solid white
+ * (`Color.White.copy(alpha = 0.95f)`) — on top of an already-bright brand
+ * gradient it read as a dull, flat cutout rather than part of the glass
+ * design used everywhere else (header, buttons), and it had no edge of its
+ * own so it didn't look "lifted" off the panel behind it. The thumb now
+ * gets the same treatment as every other glass surface in this app: a
+ * soft vertical sheen (bright at the top, settling lower), a bright hairline
+ * rim, and a subtle shadow so it visibly sits above the track instead of
+ * blending flat into it — while staying opaque enough at the core for the
+ * primary-colored label to stay fully legible.
+ */
 @Composable
 private fun SegmentedTabs(selectedIndex: Int, options: List<String>, onSelect: (Int) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.16f))
+            .background(Color.White.copy(alpha = 0.14f))
+            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
             .padding(4.dp)
     ) {
         options.forEachIndexed { index, label ->
@@ -225,8 +258,25 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<String>, onSelect: (
             Box(
                 Modifier
                     .weight(1f)
+                    .then(
+                        if (bgColor > 0.01f) {
+                            Modifier.shadow(
+                                elevation = (3f * bgColor).dp,
+                                shape = RoundedCornerShape(11.dp),
+                                clip = false
+                            )
+                        } else Modifier
+                    )
                     .clip(RoundedCornerShape(11.dp))
-                    .background(Color.White.copy(alpha = 0.95f * bgColor))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.98f * bgColor),
+                                Color.White.copy(alpha = 0.86f * bgColor)
+                            )
+                        )
+                    )
+                    .border(1.dp, Color.White.copy(alpha = 0.55f * bgColor), RoundedCornerShape(11.dp))
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
