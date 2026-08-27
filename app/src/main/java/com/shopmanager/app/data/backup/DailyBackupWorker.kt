@@ -1,10 +1,13 @@
 package com.shopmanager.app.data.backup
 
 import android.content.Context
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -59,6 +62,74 @@ class DailyBackupWorker(appContext: Context, params: WorkerParameters) :
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_WORK_NAME,
                 ExistingPeriodicWorkPolicy.KEEP,
+                request
+            )
+        }
+    }
+}
+
+/**
+ * Runs a single silent backup right after the person actually changes
+ * something (added/edited a customer, a debt, a material, a price, a
+ * catalog entry). Previously the only backup was [DailyBackupWorker],
+ * which meant up to 24 hours of new debts/materials existed nowhere but
+ * the live Firestore data — if that ever needed restoring from a local
+ * snapshot, everything added "today" was gone. This makes every change
+ * durable within seconds instead of waiting for the next scheduled day.
+ *
+ * Still completely silent (no notification, ever) and still local-only
+ * (writes to the same `filesDir/backups` directory as the daily worker —
+ * see [BackupManager]), so nothing about the "never surfaced to the
+ * person" contract changes, only how often it runs.
+ *
+ * Implemented as WorkManager (not a raw coroutine launched straight from
+ * a ViewModel) so it: (a) still finishes even if the screen is closed or
+ * the ViewModel is cleared right after the add, and (b) is safe to call
+ * on every single add/edit without spamming disk writes — [requestNow]
+ * enqueues with `REPLACE` on a short delay, so five rapid-fire adds in a
+ * row collapse into exactly one backup a moment after the last one,
+ * instead of five redundant ones.
+ */
+class InstantBackupWorker(appContext: Context, params: WorkerParameters) :
+    CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result {
+        FirebaseModule.init(applicationContext)
+        return try {
+            BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository())
+            Result.success()
+        } catch (e: Exception) {
+            // A single missed instant backup is not worth surfacing or
+            // even retrying aggressively — the next add (or the daily
+            // worker) will cover it. A light, bounded retry is enough.
+            if (runAttemptCount < 2) Result.retry() else Result.failure()
+        }
+    }
+
+    companion object {
+        private const val UNIQUE_WORK_NAME = "shop_manager_instant_backup"
+
+        /**
+         * Call after any successful add/edit/delete of a person, debt,
+         * material, price, or catalog item. Debounced by a couple of
+         * seconds via REPLACE so a burst of edits (e.g. importing several
+         * debts back to back) doesn't trigger a Firestore re-read and
+         * disk write for every single one.
+         */
+        fun requestNow(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+            val request = OneTimeWorkRequestBuilder<InstantBackupWorker>()
+                .setConstraints(constraints)
+                .setInitialDelay(3, TimeUnit.SECONDS)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                UNIQUE_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
                 request
             )
         }
