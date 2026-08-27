@@ -54,13 +54,33 @@ jobs:
           cp "$DEBUG_APK" shop-manager-debug.apk
           cp "$RELEASE_APK" shop-manager-release.apk
 
-      - name: Create GitHub Release
+      # CROSS-REPO PUBLISH: this main repo stays PRIVATE (your source code
+      # never has to be public). The Release itself — tag + the .apk
+      # assets — gets created directly on the separate, PUBLIC
+      # "Shop-app-updates" repo instead of here, via softprops/action-gh-
+      # release's `repository` input. Nothing is ever created in THIS
+      # repo anymore; the app's UpdateChecker only ever looks at
+      # Shop-app-updates (see UPDATES_REPO in UpdateChecker.kt), so this
+      # is the one step that actually connects "push to main here" →
+      # "app on people's phones sees a new update".
+      #
+      # Requires one secret set up once, in THIS repo's settings (Settings
+      # → Secrets and variables → Actions → New repository secret):
+      #   Name:  UPDATES_REPO_TOKEN
+      #   Value: a GitHub Personal Access Token that has permission to
+      #          create releases on Shop-app-updates specifically —
+      #          the built-in secrets.GITHUB_TOKEN only ever has
+      #          permission over the repo the workflow is running in, so
+      #          it cannot publish to a different repo on its own.
+      - name: Create GitHub Release on Shop-app-updates
         uses: softprops/action-gh-release@v2
         with:
+          repository: slman14422003-create/Shop-app-updates
+          token: ${{ secrets.UPDATES_REPO_TOKEN }}
           tag_name: v1.0.${{ github.run_number }}
           name: إصدار ${{ github.run_number }}
           body: |
-            بناء تلقائي لتطبيق إدارة المحل (تطبيق أندرويد أصلي بلغة Kotlin) بعد آخر تحديث على main.
+            بناء تلقائي لتطبيق إدارة المحل بعد آخر تحديث على المستودع الأساسي (خاص).
 
             📦 **shop-manager-release.apk** ← هاي النسخة المستخدمة تنزّلها عادةً: أصغر حجماً وأسرع بالتشغيل (مضغوطة/محسّنة عبر R8).
             🛠️ **shop-manager-debug.apk** ← نسخة تجريبية أكبر حجماً وأبطأ شوي، للاختبار فقط.
@@ -69,5 +89,3 @@ jobs:
           files: |
             shop-manager-release.apk
             shop-manager-debug.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
