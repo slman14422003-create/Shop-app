@@ -72,7 +72,23 @@ jobs:
       #          the built-in secrets.GITHUB_TOKEN only ever has
       #          permission over the repo the workflow is running in, so
       #          it cannot publish to a different repo on its own.
-      - name: Create GitHub Release on Shop-app-updates
+      #
+      # BUG FIXED: this used to create the release AND upload both .apk
+      # files in one single step/request. GitHub occasionally hiccups
+      # (returns its own generic "Unicorn" HTML error page instead of a
+      # JSON response) when two sizeable assets get uploaded back-to-back
+      # in the same request right after a release was just created — the
+      # release object itself can take a few seconds to become fully
+      # consistent across GitHub's edge/CDN layer before asset uploads
+      # against it reliably succeed. Split into two steps: the release
+      # is created (with the debug APK, since it's less critical) in the
+      # first step, and — a little later, after the release has had time
+      # to "settle" — the release APK (the one people actually install)
+      # gets uploaded in its own step, targeting the SAME tag so it lands
+      # as a second asset on the same release the first step made.
+      # Splitting this way also means if only ONE of the two ever fails,
+      # you only need to re-run that one step, not rebuild+reupload both.
+      - name: Create GitHub Release on Shop-app-updates (with debug APK)
         uses: softprops/action-gh-release@v2
         with:
           repository: slman14422003-create/Shop-app-updates
@@ -86,6 +102,15 @@ jobs:
             🛠️ **shop-manager-debug.apk** ← نسخة تجريبية أكبر حجماً وأبطأ شوي، للاختبار فقط.
 
             كلا الملفين موقّعين (بنفس مفتاح CI) وجاهزين للتثبيت المباشر بعد تفعيل "مصادر غير معروفة" على الجهاز.
-          files: |
-            shop-manager-release.apk
-            shop-manager-debug.apk
+          files: shop-manager-debug.apk
+
+      - name: Wait for release to settle
+        run: sleep 10
+
+      - name: Upload release APK to the same release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: slman14422003-create/Shop-app-updates
+          token: ${{ secrets.UPDATES_REPO_TOKEN }}
+          tag_name: v1.0.${{ github.run_number }}
+          files: shop-manager-release.apk
