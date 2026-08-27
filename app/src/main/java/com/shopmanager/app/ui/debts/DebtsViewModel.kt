@@ -3,6 +3,8 @@ package com.shopmanager.app.ui.debts
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.shopmanager.app.data.backup.InstantBackupWorker
+import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.debts.Person
@@ -17,8 +19,6 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.text.NumberFormat
-import java.util.Locale
 
 data class DebtsUiState(
     val persons: List<Person> = emptyList(),
@@ -146,11 +146,10 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     val newDebtIds = currentDebtIds - previous
                     if (newDebtIds.isNotEmpty() && settings.notificationsEnabled) {
                         val personsById = state.persons.associateBy { it.id }
-                        val nf = NumberFormat.getNumberInstance(Locale("ar"))
                         state.debts.filter { it.id in newDebtIds }.forEach { debt ->
                             val personName = personsById[debt.personId]?.name ?: "عميل"
                             NotificationHelper.showNewDebtNotification(
-                                getApplication(), personName, nf.format(debt.amount), settings.currencySymbol
+                                getApplication(), personName, Formatters.number(debt.amount), settings.currencySymbol
                             )
                         }
                     }
@@ -184,6 +183,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         if (amount > 0) {
                             repo.addDebt(existingPersonId, amount, date)
                             _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
+                            InstantBackupWorker.requestNow(getApplication())
                         } else {
                             _message.value = "\"$name\" موجود مسبقاً بالفعل"
                         }
@@ -192,9 +192,11 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     repo.addPerson(name, amount, date)
                     _message.value = "تم إضافة \"$name\""
+                    InstantBackupWorker.requestNow(getApplication())
                 } else {
                     repo.updatePerson(existingId, name, amount, date)
                     _message.value = "تم تعديل العميل"
+                    InstantBackupWorker.requestNow(getApplication())
                 }
                 onDone(true)
             } catch (e: Exception) {
@@ -209,6 +211,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 repo.deletePersonWithDebts(id)
                 _message.value = "تم حذف العميل وديونه"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "خطأ في الحذف: ${e.message}"
             }
@@ -227,6 +230,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     repo.updateDebt(existingId, amount, date, note)
                     _message.value = "تم تعديل الدين"
                 }
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذر الحفظ: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
             }
@@ -238,6 +242,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 repo.deleteDebt(id)
                 _message.value = "تم حذف الدين"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "خطأ في الحذف: ${e.message}"
             }
@@ -254,10 +259,10 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 repo.markAllDebtsAsPaid(person.id)
                 _message.value = "تم تسجيل سداد \"${person.name}\" ✅"
+                InstantBackupWorker.requestNow(getApplication())
                 if (settings.notificationsEnabled) {
-                    val nf = NumberFormat.getNumberInstance(Locale("ar"))
                     NotificationHelper.showDebtPaidNotification(
-                        getApplication(), person.name, nf.format(person.amount), settings.currencySymbol, person.id
+                        getApplication(), person.name, Formatters.number(person.amount), settings.currencySymbol, person.id
                     )
                 }
             } catch (e: Exception) {
@@ -272,10 +277,10 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 repo.markDebtAsPaid(debt.id)
                 _message.value = "تم تسجيل السداد ✅"
+                InstantBackupWorker.requestNow(getApplication())
                 if (settings.notificationsEnabled) {
-                    val nf = NumberFormat.getNumberInstance(Locale("ar"))
                     NotificationHelper.showDebtPaidNotification(
-                        getApplication(), personName, nf.format(debt.amount), settings.currencySymbol, debt.id
+                        getApplication(), personName, Formatters.number(debt.amount), settings.currencySymbol, debt.id
                     )
                 }
             } catch (e: Exception) {

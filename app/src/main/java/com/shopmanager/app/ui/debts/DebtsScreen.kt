@@ -34,14 +34,14 @@ import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.theme.SuccessGreen
-import java.text.NumberFormat
-import java.util.Locale
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -59,7 +59,6 @@ fun DebtsScreen(
     var payTarget by remember { mutableStateOf<Person?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
 
     LaunchedEffect(message) {
         message?.let {
@@ -191,7 +190,7 @@ fun DebtsScreen(
             onDismissRequest = { payTarget = null },
             icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
             title = { Text("تأكيد السداد") },
-            text = { Text("هل \"${person.name}\" وفى ${nf.format(person.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف كل ديونه من السجل وإرسال إشعار.") },
+            text = { Text("هل \"${person.name}\" وفى ${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف كل ديونه من السجل وإرسال إشعار.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.markPersonAsPaid(person)
@@ -205,7 +204,6 @@ fun DebtsScreen(
 
 @Composable
 private fun StatsRow(persons: Int, debts: Int, amount: Double) {
-    val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     ElevatedCard(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         shape = MaterialTheme.shapes.large
@@ -214,11 +212,17 @@ private fun StatsRow(persons: Int, debts: Int, amount: Double) {
             Modifier.fillMaxWidth().padding(vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            StatItem("عملاء", persons.toString())
+            // ANIMATION: these three used to snap straight to the new
+            // number the instant a person/debt was added or removed. Now
+            // they count up/down to it (same AnimatedCounterText already
+            // used for the dashboard totals), so adding a customer or a
+            // debt here visibly reflects in the header instead of just
+            // silently changing.
+            StatItem("عملاء", persons.toDouble()) { "%.0f".format(it) }
             VerticalDivider()
-            StatItem("ديون", debts.toString())
+            StatItem("ديون", debts.toDouble()) { "%.0f".format(it) }
             VerticalDivider()
-            StatItem("الإجمالي (${AppSettingsState.currencySymbol})", nf.format(amount))
+            StatItem("الإجمالي (${AppSettingsState.currencySymbol})", amount) { Formatters.number(it) }
         }
     }
 }
@@ -234,9 +238,18 @@ private fun VerticalDivider() {
 }
 
 @Composable
-private fun StatItem(label: String, value: String) {
+private fun StatItem(label: String, value: Double, format: (Double) -> String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.primary
+        ) {
+            com.shopmanager.app.ui.common.AnimatedCounterText(
+                targetValue = value,
+                format = format,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
         Spacer(Modifier.height(2.dp))
         Text(label, style = MaterialTheme.typography.labelSmall)
     }
@@ -265,7 +278,6 @@ private fun PersonRow(
     onDelete: () -> Unit,
     onMarkPaid: () -> Unit
 ) {
-    val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -275,10 +287,21 @@ private fun PersonRow(
         label = "personRowScale"
     )
 
+    // BUG FIXED (solid black bar under the row's action icons): the press
+    // scale used to be applied directly on the same modifier chain as the
+    // card's own elevation/shadow. On some GPUs (notably budget devices —
+    // exactly the low-end phones this app already tiers for, see
+    // DevicePerformance) scaling a composable that is *also* casting a
+    // shadow in the same layer makes the shadow rasterize as a flat black
+    // rectangle instead of a soft blur — visible as a hard black strip
+    // sitting under the row, right where the check/delete/chevron icons
+    // are. Moving `.scale()` onto a plain outer Box, so it never shares a
+    // graphics layer with the ElevatedCard's own shadow, fixes this
+    // everywhere it happens without giving up the press animation.
+    Box(modifier.fillMaxWidth().scale(scale)) {
     ElevatedCard(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .scale(scale)
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.foundation.LocalIndication.current,
@@ -300,11 +323,25 @@ private fun PersonRow(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(person.name, fontWeight = FontWeight.Medium)
-                Text(
-                    "${nf.format(person.amount)} ${AppSettingsState.currencySymbol}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // UI: a paid-off customer (amount == 0) used to show the
+                // same "٠ ل.س" as everyone else — reads as if something
+                // failed to load rather than "settled". A short, muted
+                // "no debt" label makes a zero balance immediately legible
+                // as a good state, in the same green used for the "paid"
+                // check button elsewhere on this row.
+                if (person.amount > 0) {
+                    Text(
+                        "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        "لا يوجد دين حالياً",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SuccessGreen
+                    )
+                }
             }
             // Mark-as-paid: same shared circular action button as every
             // other check/edit/delete affordance in the app (see
@@ -336,15 +373,15 @@ private fun PersonRow(
             )
         }
     }
+    }
 }
 
 private fun buildDebtsShareText(persons: List<Person>, totalAmount: Double): String {
-    val nf = NumberFormat.getNumberInstance(Locale("ar"))
     val currency = AppSettingsState.currencySymbol
     val sb = StringBuilder("💰 كشف الديون\n\n")
     persons.sortedByDescending { it.amount }.forEach { p ->
-        sb.append("• ${p.name}: ${nf.format(p.amount)} $currency\n")
+        sb.append("• ${p.name}: ${Formatters.number(p.amount)} $currency\n")
     }
-    sb.append("\nالإجمالي: ${nf.format(totalAmount)} $currency")
+    sb.append("\nالإجمالي: ${Formatters.number(totalAmount)} $currency")
     return sb.toString()
 }
