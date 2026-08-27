@@ -3,6 +3,20 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// SIGNING: reads the real Play Store release keystore's credentials from
+// keystore/keystore.properties.local — a file that is NEVER committed
+// (see .gitignore) and must never leave this machine/CI secret store.
+// If that file isn't present (a fresh checkout, a contributor's machine,
+// a CI run with no signing secret configured), release builds fall back
+// to Gradle's own auto-generated debug key exactly as before, so
+// `assembleRelease` never breaks — it just produces a build that isn't
+// the one Play will accept until the real keystore is available.
+val keystorePropertiesFile = rootProject.file("keystore/keystore.properties.local")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+val keystoreProperties = java.util.Properties().apply {
+    if (hasReleaseKeystore) load(keystorePropertiesFile.inputStream())
+}
+
 android {
     namespace = "com.shopmanager.app"
     compileSdk = 34
@@ -29,6 +43,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file("keystore/${keystoreProperties.getProperty("STORE_FILE")}")
+                storePassword = keystoreProperties.getProperty("STORE_PASSWORD")
+                keyAlias = keystoreProperties.getProperty("KEY_ALIAS")
+                keyPassword = keystoreProperties.getProperty("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // PERF FIX: this was `false`, which meant the release build
@@ -52,19 +77,20 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // SIGNING: an Android APK can't be installed unless it's
-            // signed — a release build with no signingConfig builds fine
-            // but the .apk it produces is unusable. This app has no Play
-            // Store keystore of its own, so release is signed with the
-            // same auto-generated debug key Gradle already uses for the
-            // debug build (both locally and in CI). That's the right
-            // tradeoff for an internal/sideloaded shop app: it makes
-            // `assembleRelease` produce a real installable, shrunk APK
-            // without any keystore secret to manage. It is NOT suitable
-            // if this app is ever published to the Play Store — that
-            // requires generating a dedicated release keystore and
-            // keeping it private (never in the repo).
-            signingConfig = signingConfigs.getByName("debug")
+            // SIGNING: uses the real release keystore (see keystore/
+            // shopmanager-release.jks + keystore.properties.local) when
+            // it's present on this machine, so `assembleRelease`/
+            // `bundleRelease` produce a build that's actually acceptable
+            // to the Play Store — the same signing identity every future
+            // update must keep using. Falls back to the debug key only
+            // when the real keystore isn't available locally, so this
+            // still never breaks a plain checkout/CI run with no signing
+            // secret configured.
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
