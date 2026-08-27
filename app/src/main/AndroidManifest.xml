@@ -5,6 +5,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- In-app self-update (Settings → التحديثات): lets the system
+         installer be launched directly from this app for the APK it just
+         downloaded itself, instead of sending the person to an external
+         browser/file manager. On API 26+ the person still has to flip a
+         one-time "السماح من هذا المصدر" toggle for this app specifically
+         (see ApkDownloader.canInstallPackages) — this permission alone
+         doesn't silently install anything. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".ShopManagerApplication"
