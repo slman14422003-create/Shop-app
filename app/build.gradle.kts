@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -11,9 +13,20 @@ plugins {
 // to Gradle's own auto-generated debug key exactly as before, so
 // `assembleRelease` never breaks — it just produces a build that isn't
 // the one Play will accept until the real keystore is available.
+//
+// BUILD FIX: this used to reference `java.util.Properties` inline
+// (fully-qualified, no import). That fails specifically in an Android
+// module's build.gradle.kts: AGP applies the `java-base` plugin
+// internally, which makes Gradle's Kotlin DSL auto-generate a top-level
+// `java` accessor (for JavaPluginExtension) on the script — and that
+// accessor shadows the `java` *package* name, so `java.util.Properties`
+// tried to resolve `.util` as a member of the accessor instead of the
+// JDK package ("Unresolved reference: util"). Importing `Properties`
+// explicitly (the standard pattern used everywhere else for this exact
+// keystore-loading snippet) sidesteps the shadowing entirely.
 val keystorePropertiesFile = rootProject.file("keystore/keystore.properties.local")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
-val keystoreProperties = java.util.Properties().apply {
+val keystoreProperties = Properties().apply {
     if (hasReleaseKeystore) load(keystorePropertiesFile.inputStream())
 }
 
