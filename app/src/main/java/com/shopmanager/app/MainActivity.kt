@@ -394,7 +394,19 @@ private fun ShopManagerApp(
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar {
+                // BUG FIXED (black hairline above the bottom nav bar):
+                // NavigationBar's own default containerColor is a
+                // *tonally-elevated* surface (colorScheme.surface tinted
+                // with a bit of the primary color for elevation), not
+                // plain colorScheme.surface — while the real system
+                // navigation bar behind it (see SetSystemBarsColor above)
+                // is set to plain colorScheme.surface with no elevation
+                // tint. Those are two subtly different colors meeting at
+                // the same edge, and in dark theme that difference is
+                // dark enough to read as a hard black line separating the
+                // screen content from the nav bar. Pinning both to the
+                // exact same color removes the seam.
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     NavigationBarItem(
                         selected = pagerState.currentPage == PAGE_DASHBOARD,
                         onClick = { openPager(PAGE_DASHBOARD) },
