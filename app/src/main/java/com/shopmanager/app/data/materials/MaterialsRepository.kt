@@ -116,6 +116,22 @@ class MaterialsRepository {
         Unit
     }
 
+    /**
+     * Bulk delete for the "مسح الكل" (clear all) button on the materials
+     * list — deletes every id given in as few batched commits as possible
+     * instead of one `deleteMaterial` round trip per item. Chunked at 400
+     * to stay under Firestore's 500-operation batch limit, same pattern as
+     * [restoreFromBackup].
+     */
+    suspend fun deleteMaterials(ids: List<String>) = withTimeout(WRITE_TIMEOUT_MS) {
+        ids.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(db.collection(materialsCollection).document(it)) }
+            batch.commit().await()
+        }
+        Unit
+    }
+
     suspend fun setPrice(materialName: String, price: Double) = withTimeout(WRITE_TIMEOUT_MS) {
         db.collection(pricesCollection).document(materialName).set(mapOf("price" to price)).await()
         Unit

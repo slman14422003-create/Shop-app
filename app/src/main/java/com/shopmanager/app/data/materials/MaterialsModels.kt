@@ -78,6 +78,17 @@ fun Double.formatQuantity(): String =
  * When the unit is NONE (empty label - a plain count like "بيض: 6") there is
  * no unit word to append, so this returns just the number instead of
  * leaving a trailing space.
+ *
+ * FIX: for a weight unit, quantity 1 used to print as "1 كيلو" / "1 نص
+ * كيلو" - a redundant "1" in front of a size that's already exactly one of
+ * itself once picked from the unit picker. Tapping "كيلو" should just read
+ * "كيلو"; tapping "نص كيلو" should just read "نص كيلو" - no number next to
+ * it. The count only needs to show once there's actually more than one of
+ * that size (e.g. "2 كيلو"). NONE is unaffected: a plain count like "بيض: 1"
+ * still needs its number since there's no unit word to imply it.
  */
-fun Material.quantityLabel(): String =
-    if (unit.isBlank()) quantity.formatQuantity() else "${quantity.formatQuantity()} $unit"
+fun Material.quantityLabel(): String = when {
+    unit.isBlank() -> quantity.formatQuantity()
+    quantity == 1.0 -> unit
+    else -> "${quantity.formatQuantity()} $unit"
+}
