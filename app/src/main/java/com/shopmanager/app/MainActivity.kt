@@ -33,6 +33,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -404,9 +405,22 @@ private fun ShopManagerApp(
                 // tint. Those are two subtly different colors meeting at
                 // the same edge, and in dark theme that difference is
                 // dark enough to read as a hard black line separating the
-                // screen content from the nav bar. Pinning both to the
-                // exact same color removes the seam.
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                // screen content from the nav bar.
+                //
+                // Pinning containerColor to that exact surface color was
+                // only half the fix: NavigationBar's default tonalElevation
+                // (3dp) still applies its own primary-tinted overlay ON
+                // TOP of whatever color is passed in — including a color
+                // that's already an exact match — so the rendered bar was
+                // still a shade off from the plain system nav bar even
+                // after that first fix. Explicitly zeroing tonalElevation
+                // stops that overlay from being applied at all, so the two
+                // colors are now identical pixel-for-pixel with nothing
+                // left to seam.
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp
+                ) {
                     NavigationBarItem(
                         selected = pagerState.currentPage == PAGE_DASHBOARD,
                         onClick = { openPager(PAGE_DASHBOARD) },
