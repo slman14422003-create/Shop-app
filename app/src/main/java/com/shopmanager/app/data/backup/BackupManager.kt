@@ -35,9 +35,12 @@ object BackupManager {
     private const val PREFIX = "backup_"
     private const val SUFFIX = ".json"
 
-    /** Keep roughly two weeks of daily snapshots; older ones are pruned
-     * automatically after every successful backup. */
-    private const val MAX_BACKUPS_KEPT = 14
+    /** Keep roughly a month of snapshots; older ones are pruned
+     * automatically after every successful backup. Each edit/add/delete
+     * writes its own new timestamped file (see [performBackup]) — nothing
+     * is ever overwritten in place, only the oldest file past this count
+     * is removed to keep local storage bounded. */
+    private const val MAX_BACKUPS_KEPT = 30
 
     private fun stampFormat() = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
 
