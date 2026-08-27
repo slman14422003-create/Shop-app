@@ -7,4 +7,8 @@
 -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="shared_images" path="shared_images/" />
+    <!-- Downloaded update APK (see data/updates/ApkDownloader.kt) — handed
+         to the system package installer as a content:// URI through this
+         same FileProvider, same pattern as shared_images above. -->
+    <cache-path name="updates" path="updates/" />
 </paths>
