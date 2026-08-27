@@ -62,9 +62,24 @@ class SettingsRepository(context: Context) {
      * "تحقق من التحديثات" and this URL is what gets checked. Empty by
      * default so a fresh install with no manifest configured yet fails
      * quietly/gracefully instead of hitting a placeholder URL. */
+    /** "رابط فحص التحديثات" — the JSON/GitHub-release URL the normal-user
+     * "تحقق من التحديثات" button in Settings reads from. Defaults to this
+     * repo's own GitHub Releases API URL (see
+     * UpdateChecker.defaultManifestUrl — built automatically from
+     * BuildConfig.GITHUB_REPO at CI build time, no link ever needs typing
+     * in by hand). A value explicitly saved from the developer panel
+     * (لوحة المسؤول السرية) still overrides that default, for anyone who
+     * wants to point updates somewhere else. */
     var updateManifestUrl: String
-        get() = prefs.getString(KEY_UPDATE_MANIFEST_URL, "") ?: ""
+        get() = prefs.getString(KEY_UPDATE_MANIFEST_URL, null)
+            ?: com.shopmanager.app.data.updates.UpdateChecker.defaultManifestUrl()
         set(value) = prefs.edit().putString(KEY_UPDATE_MANIFEST_URL, value.trim()).apply()
+
+    /** Clears any manually-saved override so [updateManifestUrl] goes back
+     * to auto-resolving this repo's GitHub Releases URL. */
+    fun resetUpdateManifestUrlToDefault() {
+        prefs.edit().remove(KEY_UPDATE_MANIFEST_URL).apply()
+    }
 
     /** Timestamp (epoch millis) of the last time anyone — dev or user —
      * successfully reached the update manifest, shown in the admin panel
