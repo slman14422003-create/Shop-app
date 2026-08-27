@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Used pre-Android 12 (API < 31) by android:fullBackupContent, and read by
+  Auto Backup for Apps whenever the OS backs this app up to the person's
+  Google account (allowBackup="true" in the manifest).
+
+  The app already keeps its own local, on-device backup snapshots (see
+  BackupManager/InstantBackupWorker) in filesDir/backups purely as a
+  restore-from-JSON safety net. Those are plain, unencrypted JSON files
+  containing customer names and debt amounts — real business/financial
+  data — so they're explicitly excluded here from Android's own
+  Google-account backup. Everything else (small local prefs: performance
+  tier, notification/currency settings) has no sensitive content and is
+  fine to include, which is the default when nothing is excluded.
+-->
+<full-backup-content>
+    <exclude domain="file" path="backups/" />
+</full-backup-content>

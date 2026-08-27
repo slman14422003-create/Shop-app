@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ (API 31+) replacement for the old fullBackupContent format —
+  Play Console flags apps targeting API 31+ that declare allowBackup=true
+  without this file. Same intent as backup_rules.xml (kept alongside it
+  for API < 31 devices): the app's own local JSON backup snapshots hold
+  real customer/debt data, so they're excluded from both Android's
+  device-to-device transfer and its cloud backup. Small local
+  preferences (performance tier, notification/currency settings) have no
+  sensitive content and are left included.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="backups/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="backups/" />
+    </device-transfer>
+</data-extraction-rules>
