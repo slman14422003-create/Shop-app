@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -51,7 +52,9 @@ data class BottomNavItem(val icon: ImageVector, val label: String)
  * drop shadow — so the top header and this bottom bar read as one
  * cohesive glass design language rather than two different styles.
  *
- * The capsule's width hugs its content (not fillMaxWidth), and
+ * The capsule itself hugs its content width (its outer wrapper is
+ * fillMaxWidth so the capsule is centered against the real screen edges,
+ * but the pill you see is only as wide as its icons/label need), and
  * [animateContentSize] animates it growing/shrinking as the selected tab's
  * label appears/disappears — the small "morphing pill" motion that's the
  * signature of this floating-nav style: only the selected item shows its
@@ -63,8 +66,16 @@ fun FloatingBottomNav(
     selectedIndex: Int,
     onSelect: (Int) -> Unit
 ) {
+    // BUG FIXED: this Box used to wrap only its content's width, so when
+    // Scaffold placed it as the bottomBar it wasn't measured against the
+    // full screen width at all — it just sat at its own natural size,
+    // which visually reads as "stuck to one half of the screen" instead
+    // of centered between the true left/right edges. fillMaxWidth() gives
+    // it the full screen width to center within, so contentAlignment.Center
+    // now centers the pill against the actual screen edges.
     Box(
         Modifier
+            .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 28.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center
