@@ -218,14 +218,34 @@ fun DashboardScreen(
                                 }
                                 Spacer(Modifier.width(10.dp))
                                 Column(Modifier.weight(1f)) {
-                                    Text(row.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                    Text(row.subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(
+                                        row.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        row.subtitle,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
                                 }
+                                // BUG FIXED: this timestamp had no fixed
+                                // width and no line/overflow limit, so a
+                                // long title next to it (see row.title
+                                // above) used to squeeze it and could wrap
+                                // the time/date onto two lines, breaking
+                                // this row's height versus every other row.
                                 if (row.timestamp > 0) {
                                     Text(
                                         df.format(Date(row.timestamp)),
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
@@ -254,7 +274,12 @@ fun DashboardScreen(
                                     )
                                 }
                                 Spacer(Modifier.width(10.dp))
-                                Text(p.name, modifier = Modifier.weight(1f))
+                                Text(
+                                    p.name,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
                                 Text(
                                     "${nf.format(p.amount)} ${AppSettingsState.currencySymbol}",
                                     fontWeight = FontWeight.Medium,
