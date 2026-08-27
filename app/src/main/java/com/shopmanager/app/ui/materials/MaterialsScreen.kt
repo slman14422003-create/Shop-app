@@ -224,7 +224,7 @@ private fun MaterialsHeader(
     Column(
         Modifier
             .fillMaxWidth()
-            .liquidGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            .liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
             // The glass panel itself (background/border above) already
             // fills this Column's full bounds, which now extend up behind
             // the transparent status bar; this only pushes the *content*
