@@ -75,6 +75,18 @@ fun Modifier.liquidGlassSurface(
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
+    // PERF (low-end tier): Modifier.shadow forces its own offscreen
+    // graphicsLayer + a blur pass every frame it's on screen — on a weak
+    // GPU/driver stack that's real, measurable frame time on every single
+    // glass surface (header, floating nav, admin/person-detail panels),
+    // stacking on top of everything else already competing for that
+    // budget. Every other effect in this function already degrades for
+    // LOW tier (drift, sheen); the shadow was the one still paid in full
+    // regardless of tier. LOW tier now skips it entirely — the glass
+    // panel itself (gradient + border) still reads clearly as its own
+    // surface without the drop shadow.
+    val effectiveElevation = if (isLowTier) 0.dp else elevation
+
     val drift: Float = if (isLowTier) {
         0.28f
     } else {
@@ -106,7 +118,7 @@ fun Modifier.liquidGlassSurface(
 
     return this
         .let {
-            if (elevation > 0.dp) it.shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
+            if (effectiveElevation > 0.dp) it.shadow(effectiveElevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
             else it
         }
         .clip(shape)

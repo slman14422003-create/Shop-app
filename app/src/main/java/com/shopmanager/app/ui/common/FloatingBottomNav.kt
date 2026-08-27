@@ -82,7 +82,7 @@ fun FloatingBottomNav(
     ) {
         Row(
             Modifier
-                .animateContentSize()
+                .animateContentSize(animationSpec = MotionSpecs.expandSpring())
                 .liquidGlassSurface(RoundedCornerShape(50))
                 .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
