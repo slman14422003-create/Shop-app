@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -66,6 +67,18 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
      * alongside everything else — there's no separate field left to fall
      * out of sync.
      */
+    // BUG FIXED (dashboard totals "jitter" on cold start): Firestore's
+    // snapshot listener fires once from the local cache and again once the
+    // server responds - separately for persons AND for debts. combine()
+    // re-emits on every one of those, so a fresh app launch could push 2-4
+    // different partial totals in quick succession before landing on the
+    // real one. Each of those was a separate target for
+    // AnimatedCounterText's count-up animation, so the number visibly
+    // jumped/vibrated through intermediate values instead of counting up
+    // once to the final total. debounce() coalesces that burst into a
+    // single emission once both listeners have gone quiet for a moment -
+    // normal live updates (a debt added/edited later) are a single change
+    // with nothing to coalesce, so they still feel instant.
     val uiState: StateFlow<DebtsUiState> = combine(personsFlow, debtsFlow) { persons, debts ->
         val totalsByPerson = debts.groupBy { it.personId }.mapValues { (_, list) -> list.sumOf { it.amount } }
         val enrichedPersons = persons.map { it.copy(amount = totalsByPerson[it.id] ?: 0.0) }
@@ -77,7 +90,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             totalAmount = debts.sumOf { it.amount },
             isLoading = false
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DebtsUiState())
+    }.debounce(200).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DebtsUiState())
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
