@@ -2,12 +2,10 @@ package com.shopmanager.app.ui.dashboard
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
@@ -17,12 +15,12 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -362,7 +360,7 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
     Box(
         Modifier
             .fillMaxWidth()
-            .liquidGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            .liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
             // The glass panel (background/border above) already fills this
             // Box's full bounds, which now extend up behind the
             // transparent status bar; this only pushes the *content*
@@ -389,32 +387,17 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
                     fontWeight = FontWeight.Bold
                 )
             }
+            Spacer(Modifier.width(10.dp))
             GradientIconButton(icon = Icons.Rounded.Settings, contentDescription = "الإعدادات", onClick = onOpenSettings)
-        }
-
-        // نقطة الوصول السرية للوحة المسؤول: a tiny, near-invisible dot
-        // tucked in the header's bottom corner — deliberately not an icon
-        // (no gear/wrench glyph that invites curiosity), just low-opacity
-        // decoration to anyone who isn't specifically looking for it. A
-        // regular user scrolls right past this; only someone who already
-        // knows it's there taps it.
-        Box(
-            Modifier
-                .align(Alignment.BottomStart)
-                .padding(2.dp)
-                .size(18.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onAdminTap
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                Modifier
-                    .size(5.dp)
-                    .alpha(0.35f)
-                    .background(BrandOnGradient, CircleShape)
+            Spacer(Modifier.width(10.dp))
+            // زر لوحة المسؤول: بزر زجاجي حقيقي وواضح بجانب زر الإعدادات
+            // بمسافة كافية بينهما — مو نقطة مخفية بزاوية الهيدر متل قبل.
+            // نفس منطق فتح صندوق رمز الدخول (onAdminTap) ما تغيّر، بس صار
+            // الزر يشوفه أي مستخدم عادي.
+            GradientIconButton(
+                icon = Icons.Rounded.AdminPanelSettings,
+                contentDescription = "لوحة المسؤول",
+                onClick = onAdminTap
             )
         }
     }
