@@ -17,13 +17,21 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 /**
- * Paints the status bar (and nav bar) in the app's own color instead of
- * leaving the system default bare/black bar, and switches icon contrast
- * automatically for light vs dark theme.
+ * "زجاجي بالكامل" (full glass, edge-to-edge): the status bar is always
+ * fully transparent — paired with
+ * `WindowCompat.setDecorFitsSystemWindows(window, false)` in MainActivity,
+ * this lets whatever the app itself draws behind it (a screen's own
+ * liquid-glass header, or the splash gradient) show straight through,
+ * instead of a separately-painted flat OS strip sitting on top of it.
+ * That flat strip meeting the glass surface's glossy top edge was exactly
+ * what used to read as a hard dividing line right under the status bar
+ * icons. The nav bar keeps its own solid color (callers pass whatever fits
+ * that screen), since only the *top* bar needs to disappear into the
+ * glass design here. Icon contrast (light vs dark glyphs) is still fully
+ * controllable per screen for both bars.
  */
 @Composable
 fun SetSystemBarsColor(
-    statusBarColor: Color,
     navigationBarColor: Color,
     statusBarDarkIcons: Boolean,
     navigationBarDarkIcons: Boolean
@@ -34,7 +42,7 @@ fun SetSystemBarsColor(
 
     SideEffect {
         val window = activity.window
-        window.statusBarColor = statusBarColor.toArgb()
+        window.statusBarColor = Color.Transparent.toArgb()
         window.navigationBarColor = navigationBarColor.toArgb()
         val controller = WindowCompat.getInsetsController(window, view)
         controller.isAppearanceLightStatusBars = statusBarDarkIcons
