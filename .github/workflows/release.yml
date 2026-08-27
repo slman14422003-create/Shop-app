@@ -14,6 +14,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # DYNAMIC CHANGELOG: the "Generate changelog" step below needs
+          # real commit history to build the release notes from — the
+          # default shallow checkout (depth 1, just the latest commit) has
+          # no history to diff against, so `git log <range>` would always
+          # come back empty. fetch-depth: 0 pulls full history once per
+          # run, which is the only change needed here for that step to see
+          # actual prior commits.
+          fetch-depth: 0
 
       # JDK: bumped from 17 to 21 (the current LTS release — 17's successor,
       # 21 is a Long-Term-Support build so it keeps getting security/stability
@@ -53,6 +62,38 @@ jobs:
           RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           cp "$DEBUG_APK" shop-manager-debug.apk
           cp "$RELEASE_APK" shop-manager-release.apk
+
+      # DYNAMIC RELEASE NOTES: the release body used to be one fixed block
+      # of text on every single build ("بناء تلقائي..."), so
+      # UpdateManifest.notes — which is literally this release's "body"
+      # field, see parseGitHubRelease() in UpdateChecker.kt — showed the
+      # exact same generic sentence in the in-app update dialog no matter
+      # what had actually changed. This step instead reads the real commit
+      # messages that landed since the last successful push (via
+      # `github.event.before`, the SHA main pointed to right before this
+      # push) and turns them into a bullet-point changelog, so every
+      # release — and therefore every "تحديث متوفر" dialog on someone's
+      # phone — describes what's actually new in THAT build.
+      # `workflow_dispatch` runs (no "before" SHA) and first-ever pushes
+      # (before = all-zeros) fall back to the last 15 commits so the step
+      # never produces an empty changelog.
+      - name: Generate changelog
+        id: changelog
+        run: |
+          BEFORE_SHA="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+            LOG=$(git log "${BEFORE_SHA}..${{ github.sha }}" --no-merges --pretty=format:'- %s (%h)')
+          else
+            LOG=$(git log -15 --no-merges --pretty=format:'- %s (%h)')
+          fi
+          if [ -z "$LOG" ]; then
+            LOG="- تحسينات وإصلاحات عامة"
+          fi
+          {
+            echo "notes<<CHANGELOG_EOF"
+            echo "$LOG"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # CROSS-REPO PUBLISH: this main repo stays PRIVATE (your source code
       # never has to be public). The Release itself — tag + the .apk
@@ -96,8 +137,10 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           name: إصدار ${{ github.run_number }}
           body: |
-            بناء تلقائي لتطبيق إدارة المحل بعد آخر تحديث على المستودع الأساسي (خاص).
+            ## 🆕 ما الجديد بهذا الإصدار
+            ${{ steps.changelog.outputs.notes }}
 
+            ---
             📦 **shop-manager-release.apk** ← هاي النسخة المستخدمة تنزّلها عادةً: أصغر حجماً وأسرع بالتشغيل (مضغوطة/محسّنة عبر R8).
             🛠️ **shop-manager-debug.apk** ← نسخة تجريبية أكبر حجماً وأبطأ شوي، للاختبار فقط.
 
