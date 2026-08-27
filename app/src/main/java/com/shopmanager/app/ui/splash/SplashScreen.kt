@@ -5,25 +5,19 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -31,13 +25,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shopmanager.app.data.performance.LocalPerformanceTier
@@ -46,31 +39,31 @@ import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.LiquidGlassGlow
 import com.shopmanager.app.ui.common.liquidGlassSurface
 
-/** One line of the splash checklist and whether that init step has
- * actually finished — driven from real state in MainActivity, not a
- * simulated/fake progress bar. */
-data class SplashStepState(val label: String, val done: Boolean)
-
 /**
  * "شاشة بداية حديثة": the in-app splash shown after the static system
  * splash screen hands off (see MainActivity — the OS splash is dismissed
- * the instant this Composable has a first frame ready). Unlike the static
- * system splash (just an icon on a flat color, by design — see the PERF
- * comment in MainActivity), this screen is alive: a liquid-glass logo orb,
- * the app name, and a checklist of the *real* startup steps ticking off as
- * MainActivity's background init actually completes them (Firebase,
- * notification channels, device performance-tier detection, background
- * sync/backup scheduling).
+ * the instant this Composable has a first frame ready).
  *
- * PERF: everything here runs only once, for well under a second, while
- * the background thread in MainActivity does the real work — this screen
- * itself does no I/O and holds no state of its own beyond what's passed
- * in, so it adds no measurable startup cost of its own. The one infinite
- * animation (the glass logo's slow pulse) is skipped entirely on LOW tier,
- * same convention as [com.shopmanager.app.ui.common.liquidGlassSurface].
+ * DESIGN: deliberately says nothing about *what* is loading — no step
+ * checklist, no percentage, nothing that reads as a progress report. It's
+ * purely a calm, branded moment (logo + name + a soft, indeterminate
+ * spinner) that stays up for a short, fixed minimum (see
+ * SPLASH_MIN_DISPLAY_MS in MainActivity) and then crossfades straight into
+ * the real app the instant startup actually finishes. The background is
+ * fully edge-to-edge (the status bar is transparent — see
+ * SetSystemBarsColor/MainActivity), so the brand gradient and the floating
+ * glass droplets below run all the way to the true top of the screen, with
+ * nothing sitting behind the status bar icons but more of the same glass.
+ *
+ * PERF: everything here runs only once, for well under a second of real
+ * screen time, while the background thread in MainActivity does the real
+ * initialization — this screen itself does no I/O and holds no state of
+ * its own, so it adds no measurable startup cost. The infinite animations
+ * (logo pulse, drifting droplets) are skipped entirely on LOW tier, same
+ * convention as [com.shopmanager.app.ui.common.liquidGlassSurface].
  */
 @Composable
-fun AppSplashScreen(steps: List<SplashStepState>, modifier: Modifier = Modifier) {
+fun AppSplashScreen(modifier: Modifier = Modifier) {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
     Box(
@@ -79,6 +72,17 @@ fun AppSplashScreen(steps: List<SplashStepState>, modifier: Modifier = Modifier)
             .background(BrandGradient.brush()),
         contentAlignment = Alignment.Center
     ) {
+        // A few softly blurred glass "droplets" drifting in the background —
+        // purely decorative, never behind readable content, so there's
+        // nothing here that could ever turn illegible (same safety rule as
+        // LiquidGlassGlow everywhere else in the app). Skipped on LOW tier,
+        // same as every other infinite animation in this screen.
+        if (!isLowTier) {
+            FloatingDroplet(size = 120.dp, alignment = Alignment.TopStart, offsetX = (-24).dp, offsetY = 60.dp, periodMs = 6200)
+            FloatingDroplet(size = 90.dp, alignment = Alignment.BottomEnd, offsetX = 18.dp, offsetY = (-90).dp, periodMs = 5200)
+            FloatingDroplet(size = 60.dp, alignment = Alignment.TopEnd, offsetX = (-36).dp, offsetY = 140.dp, periodMs = 7400)
+        }
+
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -103,9 +107,16 @@ fun AppSplashScreen(steps: List<SplashStepState>, modifier: Modifier = Modifier)
                 textAlign = TextAlign.Center
             )
 
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(36.dp))
 
-            SplashChecklist(steps = steps)
+            // Deliberately generic — a plain indeterminate spinner, not a
+            // checklist of internal init steps. It only says "still
+            // working", nothing more specific about what.
+            CircularProgressIndicator(
+                strokeWidth = 2.5.dp,
+                color = Color.White.copy(alpha = 0.75f),
+                modifier = Modifier.size(28.dp)
+            )
         }
 
         Text(
@@ -116,6 +127,36 @@ fun AppSplashScreen(steps: List<SplashStepState>, modifier: Modifier = Modifier)
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 28.dp)
+        )
+    }
+}
+
+/** One drifting, blurred glass circle in the splash background. Slow,
+ * gentle vertical bob — never draws anything but the glow itself, so it's
+ * safe to blur the whole node (see [LiquidGlassGlow]). */
+@Composable
+private fun FloatingDroplet(
+    size: Dp,
+    alignment: Alignment,
+    offsetX: Dp,
+    offsetY: Dp,
+    periodMs: Int
+) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "dropletBob")
+    val bob by transition.animateFloat(
+        initialValue = -1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(periodMs, easing = LinearEasing), RepeatMode.Reverse),
+        label = "dropletBobValue"
+    )
+    Box(Modifier.fillMaxSize()) {
+        LiquidGlassGlow(
+            color = Color.White,
+            blurRadius = 20.dp,
+            modifier = Modifier
+                .align(alignment)
+                .offset(x = offsetX, y = offsetY + (bob * 10).dp)
+                .size(size)
         )
     }
 }
@@ -156,52 +197,6 @@ private fun LiquidGlassLogo(isLowTier: Boolean) {
                 tint = Color.White,
                 modifier = Modifier.size(44.dp)
             )
-        }
-    }
-}
-
-@Composable
-private fun SplashChecklist(steps: List<SplashStepState>) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.10f))
-            .padding(vertical = 14.dp, horizontal = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        steps.forEach { step ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = if (step.done) 0.95f else 0.16f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    androidx.compose.animation.AnimatedVisibility(visible = step.done, enter = scaleIn() + fadeIn()) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                    androidx.compose.animation.AnimatedVisibility(visible = !step.done, enter = fadeIn(), exit = fadeOut()) {
-                        CircularProgressIndicator(
-                            strokeWidth = 1.5.dp,
-                            color = Color.White.copy(alpha = 0.55f),
-                            modifier = Modifier.size(12.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    step.label,
-                    color = Color.White.copy(alpha = if (step.done) 0.95f else 0.65f),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
         }
     }
 }
