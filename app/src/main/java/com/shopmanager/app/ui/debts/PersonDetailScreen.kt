@@ -68,6 +68,13 @@ fun PersonDetailScreen(
     val total = debts.sumOf { it.amount }
 
     Scaffold(
+        // Off-pager screen (no bottom nav bar of its own) — the outer app
+        // Scaffold already reserves the real bottom/horizontal safe-area
+        // space one level up in NavHost's padding, so this Scaffold's own
+        // content insets are zeroed to avoid reserving that same space
+        // twice. The TopAppBar below still handles the status bar inset
+        // entirely on its own regardless of this setting.
+        contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
