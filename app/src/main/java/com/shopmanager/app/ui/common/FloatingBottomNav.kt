@@ -64,17 +64,33 @@ data class BottomNavItem(val icon: ImageVector, val label: String)
 fun FloatingBottomNav(
     items: List<BottomNavItem>,
     selectedIndex: Int,
-    onSelect: (Int) -> Unit
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    // BUG FIXED: this Box used to wrap only its content's width, so when
-    // Scaffold placed it as the bottomBar it wasn't measured against the
-    // full screen width at all — it just sat at its own natural size,
-    // which visually reads as "stuck to one half of the screen" instead
-    // of centered between the true left/right edges. fillMaxWidth() gives
-    // it the full screen width to center within, so contentAlignment.Center
-    // now centers the pill against the actual screen edges.
+    // ROOT FIX ("الشريط العائم خلفيته بيضاء/سوداء"): this composable itself
+    // was never the problem — it was always transparent outside the pill
+    // (see liquidGlassSurface below, applied only to the inner Row). The
+    // solid white/black block people were seeing came from *how the caller
+    // places this composable*, not from anything drawn in here. When used
+    // as a Scaffold `bottomBar`, Scaffold reserves that slot's full area
+    // and paints its own `containerColor` (defaults to
+    // colorScheme.background — flat white in light mode, near-black in
+    // dark) behind it — and separately, Scaffold also shrinks the actual
+    // page content to stop short of that slot, so there was never any real
+    // page content behind these transparent margins either, just that flat
+    // Scaffold color showing through. No amount of changing colors *in
+    // this file* could fix that, because the rectangle wasn't drawn here.
+    // The real fix is in MainActivity: this is no longer placed as a
+    // Scaffold bottomBar at all. It's now a plain overlay, layered via
+    // Modifier.align(Alignment.BottomCenter) directly on top of a NavHost
+    // that fills the *entire* screen — so the margins around the pill are
+    // genuinely transparent over real, live page content (the dashboard
+    // list, cards, etc. scrolling underneath), never a separately-painted
+    // solid rectangle. `modifier` is how MainActivity supplies that
+    // alignment; merged first so callers' positioning wins before this
+    // composable's own sizing/inset/margin chain runs.
     Box(
-        Modifier
+        modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 28.dp, vertical = 14.dp),
