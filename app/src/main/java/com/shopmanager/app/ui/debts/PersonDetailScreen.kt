@@ -78,7 +78,14 @@ fun PersonDetailScreen(
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text(person.name, fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        person.name,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                },
                 navigationIcon = {
                     GlassIconButton(
                         icon = Icons.Default.ArrowBack,

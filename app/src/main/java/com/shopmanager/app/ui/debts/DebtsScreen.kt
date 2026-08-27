@@ -68,6 +68,23 @@ fun DebtsScreen(
     }
 
     Scaffold(
+        // BUG FIXED (black strip above the bottom nav bar, Debts tab only):
+        // unlike DashboardScreen/MaterialsScreen, this Scaffold had no
+        // contentWindowInsets override, so it fell back to Material3's
+        // default of WindowInsets.safeDrawing (top AND bottom). The outer
+        // app-level Scaffold in MainActivity already pads this screen's
+        // content for the bottom nav bar/system bar once (via its own
+        // `padding`); this inner Scaffold then reserved that same bottom
+        // system-bar space a *second* time here, leaving an extra empty
+        // gap between the list and the bottom nav bar. That gap sits on
+        // this Scaffold's own background color — colorScheme.background,
+        // which is deliberately a touch darker than colorScheme.surface
+        // (used by the cards, the nav bar, etc.) — so the gap read as a
+        // distinct dark/black bar rather than blending in. Restricting
+        // this to Bottom + Horizontal only (top is already handled by the
+        // TopAppBar itself, same pattern as the other two tabs) removes
+        // the double-padding and the gap with it.
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         snackbarHost = { SnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
@@ -322,7 +339,16 @@ private fun PersonRow(
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(person.name, fontWeight = FontWeight.Medium)
+                // BUG FIXED: an unbounded name could wrap to 2 lines and
+                // push the row taller than its avatar/action buttons,
+                // breaking the row's vertical alignment for that one
+                // customer only (every other row stayed single-line height).
+                Text(
+                    person.name,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
                 // UI: a paid-off customer (amount == 0) used to show the
                 // same "٠ ل.س" as everyone else — reads as if something
                 // failed to load rather than "settled". A short, muted
