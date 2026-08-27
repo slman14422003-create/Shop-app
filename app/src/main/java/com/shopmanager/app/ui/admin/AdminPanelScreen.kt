@@ -2,6 +2,7 @@ package com.shopmanager.app.ui.admin
 
 import android.os.Build
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -47,7 +48,7 @@ import java.util.Locale
  * whether the server side of things is actually working when a real user
  * reports a problem, without needing Android Studio/logcat/adb attached.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AdminPanelScreen(
     onBack: () -> Unit,
@@ -125,7 +126,7 @@ fun AdminPanelScreen(
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape)
+                modifier = Modifier.liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
             )
         }
     ) { padding ->
@@ -144,9 +145,13 @@ fun AdminPanelScreen(
             )
 
             // رابط التحديثات
-            AdminSection(title = "رابط التحديثات (JSON)", icon = Icons.Default.Link) {
+            AdminSection(title = "رابط التحديثات (GitHub Release)", icon = Icons.Default.Link) {
                 Text(
-                    "الرابط الذي يقرأ منه زر \"تحقق من التحديثات\" العادي في الإعدادات. يجب أن يرجع JSON بالشكل:\n" +
+                    "معبّى تلقائياً برابط GitHub Releases الخاص بهذا المستودع (يُبنى من " +
+                        "GITHUB_REPOSITORY وقت البناء على CI — لا حاجة لصق أي رابط يدوياً). " +
+                        "زر \"تحقق من التحديثات\" بالإعدادات يقرأ من هذا الرابط تلقائياً ويحمّل " +
+                        "shop-manager-release.apk من أحدث إصدار منشور. يمكن استبداله برابط JSON " +
+                        "مخصص لو رغبت باستضافة التحديثات بمكان آخر:\n" +
                         "{\"versionCode\":2,\"versionName\":\"1.1.0\",\"apkUrl\":\"...\",\"notes\":\"...\"}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -166,11 +171,16 @@ fun AdminPanelScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
                         settings.updateManifestUrl = manifestUrl
                         savedMessage = "تم الحفظ ✅"
                     }) { Text("حفظ الرابط") }
+                    OutlinedButton(onClick = {
+                        settings.resetUpdateManifestUrlToDefault()
+                        manifestUrl = settings.updateManifestUrl
+                        savedMessage = "تمت إعادة الرابط التلقائي ✅"
+                    }) { Text("استخدام الرابط التلقائي") }
                     OutlinedButton(onClick = { testManifestNow() }, enabled = !isTesting) {
                         if (isTesting) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
