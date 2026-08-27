@@ -33,6 +33,19 @@ object ApkDownloader {
         apkUrl: String,
         onProgress: (Int) -> Unit
     ): DownloadState = withContext(Dispatchers.IO) {
+        // SECURITY FIX: this accepted any scheme, including plain
+        // "http://". Android's own package installer will still reject a
+        // signature mismatch on install, but a plain-HTTP URL is trivial
+        // to intercept/tamper on an open shop Wi-Fi, and there's no
+        // reason to ever accept it for something that's about to be
+        // installed as an app update. The update manifest URL itself
+        // (see UpdateChecker) already always resolves to GitHub's HTTPS
+        // API, so a non-HTTPS apkUrl here would only ever come from a
+        // tampered/malicious manifest response — worth rejecting outright
+        // rather than attempting the download at all.
+        if (!apkUrl.startsWith("https://", ignoreCase = true)) {
+            return@withContext DownloadState.Error("رابط التحديث غير آمن (يجب أن يبدأ بـ https)")
+        }
         var connection: HttpURLConnection? = null
         try {
             val updatesDir = File(context.cacheDir, "updates").apply { mkdirs() }
