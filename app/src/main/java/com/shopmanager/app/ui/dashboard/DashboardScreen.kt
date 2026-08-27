@@ -389,7 +389,12 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
             }
             Spacer(Modifier.width(10.dp))
             GradientIconButton(icon = Icons.Rounded.Settings, contentDescription = "الإعدادات", onClick = onOpenSettings)
-            Spacer(Modifier.width(10.dp))
+            // BUG FIXED: this was only 10.dp, which reads as glued/touching
+            // once IconButton's own minimum-touch-target sizing is taken
+            // into account — the two glass circles visually met with no
+            // gap. Widened to a clearly organized gap between the two
+            // header buttons.
+            Spacer(Modifier.width(18.dp))
             // زر لوحة المسؤول: بزر زجاجي حقيقي وواضح بجانب زر الإعدادات
             // بمسافة كافية بينهما — مو نقطة مخفية بزاوية الهيدر متل قبل.
             // نفس منطق فتح صندوق رمز الدخول (onAdminTap) ما تغيّر، بس صار
