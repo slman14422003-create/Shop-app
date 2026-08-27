@@ -162,6 +162,25 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /**
+     * "مسح الكل" (clear all): deletes every material currently on the list
+     * for the active section in one batched call, same effect as
+     * select-all-then-delete but without needing a whole multi-select mode
+     * on the list UI.
+     */
+    fun deleteAllMaterials() {
+        val ids = uiState.value.materials.map { it.id }
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                repo.deleteMaterials(ids)
+                _message.value = "تم حذف كل المواد (${ids.size})"
+            } catch (e: Exception) {
+                _message.value = "تعذر حذف المواد: ${e.message ?: "تحقق من الاتصال"}"
+            }
+        }
+    }
+
     fun setPrice(materialName: String, price: Double) {
         viewModelScope.launch {
             try {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
@@ -62,6 +63,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     var search by remember { mutableStateOf("") }
     var editingMaterial by remember { mutableStateOf<Material?>(null) }
     var deleteTarget by remember { mutableStateOf<Material?>(null) }
+    var showClearAllConfirm by remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
 
@@ -87,6 +89,8 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
             MaterialsHeader(
                 tab = tab,
                 onTabChange = { tab = it },
+                showClearAll = tab == 0 && state.materials.isNotEmpty(),
+                onClearAll = { showClearAllConfirm = true },
                 onShare = {
                     val text = buildMaterialsShareText(state.materials, state.prices)
                     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -178,6 +182,21 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
     }
+
+    if (showClearAllConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearAllConfirm = false },
+            title = { Text("مسح كل المواد") },
+            text = { Text("هل أنت متأكد من حذف كل المواد المضافة (${state.materials.size})؟ لا يمكن التراجع عن هذا الإجراء.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAllMaterials()
+                    showClearAllConfirm = false
+                }) { Text("حذف الكل") }
+            },
+            dismissButton = { TextButton(onClick = { showClearAllConfirm = false }) { Text("إلغاء") } }
+        )
+    }
 }
 
 /**
@@ -191,7 +210,13 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
  * two stacked bars.
  */
 @Composable
-private fun MaterialsHeader(tab: Int, onTabChange: (Int) -> Unit, onShare: () -> Unit) {
+private fun MaterialsHeader(
+    tab: Int,
+    onTabChange: (Int) -> Unit,
+    showClearAll: Boolean,
+    onClearAll: () -> Unit,
+    onShare: () -> Unit
+) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -213,6 +238,14 @@ private fun MaterialsHeader(tab: Int, onTabChange: (Int) -> Unit, onShare: () ->
                 style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
                 fontWeight = FontWeight.Bold
             )
+            // "مسح الكل": only shown on the المواد tab, and only once there's
+            // actually something to clear - deletes every material on the
+            // list in one confirmed action (see MaterialsScreen's
+            // showClearAllConfirm dialog / MaterialsViewModel.deleteAllMaterials).
+            if (showClearAll) {
+                GradientIconButton(icon = Icons.Default.DeleteSweep, contentDescription = "مسح كل المواد", onClick = onClearAll)
+                Spacer(Modifier.width(8.dp))
+            }
             GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
         }
         Spacer(Modifier.height(16.dp))
