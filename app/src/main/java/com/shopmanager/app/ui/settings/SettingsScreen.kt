@@ -141,7 +141,15 @@ fun SettingsScreen(
                         icon = Icons.Default.ArrowBack,
                         contentDescription = "رجوع",
                         onClick = onBack,
-                        modifier = Modifier.padding(start = 8.dp),
+                        // BUG FIXED: only `start` padding (space from the
+                        // screen edge) was set here — nothing separated the
+                        // button from the title text sitting right after it
+                        // in the navigation-icon slot, so "الإعدادات" ended
+                        // up glued directly against the button. `end`
+                        // padding is direction-aware, so this opens a real
+                        // gap before the title in this app's forced-RTL
+                        // layout without needing to special-case RTL here.
+                        modifier = Modifier.padding(start = 8.dp, end = 12.dp),
                         size = 36.dp
                     )
                 },
