@@ -6,9 +6,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.shopmanager.app.data.performance.PerformanceMode
+import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
 import java.security.MessageDigest
+import java.security.SecureRandom
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 /**
  * Replaces the old debt-app `auth.js` / `security.js` - those files existed
@@ -16,11 +20,29 @@ import java.security.MessageDigest
  * protection existed). This is a small but genuinely working local PIN lock,
  * useful for a shared shop device: nothing fancy, no Firebase account needed,
  * just a 4-6 digit PIN hashed and stored locally.
+ *
+ * SECURITY FIX: the PIN used to be stored as a single unsalted SHA-256
+ * hash — fast to brute-force offline (no per-install salt means a
+ * precomputed table works across every install) if the prefs file were
+ * ever pulled off a rooted/backed-up device, and nothing stopped unlimited
+ * guesses from the lock screen itself either. Now: a random per-install
+ * salt is generated the moment a PIN is (re)set, and the stored hash is
+ * PBKDF2 with many iterations (deliberately slow) instead of one plain
+ * SHA-256 pass; [verifyPin] is also gated by [pinThrottle] so repeated
+ * wrong guesses lock the screen out for a growing cooldown instead of
+ * allowing instant unlimited retries. Anyone who already had a PIN set
+ * under the old scheme is migrated transparently the moment they type it
+ * correctly once (see [verifyPin]) — nobody has to re-set their PIN.
  */
 class SettingsRepository(context: Context) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("shop_manager_settings", Context.MODE_PRIVATE)
+
+    private val pinThrottle = PinAttemptThrottle(context, "shop_manager_pin_throttle")
+
+    /** Seconds left before the lock screen accepts another PIN attempt. */
+    fun pinLockRemainingSeconds(): Long = pinThrottle.lockRemainingSeconds()
 
     var themeMode: AppThemeMode
         get() = AppThemeMode.valueOf(prefs.getString(KEY_THEME, AppThemeMode.SYSTEM.name)!!)
@@ -91,27 +113,67 @@ class SettingsRepository(context: Context) {
     val hasPin: Boolean get() = prefs.contains(KEY_PIN_HASH)
 
     fun setPin(pin: String) {
-        prefs.edit().putString(KEY_PIN_HASH, hash(pin)).apply()
+        val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
+        prefs.edit()
+            .putString(KEY_PIN_SALT, salt.toHex())
+            .putString(KEY_PIN_HASH, hashSalted(pin, salt))
+            .apply()
+        pinThrottle.registerSuccess()
     }
 
     fun clearPin() {
-        prefs.edit().remove(KEY_PIN_HASH).apply()
+        prefs.edit().remove(KEY_PIN_HASH).remove(KEY_PIN_SALT).apply()
+        pinThrottle.registerSuccess()
     }
 
+    /**
+     * @return true if [pin] is correct. Locked out (see [pinLockRemainingSeconds])
+     * always returns false without even comparing the PIN, so a lockout
+     * can't be raced by spamming attempts while it's counting down.
+     */
     fun verifyPin(pin: String): Boolean {
-        val stored = prefs.getString(KEY_PIN_HASH, null) ?: return false
-        return stored == hash(pin)
+        if (pinThrottle.isLocked()) return false
+        val storedHash = prefs.getString(KEY_PIN_HASH, null) ?: return false
+        val saltHex = prefs.getString(KEY_PIN_SALT, null)
+
+        val correct = if (saltHex != null) {
+            storedHash == hashSalted(pin, saltHex.fromHex())
+        } else {
+            // Legacy unsalted-SHA-256 PIN from before this fix. Verify it
+            // the old way once, and if it matches, silently upgrade
+            // storage to the salted scheme so this branch is never taken
+            // again for this install.
+            val legacyMatch = storedHash == legacyHash(pin)
+            if (legacyMatch) setPin(pin)
+            legacyMatch
+        }
+
+        if (correct) pinThrottle.registerSuccess() else pinThrottle.registerFailure()
+        return correct
     }
 
-    private fun hash(value: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
-        return digest.joinToString("") { "%02x".format(it) }
+    private fun hashSalted(value: String, salt: ByteArray): String {
+        val spec = PBEKeySpec(value.toCharArray(), salt, PIN_HASH_ITERATIONS, 256)
+        val key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec)
+        return key.encoded.toHex()
     }
+
+    private fun legacyHash(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray())
+        return digest.toHex()
+    }
+
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    private fun String.fromHex(): ByteArray =
+        ByteArray(length / 2) { i -> ((Character.digit(this[i * 2], 16) shl 4) + Character.digit(this[i * 2 + 1], 16)).toByte() }
 
     companion object {
         private const val KEY_THEME = "theme_mode"
         private const val KEY_COLOR_PALETTE = "color_palette"
         private const val KEY_PIN_HASH = "pin_hash"
+        private const val KEY_PIN_SALT = "pin_salt"
+        private const val PIN_HASH_ITERATIONS = 12_000
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
         private const val KEY_PERFORMANCE_MODE = "performance_mode"
