@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,6 +52,12 @@ import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.data.updates.ApkDownloader
+import com.shopmanager.app.data.updates.AppVersionInfo
+import com.shopmanager.app.data.updates.DownloadState
+import com.shopmanager.app.data.updates.UpdateCheckResult
+import com.shopmanager.app.data.updates.UpdateChecker
+import com.shopmanager.app.data.updates.UpdateManifest
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GlassIconButton
@@ -102,6 +109,60 @@ fun SettingsScreen(
     var pendingRestore by remember { mutableStateOf<BackupManager.BackupInfo?>(null) }
     var isRestoring by remember { mutableStateOf(false) }
     var restoreStatus by remember { mutableStateOf<String?>(null) }
+
+    // التحديثات (Settings → check for update, in-app download+install):
+    // see data/updates/ for the actual networking. The manifest URL itself
+    // is only ever set from the hidden developer panel; a normal user just
+    // taps the button.
+    val appVersion = remember { AppVersionInfo.current(context) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateStatusMessage by remember { mutableStateOf<String?>(null) }
+    var pendingUpdate by remember { mutableStateOf<UpdateManifest?>(null) }
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var downloadPercent by remember { mutableStateOf(0) }
+    var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
+    var needsInstallPermission by remember { mutableStateOf(false) }
+
+    fun checkForUpdate() {
+        isCheckingUpdate = true
+        updateStatusMessage = null
+        scope.launch {
+            when (val result = UpdateChecker.check(context, settings.updateManifestUrl)) {
+                is UpdateCheckResult.UpToDate -> updateStatusMessage = "أنت تستخدم أحدث إصدار ✅"
+                is UpdateCheckResult.UpdateAvailable -> {
+                    settings.lastUpdateCheckAt = System.currentTimeMillis()
+                    pendingUpdate = result.manifest
+                }
+                is UpdateCheckResult.Failed -> updateStatusMessage = result.reason
+            }
+            isCheckingUpdate = false
+        }
+    }
+
+    fun startDownload(manifest: UpdateManifest) {
+        isDownloadingUpdate = true
+        downloadPercent = 0
+        scope.launch {
+            when (val state = ApkDownloader.download(context, manifest.apkUrl) { percent -> downloadPercent = percent }) {
+                is DownloadState.Done -> {
+                    isDownloadingUpdate = false
+                    if (ApkDownloader.canInstallPackages(context)) {
+                        ApkDownloader.install(context, state.file)
+                        pendingUpdate = null
+                    } else {
+                        downloadedApk = state.file
+                        needsInstallPermission = true
+                    }
+                }
+                is DownloadState.Error -> {
+                    isDownloadingUpdate = false
+                    updateStatusMessage = state.message
+                    pendingUpdate = null
+                }
+                is DownloadState.InProgress -> Unit
+            }
+        }
+    }
 
     val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
     val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
@@ -449,6 +510,38 @@ fun SettingsScreen(
                 }
             }
 
+            // التحديثات (updates) — checks the manifest URL configured
+            // from the hidden developer panel and, if a newer version
+            // exists, downloads + installs the APK from inside the app
+            // itself (no external browser step), same feel as Telegram's
+            // in-chat APK updates.
+            SettingsSection(title = "التحديثات", icon = Icons.Default.SystemUpdate) {
+                Text(
+                    "الإصدار الحالي: ${appVersion.name} (${appVersion.code})",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { checkForUpdate() },
+                    enabled = !isCheckingUpdate,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isCheckingUpdate) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text("جارٍ التحقق...")
+                    } else {
+                        Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("تحقق من التحديثات")
+                    }
+                }
+                updateStatusMessage?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
             // حول التطبيق (about) — new, a small personal touch
             SettingsSection(title = "حول التطبيق", icon = Icons.Default.Info) {
                 Text("إدارة المحل — الإصدار 1.0.0", style = MaterialTheme.typography.bodyMedium)
@@ -523,6 +616,60 @@ fun SettingsScreen(
                 settings.currencySymbol = selected
                 AppSettingsState.setCurrency(selected)
                 showCurrencyDialog = false
+            }
+        )
+    }
+
+    pendingUpdate?.let { manifest ->
+        AlertDialog(
+            onDismissRequest = { if (!isDownloadingUpdate) pendingUpdate = null },
+            title = { Text("يتوفر تحديث جديد 🎉") },
+            text = {
+                Column {
+                    Text("الإصدار ${manifest.versionName} متوفر الآن (نسختك الحالية: ${appVersion.name}).")
+                    if (manifest.notes.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(manifest.notes, style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (isDownloadingUpdate) {
+                        Spacer(Modifier.height(14.dp))
+                        LinearProgressIndicator(
+                            progress = { downloadPercent / 100f },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text("$downloadPercent%", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isDownloadingUpdate,
+                    onClick = { startDownload(manifest) }
+                ) { Text("تحميل وتثبيت") }
+            },
+            dismissButton = {
+                TextButton(enabled = !isDownloadingUpdate, onClick = { pendingUpdate = null }) { Text("لاحقاً") }
+            }
+        )
+    }
+
+    if (needsInstallPermission) {
+        AlertDialog(
+            onDismissRequest = { needsInstallPermission = false },
+            title = { Text("يلزم إذن التثبيت") },
+            text = { Text("لتثبيت التحديث من داخل التطبيق، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد وحاول مجدداً.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    needsInstallPermission = false
+                    context.startActivity(ApkDownloader.unknownSourcesSettingsIntent(context))
+                }) { Text("فتح الإعدادات") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    needsInstallPermission = false
+                    downloadedApk?.let { ApkDownloader.install(context, it) }
+                }) { Text("حاول التثبيت الآن") }
             }
         )
     }
