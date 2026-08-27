@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Inventory2
@@ -72,11 +72,21 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             TopAppBar(
                 title = { Text("اختر مادة", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
+                    // BUG FIXED: two issues here. (1) Icons.Default.ArrowBack
+                    // always points left, which is backwards for a back
+                    // button in this app's RTL Arabic layout — swapped for
+                    // the AutoMirrored version so it flips to point right,
+                    // matching the reading/navigation direction. (2) the
+                    // button only had `start` padding (space from the
+                    // screen edge) with nothing on the `end` side, so it
+                    // sat glued right up against the title with no room to
+                    // breathe — added `end` padding to match the same fix
+                    // already applied on the Settings screen's back button.
                     GlassIconButton(
-                        icon = Icons.Default.ArrowBack,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
                         onClick = onBack,
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = 8.dp, end = 12.dp),
                         size = 36.dp
                     )
                 },
