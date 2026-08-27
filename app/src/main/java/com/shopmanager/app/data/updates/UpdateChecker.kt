@@ -54,7 +54,7 @@ object UpdateChecker {
 
             val status = connection.responseCode
             if (status !in 200..299) {
-                return@withContext UpdateCheckResult.Failed("الخادم أعاد رمز الحالة $status")
+                return@withContext UpdateCheckResult.Failed(describeHttpFailure(status, manifestUrl, connection))
             }
 
             val body = connection.inputStream.bufferedReader().use { it.readText() }
@@ -75,6 +75,47 @@ object UpdateChecker {
         } finally {
             connection?.disconnect()
         }
+    }
+
+    // BUG FIXED (was: raw "الخادم أعاد رمز الحالة 404" with no way for
+    // whoever's holding the phone to act on it). A 404 from the GitHub
+    // Releases API specifically ("GET /repos/{owner}/{repo}/releases/latest")
+    // is not a random server hiccup — GitHub returns exactly this status
+    // for three, and only three, root causes, so we can name all three
+    // instead of just the number:
+    //   1. The repo has never published a GitHub Release yet (the
+    //      release.yml workflow hasn't successfully run to completion).
+    //   2. The owner/repo name baked into the build (BuildConfig.GITHUB_REPO,
+    //      i.e. GITHUB_REPOSITORY at CI build time) is wrong or the repo
+    //      was renamed/moved since this APK was built.
+    //   3. The repo is PRIVATE. This is the one that looks identical to
+    //      "no releases yet" from a 404 alone but has a different fix:
+    //      GitHub's API returns 404 (never 403) for private repos to
+    //      unauthenticated requests, specifically so the API doesn't leak
+    //      whether a private repo exists. Since this check runs from the
+    //      installed app with no token, a private repo will ALWAYS 404
+    //      here no matter how many releases it has — making the repo
+    //      public (or switching to a manifest hosted somewhere that
+    //      doesn't require auth) is the only real fix for that case.
+    // For a non-GitHub (custom JSON manifest) URL, 404 just means the
+    // file isn't at that address — a plainer message covers that case.
+    private fun describeHttpFailure(status: Int, requestUrl: String, connection: HttpURLConnection): String {
+        val isGitHubReleasesApi = requestUrl.contains("api.github.com/repos/") && requestUrl.contains("/releases/")
+        if (status == 404 && isGitHubReleasesApi) {
+            val ghMessage = try {
+                connection.errorStream?.bufferedReader()?.use { it.readText() }
+                    ?.let { JSONObject(it).optString("message", "") }
+                    ?.takeIf { it.isNotBlank() }
+            } catch (e: Exception) {
+                null
+            }
+            val detail = ghMessage?.let { " ($it)" } ?: ""
+            return "لم يتم العثور على أي إصدار (404)$detail — الأسباب المحتملة:\n" +
+                "• لم يتم نشر أي Release على GitHub بعد (تأكد إن release.yml اشتغل ونجح)\n" +
+                "• اسم المستودع (owner/repo) المبني بالتطبيق غلط أو المستودع انسمّى اسم تاني\n" +
+                "• المستودع خاص (Private) — الـ API بيرجع 404 دايماً بهاي الحالة لأنه بدون توكن دخول، فلازم يصير المستودع عام (Public) أو يتخزن ملف التحديثات بمكان تاني ما بيحتاج تسجيل دخول"
+        }
+        return "الخادم أعاد رمز الحالة $status"
     }
 
     private fun parseManifest(raw: String): UpdateManifest? = try {
