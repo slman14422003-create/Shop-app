@@ -1,7 +1,6 @@
 package com.shopmanager.app.data.updates
 
 import android.content.Context
-import com.shopmanager.app.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -24,15 +23,25 @@ object UpdateChecker {
 
     private const val TIMEOUT_MS = 12_000
 
-    /** The GitHub Releases API URL for this exact repo, built automatically
-     * from BuildConfig.GITHUB_REPO — the env var GitHub Actions sets on
-     * every CI build (see app/build.gradle.kts). Empty when GITHUB_REPO is
-     * empty (a local/non-CI build), same "not configured yet" state as
-     * before. This is what "رابط بجيتهاب ريليس" means in practice: nobody
-     * ever has to paste a URL anywhere — the app already knows its own
-     * repo at build time. */
+    // MANUAL BUILDS: hardcoded to the dedicated updates repo, since you're
+    // now building the APK by hand (not through GitHub Actions) — there's
+    // no GITHUB_RUN_NUMBER/GITHUB_REPOSITORY env var at build time to fill
+    // BuildConfig.GITHUB_REPO automatically, so it would've stayed blank
+    // forever and this whole check would've always failed with "لم يتم
+    // إعداد رابط التحديثات بعد". This repo is SEPARATE from wherever your
+    // actual app source lives — it only ever needs to hold Releases (tag +
+    // an .apk asset), nothing else, and it must stay Public (see the 404
+    // explanation from earlier — a private repo 404s here no matter what).
+    private const val UPDATES_REPO = "slman14422003-create/Shop-app-updates"
+
+    /** The GitHub Releases API URL for the dedicated updates repo (see
+     * [UPDATES_REPO] above). Every time you publish a new Release there
+     * (tag ending in a number + an .apk asset — any name works, see
+     * [parseGitHubRelease]), this is what the app reads to notice it and
+     * offer the download — no manifest URL ever needs typing into the
+     * admin panel by hand. */
     fun defaultManifestUrl(): String =
-        if (BuildConfig.GITHUB_REPO.isBlank()) "" else "https://api.github.com/repos/${BuildConfig.GITHUB_REPO}/releases/latest"
+        "https://api.github.com/repos/$UPDATES_REPO/releases/latest"
 
     suspend fun check(context: Context, manifestUrl: String): UpdateCheckResult = withContext(Dispatchers.IO) {
         val current = AppVersionInfo.current(context)
@@ -85,9 +94,11 @@ object UpdateChecker {
     // instead of just the number:
     //   1. The repo has never published a GitHub Release yet (the
     //      release.yml workflow hasn't successfully run to completion).
-    //   2. The owner/repo name baked into the build (BuildConfig.GITHUB_REPO,
-    //      i.e. GITHUB_REPOSITORY at CI build time) is wrong or the repo
-    //      was renamed/moved since this APK was built.
+    //   2. The owner/repo name hardcoded into the build (UPDATES_REPO
+    //      above) is wrong, or the repo got renamed/deleted since — this
+    //      no longer comes from CI, it's a plain constant in this file now
+    //      (see [defaultManifestUrl]) so it only ever changes if edited
+    //      here directly.
     //   3. The repo is PRIVATE. This is the one that looks identical to
     //      "no releases yet" from a 404 alone but has a different fix:
     //      GitHub's API returns 404 (never 403) for private repos to
@@ -148,17 +159,17 @@ object UpdateChecker {
     }
 
     /** GitHub's own `GET /repos/{owner}/{repo}/releases/latest` response
-     * shape — this is what "رابط بجيتهاب ريليس" resolves to now (see
-     * [defaultManifestUrl]/BuildConfig.GITHUB_REPO), so no manifest.json
-     * ever needs hosting or hand-editing: the release.yml workflow already
-     * publishes shop-manager-release.apk as a release asset on every push
-     * to main, and this reads that release directly.
+     * shape — this is what [defaultManifestUrl]/[UPDATES_REPO] resolves
+     * to. You publish a Release by hand on that repo (any tag, any .apk
+     * asset name — see the loop below) and this reads it directly; no
+     * manifest.json ever needs hosting anywhere.
      *
-     * Version comparison: release.yml tags every build `v1.0.<run_number>`
-     * and app/build.gradle.kts now sets this same app's own versionCode to
-     * that identical run number (see the comment there) — so the trailing
-     * number in `tag_name` *is* directly comparable to [AppVersion.code]
-     * with no separate version field GitHub's API doesn't provide.
+     * Version comparison: since releases are manual now, YOU pick the
+     * tag (e.g. "v1.0.3") and YOU set MANUAL_VERSION_CODE in
+     * app/build.gradle.kts (e.g. 3) — the trailing number after the last
+     * "." in the tag must match that build's versionCode exactly, or the
+     * app either won't notice the update or will nag about it forever
+     * (see the long comment on MANUAL_VERSION_CODE in build.gradle.kts).
      */
     private fun parseGitHubRelease(json: JSONObject): UpdateManifest? {
         val tagName = json.optString("tag_name", "")
