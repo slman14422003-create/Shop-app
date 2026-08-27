@@ -112,7 +112,17 @@ fun DashboardScreen(
         (debtRows + materialRows).sortedByDescending { it.timestamp }.take(6)
     }
 
-    Scaffold { padding ->
+    Scaffold(
+        // Edge-to-edge: the status bar is transparent (see
+        // SetSystemBarsColor/MainActivity) and DashboardHeader below draws
+        // its own liquid-glass panel all the way up to the true top of the
+        // window, padding its *content* down manually — so this Scaffold
+        // must not reserve top space itself, or the header would be pushed
+        // down a second time, leaving a plain gap above it instead of one
+        // continuous glass surface. Bottom/horizontal safe-area insets
+        // (gesture nav bar, cutouts) are kept as-is.
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+    ) { padding ->
         PullToRefreshContent(
             isRefreshing = debtsRefreshing || materialsRefreshing,
             onRefresh = { debtsViewModel.refresh(); materialsViewModel.refresh() },
@@ -293,6 +303,14 @@ private fun DashboardHeader(onOpenSettings: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .liquidGlassSurface(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+            // The glass panel (background/border above) already fills this
+            // Box's full bounds, which now extend up behind the
+            // transparent status bar; this only pushes the *content*
+            // (greeting/title/settings button) down far enough to clear
+            // the status bar icons, so it reads as one continuous glass
+            // surface from the true top of the screen instead of a seam
+            // between the system bar and the header.
+            .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
