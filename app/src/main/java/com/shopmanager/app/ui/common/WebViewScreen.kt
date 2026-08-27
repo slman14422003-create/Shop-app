@@ -60,6 +60,13 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
     val isDark = isSystemInDarkTheme()
 
     Scaffold(
+        // Off-pager screen (no bottom nav bar of its own) — the outer app
+        // Scaffold already reserves the real bottom/horizontal safe-area
+        // space one level up in NavHost's padding, so this Scaffold's own
+        // content insets are zeroed to avoid reserving that same space
+        // twice. The TopAppBar below still handles the status bar inset
+        // entirely on its own regardless of this setting.
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0.dp),
         topBar = {
             TopAppBar(
                 title = { Text(title, fontWeight = FontWeight.Bold) },
