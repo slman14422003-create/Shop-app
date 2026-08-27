@@ -63,7 +63,15 @@ fun Modifier.liquidGlassSurface(
     // content behind it, instead of a flat bar glued to the screen edge.
     // 0.dp keeps the previous flush look for callers that still want it
     // (e.g. a bar that's meant to sit flat against another surface).
-    elevation: Dp = 14.dp
+    elevation: Dp = 14.dp,
+    // "زجاج سائل مذهل": an extra diagonal specular streak that sweeps
+    // across the panel on a slow loop, like light catching a curved sheet
+    // of glass — on top of the existing drift highlight, not replacing
+    // it. Off by default so every existing header keeps today's exact
+    // look; the main Dashboard header (the app's single most-seen surface)
+    // opts in explicitly below. Degrades the same way as `drift` on LOW
+    // tier: a single fixed streak position, no per-frame animation.
+    sheen: Boolean = false
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
@@ -80,6 +88,22 @@ fun Modifier.liquidGlassSurface(
         value
     }
 
+    // Runs 0f→1f once every few seconds, forever, only when `sheen` is
+    // requested and the device can afford it. A completely separate
+    // transition/period from `drift` above so the two visibly don't move
+    // in lockstep — that's what reads as "light moving through liquid"
+    // rather than one single effect.
+    val sheenProgress: Float? = if (sheen && !isLowTier) {
+        val transition = rememberInfiniteTransition(label = "liquidGlassSheen")
+        val value by transition.animateFloat(
+            initialValue = -0.35f,
+            targetValue = 1.35f,
+            animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing), RepeatMode.Restart),
+            label = "liquidGlassSheenValue"
+        )
+        value
+    } else null
+
     return this
         .let {
             if (elevation > 0.dp) it.shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
@@ -87,15 +111,15 @@ fun Modifier.liquidGlassSurface(
         }
         .clip(shape)
         .background(baseBrush)
-        // PERF: drawWithCache (not drawWithContent) so the three Brush
-        // objects below are only rebuilt when `drift` or the surface's
-        // `size` actually change — not on every recomposition. On
+        // PERF: drawWithCache (not drawWithContent) so the Brush objects
+        // below are only rebuilt when `drift`/`sheenProgress` or the
+        // surface's `size` actually change — not on every recomposition. On
         // STANDARD/HIGH tier drift changes every animation frame anyway, so
         // this is a wash there; on LOW tier drift is a fixed constant (see
         // above), so this is where it actually pays off: a header sitting
         // behind a live Firestore-backed list (which can recompose often on
         // any data change, unrelated to the header itself) reallocates
-        // three gradient Brushes on every one of those passes without this,
+        // these gradient Brushes on every one of those passes without this,
         // and zero extra times with it.
         .drawWithCache {
             val w = size.width
@@ -115,6 +139,25 @@ fun Modifier.liquidGlassSurface(
                 startY = 0f,
                 endY = h * 0.12f
             )
+            // A narrow, angled band of light — three stops (transparent →
+            // bright → transparent) offset diagonally by `progress` so it
+            // reads as a single streak of light gliding across the panel,
+            // the same way a phone screen's reflection moves across a
+            // curved glass surface when it tilts. `null` (LOW tier / sheen
+            // not requested) skips building this brush entirely.
+            val sheenBrush = sheenProgress?.let { progress ->
+                val center = w * progress
+                val bandWidth = w * 0.22f
+                Brush.linearGradient(
+                    colorStops = arrayOf(
+                        0f to Color.White.copy(alpha = 0f),
+                        0.5f to Color.White.copy(alpha = 0.16f),
+                        1f to Color.White.copy(alpha = 0f)
+                    ),
+                    start = Offset(center - bandWidth, 0f),
+                    end = Offset(center + bandWidth, h)
+                )
+            }
             onDrawWithContent {
                 // Content (text/icons) drawn first so every highlight below
                 // is layered strictly on top of the surface itself — never
@@ -124,6 +167,7 @@ fun Modifier.liquidGlassSurface(
                 drawRect(brush = topHighlight)
                 drawRect(brush = glint)
                 drawRect(brush = topEdge)
+                if (sheenBrush != null) drawRect(brush = sheenBrush)
             }
         }
         .border(1.dp, Color.White.copy(alpha = 0.22f), shape)
