@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -94,7 +95,7 @@ fun DebtsScreen(
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape),
+                modifier = Modifier.liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
                 actions = {
                     GlassIconButton(
                         icon = Icons.Default.Share,
