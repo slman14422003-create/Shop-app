@@ -17,12 +17,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -395,50 +397,49 @@ private fun ShopManagerApp(
     val performanceTier = LocalPerformanceTier.current
     val isLowTier = performanceTier == PerformanceTier.LOW
 
-    Scaffold(
-        // Edge-to-edge: this outer Scaffold has no topBar of its own — the
-        // real per-screen header lives inside NavHost below (either a real
-        // TopAppBar, which pads itself for the status bar automatically,
-        // or DashboardScreen/MaterialsScreen's own liquid-glass header,
-        // which does the same manually). If this Scaffold also reserved
-        // top inset space here, every screen would get pushed down a
-        // second time, leaving a plain gap above its header instead of the
-        // glass bleeding up to the true top of the screen. Bottom/
-        // horizontal safe-area insets are kept, since screens with no
-        // bottomBar of their own (Settings, person detail, etc.) still
-        // need them to avoid sitting behind the gesture/nav bar.
-        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
-        // "الشريط السفلي العائم" (One UI 8.5-style floating bottom nav):
-        // this used to be an edge-to-edge NavigationBar pinned flush to the
-        // bottom of the screen (matched to colorScheme.background to avoid
-        // a seam with the content above it — see the old comment this
-        // replaced). FloatingBottomNav (ui/common/FloatingBottomNav.kt) is
-        // a self-contained glass capsule with its own margin on every
-        // side, so it floats above whatever's behind it instead of sitting
-        // flush against the edge — no seam-matching needed here any more
-        // because there's no shared edge left to seam against. Left
-        // transparent/background-less on purpose so the app's own
-        // background color shows through the margins around the capsule,
-        // which is what makes it read as floating rather than just a
-        // smaller bar.
-        bottomBar = {
-            if (showBottomBar) {
-                FloatingBottomNav(
-                    items = listOf(
-                        BottomNavItem(Icons.Default.Home, "الرئيسية"),
-                        BottomNavItem(Icons.Default.AttachMoney, "الديون"),
-                        BottomNavItem(Icons.Default.Inventory2, "المواد والأسعار")
-                    ),
-                    selectedIndex = pagerState.currentPage,
-                    onSelect = { page -> openPager(page) }
-                )
-            }
-        }
-    ) { padding ->
+    // ROOT FIX ("الشريط العائم خلفيته لسه بيضاء/سوداء"): a Scaffold(bottomBar
+    // = ...) was the actual root cause, not a styling detail inside
+    // FloatingBottomNav. Two things about Scaffold made a flat white/black
+    // rectangle unavoidable no matter what color/transparency was tried on
+    // the bar itself:
+    //  1) Scaffold paints its own `containerColor` (default
+    //     colorScheme.background) behind whatever is in the bottomBar slot.
+    //  2) Scaffold shrinks NavHost's content to stop short of that slot
+    //     (via the `padding` it hands down), so there was never any real
+    //     page content behind the bar's transparent side margins either —
+    //     just empty space over that flat Scaffold color.
+    // Both of those were true regardless of FloatingBottomNav's own
+    // background, so nothing changed there could ever fix it. This now
+    // uses a plain Box instead of Scaffold: NavHost fills the *entire*
+    // screen (see the pager tabs' own contentWindowInsets below — Dashboard/
+    // Debts/Materials already reserve their own bottom safe-area space, so
+    // no double-padding), and FloatingBottomNav is layered on top as a true
+    // overlay via Modifier.align(Alignment.BottomCenter). The margins
+    // around the pill are now genuinely transparent over the live page
+    // (list rows, cards) scrolling underneath — never a separately-painted
+    // rectangle.
+    Box(Modifier.fillMaxSize()) {
         NavHost(
             navController = navController,
             startDestination = ROUTE_MAIN_PAGER,
-            modifier = androidx.compose.ui.Modifier.padding(padding),
+            // Horizontal safe-area (cutouts/rounded corners) always
+            // applies. Bottom safe-area only applies here when there's no
+            // floating nav on screen (Settings, person detail, etc.) —
+            // when the pager IS showing, Dashboard/Debts/Materials each
+            // already reserve their own bottom inset internally (see their
+            // own `contentWindowInsets`), and reserving it a second time
+            // here is exactly what used to create the empty flat-colored
+            // strip behind the bar in the first place.
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .then(
+                    if (!showBottomBar) {
+                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    } else {
+                        Modifier
+                    }
+                ),
             // PERF/FEEL: LOW tier keeps this at zero cost (no transition at
             // all — the fastest a screen change can be). STANDARD/HIGH pairs
             // a fade with a short, subtle horizontal slide instead of the
@@ -558,13 +559,31 @@ private fun ShopManagerApp(
                 }
             }
         }
+
+        // Drawn AFTER (so visually on top of) NavHost above — a real
+        // overlay, not a layout slot with its own painted background. This
+        // is the piece that actually fixes the white/black rectangle: the
+        // pill now sits directly over whichever tab is currently showing,
+        // so its transparent margins reveal that tab's real content.
+        if (showBottomBar) {
+            FloatingBottomNav(
+                items = listOf(
+                    BottomNavItem(Icons.Default.Home, "الرئيسية"),
+                    BottomNavItem(Icons.Default.AttachMoney, "الديون"),
+                    BottomNavItem(Icons.Default.Inventory2, "المواد والأسعار")
+                ),
+                selectedIndex = pagerState.currentPage,
+                onSelect = { page -> openPager(page) },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     }
 
     // The confirmation dialog a tapped notification opens the app to show
     // ("تم تسديد الدين", "عميل جديد", "قائمة المشتريات"). Rendered as a
-    // sibling of the Scaffold above (an AlertDialog is its own system
-    // window, not part of that layout) so it appears on top regardless of
-    // which tab openPager() just switched to.
+    // sibling of the Box above (an AlertDialog is its own system window,
+    // not part of that layout) so it appears on top regardless of which
+    // tab openPager() just switched to.
     pendingNotificationAction?.let { action ->
         when (action) {
             is NotificationAction.DebtPaid -> AlertDialog(
