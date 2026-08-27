@@ -40,7 +40,7 @@ class DailyBackupWorker(appContext: Context, params: WorkerParameters) :
         FirebaseModule.init(applicationContext)
 
         return try {
-            BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository())
+            BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository(), BackupKind.DAILY)
             Result.success()
         } catch (e: Exception) {
             Result.retry()
@@ -96,8 +96,14 @@ class InstantBackupWorker(appContext: Context, params: WorkerParameters) :
     override suspend fun doWork(): Result {
         FirebaseModule.init(applicationContext)
         return try {
-            BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository())
+            BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository(), BackupKind.INSTANT)
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // A newer edit replaced this one (see requestNow's REPLACE
+            // policy below) — this is WorkManager cancelling us on
+            // purpose, not a real failure, so it must propagate rather
+            // than be swallowed into a retry/failure Result.
+            throw e
         } catch (e: Exception) {
             // A single missed instant backup is not worth surfacing or
             // even retrying aggressively — the next add (or the daily
