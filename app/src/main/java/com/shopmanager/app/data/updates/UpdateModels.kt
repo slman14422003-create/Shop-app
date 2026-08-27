@@ -28,9 +28,11 @@ data class UpdateManifest(
 )
 
 /** The current app's own version, read from PackageManager rather than
- * BuildConfig — this project doesn't have android.buildFeatures.buildConfig
- * turned on, and reading it from the installed package info works exactly
- * the same and needs no build-file change. */
+ * BuildConfig.VERSION_CODE/VERSION_NAME — works identically and needs no
+ * build-file change to keep working. (BuildConfig itself is enabled now,
+ * see app/build.gradle.kts, but only for GITHUB_REPO below — reading the
+ * app's own version through PackageManager was already correct and is
+ * left as-is.) */
 data class AppVersion(val code: Long, val name: String)
 
 object AppVersionInfo {
