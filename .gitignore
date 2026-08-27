@@ -8,3 +8,12 @@
 /captures
 .externalNativeBuild
 .cxx
+
+# Play Store release signing key — never commit this. Losing it means
+# this app can never be updated on the Play Store again under the same
+# listing; leaking it means anyone who has it can publish updates that
+# look like they come from you. Back the whole keystore/ folder up
+# somewhere private and durable (a password manager, an encrypted drive)
+# outside of git.
+/keystore/*.jks
+/keystore/*.properties.local
