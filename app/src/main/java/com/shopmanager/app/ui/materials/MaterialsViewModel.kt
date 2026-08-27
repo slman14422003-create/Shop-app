@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -51,9 +52,12 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         .catch { _hasSyncError.value = true; emit(emptyMap()) }
         .distinctUntilChanged()
 
+    // Same fix as DebtsViewModel.uiState: debounce the cache→server settle
+    // burst on cold start so the dashboard's "قائمة النواقص" counter counts
+    // up once to the real total instead of jittering through partial ones.
     val uiState: StateFlow<MaterialsUiState> = combine(materialsFlow, pricesFlow) { materials, prices ->
         MaterialsUiState(materials = materials, prices = prices, isLoading = false)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MaterialsUiState())
+    }.debounce(200).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MaterialsUiState())
 
     val catalog: StateFlow<List<MaterialCatalogItem>> = repo.listenCatalog()
         .catch { emit(emptyList()) }

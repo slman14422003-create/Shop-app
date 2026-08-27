@@ -48,6 +48,7 @@ import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -240,6 +241,19 @@ private fun MaterialsHeader(tab: Int, onTabChange: (Int) -> Unit, onShare: () ->
  */
 @Composable
 private fun SegmentedTabs(selectedIndex: Int, options: List<String>, onSelect: (Int) -> Unit) {
+    // BUG FIXED (unreadable selected label): this used to color the selected
+    // segment's text with MaterialTheme.colorScheme.primary. That's correct
+    // for surfaces that actually flip with the theme, but the selected
+    // segment's pill background here is a fixed near-white "glass" surface
+    // in BOTH light and dark mode (see the .background() below) — while
+    // colorScheme.primary itself flips to a light/pale tone in dark mode
+    // (meant to read against a dark background, not a white pill). Pale
+    // text on a near-white pill is exactly the low-contrast, hard-to-read
+    // label reported. The brand gradient's start color is deliberately the
+    // same in both themes (see ShopManagerTheme/LocalBrandGradientColors),
+    // so using it here keeps the selected label a consistent, legible dark
+    // accent color against the white pill no matter which theme is active.
+    val selectedLabelColor = LocalBrandGradientColors.current.first()
     Row(
         Modifier
             .fillMaxWidth()
@@ -287,8 +301,8 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<String>, onSelect: (
             ) {
                 Text(
                     label,
-                    color = if (selected) MaterialTheme.colorScheme.primary else BrandOnGradient,
-                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selected) selectedLabelColor else BrandOnGradient.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
                 )
             }
