@@ -59,6 +59,7 @@ import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.data.performance.resolvePerformanceTier
 import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.ui.admin.AdminPanelScreen
 import com.shopmanager.app.ui.dashboard.DashboardScreen
 import com.shopmanager.app.ui.debts.DebtsScreen
 import com.shopmanager.app.ui.debts.DebtsViewModel
@@ -91,6 +92,12 @@ private const val PAGE_DASHBOARD = 0
 private const val PAGE_DEBTS = 1
 private const val PAGE_MATERIALS = 2
 private const val ROUTE_SETTINGS = "settings"
+// لوحة المسؤول السرية: not exposed through any visible nav item — reached
+// only via the hidden dot on the dashboard header + the PIN dialog it
+// opens (see DashboardScreen). Deliberately not shown in the bottom bar
+// or Settings so a regular user has no path to it except knowing it's
+// there.
+private const val ROUTE_ADMIN = "adminPanel"
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
 private const val ROUTE_HELP = "help"
 private const val ROUTE_PRIVACY = "privacy"
@@ -234,7 +241,7 @@ class MainActivity : ComponentActivity() {
                     // nav bar stays transparent too, so it's the same
                     // continuous brand gradient as the rest of the splash
                     // instead of a mismatched solid strip at the bottom edge.
-                    navigationBarColor = if (isReady) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    navigationBarColor = if (isReady) MaterialTheme.colorScheme.background else Color.Transparent,
                     statusBarDarkIcons = isReady && !unlocked && !isDark,
                     navigationBarDarkIcons = if (isReady) !isDark else false
                 )
@@ -395,30 +402,29 @@ private fun ShopManagerApp(
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         bottomBar = {
             if (showBottomBar) {
-                // BUG FIXED (black hairline above the bottom nav bar):
-                // NavigationBar's own default containerColor is a
-                // *tonally-elevated* surface (colorScheme.surface tinted
-                // with a bit of the primary color for elevation), not
-                // plain colorScheme.surface — while the real system
-                // navigation bar behind it (see SetSystemBarsColor above)
-                // is set to plain colorScheme.surface with no elevation
-                // tint. Those are two subtly different colors meeting at
-                // the same edge, and in dark theme that difference is
-                // dark enough to read as a hard black line separating the
-                // screen content from the nav bar.
-                //
-                // Pinning containerColor to that exact surface color was
-                // only half the fix: NavigationBar's default tonalElevation
-                // (3dp) still applies its own primary-tinted overlay ON
-                // TOP of whatever color is passed in — including a color
-                // that's already an exact match — so the rendered bar was
-                // still a shade off from the plain system nav bar even
-                // after that first fix. Explicitly zeroing tonalElevation
-                // stops that overlay from being applied at all, so the two
-                // colors are now identical pixel-for-pixel with nothing
-                // left to seam.
+                // BUG FIXED FOR REAL THIS TIME (hairline/black strip above
+                // the bottom nav bar): two earlier attempts here both
+                // treated this as an *elevation* problem (tonalElevation
+                // overlay, double bottom-inset padding) and both were only
+                // half right, because the actual mismatch was never the
+                // elevation tint — it was that NavigationBar was pinned to
+                // colorScheme.surface while every screen's own canvas
+                // (DashboardScreen/DebtsScreen/MaterialsScreen's Scaffold,
+                // and this app's Material color scheme itself — see
+                // Palette.kt) deliberately uses colorScheme.background, a
+                // *different, slightly darker* color from surface (used
+                // for cards/bars). tonalElevation=0 removed the tint but
+                // could never fix a mismatch between two different base
+                // colors — content ends in `background`, the bar began in
+                // `surface`, and that boundary is exactly where the line
+                // was. Matching the bar to `background` — the same color
+                // the content directly above it actually is — removes the
+                // seam at the source instead of tuning it closer. The
+                // system navigation bar color (SetSystemBarsColor above)
+                // is matched to `background` too so every layer along that
+                // bottom edge is the same pixel value.
                 NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
+                    containerColor = MaterialTheme.colorScheme.background,
                     tonalElevation = 0.dp
                 ) {
                     NavigationBarItem(
@@ -497,7 +503,8 @@ private fun ShopManagerApp(
                             materialsViewModel = materialsViewModel,
                             onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
-                            onNavigateToMaterials = { openPager(PAGE_MATERIALS) }
+                            onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
+                            onOpenAdmin = { navController.navigate(ROUTE_ADMIN) }
                         )
                         PAGE_DEBTS -> DebtsScreen(
                             viewModel = debtsViewModel,
@@ -526,6 +533,13 @@ private fun ShopManagerApp(
                     materialsViewModel = materialsViewModel,
                     onOpenHelp = { navController.navigate(ROUTE_HELP) },
                     onOpenPrivacyPolicy = { navController.navigate(ROUTE_PRIVACY) }
+                )
+            }
+            composable(ROUTE_ADMIN) {
+                AdminPanelScreen(
+                    onBack = { navController.popBackStack() },
+                    debtsViewModel = debtsViewModel,
+                    materialsViewModel = materialsViewModel
                 )
             }
             composable(ROUTE_HELP) {
