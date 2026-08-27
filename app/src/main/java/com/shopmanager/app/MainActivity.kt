@@ -237,12 +237,19 @@ class MainActivity : ComponentActivity() {
                 // ordinary light/dark surface color like any other screen.
                 val isDark = rememberIsDarkTheme(themeMode)
                 SetSystemBarsColor(
-                    // While the splash is showing there's no MaterialTheme
-                    // surface color underneath it yet worth matching — the
-                    // nav bar stays transparent too, so it's the same
-                    // continuous brand gradient as the rest of the splash
-                    // instead of a mismatched solid strip at the bottom edge.
-                    navigationBarColor = if (isReady) MaterialTheme.colorScheme.background else Color.Transparent,
+                    // "الشريط السفلي العائم بدون الخلفية السوداء": this used
+                    // to switch to a solid MaterialTheme.colorScheme.background
+                    // once the splash finished, which on the dark theme
+                    // (near-black DarkBackground) painted a flat black strip
+                    // across the whole gesture-bar area — sitting directly
+                    // under FloatingBottomNav's transparent side margins, so
+                    // the floating pill visibly had a black rectangle behind
+                    // it instead of the page just continuing through. The nav
+                    // bar now stays fully transparent always, exactly like
+                    // the status bar already does, so FloatingBottomNav's
+                    // margins show the real page content/background instead
+                    // of a separately-painted solid color.
+                    navigationBarColor = Color.Transparent,
                     statusBarDarkIcons = isReady && !unlocked && !isDark,
                     navigationBarDarkIcons = if (isReady) !isDark else false
                 )
