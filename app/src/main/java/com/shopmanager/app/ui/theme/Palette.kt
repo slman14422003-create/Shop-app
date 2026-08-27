@@ -198,6 +198,30 @@ internal fun paletteColorsFor(palette: AppColorPalette): PaletteColors = when (p
     )
 }
 
+/**
+ * "لوحة الألوان" quality fix: [lightColorScheme]/[darkColorScheme] only had
+ * primary/secondary/background/surface/surfaceVariant/error overridden per
+ * palette — every other token Compose Material3 uses (surfaceTint, outline,
+ * outlineVariant, tertiary, inverseSurface, and the whole
+ * surfaceContainer/Low/High family that Card, Menu, Dialog, and
+ * BottomSheet default backgrounds pull from) silently fell back to
+ * [lightColorScheme]/[darkColorScheme]'s hardcoded *baseline Material
+ * purple* defaults. That meant every card, dialog, and outline in the app
+ * carried a faint baseline-purple tint no matter which of the 20 palettes
+ * (Emerald, Crimson, Forest, ...) was actually selected — the palette
+ * picker changed the header/buttons but the app's own neutral surfaces
+ * quietly stayed purple-tinted underneath. Every token below is now
+ * derived from that palette's own primary color instead, so choosing e.g.
+ * Emerald gives an app that's tinted green throughout, not green buttons
+ * on a purple-neutral shell.
+ */
+private fun blend(base: Color, tint: Color, amount: Float): Color = Color(
+    red = base.red + (tint.red - base.red) * amount,
+    green = base.green + (tint.green - base.green) * amount,
+    blue = base.blue + (tint.blue - base.blue) * amount,
+    alpha = 1f
+)
+
 internal fun lightSchemeFor(p: PaletteColors): ColorScheme = lightColorScheme(
     primary = p.primaryLight,
     onPrimary = Color.White,
@@ -206,10 +230,27 @@ internal fun lightSchemeFor(p: PaletteColors): ColorScheme = lightColorScheme(
     secondary = p.secondaryLight,
     onSecondary = Color.White,
     secondaryContainer = p.secondaryContainerLight,
+    onSecondaryContainer = p.secondaryLight,
+    tertiary = p.secondaryLight,
+    onTertiary = Color.White,
+    tertiaryContainer = p.secondaryContainerLight,
     background = LightBackground,
+    onBackground = Color(0xFF1C1B1F),
     surface = LightSurface,
+    onSurface = Color(0xFF1C1B1F),
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightOnSurfaceVariant,
+    surfaceTint = p.primaryLight,
+    outline = blend(LightOnSurfaceVariant, p.primaryLight, 0.18f),
+    outlineVariant = blend(LightSurfaceVariant, p.primaryLight, 0.10f),
+    inverseSurface = Color(0xFF2F2D33),
+    inverseOnSurface = Color(0xFFF4EFF4),
+    inversePrimary = p.primaryContainerLight,
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = blend(LightSurface, p.primaryLight, 0.02f),
+    surfaceContainer = blend(LightSurface, p.primaryLight, 0.05f),
+    surfaceContainerHigh = blend(LightSurface, p.primaryLight, 0.08f),
+    surfaceContainerHighest = blend(LightSurface, p.primaryLight, 0.11f),
     error = DangerRed,
 )
 
@@ -221,10 +262,27 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme = darkColorScheme(
     secondary = p.secondaryDark,
     onSecondary = p.onSecondaryDark,
     secondaryContainer = p.secondaryContainerDark,
+    onSecondaryContainer = Color.White,
+    tertiary = p.secondaryDark,
+    onTertiary = p.onSecondaryDark,
+    tertiaryContainer = p.secondaryContainerDark,
     background = DarkBackground,
+    onBackground = Color(0xFFE7E2EA),
     surface = DarkSurface,
+    onSurface = Color(0xFFE7E2EA),
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkOnSurfaceVariant,
+    surfaceTint = p.primaryDark,
+    outline = blend(DarkOnSurfaceVariant, p.primaryDark, 0.22f),
+    outlineVariant = blend(DarkSurfaceVariant, p.primaryDark, 0.14f),
+    inverseSurface = Color(0xFFE7E2EA),
+    inverseOnSurface = Color(0xFF2F2D33),
+    inversePrimary = p.primaryContainerDark,
+    surfaceContainerLowest = blend(DarkBackground, Color.Black, 0.35f),
+    surfaceContainerLow = blend(DarkSurface, p.primaryDark, 0.04f),
+    surfaceContainer = blend(DarkSurface, p.primaryDark, 0.07f),
+    surfaceContainerHigh = blend(DarkSurface, p.primaryDark, 0.11f),
+    surfaceContainerHighest = blend(DarkSurface, p.primaryDark, 0.15f),
     error = Color(0xFFFF6B6B),
 )
 
