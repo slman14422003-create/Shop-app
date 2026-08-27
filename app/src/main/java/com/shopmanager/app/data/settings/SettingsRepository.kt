@@ -55,6 +55,24 @@ class SettingsRepository(context: Context) {
         }.getOrDefault(PerformanceMode.AUTO)
         set(value) = prefs.edit().putString(KEY_PERFORMANCE_MODE, value.name).apply()
 
+    /** "رابط فحص التحديثات" — a JSON manifest URL (versionCode/versionName/
+     * apkUrl/notes) the normal-user "تحقق من التحديثات" button in Settings
+     * reads from. Set only from the hidden developer panel (لوحة المسؤول
+     * السرية) — a regular user never sees or edits this, they just tap
+     * "تحقق من التحديثات" and this URL is what gets checked. Empty by
+     * default so a fresh install with no manifest configured yet fails
+     * quietly/gracefully instead of hitting a placeholder URL. */
+    var updateManifestUrl: String
+        get() = prefs.getString(KEY_UPDATE_MANIFEST_URL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_UPDATE_MANIFEST_URL, value.trim()).apply()
+
+    /** Timestamp (epoch millis) of the last time anyone — dev or user —
+     * successfully reached the update manifest, shown in the admin panel
+     * as a quick "is the update server even reachable" signal. */
+    var lastUpdateCheckAt: Long
+        get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
+
     val hasPin: Boolean get() = prefs.contains(KEY_PIN_HASH)
 
     fun setPin(pin: String) {
@@ -82,5 +100,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
         private const val KEY_PERFORMANCE_MODE = "performance_mode"
+        private const val KEY_UPDATE_MANIFEST_URL = "update_manifest_url"
+        private const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
     }
 }
