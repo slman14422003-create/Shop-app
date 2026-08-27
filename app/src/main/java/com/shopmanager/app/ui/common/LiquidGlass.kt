@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,7 +57,13 @@ import com.shopmanager.app.data.performance.PerformanceTier
 @Composable
 fun Modifier.liquidGlassSurface(
     shape: Shape,
-    baseBrush: Brush = BrandGradient.brush()
+    baseBrush: Brush = BrandGradient.brush(),
+    // "عائم" (floating, One UI 8.5-style): a soft drop shadow under the
+    // panel so it reads as a distinct floating glass layer above the
+    // content behind it, instead of a flat bar glued to the screen edge.
+    // 0.dp keeps the previous flush look for callers that still want it
+    // (e.g. a bar that's meant to sit flat against another surface).
+    elevation: Dp = 14.dp
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
@@ -74,6 +81,10 @@ fun Modifier.liquidGlassSurface(
     }
 
     return this
+        .let {
+            if (elevation > 0.dp) it.shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
+            else it
+        }
         .clip(shape)
         .background(baseBrush)
         // PERF: drawWithCache (not drawWithContent) so the three Brush
