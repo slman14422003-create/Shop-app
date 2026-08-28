@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,8 +42,13 @@ import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
+import com.shopmanager.app.ui.common.ShareFormatDialog
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.SuccessGreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -59,8 +65,11 @@ fun DebtsScreen(
     var isSaving by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<Person?>(null) }
     var payTarget by remember { mutableStateOf<Person?>(null) }
+    var showShareChoice by remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val brandColor = LocalBrandGradientColors.current.first().toArgb()
 
     // BUG FIXED ("زر عميل جديد صار تحت الشريط العائم"): the floating نav
     // bar is now an overlay drawn on top of this whole screen (see
@@ -112,14 +121,7 @@ fun DebtsScreen(
                     GlassIconButton(
                         icon = Icons.Default.Share,
                         contentDescription = "مشاركة",
-                        onClick = {
-                            val text = buildDebtsShareText(state.persons, state.totalAmount)
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, text)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "مشاركة كشف الديون"))
-                        },
+                        onClick = { showShareChoice = true },
                         modifier = Modifier.padding(end = 8.dp),
                         size = 36.dp
                     )
@@ -235,6 +237,34 @@ fun DebtsScreen(
                 }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { payTarget = null }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showShareChoice) {
+        ShareFormatDialog(
+            onDismiss = { showShareChoice = false },
+            onPickImage = {
+                // PERF: Canvas drawing moved off the main thread — see the
+                // matching note in MaterialsScreen's onPickImage.
+                scope.launch {
+                    val uri = withContext(Dispatchers.Default) {
+                        DebtsReportImage.generate(context, state.persons, state.totalAmount, brandColor)
+                    }
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "image/png"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "مشاركة كشف الديون"))
+                }
+            },
+            onPickText = {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, buildDebtsShareText(state.persons, state.totalAmount))
+                }
+                context.startActivity(Intent.createChooser(intent, "مشاركة كشف الديون"))
+            }
         )
     }
 }
