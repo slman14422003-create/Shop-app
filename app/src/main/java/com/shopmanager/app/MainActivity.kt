@@ -35,6 +35,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
@@ -418,7 +421,27 @@ private fun ShopManagerApp(
     // around the pill are now genuinely transparent over the live page
     // (list rows, cards) scrolling underneath — never a separately-painted
     // rectangle.
+    // BUG FIXED ("زر عميل جديد/مادة جديدة صار تحت الشريط"): a direct side
+    // effect of the overlay fix above. Previously the outer Scaffold's
+    // `padding` shrank NavHost so screens never even extended into the
+    // pill's area — a screen's own FloatingActionButton (bottom-end of ITS
+    // OWN Scaffold) naturally landed above the pill with no extra work.
+    // Now that NavHost fills the true screen height, each tab's FAB anchors
+    // to the *real* bottom edge same as the pill does — same strip, so the
+    // pill (drawn after, on top) covers most of it, leaving only the
+    // sliver that peeks out past the pill's own width.
+    // FIX: measure the pill's actual rendered height right where it's
+    // drawn (`onSizeChanged` below — real layout size, not a guessed
+    // constant) and thread it down via [LocalFloatingBottomNavHeight] so
+    // DebtsScreen/MaterialsScreen (the two tabs with a FAB) can pad their
+    // FAB, and every tab's list, clear of it by that exact amount.
+    val density = LocalDensity.current
+    var floatingNavHeight by remember { mutableStateOf(0.dp) }
+
     Box(Modifier.fillMaxSize()) {
+        CompositionLocalProvider(
+            LocalFloatingBottomNavHeight provides if (showBottomBar) floatingNavHeight else 0.dp
+        ) {
         NavHost(
             navController = navController,
             startDestination = ROUTE_MAIN_PAGER,
@@ -559,6 +582,7 @@ private fun ShopManagerApp(
                 }
             }
         }
+        } // CompositionLocalProvider
 
         // Drawn AFTER (so visually on top of) NavHost above — a real
         // overlay, not a layout slot with its own painted background. This
@@ -574,7 +598,17 @@ private fun ShopManagerApp(
                 ),
                 selectedIndex = pagerState.currentPage,
                 onSelect = { page -> openPager(page) },
-                modifier = Modifier.align(Alignment.BottomCenter)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    // Real measured layout height (margins included, since
+                    // this size is taken at FloatingBottomNav's own root —
+                    // see its Box in FloatingBottomNav.kt), converted from
+                    // px to dp with the current screen density. This is
+                    // what LocalFloatingBottomNavHeight above actually
+                    // reflects.
+                    .onSizeChanged { size ->
+                        floatingNavHeight = with(density) { size.height.toDp() }
+                    }
             )
         }
     }
