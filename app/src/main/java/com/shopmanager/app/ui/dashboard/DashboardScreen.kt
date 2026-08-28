@@ -35,6 +35,7 @@ import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GradientIconButton
+import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
@@ -148,9 +149,12 @@ fun DashboardScreen(
             onRefresh = { debtsViewModel.refresh(); materialsViewModel.refresh() },
             modifier = Modifier.padding(padding)
         ) {
+        // BUG FIXED: same as the other two pager tabs — the floating nav
+        // pill floats over this screen too, so its last card needs to
+        // clear the pill's real measured height, not just a flat 16dp.
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = 16.dp + LocalFloatingBottomNavHeight.current),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
