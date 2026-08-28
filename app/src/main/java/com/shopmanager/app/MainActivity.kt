@@ -75,6 +75,7 @@ import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BottomNavItem
 import com.shopmanager.app.ui.common.FloatingBottomNav
+import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
