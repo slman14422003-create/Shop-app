@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -64,14 +65,18 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
+import com.shopmanager.app.ui.common.ShareFormatDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppThemeMode
+import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.SuccessGreen
 import com.shopmanager.app.ui.theme.paletteColorsFor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -100,6 +105,8 @@ fun SettingsScreen(
     var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
     var performanceMode by remember { mutableStateOf(settings.performanceMode) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
+    var showExportShareChoice by remember { mutableStateOf(false) }
+    val brandColor = LocalBrandGradientColors.current.first().toArgb()
 
     // النسخ الاحتياطي التلقائي المحلي — silent daily local backup, restore
     // only from here or from the automatic "server unavailable" prompt.
@@ -432,19 +439,7 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(10.dp))
                     Button(
-                        onClick = {
-                            val text = buildBackupText(
-                                debtsState = debtsViewModel.uiState.value,
-                                materialsState = materialsViewModel.uiState.value,
-                                currency = currency
-                            )
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_SUBJECT, "نسخة احتياطية - إدارة المحل")
-                                putExtra(Intent.EXTRA_TEXT, text)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "مشاركة النسخة الاحتياطية"))
-                        },
+                        onClick = { showExportShareChoice = true },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                     ) {
@@ -455,43 +450,40 @@ fun SettingsScreen(
                 }
             }
 
-            // النسخ الاحتياطي التلقائي المحلي (silent daily local backup) — new feature
+            // النسخ الاحتياطي التلقائي المحلي (silent local backup) — new feature
             SettingsSection(title = "النسخ الاحتياطي التلقائي", icon = Icons.Default.SettingsBackupRestore) {
                 Text(
-                    "يأخذ التطبيق نسخة كاملة من بياناتك على هذا الجهاز كل يوم تلقائيًا وبصمت (بدون أي إشعار)، احتياطًا لفقدان البيانات. لا تُستعاد هذه النسخة إلا من هنا، أو إذا تعذّر الاتصال بالخادم.",
+                    "يحتفظ التطبيق دائمًا بآخر نسخة كاملة من بياناتك على هذا الجهاز فقط، تُحدَّث تلقائيًا وبصمت (بدون أي إشعار) بعد كل حفظ جديد — أي نسخة أقدم تُحذف فورًا لأنها لم تعد مطلوبة. لا تُستعاد هذه النسخة إلا من هنا، أو إذا تعذّر الاتصال بالخادم.",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(10.dp))
                 if (backups.isEmpty()) {
                     Text(
-                        "لا توجد نسخة بعد — ستُنشأ تلقائيًا خلال أول يوم من استخدام التطبيق.",
+                        "لا توجد نسخة بعد — ستُنشأ تلقائيًا مع أول حفظ.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 } else {
-                    Text(
-                        "آخر نسخة: ${formatBackupDate(backups.first().createdAt)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    backups.take(5).forEach { backup ->
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(formatBackupDate(backup.createdAt), style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    "${backup.personsCount} عميل، ${backup.materialsCount} مادة",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            OutlinedButton(onClick = { pendingRestore = backup }, enabled = !isRestoring) {
-                                Text("استعادة")
-                            }
+                    val backup = backups.first()
+                    Row(
+                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "آخر نسخة: ${formatBackupDate(backup.createdAt)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                "${backup.personsCount} عميل، ${backup.materialsCount} مادة",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(onClick = { pendingRestore = backup }, enabled = !isRestoring) {
+                            Text("استعادة")
                         }
                     }
                 }
@@ -617,6 +609,52 @@ fun SettingsScreen(
                 settings.currencySymbol = selected
                 AppSettingsState.setCurrency(selected)
                 showCurrencyDialog = false
+            }
+        )
+    }
+
+    if (showExportShareChoice && debtsViewModel != null && materialsViewModel != null) {
+        ShareFormatDialog(
+            onDismiss = { showExportShareChoice = false },
+            onPickImage = {
+                // PERF: this is the largest of the three reports (debts +
+                // materials combined), so moving the Canvas work off the
+                // main thread matters most here — same reasoning as
+                // MaterialsScreen/DebtsScreen's onPickImage.
+                val debtsState = debtsViewModel.uiState.value
+                val materialsState = materialsViewModel.uiState.value
+                scope.launch {
+                    val uri = withContext(Dispatchers.Default) {
+                        WholeAppReportImage.generate(
+                            context = context,
+                            persons = debtsState.persons,
+                            totalDebt = debtsState.totalAmount,
+                            materials = materialsState.materials,
+                            prices = materialsState.prices,
+                            currency = currency,
+                            brandColor = brandColor
+                        )
+                    }
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "image/png"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "مشاركة النسخة الاحتياطية"))
+                }
+            },
+            onPickText = {
+                val text = buildBackupText(
+                    debtsState = debtsViewModel.uiState.value,
+                    materialsState = materialsViewModel.uiState.value,
+                    currency = currency
+                )
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_SUBJECT, "نسخة احتياطية - إدارة المحل")
+                    putExtra(Intent.EXTRA_TEXT, text)
+                }
+                context.startActivity(Intent.createChooser(intent, "مشاركة النسخة الاحتياطية"))
             }
         )
     }
@@ -831,7 +869,8 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 
 private fun formatBackupDate(timestampMillis: Long): String =
     runCatching {
-        SimpleDateFormat("yyyy/MM/dd — HH:mm", Locale("ar")).format(java.util.Date(timestampMillis))
+        // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
+        SimpleDateFormat("yyyy/MM/dd — h:mm a", Locale("ar")).format(java.util.Date(timestampMillis))
     }.getOrDefault("—")
 
 private fun buildBackupText(
