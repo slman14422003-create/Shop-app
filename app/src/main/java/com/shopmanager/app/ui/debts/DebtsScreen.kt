@@ -37,6 +37,7 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassIconButton
+import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
@@ -60,6 +61,17 @@ fun DebtsScreen(
     var payTarget by remember { mutableStateOf<Person?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
+
+    // BUG FIXED ("زر عميل جديد صار تحت الشريط العائم"): the floating نav
+    // bar is now an overlay drawn on top of this whole screen (see
+    // MainActivity), not a Scaffold bottomBar that used to reserve its own
+    // clearance automatically. Without this, the FAB below anchors to this
+    // Scaffold's own bottom edge — which is the real screen edge now — and
+    // ends up sitting directly under the pill instead of above it. 16.dp
+    // is a small breathing-room gap on top of the pill's own real measured
+    // height (see LocalFloatingBottomNavHeight), not a guess at the pill's
+    // size itself.
+    val bottomBarClearance = LocalFloatingBottomNavHeight.current + 16.dp
 
     LaunchedEffect(message) {
         message?.let {
@@ -118,7 +130,8 @@ fun DebtsScreen(
             ExtendedFloatingActionButton(
                 onClick = { showAddDialog = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("عميل جديد") }
+                text = { Text("عميل جديد") },
+                modifier = Modifier.padding(bottom = bottomBarClearance)
             )
         }
     ) { padding ->
@@ -158,7 +171,13 @@ fun DebtsScreen(
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    // BUG FIXED: bottom inset bumped by the pill's real
+                    // height so the last row in the list can actually
+                    // scroll clear of it instead of stopping underneath.
+                    contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp, top = 4.dp,
+                        bottom = 4.dp + bottomBarClearance
+                    ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filtered, key = { it.id }) { person ->
