@@ -75,7 +75,8 @@ fun AdminPanelScreen(
     val lastCheckLabel = remember(settings.lastUpdateCheckAt) {
         val ts = settings.lastUpdateCheckAt
         if (ts == 0L) "لم يتم التحقق بعد"
-        else SimpleDateFormat("yyyy/MM/dd — HH:mm", Locale("ar")).format(java.util.Date(ts))
+        // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
+        else SimpleDateFormat("yyyy/MM/dd — h:mm a", Locale("ar")).format(java.util.Date(ts))
     }
 
     fun testManifestNow() {
