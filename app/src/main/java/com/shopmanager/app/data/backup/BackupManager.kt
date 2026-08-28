@@ -14,12 +14,21 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 /**
- * Fully local, on-device daily backup. No server involved, no notification
- * ever posted for it, no storage permission needed — snapshots live in the
+ * Fully local, on-device backup. No server involved, no notification ever
+ * posted for it, no storage permission needed — the snapshot lives in the
  * app's own private storage (`filesDir/backups`), the same place Android
- * already isolates for this app alone, so they're invisible in any file
- * manager and are wiped automatically only if the app itself is
+ * already isolates for this app alone, so it's invisible in any file
+ * manager and is wiped automatically only if the app itself is
  * uninstalled (same lifetime guarantee as everything else the app owns).
+ *
+ * Only ONE snapshot is ever kept on disk. Every [performBackup] call
+ * writes the new snapshot to its own new file first, then immediately
+ * deletes every other file in the backups directory (see
+ * [pruneOldBackups]). An older snapshot is never useful once a newer one
+ * exists — restoring always means "put back the most recent state this
+ * device saw" — so keeping a history around is just wasted device
+ * storage, and it's exactly what used to read as confusing ("why are
+ * there five of these") in Settings.
  *
  * Restoring is intentionally NEVER silent/automatic in the sense of
  * quietly overwriting Firestore on its own: it always requires either an
@@ -47,37 +56,6 @@ object BackupManager {
     private const val DIR_NAME = "backups"
     private const val LEGACY_PREFIX = "backup_"
     private const val SUFFIX = ".json"
-
-    /**
-     * BUG FIXED (silent backup deleting real history): before
-     * [InstantBackupWorker] existed, every snapshot came from
-     * [DailyBackupWorker] alone (~1/day), so a single "keep the newest 30
-     * files" cap really did mean "roughly a month of history" like the
-     * old comment here claimed. Once instant backups started firing after
-     * *every* add/edit of a material, a debt, a price, or anything else,
-     * a single busy day of normal shop use (dozens of edits) could by
-     * itself produce more than 30 files — which silently pruned away
-     * last week's/last month's daily snapshots to make room, even though
-     * nothing about *those* was actually old or unwanted. That's exactly
-     * what read as "saving a material for backup deletes the old backup
-     * and replaces it with just the material (or debt, or whatever) I
-     * just touched" — the frequent, low-value instant snapshots were
-     * evicting the sparse, high-value daily ones.
-     *
-     * Fix: daily and instant snapshots are now pruned against two
-     * completely independent caps (see [pruneOldBackups]), so no number
-     * of same-day instant backups can ever touch the daily/legacy
-     * history. Legacy pre-fix files (no kind prefix at all, from before
-     * this change existed) are counted against the daily cap, since they
-     * were all daily-worker output at the time.
-     */
-    private const val MAX_DAILY_KEPT = 30
-
-    /** Instant snapshots are a short-lived "last few seconds of edits"
-     * safety net, not a history — keeping a handful is enough to recover
-     * from a crash/restore right after editing, without letting a busy
-     * editing session balloon local storage or crowd out daily backups. */
-    private const val MAX_INSTANT_KEPT = 8
 
     private fun stampFormat() = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US)
 
@@ -130,7 +108,7 @@ object BackupManager {
         val file = File(backupDir(context), "${kind.filePrefix}${stampFormat().format(System.currentTimeMillis())}$SUFFIX")
         file.writeText(root.toString())
 
-        pruneOldBackups(context)
+        pruneOldBackups(context, keep = file)
     }
 
     fun listBackups(context: Context): List<BackupInfo> =
@@ -154,21 +132,14 @@ object BackupManager {
     fun hasAnyBackup(context: Context): Boolean = listBackups(context).isNotEmpty()
 
     /**
-     * Prunes daily/legacy and instant snapshots against two independent
-     * caps (see [MAX_DAILY_KEPT]/[MAX_INSTANT_KEPT] for why they must stay
-     * separate). A file with no recognized kind prefix is treated as
-     * legacy daily output, so upgrading the app never deletes backups a
-     * person already had before this fix existed.
+     * Deletes every backup file except [keep] (the one just written),
+     * regardless of kind (daily/instant/legacy) — only the newest
+     * snapshot is ever worth having on disk, see the class doc above.
      */
-    private fun pruneOldBackups(context: Context) {
-        val all = backupDir(context)
+    private fun pruneOldBackups(context: Context, keep: File) {
+        backupDir(context)
             .listFiles { f -> f.name.startsWith(LEGACY_PREFIX) && f.name.endsWith(SUFFIX) }
-            ?.toList() ?: return
-
-        val (instant, dailyAndLegacy) = all.partition { it.name.startsWith(BackupKind.INSTANT.filePrefix) }
-
-        instant.sortedByDescending { it.lastModified() }.drop(MAX_INSTANT_KEPT).forEach { it.delete() }
-        dailyAndLegacy.sortedByDescending { it.lastModified() }.drop(MAX_DAILY_KEPT).forEach { it.delete() }
+            ?.forEach { f -> if (f != keep) f.delete() }
     }
 
     /** Writes a chosen local snapshot back into Firestore, replacing what's
