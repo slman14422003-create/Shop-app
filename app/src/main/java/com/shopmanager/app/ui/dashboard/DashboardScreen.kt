@@ -99,7 +99,8 @@ fun DashboardScreen(
     val debtsRefreshing by debtsViewModel.isRefreshing.collectAsState()
     val materialsRefreshing by materialsViewModel.isRefreshing.collectAsState()
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
-    val df = remember { SimpleDateFormat("d MMM، HH:mm", Locale("ar")) }
+    // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
+    val df = remember { SimpleDateFormat("d MMM، h:mm a", Locale("ar")) }
 
     // Every material in the list is, by definition, a shortage the shop
     // needs to buy - it's a live shopping list, not a stock count.
