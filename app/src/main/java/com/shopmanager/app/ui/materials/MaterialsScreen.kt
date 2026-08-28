@@ -49,6 +49,7 @@ import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -65,6 +66,14 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val brandColor = LocalBrandGradientColors.current.first().toArgb()
+
+    // BUG FIXED ("زر مادة جديدة صار تحت الشريط العائم"): same root cause as
+    // DebtsScreen's FAB — the floating nav pill is now an overlay drawn on
+    // top of this whole screen rather than a Scaffold bottomBar that used
+    // to reserve its own clearance automatically. See
+    // LocalFloatingBottomNavHeight's own doc comment for why this is a
+    // real measured value rather than a guessed constant.
+    val bottomBarClearance = LocalFloatingBottomNavHeight.current + 16.dp
 
     LaunchedEffect(message) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
@@ -113,7 +122,8 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                     text = { Text("مادة جديدة", fontWeight = FontWeight.SemiBold) },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
+                    modifier = Modifier.padding(bottom = bottomBarClearance)
                 )
             }
         }
@@ -371,9 +381,19 @@ private fun MaterialsList(
         )
         return
     }
+    // BUG FIXED: the trailing `Spacer(height = 72.dp)` used to be a guessed
+    // stand-in for "roughly the FAB's height" so the last row could clear
+    // it. It never accounted for the floating nav pill sitting below the
+    // FAB too, and a fixed 72dp silently drifts wrong the moment either
+    // one's real size changes. Replaced with real contentPadding sized off
+    // the pill's actual measured height (LocalFloatingBottomNavHeight) plus
+    // the FAB's own real height + a small gap — computed once below,
+    // rather than a hardcoded row.
+    val fabHeight = 56.dp // MaterialDesign's fixed ExtendedFloatingActionButton height
+    val bottomClearance = LocalFloatingBottomNavHeight.current + fabHeight + 24.dp
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomClearance),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(materials, key = { it.id }) { m ->
@@ -384,7 +404,6 @@ private fun MaterialsList(
                 modifier = Modifier.animateItemPlacement(MotionSpecs.reorderSpring())
             )
         }
-        item { Spacer(Modifier.height(72.dp)) }
     }
 }
 
@@ -451,10 +470,15 @@ private fun PricesList(materials: List<Material>, prices: Map<String, Double>, o
         return
     }
 
+    // BUG FIXED: this tab has no FAB, but the floating nav pill still
+    // floats over it (it's shared across all 3 pager tabs) — without this,
+    // the last price row stopped exactly at the screen edge, right behind
+    // the pill.
+    val bottomClearance = LocalFloatingBottomNavHeight.current + 8.dp
     Column(Modifier.fillMaxSize()) {
         LazyColumn(
             Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomClearance),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(materials, key = { it.id }) { m ->
