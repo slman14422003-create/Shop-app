@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
+import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.DeleteIconButton
@@ -62,6 +63,7 @@ import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 @Composable
 fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () -> Unit = {}) {
     val state by viewModel.uiState.collectAsState()
+    val catalog by viewModel.catalog.collectAsState()
     val message by viewModel.message.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     var tab by remember { mutableStateOf(0) }
@@ -156,6 +158,36 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                             focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                         )
                     )
+                    // NEW: sums the fixed catalog price of every shortage
+                    // material currently shown (looked up from state.prices,
+                    // the same map the "الأسعار" tab now edits against the
+                    // catalog — see PricesList below), so the person can see
+                    // the total cost of restocking without leaving this tab.
+                    // Hidden entirely until at least one shown material
+                    // actually has a price set, so an all-unpriced list
+                    // doesn't show a misleading "0".
+                    val shortageTotal = remember(filtered, state.prices) {
+                        filtered.sumOf { state.prices[it.name] ?: 0.0 }
+                    }
+                    if (shortageTotal > 0.0) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "إجمالي أسعار النواقص",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "${Formatters.number(shortageTotal)} ${AppSettingsState.currencySymbol}",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     MaterialsList(
                         materials = filtered,
                         searching = search.isNotBlank(),
@@ -164,7 +196,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                     )
                 }
             } else {
-                PricesList(materials = state.materials, prices = state.prices, onSave = viewModel::setPrice)
+                PricesList(catalogItems = catalog, prices = state.prices, onSave = viewModel::setPrice)
             }
         }
         }
@@ -491,11 +523,20 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
 }
 
 @Composable
-private fun PricesList(materials: List<Material>, prices: Map<String, Double>, onSave: (String, Double) -> Unit) {
-    val edited = remember(materials) { mutableStateMapOf<String, String>() }
+private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<String, Double>, onSave: (String, Double) -> Unit) {
+    // FIX: this tab used to price whatever happened to be on the shortage
+    // list (state.materials) — which meant a material's price disappeared
+    // the moment it was bought and removed from the shortage list, and had
+    // to be re-typed from scratch the next time it ran out. Prices now
+    // belong to the shop's fixed catalog (see المواد الثابتة /
+    // MaterialCatalogScreen) instead: a standing list that doesn't change
+    // just because something is or isn't currently a shortage, so a price
+    // set once stays set. The shortage tab (tab 0 above) still shows and
+    // sums these same prices by looking them up by name from `prices`.
+    val edited = remember(catalogItems) { mutableStateMapOf<String, String>() }
 
-    if (materials.isEmpty()) {
-        EmptyState(icon = Icons.Default.Inventory2, text = "أضف مواد أولاً لتسعيرها")
+    if (catalogItems.isEmpty()) {
+        EmptyState(icon = Icons.Default.Inventory2, text = "أضف مواد للقائمة الثابتة أولاً لتسعيرها")
         return
     }
 
@@ -510,7 +551,7 @@ private fun PricesList(materials: List<Material>, prices: Map<String, Double>, o
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomClearance),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(materials, key = { it.id }) { m ->
+            items(catalogItems, key = { it.id }) { item ->
                 ElevatedCard(shape = MaterialTheme.shapes.medium, elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)) {
                     Row(
                         Modifier.fillMaxWidth().padding(12.dp),
@@ -523,15 +564,15 @@ private fun PricesList(materials: List<Material>, prices: Map<String, Double>, o
                         // exactly the longer names. Ellipsis keeps every row
                         // the same height regardless of name length.
                         Text(
-                            m.name,
+                            item.name,
                             modifier = Modifier.weight(1f),
                             fontWeight = FontWeight.Medium,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
                         OutlinedTextField(
-                            value = edited[m.name] ?: prices[m.name]?.toString() ?: "",
-                            onValueChange = { edited[m.name] = it },
+                            value = edited[item.name] ?: prices[item.name]?.toString() ?: "",
+                            onValueChange = { edited[item.name] = it },
                             modifier = Modifier.width(120.dp),
                             label = { Text("السعر") },
                             singleLine = true,
@@ -546,7 +587,19 @@ private fun PricesList(materials: List<Material>, prices: Map<String, Double>, o
                 edited.forEach { (name, value) -> value.toDoubleOrNull()?.let { onSave(name, it) } }
                 edited.clear()
             },
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            // BUG FIXED ("زر الحفظ تحت الشريط السفلي"): this Column fills
+            // the whole screen, but the floating bottom nav pill is drawn
+            // as a separate overlay on top of it (see MainActivity/
+            // LocalFloatingBottomNavHeight's own doc comment) rather than
+            // reserving real layout space — so a plain 16.dp bottom padding
+            // here only cleared the true screen edge, not the pill sitting
+            // in front of it, and the button ended up hidden behind it.
+            // Adding the pill's own measured height (bottomClearance, same
+            // value already used for the list above) lifts the button
+            // above it, matching the FAB's own clearance elsewhere.
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomClearance + 16.dp),
             shape = MaterialTheme.shapes.medium
         ) { Text("حفظ كل الأسعار") }
     }
