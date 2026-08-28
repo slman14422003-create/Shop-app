@@ -42,7 +42,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.quantityLabel
+import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.DeleteIconButton
+import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GradientIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
@@ -50,6 +52,10 @@ import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
+import com.shopmanager.app.ui.common.ShareFormatDialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -63,8 +69,10 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     var editingMaterial by remember { mutableStateOf<Material?>(null) }
     var deleteTarget by remember { mutableStateOf<Material?>(null) }
     var showClearAllConfirm by remember { mutableStateOf(false) }
+    var showShareChoice by remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val brandColor = LocalBrandGradientColors.current.first().toArgb()
 
     // BUG FIXED ("زر مادة جديدة صار تحت الشريط العائم"): same root cause as
@@ -99,19 +107,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                 onTabChange = { tab = it },
                 showClearAll = tab == 0 && state.materials.isNotEmpty(),
                 onClearAll = { showClearAllConfirm = true },
-                onShare = {
-                    // FIX: now shares a single formatted PNG report image
-                    // (see MaterialsReportImage) instead of a plain-text
-                    // message, so the layout looks the same and stays
-                    // readable in whichever app the person shares it to.
-                    val uri = MaterialsReportImage.generate(context, state.materials, state.prices, brandColor)
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "image/png"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
-                }
+                onShare = { showShareChoice = true }
             )
         },
         floatingActionButton = {
@@ -194,6 +190,39 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                 TextButton(onClick = { viewModel.deleteMaterial(m.id); deleteTarget = null }) { Text("حذف") }
             },
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showShareChoice) {
+        ShareFormatDialog(
+            onDismiss = { showShareChoice = false },
+            onPickImage = {
+                // PERF: bitmap/Canvas drawing moved off the main thread —
+                // with a long materials list this Canvas work is real,
+                // measurable CPU time, and running it straight in the
+                // onClick previously blocked the UI thread and dropped
+                // frames right as the share sheet was trying to animate
+                // in. Generation runs on Dispatchers.Default; only the
+                // final startActivity hop is back on Main.
+                scope.launch {
+                    val uri = withContext(Dispatchers.Default) {
+                        MaterialsReportImage.generate(context, state.materials, state.prices, brandColor)
+                    }
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "image/png"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
+                }
+            },
+            onPickText = {
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, buildMaterialsShareText(state.materials, state.prices))
+                }
+                context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
+            }
         )
     }
 
@@ -532,4 +561,16 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, te
             Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
+}
+
+private fun buildMaterialsShareText(materials: List<Material>, prices: Map<String, Double>): String {
+    val currency = AppSettingsState.currencySymbol
+    val sb = StringBuilder("📦 قائمة المواد والأسعار\n\n")
+    materials.sortedBy { it.name }.forEach { m ->
+        sb.append("• ${m.name}: ${m.quantityLabel()}")
+        prices[m.name]?.let { sb.append(" — ${Formatters.number(it)} $currency") }
+        sb.append("\n")
+    }
+    sb.append("\nالإجمالي: ${materials.size} مادة")
+    return sb.toString()
 }

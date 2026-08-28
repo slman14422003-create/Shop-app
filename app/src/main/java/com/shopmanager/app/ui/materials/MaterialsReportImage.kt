@@ -76,7 +76,8 @@ object MaterialsReportImage {
             isFakeBoldText = false
             alpha = 210
         }
-        val df = SimpleDateFormat("d MMMM yyyy، HH:mm", Locale("ar"))
+        // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
+        val df = SimpleDateFormat("d MMMM yyyy، h:mm a", Locale("ar"))
         canvas.drawText(df.format(Date()), WIDTH - PADDING, 152f, datePaint)
 
         val countPaint = TextPaint(datePaint).apply { textAlign = Paint.Align.LEFT }
