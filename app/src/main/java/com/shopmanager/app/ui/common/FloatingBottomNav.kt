@@ -27,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -40,6 +41,31 @@ import androidx.compose.ui.unit.dp
 
 /** One item in [FloatingBottomNav]. */
 data class BottomNavItem(val icon: ImageVector, val label: String)
+
+/**
+ * The floating pill's actual on-screen height (including its own top/
+ * bottom margins), in dp — 0.dp when it isn't showing at all.
+ *
+ * WHY THIS EXISTS: once [FloatingBottomNav] became a true overlay drawn on
+ * top of the page (see MainActivity) instead of a Scaffold `bottomBar`
+ * slot, screens underneath stopped automatically getting bottom clearance
+ * for it — Scaffold used to hand that clearance out for free via its
+ * `padding`. Anything a screen anchors to its own bottom edge (a
+ * FloatingActionButton, a list's last row) now needs to know how tall the
+ * pill floating on top of it actually is, so it can pad itself clear of it
+ * instead of being covered.
+ *
+ * Deliberately measured at runtime (via `Modifier.onSizeChanged` on the
+ * real composable in MainActivity) and threaded down through this
+ * CompositionLocal, rather than hard-coded as a fixed dp guess: the pill's
+ * true height depends on the device's gesture/navigation-bar inset (which
+ * varies by device/OS) plus its own content padding — a guessed constant
+ * would drift out of sync the moment either changes and quietly reopen
+ * this exact bug. Screens that read it should still add their own small
+ * extra gap on top (see DebtsScreen/MaterialsScreen) so content doesn't
+ * sit flush against the pill.
+ */
+val LocalFloatingBottomNavHeight = compositionLocalOf { 0.dp }
 
 /**
  * "الشريط السفلي العائم" (One UI 8.5-style floating bottom nav): a single
