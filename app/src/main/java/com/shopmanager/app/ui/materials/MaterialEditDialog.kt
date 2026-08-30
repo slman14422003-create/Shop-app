@@ -12,9 +12,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -150,7 +152,10 @@ fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit)
             onClick = { if (value > 1) onValueChange(value - 1) }
         )
 
-        OutlinedTextField(
+        // iOS-style borderless stepper field — matches AppTextField's flat
+        // filled treatment (no outline) instead of the Material outlined box,
+        // kept compact/unlabeled since it's a stepper, not a form field.
+        TextField(
             value = value.toString(),
             onValueChange = { raw ->
                 val digitsOnly = raw.filter { it.isDigit() }
@@ -160,7 +165,14 @@ fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit)
             singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.Center),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            shape = MaterialTheme.shapes.small
+            shape = MaterialTheme.shapes.small,
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = MaterialTheme.colorScheme.primary
+            )
         )
 
         ActionIconButton(

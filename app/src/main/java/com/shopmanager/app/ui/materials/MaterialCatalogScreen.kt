@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
+import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
@@ -124,13 +125,14 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
-            OutlinedTextField(
+            AppTextField(
                 value = search,
                 onValueChange = { search = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("بحث بالقائمة...") },
+                label = "بحث",
+                placeholder = "بحث بالقائمة...",
+                showLabel = false,
                 singleLine = true,
-                shape = MaterialTheme.shapes.medium
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
             )
 
             if (filtered.isEmpty()) {
@@ -262,14 +264,14 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text("مادة جديدة للقائمة الثابتة") },
         text = {
-            OutlinedTextField(
+            AppTextField(
                 value = name,
                 onValueChange = { name = it },
-                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                placeholder = { Text("اسم المادة...") },
-                singleLine = true,
+                label = "اسم المادة",
+                placeholder = "اسم المادة...",
                 enabled = !isSaving,
-                shape = MaterialTheme.shapes.medium,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
                     imeAction = androidx.compose.ui.text.input.ImeAction.Done
                 ),

@@ -570,13 +570,28 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
-                        OutlinedTextField(
+                        // BUG FIXED: swapped the outlined field (border +
+                        // floating label breaking the border line — a
+                        // distinctly Material/Android pattern) for the same
+                        // borderless filled treatment as AppTextField, kept
+                        // inline/unlabeled here since the row is already
+                        // compact and single-line; a placeholder carries the
+                        // "السعر" context instead of a caption that would add
+                        // height and break the row's vertical centering.
+                        TextField(
                             value = edited[item.name] ?: prices[item.name]?.toString() ?: "",
                             onValueChange = { edited[item.name] = it },
                             modifier = Modifier.width(120.dp),
-                            label = { Text("السعر") },
+                            placeholder = { Text("السعر", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                             singleLine = true,
-                            shape = MaterialTheme.shapes.small
+                            shape = MaterialTheme.shapes.small,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
                     }
                 }
