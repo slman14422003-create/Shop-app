@@ -37,6 +37,7 @@ import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GradientIconButton
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
@@ -460,10 +461,10 @@ private fun AdminPinDialog(
         title = { Text("دخول لوحة المطوّر") },
         text = {
             Column {
-                OutlinedTextField(
+                AppTextField(
                     value = pin,
                     onValueChange = { pin = it.filter { c -> c.isDigit() }.take(8); error = false },
-                    label = { Text("كلمة المرور") },
+                    label = "كلمة المرور",
                     singleLine = true,
                     enabled = !isLocked,
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
