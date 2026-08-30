@@ -148,19 +148,26 @@ fun GlassAlertDialog(
         // read as messy in the screenshot — the fix for that is not "add
         // blur", it's leaning further into this app's own colors so the
         // panel still reads as a distinct, deliberately-tinted surface
-        // rather than a clear window. Two changes from before: (1) the
-        // blend toward primary/tertiary is stronger (0.24/0.16 → 0.42/0.30)
-        // so the panel is visibly "this app's color" even where content
-        // shows through, and (2) alpha lands in a band (0.86 / 0.78) that
-        // stays clearly translucent — never the old fully-opaque flat
-        // card — while keeping whatever's behind it soft and secondary
-        // rather than a competing, fully-legible layer of text.
+        // rather than a clear window. The blend toward primary/tertiary is
+        // stronger than the original (0.24/0.16 → 0.42/0.30) so the panel
+        // is visibly "this app's color". Alpha itself is tuned separately
+        // right below (it moved again after this — see that note).
+        // BUG FIXED ("بحيث ما يبين اللي تحتها" — so what's underneath
+        // doesn't show through): the previous pass kept this panel
+        // meaningfully see-through (0.86 / 0.78 alpha) since there was no
+        // real blur to soften whatever showed behind it — which is exactly
+        // why the list row underneath was still legible in the screenshot.
+        // Now that [liquidGlassSurface] carries its own bright droplet
+        // highlight/rim (see LiquidGlass.kt), the panel itself can push
+        // much closer to opaque (0.95 / 0.92) — still technically
+        // translucent so it never looks like a flat painted card, but far
+        // enough from `1f` that the row behind it never reads clearly.
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
-        ).copy(alpha = 0.86f)
+        ).copy(alpha = 0.95f)
         val gradientBottom = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.30f
-        ).copy(alpha = 0.78f)
+        ).copy(alpha = 0.92f)
 
         Box(
             modifier
