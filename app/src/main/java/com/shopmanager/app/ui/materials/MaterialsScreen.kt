@@ -3,6 +3,7 @@ package com.shopmanager.app.ui.materials
 import android.content.Intent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -474,7 +475,7 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
     // ElevatedCard's own modifier chain onto a plain wrapping Box so it
     // never shares a graphics layer with the card's shadow.
     Box(modifier.fillMaxWidth().scale(scale)) {
-    ElevatedCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(
@@ -483,7 +484,10 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
                 onClick = onEdit
             ),
         shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
@@ -542,7 +546,13 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(catalogItems, key = { it.id }) { item ->
-                ElevatedCard(shape = MaterialTheme.shapes.medium, elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)) {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
                     Row(
                         Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically

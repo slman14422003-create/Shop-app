@@ -2,6 +2,7 @@ package com.shopmanager.app.ui.materials
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -215,7 +216,7 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete:
         label = "catalogRowScale"
     )
 
-    ElevatedCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .scale(scale)
@@ -225,7 +226,10 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete:
                 onClick = onClick
             ),
         shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
