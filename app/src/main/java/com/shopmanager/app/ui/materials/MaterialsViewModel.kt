@@ -92,9 +92,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Every material on this list is, by definition, something the shop is
     // short on (a live shopping list) - so we notify about the *whole* list,
-    // not a filtered "low stock" subset. Only re-notify when the set of
-    // names actually changes - not on every unrelated Firestore update
-    // (e.g. a price edit).
+    // not a filtered "low stock" subset.
     //
     // BUG FIXED (notification fired on every app open): this used to start
     // at emptySet() instead of null. That meant the very first emission
@@ -104,28 +102,45 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     // the app once with 3 items already on the list and you'd immediately
     // get a "3 مواد ناقصة" notification, every single time, even though
     // nothing had actually changed since last time. null now means "haven't
-    // seen a real list yet" (same pattern as knownPersonIds in
+    // seen a real list yet" (same pattern as knownDebtIds in
     // DebtsViewModel): the first load only seeds the baseline silently, and
-    // a notification only fires on every load *after* that one, when the
-    // set of names genuinely changes - i.e. someone actually adding or
-    // clearing a shortage, in this session or from another device.
-    private var lastNotifiedShortages: Set<String>? = null
+    // a notification only fires on every load *after* that one, when
+    // something genuinely changed - in this session or from another device.
+    //
+    // BUG FIXED (edit/delete notifications unreliable): this used to key
+    // off just the *set of names* (`materials.map { it.name }.toSet()`).
+    // That missed real changes entirely whenever the name set stayed the
+    // same - which is most edits and a lot of deletes:
+    //  - Editing an existing shortage's quantity or unit (e.g. "2 كيلو"
+    //    -> "3 كيلو" for the same "فلفل اسود") never changed the set of
+    //    *names*, so it silently never notified at all.
+    //  - Deleting one item while another device simultaneously (or an
+    //    instant before) added a *different* item with the same name never
+    //    changed the set either - same name, different id - so that
+    //    delete could go unnotified too.
+    // Now every material's full state (name + quantity + unit) is tracked
+    // per id, so an add, an edit (even quantity/unit-only), or a delete are
+    // each detected as a real change and notified, while a totally
+    // unrelated Firestore re-emission with identical data (e.g. a
+    // metadata-only ack) still correctly notifies nothing.
+    private var lastNotifiedMaterials: Map<String, String>? = null
 
     init {
         viewModelScope.launch {
             NotificationHelper.ensureChannels(getApplication())
             uiState.collect { state ->
                 if (state.isLoading) return@collect
-                val shortageNames = state.materials.map { it.name }.toSet()
-                val previous = lastNotifiedShortages
-                if (previous != null && shortageNames != previous) {
+                val signature = state.materials.associate { it.id to "${it.name}|${it.quantity}|${it.unit}" }
+                val previous = lastNotifiedMaterials
+                if (previous != null && signature != previous) {
+                    val shortageNames = state.materials.map { it.name }.distinct()
                     if (shortageNames.isEmpty()) {
                         NotificationHelper.cancelShoppingListNotification(getApplication())
                     } else if (settings.notificationsEnabled) {
-                        NotificationHelper.showShoppingListNotification(getApplication(), shortageNames.toList())
+                        NotificationHelper.showShoppingListNotification(getApplication(), shortageNames)
                     }
                 }
-                lastNotifiedShortages = shortageNames
+                lastNotifiedMaterials = signature
             }
         }
     }
