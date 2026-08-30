@@ -9,7 +9,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -18,6 +17,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.AppTextField
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -50,19 +50,19 @@ fun PersonEditDialog(
         title = { Text(if (initial == null) "عميل جديد" else "تعديل العميل") },
         text = {
             Column {
-                OutlinedTextField(
+                AppTextField(
                     value = name, onValueChange = { name = it }, enabled = !isSaving,
-                    label = { Text("اسم العميل") }, modifier = Modifier.fillMaxWidth()
+                    label = "اسم العميل", modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                AppTextField(
                     value = amount, onValueChange = { amount = it }, enabled = !isSaving,
-                    label = { Text(if (initial == null) "الدين الأولي (${AppSettingsState.currencySymbol})" else "المبلغ (${AppSettingsState.currencySymbol})") },
+                    label = if (initial == null) "الدين الأولي (${AppSettingsState.currencySymbol})" else "المبلغ (${AppSettingsState.currencySymbol})",
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                 )
-                OutlinedTextField(
+                AppTextField(
                     value = date, onValueChange = { date = it }, enabled = !isSaving,
-                    label = { Text("التاريخ (yyyy-MM-dd)") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    label = "التاريخ (yyyy-MM-dd)", modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                 )
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
