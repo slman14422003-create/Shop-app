@@ -43,6 +43,7 @@ import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.WarningAmber as WarningAmberColor
@@ -453,7 +454,7 @@ private fun AdminPinDialog(
         }
     }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("دخول لوحة المطوّر") },
         text = {
