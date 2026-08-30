@@ -22,14 +22,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -91,8 +95,27 @@ fun FloatingBottomNav(
     items: List<BottomNavItem>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    // "زر الإضافة السريع": an optional circular action rendered as part of
+    // this exact same row as the pill — not a separate FloatingActionButton
+    // anchored to the screen's own corner (that's what used to make it
+    // drift off to the side, overlap list content, and sit disconnected
+    // from the nav bar; see the caller in MainActivity for the full
+    // before/after). Passing null (the default — used whenever the current
+    // page has nothing to "add", e.g. the Home tab) hides it with a
+    // fade+scale instead of leaving an empty gap in the row. Because it's
+    // a sibling of the pill inside the very same Row, it always sits
+    // directly beside the pill and moves/resizes with it automatically —
+    // there is no separate position to keep in sync.
+    quickAction: QuickAction? = null
 ) {
+    // Keeps rendering the last non-null action while its own exit
+    // animation plays, so switching to a page with no action (Home) fades
+    // the button away instead of yanking it off-screen the instant
+    // `quickAction` turns null.
+    var lastQuickAction by remember { mutableStateOf<QuickAction?>(null) }
+    LaunchedEffect(quickAction) { if (quickAction != null) lastQuickAction = quickAction }
+
     // ROOT FIX ("الشريط العائم خلفيته بيضاء/سوداء"): this composable itself
     // was never the problem — it was always transparent outside the pill
     // (see liquidGlassSurface below, applied only to the inner Row). The
@@ -123,23 +146,79 @@ fun FloatingBottomNav(
         contentAlignment = Alignment.Center
     ) {
         Row(
-            Modifier
-                .animateContentSize(animationSpec = MotionSpecs.expandSpring())
-                .liquidGlassSurface(RoundedCornerShape(50))
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            items.forEachIndexed { index, item ->
-                FloatingNavItem(
-                    item = item,
-                    selected = index == selectedIndex,
-                    onClick = { onSelect(index) }
-                )
+            AnimatedVisibility(
+                visible = quickAction != null,
+                enter = fadeIn(MotionSpecs.popInSpring()) + androidx.compose.animation.scaleIn(animationSpec = MotionSpecs.popInSpring(), initialScale = 0.6f),
+                exit = fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.6f)
+            ) {
+                lastQuickAction?.let { action ->
+                    QuickActionFab(action)
+                }
+            }
+            Row(
+                Modifier
+                    .animateContentSize(animationSpec = MotionSpecs.expandSpring())
+                    .liquidGlassSurface(RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                items.forEachIndexed { index, item ->
+                    FloatingNavItem(
+                        item = item,
+                        selected = index == selectedIndex,
+                        onClick = { onSelect(index) }
+                    )
+                }
             }
         }
     }
 }
+
+/** Describes the circular quick-add button that floats beside the pill —
+ * what icon it shows and what happens when it's tapped. Kept as data
+ * (rather than a raw `@Composable () -> Unit`) so [FloatingBottomNav] can
+ * give it one consistent glass-circle look for every page instead of each
+ * caller styling its own button differently. */
+data class QuickAction(
+    val icon: ImageVector,
+    val contentDescription: String,
+    val onClick: () -> Unit
+)
+
+@Composable
+private fun QuickActionFab(action: QuickAction) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = MotionSpecs.pressSpring(),
+        label = "quickActionFabScale"
+    )
+    Box(
+        Modifier
+            .scale(scale)
+            .size(52.dp)
+            .liquidGlassSurface(CircleShape, elevation = 10.dp)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = action.onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            action.icon,
+            contentDescription = action.contentDescription,
+            tint = BrandOnGradient,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
 
 @Composable
 private fun FloatingNavItem(item: BottomNavItem, selected: Boolean, onClick: () -> Unit) {
