@@ -99,25 +99,43 @@ jobs:
       # If everything in the range happens to be internal/build commits,
       # the filtered log is legitimately empty — falls back to the same
       # honest generic line as before rather than showing nothing.
+      # ACCURATE RELEASE NOTES: this used to build "ما الجديد" purely by
+      # scanning raw commit subjects and filtering out CI/build noise —
+      # but a vague commit message (or one that happens to match the
+      # noise blocklist) produced no real information, so most releases
+      # fell back to the generic "تحسينات وإصلاحات عامة" line no matter
+      # what had actually changed in the app.
+      #
+      # Source of truth is now CHANGELOG.md's own "## غير منشور" section
+      # at the repo root — real, human-written Arabic bullet points
+      # describing what actually changed, added over time as fixes land
+      # (not auto-generated). This step just extracts that section
+      # verbatim. If it's ever empty (e.g. a build-only push with no
+      # real changelog entry written), the old commit-log scan is kept
+      # as a fallback so the step never produces an empty changelog.
       - name: Generate changelog
         id: changelog
         run: |
-          NOISE_PATTERN='^(ci|chore|docs|build|test|merge)(\(.*\))?:|\b(ci|workflow|github action|gradle|jdk|keystore|signing|proguard|r8|assemble(debug|release)?|debug apk|release apk|changelog|readme|gitignore)\b'
-          BEFORE_SHA="${{ github.event.before }}"
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
-            RANGE="${BEFORE_SHA}..${{ github.sha }}"
-          else
-            RANGE="-15"
+          UNRELEASED=$(awk '/^## غير منشور/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md \
+            | sed '/^[[:space:]]*$/d')
+          if [ -z "$UNRELEASED" ]; then
+            NOISE_PATTERN='^(ci|chore|docs|build|test|merge)(\(.*\))?:|\b(ci|workflow|github action|gradle|jdk|keystore|signing|proguard|r8|assemble(debug|release)?|debug apk|release apk|changelog|readme|gitignore)\b'
+            BEFORE_SHA="${{ github.event.before }}"
+            if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+              RANGE="${BEFORE_SHA}..${{ github.sha }}"
+            else
+              RANGE="-15"
+            fi
+            UNRELEASED=$(git log $RANGE --no-merges --pretty=format:'%s' \
+              | grep -viE "$NOISE_PATTERN" \
+              | sed 's/^/- /')
           fi
-          LOG=$(git log $RANGE --no-merges --pretty=format:'%s' \
-            | grep -viE "$NOISE_PATTERN" \
-            | sed 's/^/- /')
-          if [ -z "$LOG" ]; then
-            LOG="- تحسينات وإصلاحات عامة"
+          if [ -z "$UNRELEASED" ]; then
+            UNRELEASED="- تحسينات وإصلاحات عامة"
           fi
           {
             echo "notes<<CHANGELOG_EOF"
-            echo "$LOG"
+            echo "$UNRELEASED"
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -183,3 +201,29 @@ jobs:
           token: ${{ secrets.UPDATES_REPO_TOKEN }}
           tag_name: v1.0.${{ github.run_number }}
           files: shop-manager-release.apk
+
+      # RESET CHANGELOG.md: whatever was under "## غير منشور" just got
+      # published as this release's real notes above — archive it under
+      # a dated heading (so the history stays browsable in the file
+      # itself) and empty "غير منشور" back out, so the NEXT release
+      # doesn't re-publish the same bullets again. Committed with
+      # [skip ci] so this doesn't re-trigger the workflow on itself.
+      - name: Archive changelog entry
+        run: |
+          UNRELEASED=$(awk '/^## غير منشور/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md | sed '/^[[:space:]]*$/d')
+          if [ -n "$UNRELEASED" ]; then
+            DATE_HEADING="## v1.0.${{ github.run_number }} — $(date +%Y-%m-%d)"
+            awk -v heading="$DATE_HEADING" -v entry="$UNRELEASED" '
+              /^## غير منشور/ { print; print ""; found=1; next }
+              found && /^## / { print heading; print entry; print ""; found=0; print; next }
+              found { next }
+              { print }
+              END { if (found) { print heading; print entry; print "" } }
+            ' CHANGELOG.md > CHANGELOG.md.tmp
+            mv CHANGELOG.md.tmp CHANGELOG.md
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add CHANGELOG.md
+            git commit -m "chore: archive changelog for v1.0.${{ github.run_number }} [skip ci]"
+            git push
+          fi
