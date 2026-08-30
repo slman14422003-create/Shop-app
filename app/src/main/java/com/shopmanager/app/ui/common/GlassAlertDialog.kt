@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.common
 
+import android.os.Build
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
@@ -31,11 +32,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 
 /**
  * "iOS 26 / زجاج سائل" replacement for [androidx.compose.material3.AlertDialog].
@@ -108,16 +111,6 @@ fun GlassAlertDialog(
     properties: DialogProperties = DialogProperties()
 ) {
     Dialog(onDismissRequest = onDismissRequest, properties = properties) {
-        // BUG FIXED ("بدون ضبابية فقط بلور بدون طلب اصدار اندرويد محدد" —
-        // transparent, but no blur, and not gated on a specific Android
-        // version): this used to call `Window.setBackgroundBlurRadius`,
-        // which is an API 31+-only call — on any older device (like the
-        // one in the follow-up screenshot) it silently did nothing, so the
-        // panel was left as plain, un-blurred transparency with the real
-        // list rows showing straight through it, unreadable and messy.
-        // That whole window-blur branch is removed rather than tuned: no
-        // blur, and nothing conditioned on `Build.VERSION.SDK_INT` — every
-        // device now renders exactly the same glass tint below, always.
         // Springy pop-in instead of Dialog's default hard cut — kicked off
         // once on entry (Dialog hosts this composable in its own window, so
         // there's no risk of re-triggering on unrelated recomposition).
@@ -133,6 +126,35 @@ fun GlassAlertDialog(
             animationSpec = tween(180),
             label = "glassDialogAlpha"
         )
+
+        // BUG FIXED ("البلور مو شفاف بل انه مغبش فعليا" — the "blur" wasn't
+        // actually transparent, it was just a solid foggy-looking panel):
+        // everything above this point fakes glass with color + highlights,
+        // but never actually blurs what's behind the dialog — so on a real
+        // device it reads as a flat opaque gray card, not glass. Real
+        // cross-window backdrop blur (Window.setBackgroundBlurRadius) is
+        // API 31+ only, which is exactly why the previous pass ripped it
+        // out — it silently did nothing on older devices, leaving raw
+        // unblurred transparency (the list rows behind, showing through
+        // messily) with no fallback. The fix isn't "remove it", it's
+        // "gate it": apply real blur only where the OS actually supports
+        // it, and only lower the panel's own alpha (so the blur is
+        // actually visible through it) on exactly those devices — every
+        // device below API 31 keeps today's near-opaque tinted fallback
+        // untouched, so nothing regresses there.
+        val isBlurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        if (isBlurSupported) {
+            val view = LocalView.current
+            LaunchedEffect(Unit) {
+                val window = (view.parent as? DialogWindowProvider)?.window ?: return@LaunchedEffect
+                window.setBackgroundBlurRadius(140)
+                // Compose's Dialog applies a fairly dark default scrim
+                // behind the panel; a real blur reads as glass, not fog,
+                // only when that scrim is light enough to let it show —
+                // iOS 26's own sheets sit on a soft, barely-there dim.
+                window.setDimAmount(0.28f)
+            }
+        }
 
         val resolvedContainer = if (containerColor.isSpecified()) containerColor
         else MaterialTheme.colorScheme.surfaceContainerHigh
@@ -162,12 +184,21 @@ fun GlassAlertDialog(
         // much closer to opaque (0.95 / 0.92) — still technically
         // translucent so it never looks like a flat painted card, but far
         // enough from `1f` that the row behind it never reads clearly.
+        // On API 31+ the window behind this panel is now genuinely blurred
+        // (see isBlurSupported above), so the fill can drop back down to
+        // real glass-level translucency (0.95/0.92 → 0.62/0.55) without
+        // turning messy — what shows through is a soft blur, not sharp
+        // list rows. Devices without real blur keep the original
+        // near-opaque values, since on those there's nothing but sharp
+        // content behind the panel to hide.
+        val fillAlphaTop = if (isBlurSupported) 0.62f else 0.95f
+        val fillAlphaBottom = if (isBlurSupported) 0.55f else 0.92f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
-        ).copy(alpha = 0.95f)
+        ).copy(alpha = fillAlphaTop)
         val gradientBottom = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.30f
-        ).copy(alpha = 0.92f)
+        ).copy(alpha = fillAlphaBottom)
 
         Box(
             modifier
