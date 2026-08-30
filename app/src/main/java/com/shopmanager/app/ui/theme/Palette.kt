@@ -246,6 +246,44 @@ private fun blend(base: Color, tint: Color, amount: Float): Color = Color(
     alpha = 1f
 )
 
+/**
+ * BUG FIXED ("الألوان الديناميكية غلط" — bad contrast, doesn't harmonize
+ * with the background): [AppColorMode.DYNAMIC]'s header gradient used to be
+ * built straight from the wallpaper-derived `colors.primary`/`colors.tertiary`
+ * tones, on the same assumption every hand-tuned MANUAL palette's
+ * gradientStart/End already satisfies — that the gradient is always deep
+ * enough to pair with the header's white text/icons ([BrandOnGradient]).
+ * That assumption only holds for MANUAL, because its gradient colors are
+ * fixed, hand-picked dark tones, independent of theme.
+ *
+ * It does NOT hold for Material You's dynamic scheme: `dynamicDarkColorScheme`
+ * deliberately hands back a LIGHT primary/tertiary (tone ~80), meant to sit
+ * as an accent on a dark surface with dark `onPrimary` text — not to be used
+ * as a full-bleed background behind white text. Used that way, a light
+ * pastel wallpaper tone directly behind white text is exactly the washed-out,
+ * low-contrast look being reported. Even in light mode, a low-chroma/pastel
+ * wallpaper can land too close in lightness to the app's own surfaces to read
+ * as a distinct, harmonious header.
+ *
+ * This blends the color toward black only as far as needed to bring it under
+ * a safe luminance ceiling, leaving already-dark colors (a saturated/dark
+ * wallpaper) completely untouched — so the header still visibly tracks the
+ * wallpaper's actual hue, just guaranteed dark enough to stay legible and
+ * consistent with the rest of the app's glass headers.
+ */
+internal fun ensureDarkEnoughForWhiteText(color: Color): Color {
+    val luminance = 0.2126f * color.red + 0.7152f * color.green + 0.0722f * color.blue
+    val maxLuminance = 0.32f
+    if (luminance <= maxLuminance) return color
+    val amount = ((luminance - maxLuminance) / luminance).coerceIn(0f, 1f)
+    return Color(
+        red = color.red * (1f - amount),
+        green = color.green * (1f - amount),
+        blue = color.blue * (1f - amount),
+        alpha = 1f
+    )
+}
+
 /** The two header/gradient colors used in [AppColorMode.CLASSIC] — true
  * neutral grays instead of any hue, kept the same in light and dark for
  * the same reason [BrandGradientStart]/[BrandGradientEnd] are. */

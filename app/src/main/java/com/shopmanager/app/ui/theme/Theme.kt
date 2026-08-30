@@ -106,7 +106,14 @@ fun ShopManagerTheme(
     // just sourced from the wallpaper instead of a hand-picked hue.
     val gradientColors = remember(effectiveMode, colors, paletteColors) {
         when (effectiveMode) {
-            AppColorMode.DYNAMIC -> listOf(colors.primary, colors.tertiary)
+            // BUG FIXED: raw colors.primary/tertiary aren't guaranteed dark
+            // enough for the white header text/icons drawn on top of them —
+            // see ensureDarkEnoughForWhiteText's doc for why. This keeps the
+            // gradient tied to the wallpaper's hue while guaranteeing contrast.
+            AppColorMode.DYNAMIC -> listOf(
+                ensureDarkEnoughForWhiteText(colors.primary),
+                ensureDarkEnoughForWhiteText(colors.tertiary)
+            )
             AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
             AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
         }
