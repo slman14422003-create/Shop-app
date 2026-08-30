@@ -11,6 +11,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.ui.common.AppTextField
 import kotlinx.coroutines.delay
 
 /**
@@ -49,15 +50,16 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Text("إدارة المحل مقفلة", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(24.dp))
-            OutlinedTextField(
+            AppTextField(
                 value = pin,
                 onValueChange = { pin = it.filter { c -> c.isDigit() }.take(6); error = false },
-                label = { Text("أدخل رمز PIN") },
+                label = "أدخل رمز PIN",
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 isError = error,
                 enabled = !isLocked,
-                singleLine = true
+                singleLine = true,
+                modifier = Modifier.width(220.dp)
             )
             if (isLocked) {
                 Spacer(Modifier.height(4.dp))
