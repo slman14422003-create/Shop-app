@@ -332,26 +332,19 @@ fun SettingsScreen(
             // المظهر (appearance)
             SettingsSection(title = "المظهر", icon = Icons.Default.Palette) {
                 AppThemeMode.entries.forEach { mode ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = themeMode == mode,
-                            onClick = {
-                                themeMode = mode
-                                settings.themeMode = mode
-                                onThemeChanged(mode)
-                            }
-                        )
-                        Text(
-                            when (mode) {
-                                AppThemeMode.SYSTEM -> "حسب النظام"
-                                AppThemeMode.LIGHT -> "فاتح"
-                                AppThemeMode.DARK -> "داكن"
-                            }
-                        )
-                    }
+                    IosOptionRow(
+                        label = when (mode) {
+                            AppThemeMode.SYSTEM -> "حسب النظام"
+                            AppThemeMode.LIGHT -> "فاتح"
+                            AppThemeMode.DARK -> "داكن"
+                        },
+                        selected = themeMode == mode,
+                        onClick = {
+                            themeMode = mode
+                            settings.themeMode = mode
+                            onThemeChanged(mode)
+                        }
+                    )
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -470,20 +463,15 @@ fun SettingsScreen(
                     PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
                     PerformanceMode.LOW to "منخفض (أداء أعلى وبطارية أطول)"
                 ).forEach { (mode, label) ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = performanceMode == mode,
-                            onClick = {
-                                performanceMode = mode
-                                settings.performanceMode = mode
-                                onPerformancePreferenceChanged(mode)
-                            }
-                        )
-                        Text(label)
-                    }
+                    IosOptionRow(
+                        label = label,
+                        selected = performanceMode == mode,
+                        onClick = {
+                            performanceMode = mode
+                            settings.performanceMode = mode
+                            onPerformancePreferenceChanged(mode)
+                        }
+                    )
                 }
             }
 
@@ -1022,6 +1010,41 @@ private fun ColorPaletteSwatch(palette: AppColorPalette, selected: Boolean, onCl
  * square rather than a bare tinted glyph) — and the whole group fades +
  * rises in on first composition instead of just snapping into place.
  */
+/**
+ * iOS 26 REDESIGN: replaces a plain [RadioButton] + label row with the
+ * way iOS itself shows a single-choice list — the whole row is tappable,
+ * the selected option gets a trailing checkmark instead of a filled
+ * circle on the leading edge, and there's no visible "control" at all on
+ * the unselected rows (just the label) the way a Material RadioButton
+ * always draws its empty ring.
+ */
+@Composable
+private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            label,
+            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+        )
+        AnimatedVisibility(
+            visible = selected,
+            enter = fadeIn(MotionSpecs.popInSpring()) + scaleIn(MotionSpecs.popInSpring(), initialScale = 0.6f),
+            exit = fadeOut() + scaleOut(targetScale = 0.6f)
+        ) {
+            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
 @Composable
 private fun SettingsSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     var visible by remember { mutableStateOf(false) }
@@ -1081,13 +1104,7 @@ private fun CurrencyPickerDialog(current: String, onDismiss: () -> Unit, onSelec
         text = {
             Column {
                 CURRENCY_OPTIONS.forEach { option ->
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = current == option, onClick = { onSelect(option) })
-                        Text(option)
-                    }
+                    IosOptionRow(label = option, selected = current == option, onClick = { onSelect(option) })
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
