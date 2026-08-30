@@ -37,6 +37,30 @@ enum class AppColorPalette(val label: String) {
     FOREST("أخضر غابي");
 }
 
+/**
+ * "لوحة الألوان" (Settings → المظهر) top-level mode. Independent from
+ * [AppThemeMode] (light/dark/system), which only controls brightness:
+ *
+ * - [MANUAL]: one of the 20 hand-tuned [AppColorPalette] hues below,
+ *   picked from the swatch grid — the app's original behavior, and the
+ *   default so nobody's look changes on update.
+ * - [DYNAMIC]: Android 12+'s Material You wallpaper-derived colors
+ *   ([androidx.compose.material3.dynamicLightColorScheme]/
+ *   dynamicDarkColorScheme) — the app's accent literally matches whatever
+ *   the person's home screen wallpaper looks like. Only offered where the
+ *   OS actually supports it; [ShopManagerTheme] falls back to [MANUAL]'s
+ *   selected palette on older Android automatically if this is somehow
+ *   still stored (e.g. after a downgrade).
+ * - [CLASSIC]: the "إيقاف لوحة الألوان" escape hatch — no accent hue at
+ *   all, just true neutral grays on white (light) / near-black (dark), for
+ *   anyone who wants the plain two-tone look and nothing more.
+ */
+enum class AppColorMode(val label: String) {
+    DYNAMIC("ديناميكي (حسب خلفية الجهاز)"),
+    MANUAL("لوحة ألوان مخصصة"),
+    CLASSIC("أبيض وأسود كلاسيكي"),
+}
+
 /** The resolved colors for one palette: the two brand-gradient colors (same
  * in every theme) plus the primary/secondary tones fed into the light and
  * dark Material color schemes. */
@@ -220,6 +244,87 @@ private fun blend(base: Color, tint: Color, amount: Float): Color = Color(
     green = base.green + (tint.green - base.green) * amount,
     blue = base.blue + (tint.blue - base.blue) * amount,
     alpha = 1f
+)
+
+/** The two header/gradient colors used in [AppColorMode.CLASSIC] — true
+ * neutral grays instead of any hue, kept the same in light and dark for
+ * the same reason [BrandGradientStart]/[BrandGradientEnd] are. */
+val ClassicGradientStart = Color(0xFF5B5B5F)
+val ClassicGradientEnd = Color(0xFF2D2D30)
+
+/**
+ * [AppColorMode.CLASSIC]'s color scheme: real grayscale, not Compose
+ * Material3's own `lightColorScheme()`/`darkColorScheme()` defaults (those
+ * bake in a baseline purple tint on primary/tertiary/surfaceTint — using
+ * them as-is would silently reintroduce a hue after "إيقاف لوحة الألوان"
+ * was supposed to remove it entirely). Built the same way [lightSchemeFor]/
+ * [darkSchemeFor] build every other palette, just tinted toward gray
+ * instead of toward a color.
+ */
+private val ClassicGray = Color(0xFF49454E)
+
+internal fun neutralLightScheme(): ColorScheme = lightColorScheme(
+    primary = Color(0xFF3A3A3D),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFE2E1E5),
+    onPrimaryContainer = Color(0xFF3A3A3D),
+    secondary = Color(0xFF5C5C60),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE7E6EA),
+    onSecondaryContainer = Color(0xFF5C5C60),
+    tertiary = Color(0xFF5C5C60),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFE7E6EA),
+    background = LightBackground,
+    onBackground = Color(0xFF1C1B1F),
+    surface = LightSurface,
+    onSurface = Color(0xFF1C1B1F),
+    surfaceVariant = LightSurfaceVariant,
+    onSurfaceVariant = LightOnSurfaceVariant,
+    surfaceTint = Color(0xFF3A3A3D),
+    outline = blend(LightOnSurfaceVariant, ClassicGray, 0.18f),
+    outlineVariant = blend(LightSurfaceVariant, ClassicGray, 0.10f),
+    inverseSurface = Color(0xFF2F2D33),
+    inverseOnSurface = Color(0xFFF4EFF4),
+    inversePrimary = Color(0xFFE2E1E5),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = blend(LightSurface, ClassicGray, 0.02f),
+    surfaceContainer = blend(LightSurface, ClassicGray, 0.05f),
+    surfaceContainerHigh = blend(LightSurface, ClassicGray, 0.08f),
+    surfaceContainerHighest = blend(LightSurface, ClassicGray, 0.11f),
+    error = DangerRed,
+)
+
+internal fun neutralDarkScheme(): ColorScheme = darkColorScheme(
+    primary = Color(0xFFE2E1E5),
+    onPrimary = Color(0xFF1C1B1F),
+    primaryContainer = Color(0xFF454549),
+    onPrimaryContainer = Color.White,
+    secondary = Color(0xFFC7C6CA),
+    onSecondary = Color(0xFF1C1B1F),
+    secondaryContainer = Color(0xFF454549),
+    onSecondaryContainer = Color.White,
+    tertiary = Color(0xFFC7C6CA),
+    onTertiary = Color(0xFF1C1B1F),
+    tertiaryContainer = Color(0xFF454549),
+    background = DarkBackground,
+    onBackground = Color(0xFFE7E2EA),
+    surface = DarkSurface,
+    onSurface = Color(0xFFE7E2EA),
+    surfaceVariant = DarkSurfaceVariant,
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    surfaceTint = Color(0xFFE2E1E5),
+    outline = blend(DarkOnSurfaceVariant, ClassicGray, 0.22f),
+    outlineVariant = blend(DarkSurfaceVariant, ClassicGray, 0.14f),
+    inverseSurface = Color(0xFFE7E2EA),
+    inverseOnSurface = Color(0xFF2F2D33),
+    inversePrimary = Color(0xFF454549),
+    surfaceContainerLowest = blend(DarkBackground, Color.Black, 0.35f),
+    surfaceContainerLow = blend(DarkSurface, ClassicGray, 0.04f),
+    surfaceContainer = blend(DarkSurface, ClassicGray, 0.07f),
+    surfaceContainerHigh = blend(DarkSurface, ClassicGray, 0.11f),
+    surfaceContainerHighest = blend(DarkSurface, ClassicGray, 0.15f),
+    error = Color(0xFFFF6B6B),
 )
 
 internal fun lightSchemeFor(p: PaletteColors): ColorScheme = lightColorScheme(
