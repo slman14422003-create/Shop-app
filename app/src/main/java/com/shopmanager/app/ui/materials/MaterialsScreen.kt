@@ -77,13 +77,10 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     val scope = rememberCoroutineScope()
     val brandColor = LocalBrandGradientColors.current.first().toArgb()
 
-    // BUG FIXED ("زر مادة جديدة صار تحت الشريط العائم"): same root cause as
-    // DebtsScreen's FAB — the floating nav pill is now an overlay drawn on
-    // top of this whole screen rather than a Scaffold bottomBar that used
-    // to reserve its own clearance automatically. See
-    // LocalFloatingBottomNavHeight's own doc comment for why this is a
-    // real measured value rather than a guessed constant.
-    val bottomBarClearance = LocalFloatingBottomNavHeight.current + 16.dp
+    // REDESIGN: the "مادة جديدة" quick-add action moved out to
+    // FloatingBottomNav's shared `quickAction` slot beside the nav pill
+    // (wired up in MainActivity), so this screen no longer needs its own
+    // FAB or a clearance value just for it.
 
     LaunchedEffect(message) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
@@ -111,20 +108,12 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                 onClearAll = { showClearAllConfirm = true },
                 onShare = { showShareChoice = true }
             )
-        },
-        floatingActionButton = {
-            if (tab == 0) {
-                ExtendedFloatingActionButton(
-                    onClick = onAddNew,
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("مادة جديدة", fontWeight = FontWeight.SemiBold) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
-                    modifier = Modifier.padding(bottom = bottomBarClearance)
-                )
-            }
         }
+        // REDESIGN: no `floatingActionButton` slot here anymore — "مادة
+        // جديدة" now lives beside the floating nav pill (see
+        // FloatingBottomNav's quickAction, wired up in MainActivity) so it
+        // reads as one attached unit with the pill instead of a separate
+        // button floating off on its own over the list.
     ) { padding ->
         PullToRefreshContent(
             isRefreshing = isRefreshing,
