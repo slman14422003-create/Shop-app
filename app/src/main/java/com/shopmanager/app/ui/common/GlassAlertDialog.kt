@@ -122,7 +122,8 @@ fun GlassAlertDialog(
                         listOf(resolvedContainer, resolvedContainer)
                     ),
                     elevation = 24.dp,
-                    sheen = true
+                    sheen = true,
+                    animated = true
                 )
         ) {
             Column {

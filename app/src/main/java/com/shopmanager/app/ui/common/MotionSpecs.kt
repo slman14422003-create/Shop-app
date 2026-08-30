@@ -97,6 +97,22 @@ object MotionSpecs {
     }
 
     /**
+     * The floating bottom nav's sliding selection highlight (tab → tab).
+     * iOS 26's own tab-bar indicator moves with a quick, only-slightly-
+     * bouncy spring — snappy enough to feel immediate when someone taps a
+     * tab, without overshooting so far it looks like it's wobbling into
+     * place. Higher stiffness than [pressSpring] since this travels a
+     * real horizontal distance rather than a tiny scale change, so it
+     * needs more energy to still read as "quick" over that distance.
+     */
+    @Composable
+    fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = if (isLowTier()) {
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
+    } else {
+        spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
+    }
+
+    /**
      * Smooth content fade+slide for anything that swaps in place (a
      * status line changing, a list of local backups loading in) —
      * FastOutSlowInEasing is Material's own standard curve: quick to

@@ -64,7 +64,7 @@ fun Modifier.liquidGlassSurface(
     // content behind it, instead of a flat bar glued to the screen edge.
     // 0.dp keeps the previous flush look for callers that still want it
     // (e.g. a bar that's meant to sit flat against another surface).
-    elevation: Dp = 14.dp,
+    elevation: Dp = 10.dp,
     // "زجاج سائل مذهل": an extra diagonal specular streak that sweeps
     // across the panel on a slow loop, like light catching a curved sheet
     // of glass — on top of the existing drift highlight, not replacing
@@ -99,7 +99,24 @@ fun Modifier.liquidGlassSurface(
     // between two panels meant to read as one surface) — so the two
     // panels blend into what looks like a single continuous sheet of
     // glass instead of two stacked slabs with a hard line between them.
-    topFlush: Boolean = false
+    topFlush: Boolean = false,
+    // iOS 26 REDESIGN ("شيل لمعى الزجاج للي في الشريط العلوي"): every top
+    // bar in the app used to run two never-ending animation loops forever
+    // — `drift`, a radial highlight sliding back and forth every 7s, and
+    // (on the Dashboard header) `sheen`, a diagonal streak sweeping across
+    // it every 5.2s. That constant motion is exactly what read as a
+    // "لمعة" (glare/shine) restlessly playing on the bar — it's also not
+    // how iOS 26's own frosted "Liquid Glass" material behaves: real iOS
+    // bars are a *static* frosted material with no animated highlight
+    // looping on them; only content scrolling underneath ever changes how
+    // they look. `animated` now defaults to false everywhere (every top
+    // bar, the floating bottom nav, its FAB): the highlight/rim below are
+    // still drawn — the panel still reads as glass — but as a fixed,
+    // calm surface with nothing looping on it. Only [GlassAlertDialog]
+    // opts back in explicitly, since a one-off dialog appearing on screen
+    // is a moment that can afford a little extra life without it reading
+    // as restless chrome.
+    animated: Boolean = false
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
@@ -113,15 +130,17 @@ fun Modifier.liquidGlassSurface(
     // regardless of tier. LOW tier now skips it entirely — the glass
     // panel itself (gradient + border) still reads clearly as its own
     // surface without the drop shadow.
+    //
+    // iOS 26: also trimmed from 14.dp to a lighter, native-looking float —
+    // real iOS bars sit close to the content with a soft, shallow shadow,
+    // never a heavy floating-card drop shadow.
     val effectiveElevation = if (isLowTier || topFlush) 0.dp else elevation
 
-    // BUG FIXED ("انميشن زجاج يلمع غير مرتب"): LinearEasing here meant the
-    // highlight moved at constant speed and instantly reversed direction at
-    // both ends every 7s — a mechanical back-and-forth "tick" rather than
-    // anything reading as liquid. FastOutSlowInEasing decelerates into each
-    // turnaround and accelerates back out, the same way real light drifting
-    // across a curved surface would.
-    val drift: Float = if (isLowTier) {
+    // Fixed, calm highlight position when `animated` is false (the new
+    // default for every top bar/bottom nav) — still gives the surface a
+    // single soft light source like glass catching light from one angle,
+    // just without anything looping.
+    val drift: Float = if (!animated || isLowTier) {
         0.28f
     } else {
         val transition = rememberInfiniteTransition(label = "liquidGlassDrift")
@@ -134,14 +153,9 @@ fun Modifier.liquidGlassSurface(
         value
     }
 
-    // BUG FIXED ("غير مرتب وغير جميل"): this used to run a fast (3.2s),
-    // constant-speed, non-stop sweep — restarting the instant it finished,
-    // which reads as a restless flicker rather than a deliberate accent.
-    // Real "light catching glass" is a single, occasional sweep: a pause,
-    // then one smooth eased pass, then a longer pause before it repeats —
-    // so it draws the eye once and then gets out of the way instead of
-    // competing with `drift` for attention the whole time it's on screen.
-    val sheenProgress: Float? = if (sheen && !isLowTier) {
+    // The diagonal sweeping streak only ever runs when both `sheen` is
+    // requested AND `animated` is true — i.e. nowhere by default anymore.
+    val sheenProgress: Float? = if (sheen && animated && !isLowTier) {
         val transition = rememberInfiniteTransition(label = "liquidGlassSheen")
         val value by transition.animateFloat(
             initialValue = -0.35f,

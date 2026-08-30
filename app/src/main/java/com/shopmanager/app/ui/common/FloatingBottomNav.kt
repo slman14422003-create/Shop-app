@@ -1,23 +1,23 @@
 package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** One item in [FloatingBottomNav]. */
@@ -82,13 +83,11 @@ val LocalFloatingBottomNavHeight = compositionLocalOf { 0.dp }
  * drop shadow — so the top header and this bottom bar read as one
  * cohesive glass design language rather than two different styles.
  *
- * The capsule itself hugs its content width (its outer wrapper is
- * fillMaxWidth so the capsule is centered against the real screen edges,
- * but the pill you see is only as wide as its icons/label need), and
- * [animateContentSize] animates it growing/shrinking as the selected tab's
- * label appears/disappears — the small "morphing pill" motion that's the
- * signature of this floating-nav style: only the selected item shows its
- * label inside a filled pill, the rest are icon-only.
+ * iOS 26 REDESIGN: every item is a fixed-width segment showing icon +
+ * label at all times (a real iOS tab bar never hides a tab's label), and
+ * a single rounded highlight slides between segments with a spring as the
+ * selection changes, instead of the whole capsule growing/shrinking to
+ * fit a label that only the selected tab used to show.
  */
 @Composable
 fun FloatingBottomNav(
@@ -158,20 +157,51 @@ fun FloatingBottomNav(
                     QuickActionFab(action)
                 }
             }
-            Row(
+            // iOS 26 REDESIGN: real iOS tab bars keep every item's icon +
+            // label visible all the time — only the tint changes on
+            // selection — instead of collapsing unselected items down to a
+            // bare icon and morphing the whole capsule's width as the
+            // selection changes (the previous "only the selected item gets
+            // a label" pill). Each item is now a fixed-width segment, so
+            // the capsule's overall width is constant, and a single
+            // rounded highlight slides between segments with a spring
+            // (see `indicatorOffset` below) — the signature iOS 26 tab-bar
+            // motion — instead of the bar itself resizing.
+            val itemWidth = 66.dp
+            val indicatorOffset by animateDpAsState(
+                targetValue = itemWidth * selectedIndex,
+                animationSpec = MotionSpecs.tabIndicatorSpring(),
+                label = "floatingNavIndicatorOffset"
+            )
+            Box(
                 Modifier
-                    .animateContentSize(animationSpec = MotionSpecs.expandSpring())
                     .liquidGlassSurface(RoundedCornerShape(50))
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(6.dp)
             ) {
-                items.forEachIndexed { index, item ->
-                    FloatingNavItem(
-                        item = item,
-                        selected = index == selectedIndex,
-                        onClick = { onSelect(index) }
-                    )
+                // Sliding selection highlight — a single rounded segment
+                // that springs from one item's position to the next,
+                // instead of each item drawing its own separate highlight.
+                Box(
+                    Modifier
+                        .offset(x = indicatorOffset)
+                        .width(itemWidth)
+                        .height(56.dp)
+                        .padding(horizontal = 4.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color.White.copy(alpha = 0.22f))
+                )
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    items.forEachIndexed { index, item ->
+                        FloatingNavItem(
+                            item = item,
+                            selected = index == selectedIndex,
+                            width = itemWidth,
+                            onClick = { onSelect(index) }
+                        )
+                    }
                 }
             }
         }
@@ -220,49 +250,56 @@ private fun QuickActionFab(action: QuickAction) {
 }
 
 
+/**
+ * iOS 26 REDESIGN: a real iOS tab-bar item — icon stacked above its label,
+ * both always visible (not just for the selected tab; the previous
+ * design only showed a label next to the selected icon and hid the rest,
+ * which reads as an Android/Material bottom-nav pattern, not iOS). Only
+ * the tint animates between selected/unselected — the sliding highlight
+ * segment behind it (drawn once by the parent, see [FloatingBottomNav])
+ * is what actually communicates which tab is active.
+ */
 @Composable
-private fun FloatingNavItem(item: BottomNavItem, selected: Boolean, onClick: () -> Unit) {
+private fun FloatingNavItem(item: BottomNavItem, selected: Boolean, width: Dp, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
+        targetValue = if (pressed) 0.88f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "floatingNavItemScale"
     )
+    val tintAlpha by animateFloatAsState(
+        targetValue = if (selected) 1f else 0.55f,
+        animationSpec = MotionSpecs.contentTween(),
+        label = "floatingNavItemTint"
+    )
 
-    Row(
+    Column(
         modifier = Modifier
+            .width(width)
             .scale(scale)
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) Color.White.copy(alpha = 0.24f) else Color.Transparent)
+            .clip(RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = if (selected) 18.dp else 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Icon(
             item.icon,
             contentDescription = item.label,
-            tint = BrandOnGradient.copy(alpha = if (selected) 1f else 0.62f),
+            tint = BrandOnGradient.copy(alpha = tintAlpha),
             modifier = Modifier.size(22.dp)
         )
-        AnimatedVisibility(
-            visible = selected,
-            enter = fadeIn() + expandHorizontally(),
-            exit = fadeOut() + shrinkHorizontally()
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.width(7.dp))
-                Text(
-                    item.label,
-                    color = BrandOnGradient,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
+        Text(
+            item.label,
+            color = BrandOnGradient.copy(alpha = tintAlpha),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1
+        )
     }
 }
