@@ -55,13 +55,27 @@ import kotlinx.coroutines.withContext
 @Composable
 fun DebtsScreen(
     onOpenPerson: (String) -> Unit,
-    viewModel: DebtsViewModel = viewModel()
+    viewModel: DebtsViewModel = viewModel(),
+    addPersonRequested: Boolean = false,
+    onAddPersonRequestHandled: () -> Unit = {}
 ) {
     val state = viewModel.uiState.collectAsState().value
     val message = viewModel.message.collectAsState().value
     val isRefreshing = viewModel.isRefreshing.collectAsState().value
     val search = remember { mutableStateOf("") }
     val showAddDialog = remember { mutableStateOf(false) }
+
+    // The shared "+" beside the bottom nav pill (see MainActivity) can't
+    // reach into this screen's own dialog state directly, so it just raises
+    // `addPersonRequested`. Watch it here and open the same "عميل جديد"
+    // dialog the in-screen button uses, then immediately tell MainActivity
+    // it's been handled so the flag doesn't re-fire on recomposition.
+    LaunchedEffect(addPersonRequested) {
+        if (addPersonRequested) {
+            showAddDialog.value = true
+            onAddPersonRequestHandled()
+        }
+    }
     val isSaving = remember { mutableStateOf(false) }
     val deleteTarget = remember { mutableStateOf<Person?>(null) }
     val payTarget = remember { mutableStateOf<Person?>(null) }
