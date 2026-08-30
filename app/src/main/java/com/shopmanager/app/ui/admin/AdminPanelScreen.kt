@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ContentCopy
@@ -32,6 +32,7 @@ import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.updates.AppVersionInfo
 import com.shopmanager.app.data.updates.UpdateCheckResult
 import com.shopmanager.app.data.updates.UpdateChecker
+import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.liquidGlassSurface
@@ -118,7 +119,7 @@ fun AdminPanelScreen(
                 title = { Text("لوحة المطوّر", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     GlassIconButton(
-                        icon = Icons.Default.ArrowBack,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
                         onClick = onBack,
                         modifier = Modifier.padding(start = 8.dp, end = 12.dp),
@@ -161,10 +162,11 @@ fun AdminPanelScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                AppTextField(
                     value = manifestUrl,
                     onValueChange = { manifestUrl = it; savedMessage = null },
-                    label = { Text("https://...") },
+                    label = "رابط التحديثات",
+                    placeholder = "https://...",
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
