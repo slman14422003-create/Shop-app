@@ -1,6 +1,7 @@
 package com.shopmanager.app.ui.debts
 
 import android.content.Intent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -166,21 +167,31 @@ fun DebtsScreen(
         Column(Modifier.fillMaxSize()) {
             StatsRow(state.totalPersons, state.totalDebts, state.totalAmount)
 
+            // iOS 26 REDESIGN: a filled, fully-rounded capsule search
+            // field (no visible outline) instead of the boxy outlined
+            // Material text field — this is the exact shape of iOS's own
+            // search bar (UISearchBar / SwiftUI .searchable).
             OutlinedTextField(
                 value = search.value,
                 onValueChange = { search.value = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("بحث عن عميل...") },
-                leadingIcon = { Icon(Icons.Default.Search, null) },
+                leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                 trailingIcon = {
                     if (search.value.isNotEmpty()) {
                         IconButton(onClick = { search.value = "" }) {
-                            Icon(Icons.Default.Clear, null)
+                            Icon(Icons.Default.Clear, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 },
                 singleLine = true,
-                shape = MaterialTheme.shapes.medium
+                shape = RoundedCornerShape(50),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                )
             )
 
             val filtered = if (search.value.isBlank()) state.persons
@@ -292,9 +303,15 @@ fun DebtsScreen(
 
 @Composable
 private fun StatsRow(persons: Int, debts: Int, amount: Double) {
-    ElevatedCard(
+    // iOS 26 REDESIGN: flat surface + hairline border instead of a
+    // drop-shadowed ElevatedCard — matches Dashboard/Settings' cards now.
+    Surface(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        shape = MaterialTheme.shapes.large
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
             Modifier.fillMaxWidth().padding(vertical = 16.dp),
@@ -385,10 +402,13 @@ private fun PersonRow(
     // rectangle instead of a soft blur — visible as a hard black strip
     // sitting under the row, right where the check/delete/chevron icons
     // are. Moving `.scale()` onto a plain outer Box, so it never shares a
-    // graphics layer with the ElevatedCard's own shadow, fixes this
-    // everywhere it happens without giving up the press animation.
+    // graphics layer with the card's own shadow, fixes this everywhere it
+    // happens without giving up the press animation. iOS 26 REDESIGN also
+    // drops the shadow itself (shadowElevation = 0.dp below) in favour of
+    // a flat surface + hairline border, so this is now belt-and-braces
+    // rather than the only thing preventing the bug.
     Box(modifier.fillMaxWidth().scale(scale)) {
-    ElevatedCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(
@@ -397,7 +417,10 @@ private fun PersonRow(
                 onClick = onClick
             ),
         shape = MaterialTheme.shapes.medium,
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
