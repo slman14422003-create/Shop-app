@@ -82,6 +82,22 @@ fun DebtsScreen(
     // size itself.
     val bottomBarClearance = LocalFloatingBottomNavHeight.current + 16.dp
 
+    // BUG FIXED ("زر عميل جديد" sitting too high / list not lining up under
+    // it): the list's own bottom clearance only ever accounted for the
+    // floating nav pill (bottomBarClearance above), never for the FAB
+    // that floats on top of the pill — so a separate, hand-guessed
+    // `Spacer(Modifier.height(72.dp))` item used to be tacked onto the end
+    // of the list to make up the difference. That guess didn't track the
+    // FAB's real height, so on the label-hidden/compact system font
+    // settings it left too little clearance (last row peeking out from
+    // under the button) and on larger font scales too much (a dead gap
+    // before the button). Mirrors MaterialsScreen's own formula exactly:
+    // pill height + the FAB's real fixed height + a small breathing gap,
+    // computed once and used directly as contentPadding — no separate
+    // guessed spacer item needed.
+    val fabHeight = 56.dp // ExtendedFloatingActionButton's fixed height
+    val listBottomClearance = LocalFloatingBottomNavHeight.current + fabHeight + 24.dp
+
     LaunchedEffect(message) {
         message?.let {
             snackbarHost.showSnackbar(it)
@@ -173,12 +189,13 @@ fun DebtsScreen(
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    // BUG FIXED: bottom inset bumped by the pill's real
-                    // height so the last row in the list can actually
-                    // scroll clear of it instead of stopping underneath.
+                    // Bottom inset sized off the pill's real measured
+                    // height plus the FAB's own fixed height, so the last
+                    // row in the list scrolls fully clear of both instead
+                    // of stopping underneath either one.
                     contentPadding = PaddingValues(
                         start = 16.dp, end = 16.dp, top = 4.dp,
-                        bottom = 4.dp + bottomBarClearance
+                        bottom = listBottomClearance
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -190,7 +207,6 @@ fun DebtsScreen(
                             onMarkPaid = { payTarget = person }
                         )
                     }
-                    item { Spacer(Modifier.height(72.dp)) }
                 }
             }
         }
