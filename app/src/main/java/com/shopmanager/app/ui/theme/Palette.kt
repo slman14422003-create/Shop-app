@@ -389,11 +389,19 @@ internal fun lightSchemeFor(p: PaletteColors): ColorScheme = lightColorScheme(
     inverseSurface = Color(0xFF2F2D33),
     inverseOnSurface = Color(0xFFF4EFF4),
     inversePrimary = p.primaryContainerLight,
+    // BUG FIXED ("الألوان ينقصها شيء لتبدو زاهية وفخمة"): these blends used
+    // to be very faint (2–11%), so every card/dialog/sheet in the app read
+    // as close to flat neutral gray no matter which vivid palette was
+    // selected — the accent hue only really showed up on buttons/headers,
+    // never on the surfaces behind them. Raised so cards/sheets carry a
+    // visibly richer tint of the selected color, closer to how iOS's own
+    // "material" surfaces pick up a tint from whatever's behind/around them
+    // instead of sitting as plain gray boxes.
     surfaceContainerLowest = Color.White,
-    surfaceContainerLow = blend(LightSurface, p.primaryLight, 0.02f),
-    surfaceContainer = blend(LightSurface, p.primaryLight, 0.05f),
-    surfaceContainerHigh = blend(LightSurface, p.primaryLight, 0.08f),
-    surfaceContainerHighest = blend(LightSurface, p.primaryLight, 0.11f),
+    surfaceContainerLow = blend(LightSurface, p.primaryLight, 0.04f),
+    surfaceContainer = blend(LightSurface, p.primaryLight, 0.08f),
+    surfaceContainerHigh = blend(LightSurface, p.primaryLight, 0.12f),
+    surfaceContainerHighest = blend(LightSurface, p.primaryLight, 0.16f),
     error = DangerRed,
 )
 
@@ -422,10 +430,10 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme = darkColorScheme(
     inverseOnSurface = Color(0xFF2F2D33),
     inversePrimary = p.primaryContainerDark,
     surfaceContainerLowest = blend(DarkBackground, Color.Black, 0.35f),
-    surfaceContainerLow = blend(DarkSurface, p.primaryDark, 0.04f),
-    surfaceContainer = blend(DarkSurface, p.primaryDark, 0.07f),
-    surfaceContainerHigh = blend(DarkSurface, p.primaryDark, 0.11f),
-    surfaceContainerHighest = blend(DarkSurface, p.primaryDark, 0.15f),
+    surfaceContainerLow = blend(DarkSurface, p.primaryDark, 0.07f),
+    surfaceContainer = blend(DarkSurface, p.primaryDark, 0.11f),
+    surfaceContainerHigh = blend(DarkSurface, p.primaryDark, 0.16f),
+    surfaceContainerHighest = blend(DarkSurface, p.primaryDark, 0.22f),
     error = Color(0xFFFF6B6B),
 )
 
