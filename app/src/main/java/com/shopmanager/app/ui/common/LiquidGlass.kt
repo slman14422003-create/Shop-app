@@ -72,7 +72,34 @@ fun Modifier.liquidGlassSurface(
     // look; the main Dashboard header (the app's single most-seen surface)
     // opts in explicitly below. Degrades the same way as `drift` on LOW
     // tier: a single fixed streak position, no per-frame animation.
-    sheen: Boolean = false
+    sheen: Boolean = false,
+    // BUG FIXED ("في خط مو حلو فوق بالديون" — an ugly seam line across the
+    // top of the person-detail screen): PersonDetailScreen used to stack
+    // *two independent* liquidGlassSurface panels directly on top of one
+    // another — the TopAppBar, then PersonHeader (the "إجمالي الديون"
+    // summary) as the very next element. Every screen *other* than that
+    // one only ever has a single glass panel for its whole header (see
+    // DebtsScreen/MaterialsScreen/DashboardScreen — the header rounds off
+    // with `bottomStart`/`bottomEnd` and whatever's below it is a plain,
+    // non-glass surface), so this never showed up anywhere else. Two
+    // independent panels touching is what actually drew the line — not
+    // one effect but three stacking at the exact same seam: (1) this
+    // function's own drop shadow (`elevation`, 14.dp by default) reads as
+    // a dark line cast by the second panel onto the first, (2) the second
+    // panel's own `topEdge` bright highlight — meant to read as "light
+    // hitting the top of a pane of glass" — draws a *second*, brighter
+    // line at that exact seam since, as far as that panel knows, its top
+    // edge IS the top of the glass, and (3) the glass-rim border draws a
+    // full-perimeter line, including straight across that same seam.
+    // `topFlush = true` is for exactly this "continuation panel sitting
+    // directly beneath another glass panel" case: it drops the shadow
+    // entirely (nothing should be floating above what's already there),
+    // skips the topEdge highlight (this panel's top is not a real top,
+    // don't draw one), and skips the rim border (no perimeter line
+    // between two panels meant to read as one surface) — so the two
+    // panels blend into what looks like a single continuous sheet of
+    // glass instead of two stacked slabs with a hard line between them.
+    topFlush: Boolean = false
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
@@ -86,7 +113,7 @@ fun Modifier.liquidGlassSurface(
     // regardless of tier. LOW tier now skips it entirely — the glass
     // panel itself (gradient + border) still reads clearly as its own
     // surface without the drop shadow.
-    val effectiveElevation = if (isLowTier) 0.dp else elevation
+    val effectiveElevation = if (isLowTier || topFlush) 0.dp else elevation
 
     // BUG FIXED ("انميشن زجاج يلمع غير مرتب"): LinearEasing here meant the
     // highlight moved at constant speed and instantly reversed direction at
@@ -166,7 +193,7 @@ fun Modifier.liquidGlassSurface(
             // a single coherent sheet of glass — removed rather than tuned,
             // since `topHighlight` alone already carries the "light drifting
             // across glass" read that this was meant to reinforce.
-            val topEdge = Brush.verticalGradient(
+            val topEdge = if (topFlush) null else Brush.verticalGradient(
                 colors = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0f)),
                 startY = 0f,
                 endY = h * 0.12f
@@ -197,11 +224,13 @@ fun Modifier.liquidGlassSurface(
                 // illegible.
                 drawContent()
                 drawRect(brush = topHighlight)
-                drawRect(brush = topEdge)
+                if (topEdge != null) drawRect(brush = topEdge)
                 if (sheenBrush != null) drawRect(brush = sheenBrush)
             }
         }
-        .border(1.dp, Color.White.copy(alpha = 0.22f), shape)
+        .let {
+            if (topFlush) it else it.border(1.dp, Color.White.copy(alpha = 0.22f), shape)
+        }
 }
 
 /**

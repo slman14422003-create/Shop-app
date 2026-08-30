@@ -2,18 +2,20 @@ package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +30,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -122,35 +125,65 @@ fun GlassAlertDialog(
                     sheen = true
                 )
         ) {
-            Column(Modifier.padding(24.dp)) {
-                icon?.let {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        CompositionLocalProvider(LocalContentColor provides resolvedTitleColor) { it() }
-                    }
-                }
-                title?.let {
-                    Box(
-                        Modifier.fillMaxWidth().padding(top = if (icon != null) 12.dp else 0.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ProvideTextStyle(MaterialTheme.typography.headlineSmall) {
+            Column {
+                Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
+                    icon?.let {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             CompositionLocalProvider(LocalContentColor provides resolvedTitleColor) { it() }
                         }
                     }
-                }
-                text?.let {
-                    Box(Modifier.padding(top = if (title != null) 12.dp else 0.dp)) {
-                        ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
-                            CompositionLocalProvider(LocalContentColor provides resolvedTextColor) { it() }
+                    title?.let {
+                        Box(
+                            Modifier.fillMaxWidth().padding(top = if (icon != null) 10.dp else 0.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            // BUG FIXED ("لا يزال غير منسق"): headlineSmall
+                            // (this app's type scale runs it ~24sp+bold) was
+                            // oversized for a modal title — "عميل جديد"
+                            // force-wrapped onto two lines even though the
+                            // dialog is plenty wide for it on one, which is
+                            // what read as sloppy/unbalanced. iOS alert
+                            // titles are a compact, semibold single line;
+                            // titleLarge (~22sp, and never forced bold in
+                            // this app's type scale) undersells the "title"
+                            // read on its own, so weight is bumped
+                            // explicitly instead of relying on the style.
+                            ProvideTextStyle(
+                                MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+                            ) {
+                                CompositionLocalProvider(LocalContentColor provides resolvedTitleColor) { it() }
+                            }
+                        }
+                    }
+                    text?.let {
+                        Box(Modifier.fillMaxWidth().padding(top = if (title != null) 10.dp else 0.dp)) {
+                            ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
+                                CompositionLocalProvider(LocalContentColor provides resolvedTextColor) { it() }
+                            }
                         }
                     }
                 }
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 20.dp).wrapContentWidth(Alignment.End),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    dismissButton?.invoke()
-                    confirmButton()
+                // BUG FIXED ("لا يزال غير منسق"): the button row used to be
+                // small TextButtons squeezed into a `wrapContentWidth(End)`
+                // cluster — fine for Material, but next to nothing like an
+                // iOS 26 sheet, where the action row is a full-width strip
+                // split evenly by a hairline divider. A thin top divider
+                // now separates the button strip from the content above it
+                // (its own subtle "glass rim", matching the panel's outer
+                // border), and each button sits in an equal-width half
+                // (single button = full width) instead of floating at one
+                // corner.
+                HorizontalDivider(color = Color.White.copy(alpha = 0.14f), thickness = 1.dp)
+                Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (dismissButton != null) {
+                        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                            dismissButton()
+                        }
+                        VerticalDivider(color = Color.White.copy(alpha = 0.14f), thickness = 1.dp)
+                    }
+                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                        confirmButton()
+                    }
                 }
             }
         }
