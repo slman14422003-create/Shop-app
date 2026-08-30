@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialUnit
 import com.shopmanager.app.ui.common.ActionIconButton
+import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.MotionSpecs
 
 @Composable
@@ -62,9 +63,9 @@ fun MaterialEditDialog(
         title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
         text = {
             Column {
-                OutlinedTextField(
+                AppTextField(
                     value = name, onValueChange = { name = it },
-                    label = { Text("اسم المادة") }, modifier = Modifier.fillMaxWidth()
+                    label = "اسم المادة", modifier = Modifier.fillMaxWidth()
                 )
 
                 Text(
