@@ -60,30 +60,12 @@ fun DebtsScreen(
     val state = viewModel.uiState.collectAsState().value
     val message = viewModel.message.collectAsState().value
     val isRefreshing = viewModel.isRefreshing.collectAsState().value
-    val searchState = remember { mutableStateOf("") }
-    var search: String
-        get() = searchState.value
-        set(value) { searchState.value = value }
-    val showAddDialogState = remember { mutableStateOf(false) }
-    var showAddDialog: Boolean
-        get() = showAddDialogState.value
-        set(value) { showAddDialogState.value = value }
-    val isSavingState = remember { mutableStateOf(false) }
-    var isSaving: Boolean
-        get() = isSavingState.value
-        set(value) { isSavingState.value = value }
-    val deleteTargetState = remember { mutableStateOf<Person?>(null) }
-    var deleteTarget: Person?
-        get() = deleteTargetState.value
-        set(value) { deleteTargetState.value = value }
-    val payTargetState = remember { mutableStateOf<Person?>(null) }
-    var payTarget: Person?
-        get() = payTargetState.value
-        set(value) { payTargetState.value = value }
-    val showShareChoiceState = remember { mutableStateOf(false) }
-    var showShareChoice: Boolean
-        get() = showShareChoiceState.value
-        set(value) { showShareChoiceState.value = value }
+    val search = remember { mutableStateOf("") }
+    val showAddDialog = remember { mutableStateOf(false) }
+    val isSaving = remember { mutableStateOf(false) }
+    val deleteTarget = remember { mutableStateOf<Person?>(null) }
+    val payTarget = remember { mutableStateOf<Person?>(null) }
+    val showShareChoice = remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -155,7 +137,7 @@ fun DebtsScreen(
                     GlassIconButton(
                         icon = Icons.Default.Share,
                         contentDescription = "مشاركة",
-                        onClick = { showShareChoice = true },
+                        onClick = { showShareChoice.value = true },
                         modifier = Modifier.padding(end = 8.dp),
                         size = 36.dp
                     )
@@ -164,7 +146,7 @@ fun DebtsScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { showAddDialog = true },
+                onClick = { showAddDialog.value = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("عميل جديد") },
                 modifier = Modifier.padding(bottom = bottomBarClearance)
@@ -180,14 +162,14 @@ fun DebtsScreen(
             StatsRow(state.totalPersons, state.totalDebts, state.totalAmount)
 
             OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
+                value = search.value,
+                onValueChange = { search.value = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 placeholder = { Text("بحث عن عميل...") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 trailingIcon = {
-                    if (search.isNotEmpty()) {
-                        IconButton(onClick = { search = "" }) {
+                    if (search.value.isNotEmpty()) {
+                        IconButton(onClick = { search.value = "" }) {
                             Icon(Icons.Default.Clear, null)
                         }
                     }
@@ -196,13 +178,13 @@ fun DebtsScreen(
                 shape = MaterialTheme.shapes.medium
             )
 
-            val filtered = if (search.isBlank()) state.persons
-            else state.persons.filter { it.name.contains(search, ignoreCase = true) }
+            val filtered = if (search.value.isBlank()) state.persons
+            else state.persons.filter { it.name.contains(search.value, ignoreCase = true) }
 
             if (filtered.isEmpty()) {
                 EmptyState(
-                    icon = if (search.isBlank()) Icons.Default.People else Icons.Default.PersonSearch,
-                    text = if (search.isBlank()) "لا يوجد عملاء بعد\nاضغط \"عميل جديد\" للبدء" else "لا توجد نتائج"
+                    icon = if (search.value.isBlank()) Icons.Default.People else Icons.Default.PersonSearch,
+                    text = if (search.value.isBlank()) "لا يوجد عملاء بعد\nاضغط \"عميل جديد\" للبدء" else "لا توجد نتائج"
                 )
             } else {
                 LazyColumn(
@@ -221,8 +203,8 @@ fun DebtsScreen(
                         PersonRow(
                             person, Modifier.animateItemPlacement(MotionSpecs.reorderSpring()),
                             onClick = { onOpenPerson(person.id) },
-                            onDelete = { deleteTarget = person },
-                            onMarkPaid = { payTarget = person }
+                            onDelete = { deleteTarget.value = person },
+                            onMarkPaid = { payTarget.value = person }
                         )
                     }
                 }
@@ -231,52 +213,52 @@ fun DebtsScreen(
         }
     }
 
-    if (showAddDialog) {
+    if (showAddDialog.value) {
         PersonEditDialog(
             initial = null,
-            isSaving = isSaving,
-            onDismiss = { if (!isSaving) showAddDialog = false },
+            isSaving = isSaving.value,
+            onDismiss = { if (!isSaving.value) showAddDialog.value = false },
             onSave = { name, amount, date ->
-                isSaving = true
+                isSaving.value = true
                 viewModel.savePerson(null, name, amount, date) { success ->
-                    isSaving = false
-                    if (success) showAddDialog = false
+                    isSaving.value = false
+                    if (success) showAddDialog.value = false
                 }
             }
         )
     }
 
-    deleteTarget?.let { person ->
+    deleteTarget.value?.let { person ->
         AlertDialog(
-            onDismissRequest = { deleteTarget = null },
+            onDismissRequest = { deleteTarget.value = null },
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${person.name}\" وكل ديونه؟") },
             confirmButton = {
-                TextButton(onClick = { viewModel.deletePerson(person.id); deleteTarget = null }) { Text("حذف") }
+                TextButton(onClick = { viewModel.deletePerson(person.id); deleteTarget.value = null }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(onClick = { deleteTarget.value = null }) { Text("إلغاء") } }
         )
     }
 
-    payTarget?.let { person ->
+    payTarget.value?.let { person ->
         AlertDialog(
-            onDismissRequest = { payTarget = null },
+            onDismissRequest = { payTarget.value = null },
             icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
             title = { Text("تأكيد السداد") },
             text = { Text("هل \"${person.name}\" وفى ${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف كل ديونه من السجل وإرسال إشعار.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.markPersonAsPaid(person)
-                    payTarget = null
+                    payTarget.value = null
                 }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { payTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(onClick = { payTarget.value = null }) { Text("إلغاء") } }
         )
     }
 
-    if (showShareChoice) {
+    if (showShareChoice.value) {
         ShareFormatDialog(
-            onDismiss = { showShareChoice = false },
+            onDismiss = { showShareChoice.value = false },
             onPickImage = {
                 // PERF: Canvas drawing moved off the main thread — see the
                 // matching note in MaterialsScreen's onPickImage.
