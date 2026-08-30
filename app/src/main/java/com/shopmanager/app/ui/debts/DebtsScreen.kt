@@ -88,18 +88,12 @@ fun DebtsScreen(
     // BUG FIXED ("زر عميل جديد صار تحت الشريط العائم"): the floating نav
     // bar is now an overlay drawn on top of this whole screen (see
     // MainActivity), not a Scaffold bottomBar that used to reserve its own
-    // clearance automatically. Without this, the FAB below anchors to this
-    // Scaffold's own bottom edge — which is the real screen edge now — and
-    // ends up sitting directly under the pill instead of above it. 16.dp
-    // is a small breathing-room gap on top of the pill's own real measured
-    // height (see LocalFloatingBottomNavHeight), not a guess at the pill's
-    // size itself.
-    val bottomBarClearance = LocalFloatingBottomNavHeight.current + 16.dp
+    // clearance automatically.
 
     // BUG FIXED ("زر عميل جديد" sitting too high / list not lining up under
     // it): the list's own bottom clearance only ever accounted for the
-    // floating nav pill (bottomBarClearance above), never for the FAB
-    // that floats on top of the pill — so a separate, hand-guessed
+    // floating nav pill, never for the FAB-style quick-add button that
+    // floats on top of the pill — so a separate, hand-guessed
     // `Spacer(Modifier.height(72.dp))` item used to be tacked onto the end
     // of the list to make up the difference. That guess didn't track the
     // FAB's real height, so on the label-hidden/compact system font
@@ -158,14 +152,10 @@ fun DebtsScreen(
                 }
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAddDialog.value = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("عميل جديد") },
-                modifier = Modifier.padding(bottom = bottomBarClearance)
-            )
-        }
+        // The "عميل جديد" FAB used to live here on its own, but that action
+        // now lives as the shared quick-add "+" beside the bottom nav pill
+        // (see MainActivity's `quickAction` / `addPersonRequested`), so a
+        // second FAB here would just duplicate it on screen.
     ) { padding ->
         PullToRefreshContent(
             isRefreshing = isRefreshing,
