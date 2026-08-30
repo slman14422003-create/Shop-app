@@ -51,12 +51,24 @@ class SettingsRepository(context: Context) {
     /** "لوحة الألوان" — the accent color pair used for the header gradient,
      * status bar, and Material primary/secondary colors. Defaults to the
      * original Indigo/Violet look so nobody's app changes color unless they
-     * open Settings and pick something else. */
+     * open Settings and pick something else. Only consulted when
+     * [colorMode] is [AppColorMode.MANUAL] (or falls back to it — see
+     * [colorMode]'s own doc). */
     var colorPalette: AppColorPalette
         get() = runCatching {
             AppColorPalette.valueOf(prefs.getString(KEY_COLOR_PALETTE, AppColorPalette.INDIGO.name)!!)
         }.getOrDefault(AppColorPalette.INDIGO)
         set(value) = prefs.edit().putString(KEY_COLOR_PALETTE, value.name).apply()
+
+    /** "وضع لوحة الألوان" — ديناميكي (wallpaper-based Material You), يدوي
+     * (pick one of [AppColorPalette]'s 20 hues), or كلاسيكي (no accent hue
+     * at all — see [AppColorMode.CLASSIC]). Defaults to MANUAL so nobody's
+     * look changes unless they open Settings and switch it themselves. */
+    var colorMode: AppColorMode
+        get() = runCatching {
+            AppColorMode.valueOf(prefs.getString(KEY_COLOR_MODE, AppColorMode.MANUAL.name)!!)
+        }.getOrDefault(AppColorMode.MANUAL)
+        set(value) = prefs.edit().putString(KEY_COLOR_MODE, value.name).apply()
 
     /** Currency label shown across the app (money amounts, share text, notifications). */
     var currencySymbol: String
@@ -171,6 +183,7 @@ class SettingsRepository(context: Context) {
     companion object {
         private const val KEY_THEME = "theme_mode"
         private const val KEY_COLOR_PALETTE = "color_palette"
+        private const val KEY_COLOR_MODE = "color_mode"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
         private const val PIN_HASH_ITERATIONS = 12_000
