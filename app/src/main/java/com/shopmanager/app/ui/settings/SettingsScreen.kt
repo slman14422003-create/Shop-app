@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -1005,17 +1006,67 @@ private fun ColorPaletteSwatch(palette: AppColorPalette, selected: Boolean, onCl
     }
 }
 
+/**
+ * iOS 26 REDESIGN ("عدل شاشة الاعدادات بتصميم جميل"): the old wrapper drew
+ * every group as its own [ElevatedCard] — a raised, shadowed white/dark
+ * rectangle with the group's icon+title *inside* it as its own row. Real
+ * iOS Settings never puts a shadowed card around each group: it's a flat,
+ * borderless "grouped inset list" — a small caps-style gray label floats
+ * *above* a plain rounded surface, and that surface has no elevation of
+ * its own at all. Kept the exact same signature (title, icon, content)
+ * so every one of this screen's ~10 call sites needed zero changes — only
+ * how the group itself is drawn changed.
+ *
+ * The icon now sits inside a small colored rounded-square "badge" before
+ * the label, the way iOS Settings badges each group's icon (a colored
+ * square rather than a bare tinted glyph) — and the whole group fades +
+ * rises in on first composition instead of just snapping into place.
+ */
 @Composable
 private fun SettingsSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
-    ElevatedCard(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { visible = true }
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring())
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier.padding(start = 4.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier
+                        .size(22.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                }
                 Spacer(Modifier.width(8.dp))
-                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    // NOTE: no .uppercase() here — Arabic has no case
+                    // distinction, so English-style "SMALL CAPS SECTION
+                    // HEADER" styling doesn't translate; the colored badge
+                    // + muted semibold label carries the same "this is a
+                    // group header" read instead.
+                    title,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            Spacer(Modifier.height(10.dp))
-            content()
+            Surface(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp
+            ) {
+                Column(Modifier.padding(16.dp), content = content)
+            }
         }
     }
 }
