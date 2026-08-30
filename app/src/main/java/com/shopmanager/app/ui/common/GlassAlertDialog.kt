@@ -68,6 +68,27 @@ import androidx.compose.ui.window.DialogProperties
  * whatever dialog background sits behind it (see the bug note on
  * [AppTextField]); using that same tone here would silently reintroduce the
  * "invisible field" bug this file's sibling already fixed once.
+ *
+ * BUG FIXED ("ما بدي الأنيميشن/اللمعة هون" + "لازم يكون فيه نفس لون
+ * التطبيق مع تدرج جميل"): this was the one surface in the app that opted
+ * back into `liquidGlassSurface`'s animated diagonal sheen sweep
+ * (`sheen = true, animated = true`) — every other glass panel (headers,
+ * bottom nav) had that shine animation removed already (see `animated`'s
+ * own doc in LiquidGlass.kt) because it read as restless chrome, but the
+ * dialog kept it. Both are now off, so the dialog is a calm, static glass
+ * panel like everywhere else — no sweeping highlight, no looping motion.
+ *
+ * The fill itself also used to be a flat, colorless `resolvedContainer`
+ * tone painted twice as a "gradient" with identical start/end stops — i.e.
+ * no gradient at all, and no relationship to the app's actual brand color.
+ * It's now a real two-stop vertical gradient blended toward the app's own
+ * primary/tertiary theme colors (whatever palette — or dynamic color —
+ * the person has selected in Settings, same source every other
+ * brand-tinted surface reads from), softened by lerping into the neutral
+ * container tone rather than using the vivid header colors outright, so
+ * the dialog reads as unmistakably "this app's color" while staying dark
+ * enough/neutral enough for the existing onSurface/onSurfaceVariant text
+ * to stay legible on top of it.
  */
 @Composable
 fun GlassAlertDialog(
@@ -108,6 +129,19 @@ fun GlassAlertDialog(
         val resolvedTextColor = if (textContentColor.isSpecified()) textContentColor
         else MaterialTheme.colorScheme.onSurfaceVariant
 
+        // The "نفس لون التطبيق مع تدرج جميل" gradient: the neutral dialog
+        // tone lerped toward this app's own primary/tertiary colors (not
+        // the separate, always-vivid header BrandGradient — that's tuned
+        // for white text and would fight this dialog's existing dark-theme
+        // text colors) so it visibly carries the app's current palette
+        // while staying dark/neutral enough for onSurface text on top.
+        val gradientTop = androidx.compose.ui.graphics.lerp(
+            resolvedContainer, MaterialTheme.colorScheme.primary, 0.24f
+        )
+        val gradientBottom = androidx.compose.ui.graphics.lerp(
+            resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.16f
+        )
+
         Box(
             modifier
                 .graphicsLayer {
@@ -119,11 +153,11 @@ fun GlassAlertDialog(
                 .liquidGlassSurface(
                     shape = shape,
                     baseBrush = Brush.verticalGradient(
-                        listOf(resolvedContainer, resolvedContainer)
+                        listOf(gradientTop, gradientBottom)
                     ),
                     elevation = 24.dp,
-                    sheen = true,
-                    animated = true
+                    sheen = false,
+                    animated = false
                 )
         ) {
             Column {
