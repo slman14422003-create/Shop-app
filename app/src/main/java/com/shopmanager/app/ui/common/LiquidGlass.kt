@@ -1,11 +1,12 @@
 package com.shopmanager.app.ui.common
 
 import android.os.Build
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -87,6 +88,12 @@ fun Modifier.liquidGlassSurface(
     // surface without the drop shadow.
     val effectiveElevation = if (isLowTier) 0.dp else elevation
 
+    // BUG FIXED ("انميشن زجاج يلمع غير مرتب"): LinearEasing here meant the
+    // highlight moved at constant speed and instantly reversed direction at
+    // both ends every 7s — a mechanical back-and-forth "tick" rather than
+    // anything reading as liquid. FastOutSlowInEasing decelerates into each
+    // turnaround and accelerates back out, the same way real light drifting
+    // across a curved surface would.
     val drift: Float = if (isLowTier) {
         0.28f
     } else {
@@ -94,23 +101,34 @@ fun Modifier.liquidGlassSurface(
         val value by transition.animateFloat(
             initialValue = 0.08f,
             targetValue = 0.92f,
-            animationSpec = infiniteRepeatable(tween(7000, easing = LinearEasing), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(7000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
             label = "liquidGlassDriftValue"
         )
         value
     }
 
-    // Runs 0f→1f once every few seconds, forever, only when `sheen` is
-    // requested and the device can afford it. A completely separate
-    // transition/period from `drift` above so the two visibly don't move
-    // in lockstep — that's what reads as "light moving through liquid"
-    // rather than one single effect.
+    // BUG FIXED ("غير مرتب وغير جميل"): this used to run a fast (3.2s),
+    // constant-speed, non-stop sweep — restarting the instant it finished,
+    // which reads as a restless flicker rather than a deliberate accent.
+    // Real "light catching glass" is a single, occasional sweep: a pause,
+    // then one smooth eased pass, then a longer pause before it repeats —
+    // so it draws the eye once and then gets out of the way instead of
+    // competing with `drift` for attention the whole time it's on screen.
     val sheenProgress: Float? = if (sheen && !isLowTier) {
         val transition = rememberInfiniteTransition(label = "liquidGlassSheen")
         val value by transition.animateFloat(
             initialValue = -0.35f,
             targetValue = 1.35f,
-            animationSpec = infiniteRepeatable(tween(3200, easing = LinearEasing), RepeatMode.Restart),
+            animationSpec = infiniteRepeatable(
+                animation = keyframes {
+                    durationMillis = 5200
+                    -0.35f at 0
+                    -0.35f at 1800 using FastOutSlowInEasing
+                    1.35f at 4200 using FastOutSlowInEasing
+                    1.35f at 5200
+                },
+                repeatMode = RepeatMode.Restart
+            ),
             label = "liquidGlassSheenValue"
         )
         value
@@ -141,11 +159,13 @@ fun Modifier.liquidGlassSurface(
                 center = Offset(w * drift, -h * 0.25f),
                 radius = w * 0.75f
             )
-            val glint = Brush.radialGradient(
-                colors = listOf(Color.White.copy(alpha = 0.09f), Color.White.copy(alpha = 0f)),
-                center = Offset(w * (1f - drift) * 0.6f, h * 1.1f),
-                radius = w * 0.5f
-            )
+            // BUG FIXED ("غير مرتب"): a second radial highlight ("glint")
+            // used to drift here too, moving opposite `topHighlight`. Two
+            // independently-moving translucent-white patches overlapping on
+            // the same small panel is what read as messy/blotchy rather than
+            // a single coherent sheet of glass — removed rather than tuned,
+            // since `topHighlight` alone already carries the "light drifting
+            // across glass" read that this was meant to reinforce.
             val topEdge = Brush.verticalGradient(
                 colors = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0f)),
                 startY = 0f,
@@ -177,7 +197,6 @@ fun Modifier.liquidGlassSurface(
                 // illegible.
                 drawContent()
                 drawRect(brush = topHighlight)
-                drawRect(brush = glint)
                 drawRect(brush = topEdge)
                 if (sheenBrush != null) drawRect(brush = sheenBrush)
             }
