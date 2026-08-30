@@ -11,11 +11,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -38,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
@@ -456,6 +459,13 @@ private fun ShopManagerApp(
     var floatingNavHeight by remember { mutableStateOf(0.dp) }
 
     Box(Modifier.fillMaxSize()) {
+        // See the BUG FIXED note below (inside NavHost's transition params)
+        // for why these are shaped the way they are — declared here, above
+        // NavHost, since a function-call argument list can only contain
+        // `name = value` arguments, not local `val` statements.
+        val iosEasing = CubicBezierEasing(0.32f, 0f, 0.24f, 1f)
+        val iosSlideSpec: FiniteAnimationSpec<IntOffset> = tween(340, easing = iosEasing)
+        val iosFadeSpec: FiniteAnimationSpec<Float> = tween(340, easing = iosEasing)
         CompositionLocalProvider(
             LocalFloatingBottomNavHeight provides if (showBottomBar) floatingNavHeight else 0.dp
         ) {
@@ -480,28 +490,54 @@ private fun ShopManagerApp(
                         Modifier
                     }
                 ),
-            // PERF/FEEL: LOW tier keeps this at zero cost (no transition at
-            // all — the fastest a screen change can be). STANDARD/HIGH pairs
-            // a fade with a short, subtle horizontal slide instead of the
-            // previous plain crossfade: a one-shot ~200ms transition (not a
-            // continuous per-frame cost like the Pager's own drag below) is
-            // cheap enough to afford the extra graphicsLayer pass, and it's
-            // what actually reads as a "smooth, designed" transition instead
-            // of a flat fade that can feel like something's missing.
-            // FastOutSlowInEasing (Material's standard curve) so it eases
-            // out at the end instead of stopping abruptly.
+            // BUG FIXED ("عدل الانميشن والانتقالات... تشبه iOS بشكل كامل"):
+            // this used to be a fade+small-slide on the incoming screen
+            // (only fullWidth/8 — a ~12% peek, not a real push) paired with
+            // a plain fadeOut on the outgoing one that never moved at all.
+            // That reads as a generic Android crossfade no matter how the
+            // easing/duration are tuned, because the actual *shape* of the
+            // motion is wrong: iOS's UINavigationController push is a full
+            // one-screen-covers-another slide, where the screen underneath
+            // doesn't fade away — it slides a third of the way off-screen
+            // and dims slightly (parallax), staying spatially "behind" the
+            // new one rather than disappearing in place. Rebuilt as that
+            // exact shape below, with the direction mirrored for push vs.
+            // pop so it always reads as one screen genuinely covering (or
+            // uncovering) another:
+            //  - push (enter/exit): incoming screen slides in the *entire*
+            //    width from the right; the screen it's covering slides a
+            //    third of its own width to the left and dims to ~72%.
+            //  - pop (popEnter/popExit): the top screen slides the entire
+            //    width back out to the right; the screen being revealed
+            //    slides back in from a third off-screen on the left and
+            //    brightens back to full.
+            // PERF: LOW tier still keeps this at zero cost (EnterTransition/
+            // ExitTransition.None below) — the fastest a screen change can
+            // be, same as before this rewrite.
+            // `iosEasing` approximates UINavigationController's own curve —
+            // steeper off the start than Material's FastOutSlowInEasing
+            // (which is what made the old transition read as "Android" no
+            // matter what else changed) — and 340ms lands in iOS's own
+            // ~300-350ms range for a push, instead of the old 220ms/160ms
+            // split (which also made push/pop feel asymmetric in speed).
             enterTransition = {
                 if (isLowTier) EnterTransition.None
-                else fadeIn(tween(220, easing = FastOutSlowInEasing)) +
-                    slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { fullWidth -> fullWidth / 8 }
+                else slideInHorizontally(iosSlideSpec) { fullWidth -> fullWidth }
             },
-            exitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(160, easing = FastOutSlowInEasing)) },
+            exitTransition = {
+                if (isLowTier) ExitTransition.None
+                else slideOutHorizontally(iosSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                    fadeOut(iosFadeSpec, targetAlpha = 0.72f)
+            },
             popEnterTransition = {
                 if (isLowTier) EnterTransition.None
-                else fadeIn(tween(220, easing = FastOutSlowInEasing)) +
-                    slideInHorizontally(tween(220, easing = FastOutSlowInEasing)) { fullWidth -> -fullWidth / 8 }
+                else slideInHorizontally(iosSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                    fadeIn(iosFadeSpec, initialAlpha = 0.72f)
             },
-            popExitTransition = { if (isLowTier) ExitTransition.None else fadeOut(tween(160, easing = FastOutSlowInEasing)) }
+            popExitTransition = {
+                if (isLowTier) ExitTransition.None
+                else slideOutHorizontally(iosSlideSpec) { fullWidth -> fullWidth }
+            }
         ) {
             composable(ROUTE_MAIN_PAGER) {
                 // A single swipeable surface for Home, Debts, and Materials:
