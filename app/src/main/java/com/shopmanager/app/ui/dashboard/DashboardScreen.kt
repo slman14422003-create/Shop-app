@@ -2,10 +2,13 @@ package com.shopmanager.app.ui.dashboard
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
@@ -518,29 +521,66 @@ private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit) 
     }
 }
 
+// REDESIGN ("جمال + أداء"): QuickActionButton used to be a flat
+// OutlinedButton — same 1dp border regardless of accent, icon and label
+// packed tight with no breathing room, and no depth of its own (it only
+// registered as "a button" from its border). Rebuilt as a self-contained
+// tonal card with its own soft accent-colored icon badge (mirrors
+// StatCard's badge language below, so the two feel like one family) and a
+// two-line layout so the label gets its own row instead of squeezing next
+// to the icon. Still a single `background()` + `border()` — no extra
+// graphicsLayer/blur — so this costs nothing extra on LOW tier versus the
+// old OutlinedButton.
 @Composable
 private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, label: String, onClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        if (pressed) 0.96f else 1f,
+        if (pressed) 0.97f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "quickActionScale"
     )
+    val accent = MaterialTheme.colorScheme.primary
 
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier.scale(scale),
-        interactionSource = interactionSource,
-        shape = MaterialTheme.shapes.large,
-        contentPadding = PaddingValues(vertical = 12.dp)
+    Column(
+        modifier
+            .scale(scale)
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            .border(1.dp, accent.copy(alpha = 0.16f), MaterialTheme.shapes.large)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick
+            )
+            .padding(vertical = 14.dp, horizontal = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Box(
+            Modifier.size(38.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
+// REDESIGN: StatCard's icon badge and value used to share the same visual
+// weight as everything else on the card (a small tinted square, then plain
+// text) — the number itself, which is the whole point of the card, didn't
+// stand out from its own label/subtitle. The badge is now a circle (matches
+// QuickActionButton's badge language above) and sits beside a slim
+// accent-colored vertical rule instead of stacked above the text, so the
+// eye reads accent → number in one line instead of scanning top-to-bottom
+// through three same-weight rows. No new animated/blurred layers, so this
+// is exactly as cheap on LOW tier as the previous version.
 @Composable
 private fun StatCard(
     modifier: Modifier = Modifier,
@@ -550,20 +590,44 @@ private fun StatCard(
     valueContent: @Composable () -> Unit,
     subtitle: String
 ) {
-    ElevatedCard(modifier = modifier, shape = MaterialTheme.shapes.large) {
-        Column(Modifier.padding(16.dp)) {
+    ElevatedCard(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(Modifier.padding(14.dp)) {
             Box(
-                Modifier.size(36.dp).clip(MaterialTheme.shapes.small).background(accentColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(20.dp))
+                Modifier
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(50))
+                    .background(accentColor.copy(alpha = 0.55f))
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(30.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                valueContent()
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
             }
-            Spacer(Modifier.height(10.dp))
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(4.dp))
-            valueContent()
-            Spacer(Modifier.height(2.dp))
-            Text(subtitle, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
