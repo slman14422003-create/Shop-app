@@ -388,7 +388,7 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
             // so it's the one header that opts into the extra animated
             // sheen sweep on top of the shared drift highlight every glass
             // panel already has — see liquidGlassSurface's `sheen` param.
-            .liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp), sheen = true)
+            .liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
             // The glass panel (background/border above) already fills this
             // Box's full bounds, which now extend up behind the
             // transparent status bar; this only pushes the *content*
