@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.theme.AppColorPalette
+import com.shopmanager.app.ui.theme.AppColorMode
 import com.shopmanager.app.ui.theme.AppThemeMode
 import java.security.MessageDigest
 import java.security.SecureRandom
