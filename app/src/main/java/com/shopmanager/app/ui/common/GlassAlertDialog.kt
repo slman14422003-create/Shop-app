@@ -1,7 +1,5 @@
 package com.shopmanager.app.ui.common
 
-import android.os.Build
-import android.view.WindowManager
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
@@ -33,14 +31,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
 
 /**
  * "iOS 26 / زجاج سائل" replacement for [androidx.compose.material3.AlertDialog].
@@ -113,34 +108,16 @@ fun GlassAlertDialog(
     properties: DialogProperties = DialogProperties()
 ) {
     Dialog(onDismissRequest = onDismissRequest, properties = properties) {
-        // BUG FIXED ("لازم يكون تصميم شفاف وضبابي مو لون باهت" — must be a
-        // transparent/blurry design, not a dull/pale color): this dialog's
-        // panel used to be a fully OPAQUE gradient (no alpha at all) sitting
-        // in front of a plain dark scrim — i.e. not glass at all, just a
-        // solid pastel card, which is exactly what read as "flat pale
-        // color" in the screenshot. Two real fixes, not just a tint tweak:
-        // (1) the panel fill below now carries actual alpha so the layers
-        // behind it can show through, and (2) on Android 12+ (API 31,
-        // `FLAG_BLUR_BEHIND`) the dialog's own *window* is told to blur
-        // whatever is genuinely behind it — the real screen content, not a
-        // fake approximation — which is the one place in this app where
-        // that's honestly possible (a modal dialog, unlike the always-on
-        // headers in LiquidGlass.kt, always sits on top of a full frame of
-        // real content). Older API levels fall back to the plain dim scrim
-        // Dialog already provided, just with the now-translucent panel on
-        // top of it — still reads as "less opaque", just without the blur.
-        val view = LocalView.current
-        val density = LocalDensity.current
-        LaunchedEffect(Unit) {
-            val window = (view.parent as? DialogWindowProvider)?.window
-            if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val radiusPx = with(density) { 56.dp.toPx() }.toInt().coerceAtLeast(1)
-                window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                window.attributes = window.attributes.apply { blurBehindRadius = radiusPx }
-                window.setDimAmount(0.30f)
-            }
-        }
-
+        // BUG FIXED ("بدون ضبابية فقط بلور بدون طلب اصدار اندرويد محدد" —
+        // transparent, but no blur, and not gated on a specific Android
+        // version): this used to call `Window.setBackgroundBlurRadius`,
+        // which is an API 31+-only call — on any older device (like the
+        // one in the follow-up screenshot) it silently did nothing, so the
+        // panel was left as plain, un-blurred transparency with the real
+        // list rows showing straight through it, unreadable and messy.
+        // That whole window-blur branch is removed rather than tuned: no
+        // blur, and nothing conditioned on `Build.VERSION.SDK_INT` — every
+        // device now renders exactly the same glass tint below, always.
         // Springy pop-in instead of Dialog's default hard cut — kicked off
         // once on entry (Dialog hosts this composable in its own window, so
         // there's no risk of re-triggering on unrelated recomposition).
@@ -164,26 +141,26 @@ fun GlassAlertDialog(
         val resolvedTextColor = if (textContentColor.isSpecified()) textContentColor
         else MaterialTheme.colorScheme.onSurfaceVariant
 
-        // The "نفس لون التطبيق مع تدرج جميل" gradient: the neutral dialog
-        // tone lerped toward this app's own primary/tertiary colors (not
-        // the separate, always-vivid header BrandGradient — that's tuned
-        // for white text and would fight this dialog's existing dark-theme
-        // text colors) so it visibly carries the app's current palette
-        // while staying dark/neutral enough for onSurface text on top.
-        // BUG FIXED (same "شفاف وضبابي" request): these two stops used to be
-        // blended entirely from fully-opaque colors (resolvedContainer,
-        // primary, tertiary all alpha = 1), so the resulting gradient was
-        // itself 100% opaque no matter what — a solid card, not glass. The
-        // `.copy(alpha = ...)` below is what actually lets the real,
-        // now-blurred content behind the dialog (see the window-blur fix
-        // above) show through the panel, which is what makes it read as a
-        // pane of frosted glass instead of a flat painted rectangle.
+        // BUG FIXED ("شفافية جميلة... مع التناسق مع لوحة الالوان" — nice
+        // transparency that still matches the color palette): without real
+        // blur, translucency alone just reveals whatever's underneath
+        // (list rows, other dialog text) at full clarity, which is what
+        // read as messy in the screenshot — the fix for that is not "add
+        // blur", it's leaning further into this app's own colors so the
+        // panel still reads as a distinct, deliberately-tinted surface
+        // rather than a clear window. Two changes from before: (1) the
+        // blend toward primary/tertiary is stronger (0.24/0.16 → 0.42/0.30)
+        // so the panel is visibly "this app's color" even where content
+        // shows through, and (2) alpha lands in a band (0.86 / 0.78) that
+        // stays clearly translucent — never the old fully-opaque flat
+        // card — while keeping whatever's behind it soft and secondary
+        // rather than a competing, fully-legible layer of text.
         val gradientTop = androidx.compose.ui.graphics.lerp(
-            resolvedContainer, MaterialTheme.colorScheme.primary, 0.24f
-        ).copy(alpha = 0.68f)
+            resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
+        ).copy(alpha = 0.86f)
         val gradientBottom = androidx.compose.ui.graphics.lerp(
-            resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.16f
-        ).copy(alpha = 0.55f)
+            resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.30f
+        ).copy(alpha = 0.78f)
 
         Box(
             modifier
