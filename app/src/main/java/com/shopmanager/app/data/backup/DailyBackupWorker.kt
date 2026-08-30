@@ -98,6 +98,25 @@ class InstantBackupWorker(appContext: Context, params: WorkerParameters) :
         return try {
             BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository(), BackupKind.INSTANT)
             Result.success()
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            // BUG FIXED (instant backup silently never happening): every
+            // read inside performBackup (persons/debts/materials/prices/
+            // catalog) is wrapped in withTimeout(15s) — see
+            // DebtsRepository/MaterialsRepository. On a slow/flaky
+            // connection (exactly the case an on-device backup exists
+            // for), one of those timing out throws
+            // TimeoutCancellationException, which IS-A CancellationException
+            // — so it used to match the `catch (CancellationException)`
+            // branch below and get rethrown as if WorkManager itself had
+            // cancelled this job on purpose (see that branch's comment).
+            // WorkManager then marks the work CANCELLED, not FAILED, so
+            // the retry logic never ran and the backup was simply lost —
+            // no retry, nothing recorded, nothing surfaced. A plain
+            // network timeout must retry like any other real failure, so
+            // this now has to be caught ahead of the general
+            // CancellationException branch (it's a subtype, so ordering
+            // matters) and treated the same as any other exception below.
+            if (runAttemptCount < 2) Result.retry() else Result.failure()
         } catch (e: kotlinx.coroutines.CancellationException) {
             // A newer edit replaced this one (see requestNow's REPLACE
             // policy below) — this is WorkManager cancelling us on
