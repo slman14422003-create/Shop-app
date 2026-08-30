@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -28,6 +28,7 @@ import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.BrandOnGradient
@@ -90,7 +91,7 @@ fun PersonDetailScreen(
                 },
                 navigationIcon = {
                     GlassIconButton(
-                        icon = Icons.Default.ArrowBack,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
                         onClick = onBack,
                         modifier = Modifier.padding(start = 8.dp),
@@ -310,32 +311,30 @@ private fun AddDebtCard(
             )
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.Top) {
-                OutlinedTextField(
+                AppTextField(
                     value = amount, onValueChange = onAmountChange,
-                    label = { Text("المبلغ (${AppSettingsState.currencySymbol})") },
+                    label = "المبلغ (${AppSettingsState.currencySymbol})",
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(Modifier.width(8.dp))
-                OutlinedTextField(
+                AppTextField(
                     value = date, onValueChange = onDateChange,
-                    label = { Text("التاريخ") },
-                    leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    label = "التاريخ",
+                    leadingIcon = Icons.Default.CalendarMonth,
                     singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.weight(1f)
                 )
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
+            AppTextField(
                 value = note, onValueChange = onNoteChange,
-                label = { Text("ملاحظة (اختياري)") },
-                leadingIcon = { Icon(Icons.Default.Notes, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                label = "ملاحظة (اختياري)",
+                leadingIcon = Icons.Default.Notes,
+                singleLine = false,
                 minLines = 1,
                 maxLines = 3,
-                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(10.dp))
