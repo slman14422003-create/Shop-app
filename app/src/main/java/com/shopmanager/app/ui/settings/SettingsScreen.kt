@@ -1,6 +1,8 @@
 package com.shopmanager.app.ui.settings
 
 import android.content.Intent
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -46,9 +48,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.shopmanager.app.data.backup.BackupManager
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.materials.MaterialsRepository
@@ -103,6 +108,37 @@ fun SettingsScreen(
     var showSetPinDialog by remember { mutableStateOf(false) }
     var currency by remember { mutableStateOf(settings.currencySymbol) }
     var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
+    // BUG FIXED ("notifications sometimes never arrive at all", root
+    // cause): the switch above only ever reflected this app's OWN saved
+    // preference — it had no idea whether Android itself was actually
+    // allowed to show a notification for this app. Denying the one-time
+    // permission prompt on first launch (or turning notifications off for
+    // this app later from the system Settings app, or a channel getting
+    // silently disabled by the OS) all leave this switch showing "on" with
+    // nothing in the UI hinting that nothing will actually arrive — every
+    // notification call in NotificationHelper was already silently
+    // no-op'ing in exactly that case (see its hasPermission check), just
+    // with zero visibility into it from here. This now reads the real
+    // system-level state directly (covers both the API 33+ runtime
+    // permission and the general per-app notification toggle that exists
+    // on every Android version) and shows a clear warning + a direct link
+    // to the system notification settings for this app whenever the two
+    // disagree, instead of the switch quietly lying.
+    fun checkSystemNotificationsAllowed(): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    var systemNotificationsAllowed by remember { mutableStateOf(checkSystemNotificationsAllowed()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        // Re-check on every resume, not just once — this is exactly how
+        // someone comes back after tapping the warning's "open settings"
+        // button below and flipping the OS toggle there.
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                systemNotificationsAllowed = checkSystemNotificationsAllowed()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     var performanceMode by remember { mutableStateOf(settings.performanceMode) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showExportShareChoice by remember { mutableStateOf(false) }
@@ -378,6 +414,44 @@ fun SettingsScreen(
                             settings.notificationsEnabled = it
                         }
                     )
+                }
+                AnimatedVisibility(
+                    visible = notificationsEnabled && !systemNotificationsAllowed,
+                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(),
+                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically()
+                ) {
+                    Column {
+                        Spacer(Modifier.height(10.dp))
+                        ElevatedCard(
+                            Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        "الإشعارات موقوفة من نظام الجهاز",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع هذا التطبيق تحديداً من إظهار أي إشعار على هذا الجهاز — لن تصلك تنبيهات النواقص أو الديون الجديدة مهما حدث بالتطبيق حتى تُفعّلها من إعدادات الجهاز.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(Modifier.height(10.dp))
+                                Button(onClick = {
+                                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                    context.startActivity(intent)
+                                }) { Text("فتح إعدادات الإشعارات") }
+                            }
+                        }
+                    }
                 }
             }
 
