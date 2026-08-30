@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
@@ -76,6 +77,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BottomNavItem
 import com.shopmanager.app.ui.common.FloatingBottomNav
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
+import com.shopmanager.app.ui.common.QuickAction
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
@@ -370,6 +372,15 @@ private fun ShopManagerApp(
     // composable) so it survives navigating away to Settings/Help and back,
     // and so the bottom bar can read/drive the current page directly.
     val pagerState = rememberPagerState(initialPage = PAGE_DASHBOARD) { 3 }
+    // REDESIGN ("زر عميل جديد بجانب الشريط السفلي"): the "+" that used to
+    // be each tab's own FloatingActionButton is now a single shared button
+    // rendered as part of FloatingBottomNav itself (see its `quickAction`
+    // param) so it always sits attached to the pill instead of floating
+    // separately over the list. It can't reach into DebtsScreen's own
+    // dialog state directly, so tapping it just raises this flag; DebtsScreen
+    // watches it and opens its "عميل جديد" dialog when it turns true (see
+    // DebtsScreen's `addPersonRequested` parameter).
+    var addPersonRequested by remember { mutableStateOf(false) }
     val pagerScope = rememberCoroutineScope()
 
     @OptIn(ExperimentalFoundationApi::class)
@@ -519,7 +530,9 @@ private fun ShopManagerApp(
                         )
                         PAGE_DEBTS -> DebtsScreen(
                             viewModel = debtsViewModel,
-                            onOpenPerson = { personId -> navController.navigate("personDetail/$personId") }
+                            onOpenPerson = { personId -> navController.navigate("personDetail/$personId") },
+                            addPersonRequested = addPersonRequested,
+                            onAddPersonRequestHandled = { addPersonRequested = false }
                         )
                         else -> MaterialsScreen(
                             viewModel = materialsViewModel,
@@ -591,6 +604,25 @@ private fun ShopManagerApp(
         // pill now sits directly over whichever tab is currently showing,
         // so its transparent margins reveal that tab's real content.
         if (showBottomBar) {
+            // REDESIGN: which quick-add action (if any) shows beside the
+            // pill follows the same `pagerState.currentPage` the pill's own
+            // `selectedIndex` below already tracks — one page, one source
+            // of truth for "what tab is this". Home has nothing to add, so
+            // it's null there and the button fades out entirely (see
+            // FloatingBottomNav's own AnimatedVisibility around it).
+            val quickAction = when (pagerState.currentPage) {
+                PAGE_DEBTS -> QuickAction(
+                    icon = Icons.Default.Add,
+                    contentDescription = "عميل جديد",
+                    onClick = { addPersonRequested = true }
+                )
+                PAGE_MATERIALS -> QuickAction(
+                    icon = Icons.Default.Add,
+                    contentDescription = "مادة جديدة",
+                    onClick = { navController.navigate(ROUTE_MATERIAL_CATALOG) }
+                )
+                else -> null
+            }
             FloatingBottomNav(
                 items = listOf(
                     BottomNavItem(Icons.Default.Home, "الرئيسية"),
@@ -599,6 +631,7 @@ private fun ShopManagerApp(
                 ),
                 selectedIndex = pagerState.currentPage,
                 onSelect = { page -> openPager(page) },
+                quickAction = quickAction,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     // Real measured layout height (margins included, since
