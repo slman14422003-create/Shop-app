@@ -72,6 +72,7 @@ import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.ShareFormatDialog
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
@@ -651,7 +652,7 @@ fun SettingsScreen(
     }
 
     pendingRestore?.let { backup ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { pendingRestore = null },
             title = { Text("استعادة نسخة احتياطية؟") },
             text = {
@@ -731,7 +732,7 @@ fun SettingsScreen(
     }
 
     pendingUpdate?.let { manifest ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { if (!isDownloadingUpdate) pendingUpdate = null },
             title = { Text("يتوفر تحديث جديد 🎉") },
             text = {
@@ -765,7 +766,7 @@ fun SettingsScreen(
     }
 
     if (needsInstallPermission) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { needsInstallPermission = false },
             title = { Text("يلزم إذن التثبيت") },
             text = { Text("لتثبيت التحديث من داخل التطبيق، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد وحاول مجدداً.") },
@@ -1023,7 +1024,7 @@ private fun SettingsSection(title: String, icon: ImageVector, content: @Composab
 private fun CurrencyPickerDialog(current: String, onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     var custom by remember { mutableStateOf(current.takeIf { it !in CURRENCY_OPTIONS } ?: "") }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("اختر العملة") },
         text = {
@@ -1063,7 +1064,7 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
     var confirm by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("تعيين رمز PIN") },
         text = {
