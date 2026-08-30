@@ -32,6 +32,7 @@ import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.common.GlassAlertDialog
 
 /**
  * Standalone screen for picking which shortage to add: pick a name from the
@@ -191,7 +192,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     }
 
     deleteTarget?.let { item ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("حذف من القائمة الثابتة") },
             text = { Text("هل تريد حذف \"${item.name}\" من القائمة الثابتة؟ (هذا لا يحذف أي كمية مخزنة سابقًا)") },
@@ -253,7 +254,7 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text("مادة جديدة للقائمة الثابتة") },
         text = {
@@ -304,7 +305,7 @@ private fun QuantityEntryDialog(
     var unit by remember { mutableStateOf(MaterialUnit.KG) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(materialName) },
         text = {

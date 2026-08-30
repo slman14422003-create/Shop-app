@@ -54,6 +54,7 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.ShareFormatDialog
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -203,7 +204,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     }
 
     deleteTarget?.let { m ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${m.name}\"؟") },
@@ -248,7 +249,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     }
 
     if (showClearAllConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showClearAllConfirm = false },
             title = { Text("مسح كل المواد") },
             text = { Text("هل أنت متأكد من حذف كل المواد المضافة (${state.materials.size})؟ لا يمكن التراجع عن هذا الإجراء.") },

@@ -10,7 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material3.AlertDialog
+
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,6 +28,7 @@ import com.shopmanager.app.data.materials.MaterialUnit
 import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.MotionSpecs
+import com.shopmanager.app.ui.common.GlassAlertDialog
 
 @Composable
 fun MaterialEditDialog(
@@ -58,7 +59,7 @@ fun MaterialEditDialog(
     // نص كيلو من 3" -> tapping "نص كيلو" would carry a leftover count.
     val showQuantityStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
         text = {
