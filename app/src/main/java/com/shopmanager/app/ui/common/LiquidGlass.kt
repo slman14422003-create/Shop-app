@@ -231,6 +231,33 @@ fun Modifier.liquidGlassSurface(
                     end = Offset(center + bandWidth, h)
                 )
             }
+            // BUG FIXED ("بدي ياه بلوز زجاجي... متل نقطة ماء وبلور" — this
+            // panel needs a real "water droplet" glass read, and the same
+            // treatment on the top/bottom bars too): `topHighlight` alone is
+            // a soft, wide drift with no bright core, so on its own it reads
+            // as a faint color wash, not glass catching light. A genuine
+            // optical blur/refraction pass isn't something Compose exposes
+            // for content drawn elsewhere on screen, but a tight,
+            // bright-cored radial highlight fixed in one corner — the way
+            // light collects at the curved center of a bead of water and
+            // fades sharply outward — is a real, well-established way to
+            // fake exactly that "droplet" read cheaply. It's added here, in
+            // the one function every glass surface in the app already goes
+            // through ([DashboardScreen]'s header, [FloatingBottomNav], and
+            // [GlassAlertDialog]), so all three automatically pick up the
+            // same "نفس المبدأ" droplet glint without editing each of them
+            // separately — and it's unconditional (not gated behind
+            // `sheen`/`animated`), so it's part of this surface's resting
+            // look everywhere, not an extra opt-in effect.
+            val dropletGlint = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.50f),
+                    Color.White.copy(alpha = 0.16f),
+                    Color.White.copy(alpha = 0f)
+                ),
+                center = Offset(w * 0.22f, h * 0.14f),
+                radius = w * 0.30f
+            )
             onDrawWithContent {
                 // Content (text/icons) drawn first so every highlight below
                 // is layered strictly on top of the surface itself — never
@@ -239,11 +266,15 @@ fun Modifier.liquidGlassSurface(
                 drawContent()
                 drawRect(brush = topHighlight)
                 if (topEdge != null) drawRect(brush = topEdge)
+                drawRect(brush = dropletGlint)
                 if (sheenBrush != null) drawRect(brush = sheenBrush)
             }
         }
         .let {
-            if (topFlush) it else it.border(1.dp, Color.White.copy(alpha = 0.22f), shape)
+            // Slightly brighter glass rim (0.22 → 0.30) so the edge reads as
+            // a distinct rim of light catching the border of the glass/
+            // droplet, matching the stronger `dropletGlint` highlight above.
+            if (topFlush) it else it.border(1.dp, Color.White.copy(alpha = 0.30f), shape)
         }
 }
 
