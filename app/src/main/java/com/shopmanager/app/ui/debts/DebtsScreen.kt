@@ -57,15 +57,33 @@ fun DebtsScreen(
     onOpenPerson: (String) -> Unit,
     viewModel: DebtsViewModel = viewModel()
 ) {
-    val state by viewModel.uiState.collectAsState()
-    val message by viewModel.message.collectAsState()
-    val isRefreshing by viewModel.isRefreshing.collectAsState()
-    var search by remember { mutableStateOf("") }
-    var showAddDialog by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
-    var deleteTarget by remember { mutableStateOf<Person?>(null) }
-    var payTarget by remember { mutableStateOf<Person?>(null) }
-    var showShareChoice by remember { mutableStateOf(false) }
+    val state = viewModel.uiState.collectAsState().value
+    val message = viewModel.message.collectAsState().value
+    val isRefreshing = viewModel.isRefreshing.collectAsState().value
+    val searchState = remember { mutableStateOf("") }
+    var search: String
+        get() = searchState.value
+        set(value) { searchState.value = value }
+    val showAddDialogState = remember { mutableStateOf(false) }
+    var showAddDialog: Boolean
+        get() = showAddDialogState.value
+        set(value) { showAddDialogState.value = value }
+    val isSavingState = remember { mutableStateOf(false) }
+    var isSaving: Boolean
+        get() = isSavingState.value
+        set(value) { isSavingState.value = value }
+    val deleteTargetState = remember { mutableStateOf<Person?>(null) }
+    var deleteTarget: Person?
+        get() = deleteTargetState.value
+        set(value) { deleteTargetState.value = value }
+    val payTargetState = remember { mutableStateOf<Person?>(null) }
+    var payTarget: Person?
+        get() = payTargetState.value
+        set(value) { payTargetState.value = value }
+    val showShareChoiceState = remember { mutableStateOf(false) }
+    var showShareChoice: Boolean
+        get() = showShareChoiceState.value
+        set(value) { showShareChoiceState.value = value }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -363,12 +381,13 @@ private fun PersonRow(
 ) {
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by androidx.compose.animation.core.animateFloatAsState(
+    val pressed = interactionSource.collectIsPressedAsState().value
+    val scaleState = androidx.compose.animation.core.animateFloatAsState(
         targetValue = if (pressed) 0.98f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "personRowScale"
     )
+    val scale = scaleState.value
 
     // BUG FIXED (solid black bar under the row's action icons): the press
     // scale used to be applied directly on the same modifier chain as the
