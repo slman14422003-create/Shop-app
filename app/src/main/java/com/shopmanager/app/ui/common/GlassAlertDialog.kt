@@ -1,5 +1,7 @@
 package com.shopmanager.app.ui.common
 
+import android.os.Build
+import android.view.WindowManager
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
@@ -30,10 +32,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 
 /**
  * "iOS 26 / زجاج سائل" replacement for [androidx.compose.material3.AlertDialog].
@@ -106,6 +113,34 @@ fun GlassAlertDialog(
     properties: DialogProperties = DialogProperties()
 ) {
     Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+        // BUG FIXED ("لازم يكون تصميم شفاف وضبابي مو لون باهت" — must be a
+        // transparent/blurry design, not a dull/pale color): this dialog's
+        // panel used to be a fully OPAQUE gradient (no alpha at all) sitting
+        // in front of a plain dark scrim — i.e. not glass at all, just a
+        // solid pastel card, which is exactly what read as "flat pale
+        // color" in the screenshot. Two real fixes, not just a tint tweak:
+        // (1) the panel fill below now carries actual alpha so the layers
+        // behind it can show through, and (2) on Android 12+ (API 31,
+        // `FLAG_BLUR_BEHIND`) the dialog's own *window* is told to blur
+        // whatever is genuinely behind it — the real screen content, not a
+        // fake approximation — which is the one place in this app where
+        // that's honestly possible (a modal dialog, unlike the always-on
+        // headers in LiquidGlass.kt, always sits on top of a full frame of
+        // real content). Older API levels fall back to the plain dim scrim
+        // Dialog already provided, just with the now-translucent panel on
+        // top of it — still reads as "less opaque", just without the blur.
+        val view = LocalView.current
+        val density = LocalDensity.current
+        LaunchedEffect(Unit) {
+            val window = (view.parent as? DialogWindowProvider)?.window
+            if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val radiusPx = with(density) { 56.dp.toPx() }.toInt().coerceAtLeast(1)
+                window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                window.attributes = window.attributes.apply { blurBehindRadius = radiusPx }
+                window.setDimAmount(0.30f)
+            }
+        }
+
         // Springy pop-in instead of Dialog's default hard cut — kicked off
         // once on entry (Dialog hosts this composable in its own window, so
         // there's no risk of re-triggering on unrelated recomposition).
@@ -135,12 +170,20 @@ fun GlassAlertDialog(
         // for white text and would fight this dialog's existing dark-theme
         // text colors) so it visibly carries the app's current palette
         // while staying dark/neutral enough for onSurface text on top.
+        // BUG FIXED (same "شفاف وضبابي" request): these two stops used to be
+        // blended entirely from fully-opaque colors (resolvedContainer,
+        // primary, tertiary all alpha = 1), so the resulting gradient was
+        // itself 100% opaque no matter what — a solid card, not glass. The
+        // `.copy(alpha = ...)` below is what actually lets the real,
+        // now-blurred content behind the dialog (see the window-blur fix
+        // above) show through the panel, which is what makes it read as a
+        // pane of frosted glass instead of a flat painted rectangle.
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.24f
-        )
+        ).copy(alpha = 0.68f)
         val gradientBottom = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.16f
-        )
+        ).copy(alpha = 0.55f)
 
         Box(
             modifier
@@ -211,12 +254,12 @@ fun GlassAlertDialog(
                 HorizontalDivider(color = Color.White.copy(alpha = 0.14f), thickness = 1.dp)
                 Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (dismissButton != null) {
-                        Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                        DialogButtonCell(Modifier.weight(1f).fillMaxHeight()) {
                             dismissButton()
                         }
                         VerticalDivider(color = Color.White.copy(alpha = 0.14f), thickness = 1.dp)
                     }
-                    Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
+                    DialogButtonCell(Modifier.weight(1f).fillMaxHeight()) {
                         confirmButton()
                     }
                 }
@@ -226,3 +269,36 @@ fun GlassAlertDialog(
 }
 
 private fun Color.isSpecified(): Boolean = this != Color.Unspecified
+
+/**
+ * BUG FIXED ("لازم لما اضغط عالمربع كله يتنفذ الامر مو بس الكلمة" — tapping
+ * anywhere in the button's half of the row must trigger the action, not
+ * just the word): the button row used to place [dismissButton]/
+ * [confirmButton] inside a plain `Box(..., contentAlignment = Center)`.
+ * That Box gives its child *loose* constraints (max size only), so a
+ * [androidx.compose.material3.TextButton] — which never asked to fill —
+ * just wrapped its own short label ("إلغاء", "حفظ") and centered at its own
+ * small size. Everything else in that half-width, 52.dp-tall cell was dead
+ * space: visually part of the button, but not clickable.
+ *
+ * This replaces that Box with a tiny custom [Layout] that measures its
+ * single child with *tight* constraints fixed to the cell's full size
+ * (`Constraints.fixed`), instead of the loose ones a Box would hand down.
+ * A measured child cannot opt out of tight constraints — it must report
+ * exactly that size — so the TextButton's own `Surface` (the thing that
+ * actually carries the ripple/click handling) is forced to expand to fill
+ * the entire cell, and only *then* centers its short text label inside
+ * itself. The net effect: the same visual layout as before (short,
+ * centered label), but the whole half of the row is now one real click
+ * target, same as an iOS/Material full-bleed sheet action.
+ */
+@Composable
+private fun DialogButtonCell(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val forced = Constraints.fixed(constraints.maxWidth, constraints.maxHeight)
+        val placeable = measurables.first().measure(forced)
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            placeable.place(0, 0)
+        }
+    }
+}
