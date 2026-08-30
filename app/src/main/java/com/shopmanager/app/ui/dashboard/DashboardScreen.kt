@@ -1,6 +1,7 @@
 package com.shopmanager.app.ui.dashboard
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -591,13 +592,16 @@ private fun StatCard(
     valueContent: @Composable () -> Unit,
     subtitle: String
 ) {
-    ElevatedCard(
+    // iOS 26 REDESIGN: flat card — a plain surface with a hairline border
+    // instead of a drop-shadowed ElevatedCard. Real iOS cards read as
+    // "grouped" via a subtle 1dp separator, not a floating shadow.
+    Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Row(Modifier.padding(14.dp)) {
             Box(
@@ -640,7 +644,14 @@ private fun SectionCard(
     icon: ImageVector? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    ElevatedCard(Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = MaterialTheme.shapes.large) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
         Column(Modifier.padding(16.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall, color = color)
             Spacer(Modifier.height(8.dp))
