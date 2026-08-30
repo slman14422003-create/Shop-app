@@ -250,7 +250,12 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
     Box(
         Modifier
             .fillMaxWidth()
-            .liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape)
+            // topFlush = true: this sits directly beneath the TopAppBar's
+            // own liquidGlassSurface, so it reads as a continuation of the
+            // same glass panel instead of a second one with a shadow/
+            // highlight/border seam at the boundary — see the bug note on
+            // `topFlush` in LiquidGlass.kt.
+            .liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape, topFlush = true)
             .padding(20.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
