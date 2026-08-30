@@ -44,6 +44,7 @@ import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.ShareFormatDialog
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.SuccessGreen
 import kotlinx.coroutines.Dispatchers
@@ -233,7 +234,7 @@ fun DebtsScreen(
     }
 
     deleteTarget.value?.let { person ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { deleteTarget.value = null },
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${person.name}\" وكل ديونه؟") },
@@ -245,7 +246,7 @@ fun DebtsScreen(
     }
 
     payTarget.value?.let { person ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { payTarget.value = null },
             icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
             title = { Text("تأكيد السداد") },

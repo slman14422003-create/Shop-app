@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
@@ -18,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,7 +45,7 @@ fun PersonEditDialog(
     var date by remember { mutableStateOf(initial?.date?.ifBlank { today() } ?: today()) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
+    GlassAlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (initial == null) "عميل جديد" else "تعديل العميل") },
         text = {

@@ -32,6 +32,7 @@ import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.InfoBlue
 import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
@@ -197,7 +198,7 @@ fun PersonDetailScreen(
     }
 
     if (showDeletePersonConfirm) {
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { showDeletePersonConfirm = false },
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${person.name}\" وكل ديونه؟") },
@@ -213,7 +214,7 @@ fun PersonDetailScreen(
     }
 
     deleteDebtTarget?.let { id ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { deleteDebtTarget = null },
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف هذا الدين؟") },
@@ -228,7 +229,7 @@ fun PersonDetailScreen(
     }
 
     payDebtTarget?.let { debt ->
-        AlertDialog(
+        GlassAlertDialog(
             onDismissRequest = { payDebtTarget = null },
             icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
             title = { Text("تأكيد السداد") },
