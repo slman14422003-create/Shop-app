@@ -32,6 +32,19 @@ import androidx.compose.ui.unit.dp
  * as a drop-in replacement for OutlinedTextField wherever a caller wants the
  * iOS look. `label` is a plain string (not a slot) on purpose: the whole
  * point is that it's a static caption, never a floating/animating label.
+ *
+ * BUG FIXED ("لعنت أم الشاشة"): the field's fill first shipped as
+ * `surfaceContainerHigh` — which is *also* Material3's own default
+ * [androidx.compose.material3.AlertDialog] background color. Every caller
+ * of this field so far is inside a plain AlertDialog, so the field was
+ * exactly the same color as the dialog behind it: no border and no visible
+ * fill meant the field was completely invisible, reading as a big dead gap
+ * of empty space with no visible box to tap into — worse than the
+ * OutlinedTextField it replaced. `surfaceContainerHighest` is the next step
+ * up Material3's own tonal-elevation ladder, so it's guaranteed lighter
+ * than whatever `surfaceContainerHigh`-or-lower surface this field sits on
+ * (a plain AlertDialog today, any other card/sheet later) while staying in
+ * the same neutral family — visible without turning into a harsh outline.
  */
 @Composable
 fun AppTextField(
@@ -64,9 +77,9 @@ fun AppTextField(
             visualTransformation = visualTransformation,
             shape = RoundedCornerShape(14.dp),
             colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.6f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
                 disabledIndicatorColor = Color.Transparent,
