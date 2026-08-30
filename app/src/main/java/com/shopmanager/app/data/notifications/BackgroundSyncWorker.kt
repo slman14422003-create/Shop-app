@@ -101,17 +101,31 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
             .apply()
     }
 
+    /**
+     * BUG FIXED (edit/delete notifications unreliable): this used to diff
+     * only the *set of names* on the shortage list, the same gap as the old
+     * in-app MaterialsViewModel logic (see its comment) - editing an
+     * existing item's quantity/unit while its name stayed the same never
+     * looked like a change here either, so a phone woken up by this worker
+     * could report nothing even though the list had genuinely changed.
+     * Diffing each item's full signature (id + name + quantity + unit)
+     * instead catches edits the same way the in-app check now does.
+     */
     private suspend fun checkShortageList() {
         val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val db = FirebaseModule.materialsDb
         val snapshot = db.collection("spices_final_v12").get(Source.SERVER).await()
-        val names = snapshot.documents.mapNotNull { it.getString("name") }
+        val signature = snapshot.documents.associate { doc ->
+            doc.id to "${doc.getString("name") ?: ""}|${doc.getDouble("quantity") ?: 0.0}|${doc.getString("unit") ?: ""}"
+        }
+        val names = snapshot.documents.mapNotNull { it.getString("name") }.distinct()
 
-        val lastNames = prefs.getStringSet(KEY_KNOWN_MATERIALS, null)
-        if (lastNames != null && names.toSet() != lastNames && names.isNotEmpty()) {
+        val lastSignature = prefs.getString(KEY_KNOWN_MATERIALS, null)
+        val encoded = signature.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
+        if (lastSignature != null && encoded != lastSignature && names.isNotEmpty()) {
             NotificationHelper.showShoppingListNotification(applicationContext, names)
         }
-        prefs.edit().putStringSet(KEY_KNOWN_MATERIALS, names.toSet()).apply()
+        prefs.edit().putString(KEY_KNOWN_MATERIALS, encoded).apply()
     }
 
     private fun formatAmount(amount: Double): String =
@@ -121,7 +135,13 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
         private const val PREFS = "shop_manager_sync"
         private const val KEY_KNOWN_PERSONS = "known_person_ids"
         private const val KEY_KNOWN_DEBTS = "known_debt_ids"
-        private const val KEY_KNOWN_MATERIALS = "known_material_names"
+        // Renamed from "known_material_names": that old key held a
+        // StringSet (just names). Reusing it here with getString() would
+        // throw ClassCastException on any device upgrading from the old
+        // version with a value already stored under it - a new key name
+        // sidesteps that entirely (worst case: one silent reseed on the
+        // first run after updating, same as a fresh install).
+        private const val KEY_KNOWN_MATERIALS = "known_material_signature"
         private const val UNIQUE_WORK_NAME = "shop_manager_background_sync"
 
         /**
