@@ -5,7 +5,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,7 +23,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -210,7 +208,7 @@ fun DebtsScreen(
                 ) {
                     items(filtered, key = { it.id }) { person ->
                         PersonRow(
-                            person, Modifier.animateItemPlacement(MotionSpecs.reorderSpring()),
+                            person, Modifier,
                             onClick = { onOpenPerson(person.id) },
                             onDelete = { deleteTarget = person },
                             onMarkPaid = { payTarget = person }
@@ -332,16 +330,12 @@ private fun VerticalDivider() {
 @Composable
 private fun StatItem(label: String, value: Double, format: (Double) -> String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        androidx.compose.runtime.CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.primary
-        ) {
-            com.shopmanager.app.ui.common.AnimatedCounterText(
-                targetValue = value,
-                format = format,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        Text(
+            text = format(value),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
         Spacer(Modifier.height(2.dp))
         Text(label, style = MaterialTheme.typography.labelSmall)
     }
@@ -371,13 +365,6 @@ private fun PersonRow(
     onMarkPaid: () -> Unit
 ) {
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = MotionSpecs.pressSpring(),
-        label = "personRowScale"
-    )
 
     // BUG FIXED (solid black bar under the row's action icons): the press
     // scale used to be applied directly on the same modifier chain as the
@@ -390,15 +377,11 @@ private fun PersonRow(
     // are. Moving `.scale()` onto a plain outer Box, so it never shares a
     // graphics layer with the ElevatedCard's own shadow, fixes this
     // everywhere it happens without giving up the press animation.
-    Box(modifier.fillMaxWidth().scale(scale)) {
+    Box(modifier.fillMaxWidth()) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(
-                interactionSource = interactionSource,
-                indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = onClick
-            ),
+            .clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
     ) {
