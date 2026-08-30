@@ -79,6 +79,7 @@ import com.shopmanager.app.ui.common.FloatingBottomNav
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.QuickAction
 import com.shopmanager.app.ui.common.WebViewScreen
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
 import com.shopmanager.app.ui.theme.AppColorPalette
@@ -659,19 +660,19 @@ private fun ShopManagerApp(
     // tab openPager() just switched to.
     pendingNotificationAction?.let { action ->
         when (action) {
-            is NotificationAction.DebtPaid -> AlertDialog(
+            is NotificationAction.DebtPaid -> GlassAlertDialog(
                 onDismissRequest = onConsumeNotificationAction,
                 title = { Text("✅ تم سداد دين") },
                 text = { Text("${action.personName} وفى ${action.amount} ${action.currency}") },
                 confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
             )
-            is NotificationAction.NewDebt -> AlertDialog(
+            is NotificationAction.NewDebt -> GlassAlertDialog(
                 onDismissRequest = onConsumeNotificationAction,
                 title = { Text("💰 عميل جديد بالديون") },
                 text = { Text("${action.personName} — ${action.amount} ${action.currency}") },
                 confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
             )
-            is NotificationAction.ShoppingList -> AlertDialog(
+            is NotificationAction.ShoppingList -> GlassAlertDialog(
                 onDismissRequest = onConsumeNotificationAction,
                 title = { Text("🛒 قائمة المشتريات") },
                 text = {
