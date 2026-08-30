@@ -24,7 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
@@ -67,7 +67,11 @@ import com.shopmanager.app.data.updates.DownloadState
 import com.shopmanager.app.data.updates.UpdateCheckResult
 import com.shopmanager.app.data.updates.UpdateChecker
 import com.shopmanager.app.data.updates.UpdateManifest
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.shopmanager.app.ui.common.AppSettingsState
+import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
@@ -250,7 +254,7 @@ fun SettingsScreen(
                 title = { Text("الإعدادات", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     GlassIconButton(
-                        icon = Icons.Default.ArrowBack,
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
                         onClick = onBack,
                         // BUG FIXED: only `start` padding (space from the
@@ -1107,10 +1111,10 @@ private fun CurrencyPickerDialog(current: String, onDismiss: () -> Unit, onSelec
                     IosOptionRow(label = option, selected = current == option, onClick = { onSelect(option) })
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
+                AppTextField(
                     value = custom,
                     onValueChange = { custom = it },
-                    label = { Text("عملة أخرى") },
+                    label = "عملة أخرى",
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1137,13 +1141,19 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
         title = { Text("تعيين رمز PIN") },
         text = {
             Column {
-                OutlinedTextField(
+                AppTextField(
                     value = pin, onValueChange = { pin = it.filter { c -> c.isDigit() }.take(6) },
-                    label = { Text("رمز من 4 إلى 6 أرقام") }, modifier = Modifier.fillMaxWidth()
+                    label = "رمز من 4 إلى 6 أرقام",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
+                AppTextField(
                     value = confirm, onValueChange = { confirm = it.filter { c -> c.isDigit() }.take(6) },
-                    label = { Text("تأكيد الرمز") }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    label = "تأكيد الرمز",
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
