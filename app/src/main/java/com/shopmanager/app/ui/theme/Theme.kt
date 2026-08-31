@@ -1,15 +1,11 @@
 package com.shopmanager.app.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -44,12 +40,6 @@ fun rememberIsDarkTheme(themeMode: AppThemeMode): Boolean {
     }
 }
 
-/** True only on Android 12+ (API 31), where [dynamicLightColorScheme]/
- * [dynamicDarkColorScheme] actually exist and read the device wallpaper —
- * gates whether [AppColorMode.DYNAMIC] can be offered/honored at all. */
-@Composable
-fun isDynamicColorSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-
 /**
  * BUG FIXED (RTL layout): every string in this app is hardcoded Arabic —
  * there's no strings.xml localization, no values-ar folder, nothing that
@@ -77,21 +67,12 @@ fun ShopManagerTheme(
     content: @Composable () -> Unit
 ) {
     val useDark = rememberIsDarkTheme(themeMode)
-    val context = LocalContext.current
-    val dynamicSupported = isDynamicColorSupported()
-
-    // Falls back to MANUAL's own selected palette if DYNAMIC is somehow
-    // stored on a device that doesn't support it (e.g. after restoring a
-    // backup taken on a newer phone onto an older one running < Android 12).
-    val effectiveMode = if (colorMode == AppColorMode.DYNAMIC && !dynamicSupported) {
-        AppColorMode.MANUAL
-    } else colorMode
 
     val paletteColors = remember(colorPalette) { paletteColorsFor(colorPalette) }
-    val colors = remember(effectiveMode, paletteColors, useDark, context) {
-        when (effectiveMode) {
-            AppColorMode.DYNAMIC ->
-                if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colors = remember(colorMode, paletteColors, useDark) {
+        when (colorMode) {
+            AppColorMode.GLASS ->
+                if (useDark) glassDarkScheme(paletteColors) else glassLightScheme(paletteColors)
             AppColorMode.CLASSIC ->
                 if (useDark) neutralDarkScheme() else neutralLightScheme()
             AppColorMode.MANUAL ->
@@ -99,21 +80,9 @@ fun ShopManagerTheme(
         }
     }
 
-    // The header/status-bar gradient (LocalBrandGradientColors) has no
-    // single "gradientStart/End" pair to read off a system dynamic scheme,
-    // so it's built straight from that scheme's own primary/tertiary tones
-    // instead — same idea as every manual palette's own two-color pair,
-    // just sourced from the wallpaper instead of a hand-picked hue.
-    val gradientColors = remember(effectiveMode, colors, paletteColors) {
-        when (effectiveMode) {
-            // BUG FIXED: raw colors.primary/tertiary aren't guaranteed dark
-            // enough for the white header text/icons drawn on top of them —
-            // see ensureDarkEnoughForWhiteText's doc for why. This keeps the
-            // gradient tied to the wallpaper's hue while guaranteeing contrast.
-            AppColorMode.DYNAMIC -> listOf(
-                ensureDarkEnoughForWhiteText(colors.primary),
-                ensureDarkEnoughForWhiteText(colors.tertiary)
-            )
+    val gradientColors = remember(colorMode, paletteColors) {
+        when (colorMode) {
+            AppColorMode.GLASS -> glassGradientColors(paletteColors)
             AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
             AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
         }
@@ -121,7 +90,12 @@ fun ShopManagerTheme(
 
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Rtl,
-        LocalBrandGradientColors provides gradientColors
+        LocalBrandGradientColors provides gradientColors,
+        // Scoped switch for the animated liquid-glass motion (drift/sheen)
+        // and the extra translucency in liquidGlassSurface/GlassAlertDialog/
+        // the glass buttons — on only for AppColorMode.GLASS, so MANUAL and
+        // CLASSIC keep their existing calm, static glass panels untouched.
+        LocalGlassMode provides (colorMode == AppColorMode.GLASS)
     ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
     }
