@@ -209,8 +209,13 @@ fun GlassAlertDialog(
         // panel, so the fill can drop back down to real glass-level
         // translucency (0.95/0.92 → 0.62/0.55) without turning messy —
         // what shows through is a soft blur, never sharp list rows.
-        val fillAlphaTop = 0.62f
-        val fillAlphaBottom = 0.55f
+        // BUG FIXED ("اللمعه ما بدي ياها" — don't want the shine): this
+        // panel used to get [liquidGlassSurface]'s glare unconditionally
+        // (the bright glow visible top-left in the screenshot) — that
+        // parameter didn't exist until now; `highlight = false` turns it
+        // off, leaving just the tinted gradient fill + thin glass rim.
+        val fillAlphaTop = 0.42f
+        val fillAlphaBottom = 0.34f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
         ).copy(alpha = fillAlphaTop)
@@ -245,6 +250,7 @@ fun GlassAlertDialog(
                         ),
                         elevation = 24.dp,
                         sheen = false,
+                        highlight = false,
                         animated = false
                     )
             ) {
@@ -317,23 +323,41 @@ fun GlassAlertDialog(
 private fun Color.isSpecified(): Boolean = this != Color.Unspecified
 
 /**
- * Cheap, version-independent blur: shrink the screenshot down to a few
- * dozen pixels wide, then stretch it back up to full size. Shrinking
- * throws away all the fine detail (text edges, icons); the upscale then
- * smears what's left across the full image with bilinear filtering — a
- * real blur of the actual pixels, not a transparency trick, and it's
- * plain [Bitmap] math with no RenderEffect/OS version requirement, so it
- * runs the same on every Android version this app supports.
+ * Cheap, version-independent blur: repeatedly halve the screenshot's size,
+ * then stretch the tiny result back up to full size.
+ *
+ * BUG FIXED ("البلور ورا المربع شكله مو حلو" — the blur behind the panel
+ * looked bad): the first version did this in one huge jump (straight to
+ * ~6% size, then straight back up). A single giant scale like that doesn't
+ * properly average enough source pixels into each destination pixel, so
+ * instead of a smooth blur it came out as a hard-edged mosaic of flat
+ * color blocks — visible as actual square tiles in the screenshot, not
+ * blur at all. Repeated *halving* fixes this: each individual step is a
+ * mild, well-sampled 2x reduction (real box-filtered averaging, not a
+ * lossy jump), and those small clean averages stack across the five
+ * steps into a genuinely smooth result — the same trick GPU mipmaps use
+ * to blur cheaply. Scaling the final tiny bitmap back up to full size in
+ * one shot is fine (that direction doesn't have the same sampling
+ * problem), and is still just [Bitmap] math with no OS version or
+ * hardware requirement.
  */
 private fun frostBitmap(source: Bitmap): Bitmap {
     return try {
-        val downscale = 0.06f
-        val smallWidth = maxOf(1, (source.width * downscale).toInt())
-        val smallHeight = maxOf(1, (source.height * downscale).toInt())
-        val tiny = Bitmap.createScaledBitmap(source, smallWidth, smallHeight, true)
-        val blurred = Bitmap.createScaledBitmap(tiny, source.width, source.height, true)
-        if (tiny !== blurred) tiny.recycle()
-        source.recycle()
+        var current = source
+        // 5 halvings ≈ final size is ~1/32 of the original in each
+        // dimension (~0.1% of the pixel count) — heavy enough to erase
+        // all text/icon detail, reached gently enough (one mild 2x step
+        // at a time) to stay smooth instead of blocky.
+        repeat(5) {
+            val nextWidth = maxOf(1, current.width / 2)
+            val nextHeight = maxOf(1, current.height / 2)
+            val next = Bitmap.createScaledBitmap(current, nextWidth, nextHeight, true)
+            if (current !== source) current.recycle()
+            current = next
+        }
+        val blurred = Bitmap.createScaledBitmap(current, source.width, source.height, true)
+        if (current !== blurred) current.recycle()
+        if (source !== blurred) source.recycle()
         blurred
     } catch (t: Throwable) {
         source
