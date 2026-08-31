@@ -6,7 +6,6 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -128,16 +127,22 @@ fun Modifier.liquidGlassSurface(
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
-    // "وضع الجلاس الشفاف الكامل" (AppColorMode.GLASS): the one mode where
-    // this surface's animated drift/sheen motion turns on and its fill
-    // pushes further toward see-through, regardless of what the caller
-    // passed for `animated`/`sheen`/`baseAlpha` — every other color mode
-    // (MANUAL/CLASSIC) keeps exactly the calm, static look it already had,
-    // since `glassModeActive` is false there and every line below falls
-    // straight back to the original parameter values.
+    // "وضع الجلاس الشفاف الكامل" (AppColorMode.GLASS): the mode where this
+    // surface's fill pushes further toward see-through and its drift
+    // highlight is free to animate, regardless of the caller's `animated`
+    // value — every other color mode (MANUAL/CLASSIC) keeps exactly the
+    // calm, static look it already had, since `glassModeActive` is false
+    // there. `sheen` is deliberately left to the caller alone (never
+    // force-enabled by glass mode): the diagonal streak is a strong,
+    // deliberate glare/glint effect, not a general "glass mode" trait —
+    // forcing it on every header/bottom-nav panel by default is exactly
+    // what read as "لمعة" (unwanted shine) once the bright orbs from
+    // `highlight` combined with it. Only surfaces that explicitly opt in
+    // (`sheen = true`) get the streak; the rest just get plain, animation-
+    // free transparency.
     val glassModeActive = LocalGlassMode.current
     val effectiveAnimated = (animated || glassModeActive) && !isLowTier
-    val effectiveSheen = (sheen || glassModeActive) && effectiveAnimated
+    val effectiveSheen = sheen && effectiveAnimated
     val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.78f).coerceIn(0f, 1f) else baseAlpha
 
     // PERF (low-end tier): Modifier.shadow forces its own offscreen
@@ -173,21 +178,21 @@ fun Modifier.liquidGlassSurface(
         value
     }
 
-    // The diagonal sweeping streak only ever runs when both `sheen` is
-    // requested AND `animated` is true — i.e. nowhere by default anymore.
+    // BUG FIXED ("الانميشن مو سلسة" — jerky sheen): the streak used to
+    // pause dead-still at each end for a beat (`-0.35f at 1800`/`1.35f at
+    // 5200`) before suddenly rushing across in the middle of the cycle —
+    // a stop-start motion that read as jerky rather than a smooth glide.
+    // A single continuous ease across the whole duration (no plateaus)
+    // reads as one smooth glide instead — slower and gentler too (5200ms
+    // → 6400ms), matching a calmer "liquid glass" feel over an obvious
+    // sweep.
     val sheenProgress: Float? = if (effectiveSheen) {
         val transition = rememberInfiniteTransition(label = "liquidGlassSheen")
         val value by transition.animateFloat(
             initialValue = -0.35f,
             targetValue = 1.35f,
             animationSpec = infiniteRepeatable(
-                animation = keyframes {
-                    durationMillis = 5200
-                    -0.35f at 0
-                    -0.35f at 1800 using FastOutSlowInEasing
-                    1.35f at 4200 using FastOutSlowInEasing
-                    1.35f at 5200
-                },
+                animation = tween(6400, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Restart
             ),
             label = "liquidGlassSheenValue"
@@ -246,13 +251,17 @@ fun Modifier.liquidGlassSurface(
             // the same way a phone screen's reflection moves across a
             // curved glass surface when it tilts. `null` (LOW tier / sheen
             // not requested) skips building this brush entirely.
+            // BUG FIXED ("بدون لمعة" — no glare): lowered from 0.16 to
+            // 0.09 alpha at its brightest point — a faint glide instead of
+            // a visible bright streak, since this now also has to coexist
+            // with `highlight`'s absence on every surface that uses it.
             val sheenBrush = sheenProgress?.let { progress ->
                 val center = w * progress
                 val bandWidth = w * 0.22f
                 Brush.linearGradient(
                     colorStops = arrayOf(
                         0f to Color.White.copy(alpha = 0f),
-                        0.5f to Color.White.copy(alpha = 0.16f),
+                        0.5f to Color.White.copy(alpha = 0.09f),
                         1f to Color.White.copy(alpha = 0f)
                     ),
                     start = Offset(center - bandWidth, 0f),
