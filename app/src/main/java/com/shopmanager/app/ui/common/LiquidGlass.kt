@@ -100,22 +100,15 @@ fun Modifier.liquidGlassSurface(
     // panels blend into what looks like a single continuous sheet of
     // glass instead of two stacked slabs with a hard line between them.
     topFlush: Boolean = false,
-    // iOS 26 REDESIGN ("شيل لمعى الزجاج للي في الشريط العلوي"): every top
-    // bar in the app used to run two never-ending animation loops forever
-    // — `drift`, a radial highlight sliding back and forth every 7s, and
-    // (on the Dashboard header) `sheen`, a diagonal streak sweeping across
-    // it every 5.2s. That constant motion is exactly what read as a
-    // "لمعة" (glare/shine) restlessly playing on the bar — it's also not
-    // how iOS 26's own frosted "Liquid Glass" material behaves: real iOS
-    // bars are a *static* frosted material with no animated highlight
-    // looping on them; only content scrolling underneath ever changes how
-    // they look. `animated` now defaults to false everywhere (every top
-    // bar, the floating bottom nav, its FAB): the highlight/rim below are
-    // still drawn — the panel still reads as glass — but as a fixed,
-    // calm surface with nothing looping on it. Only [GlassAlertDialog]
-    // opts back in explicitly, since a one-off dialog appearing on screen
-    // is a moment that can afford a little extra life without it reading
-    // as restless chrome.
+    // BUG FIXED ("اللمعه ما بدي ياها" — don't want the shine/glare):
+    // `topHighlight`, `topEdge`, and `dropletGlint` below were all drawn
+    // unconditionally — no caller could turn the glare off, only tune
+    // `sheen`/`animated` (the *moving* streak). [GlassAlertDialog] needs
+    // exactly that: a flat, true-transparent glass panel with none of
+    // this surface's usual gloss. `false` here skips all three static
+    // highlight layers; the base gradient + rim border still render, so
+    // it still reads as a distinct glass panel — just without any glare.
+    highlight: Boolean = true,
     animated: Boolean = false
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
@@ -195,11 +188,11 @@ fun Modifier.liquidGlassSurface(
         .drawWithCache {
             val w = size.width
             val h = size.height
-            val topHighlight = Brush.radialGradient(
+            val topHighlight = if (highlight) Brush.radialGradient(
                 colors = listOf(Color.White.copy(alpha = 0.20f), Color.White.copy(alpha = 0f)),
                 center = Offset(w * drift, -h * 0.25f),
                 radius = w * 0.75f
-            )
+            ) else null
             // BUG FIXED ("غير مرتب"): a second radial highlight ("glint")
             // used to drift here too, moving opposite `topHighlight`. Two
             // independently-moving translucent-white patches overlapping on
@@ -207,7 +200,7 @@ fun Modifier.liquidGlassSurface(
             // a single coherent sheet of glass — removed rather than tuned,
             // since `topHighlight` alone already carries the "light drifting
             // across glass" read that this was meant to reinforce.
-            val topEdge = if (topFlush) null else Brush.verticalGradient(
+            val topEdge = if (topFlush || !highlight) null else Brush.verticalGradient(
                 colors = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0f)),
                 startY = 0f,
                 endY = h * 0.12f
@@ -249,7 +242,7 @@ fun Modifier.liquidGlassSurface(
             // separately — and it's unconditional (not gated behind
             // `sheen`/`animated`), so it's part of this surface's resting
             // look everywhere, not an extra opt-in effect.
-            val dropletGlint = Brush.radialGradient(
+            val dropletGlint = if (highlight) Brush.radialGradient(
                 colors = listOf(
                     Color.White.copy(alpha = 0.50f),
                     Color.White.copy(alpha = 0.16f),
@@ -257,16 +250,16 @@ fun Modifier.liquidGlassSurface(
                 ),
                 center = Offset(w * 0.22f, h * 0.14f),
                 radius = w * 0.30f
-            )
+            ) else null
             onDrawWithContent {
                 // Content (text/icons) drawn first so every highlight below
                 // is layered strictly on top of the surface itself — never
                 // a blur pass over the content, so nothing ever turns
                 // illegible.
                 drawContent()
-                drawRect(brush = topHighlight)
+                if (topHighlight != null) drawRect(brush = topHighlight)
                 if (topEdge != null) drawRect(brush = topEdge)
-                drawRect(brush = dropletGlint)
+                if (dropletGlint != null) drawRect(brush = dropletGlint)
                 if (sheenBrush != null) drawRect(brush = sheenBrush)
             }
         }
