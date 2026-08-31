@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
+import com.shopmanager.app.ui.theme.LocalGlassMode
 
 /**
  * "زجاج سائل" (liquid glass): the frosted, glossy surface behind every
@@ -127,6 +128,18 @@ fun Modifier.liquidGlassSurface(
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
+    // "وضع الجلاس الشفاف الكامل" (AppColorMode.GLASS): the one mode where
+    // this surface's animated drift/sheen motion turns on and its fill
+    // pushes further toward see-through, regardless of what the caller
+    // passed for `animated`/`sheen`/`baseAlpha` — every other color mode
+    // (MANUAL/CLASSIC) keeps exactly the calm, static look it already had,
+    // since `glassModeActive` is false there and every line below falls
+    // straight back to the original parameter values.
+    val glassModeActive = LocalGlassMode.current
+    val effectiveAnimated = (animated || glassModeActive) && !isLowTier
+    val effectiveSheen = (sheen || glassModeActive) && effectiveAnimated
+    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.78f).coerceIn(0f, 1f) else baseAlpha
+
     // PERF (low-end tier): Modifier.shadow forces its own offscreen
     // graphicsLayer + a blur pass every frame it's on screen — on a weak
     // GPU/driver stack that's real, measurable frame time on every single
@@ -147,7 +160,7 @@ fun Modifier.liquidGlassSurface(
     // default for every top bar/bottom nav) — still gives the surface a
     // single soft light source like glass catching light from one angle,
     // just without anything looping.
-    val drift: Float = if (!animated || isLowTier) {
+    val drift: Float = if (!effectiveAnimated) {
         0.28f
     } else {
         val transition = rememberInfiniteTransition(label = "liquidGlassDrift")
@@ -162,7 +175,7 @@ fun Modifier.liquidGlassSurface(
 
     // The diagonal sweeping streak only ever runs when both `sheen` is
     // requested AND `animated` is true — i.e. nowhere by default anymore.
-    val sheenProgress: Float? = if (sheen && animated && !isLowTier) {
+    val sheenProgress: Float? = if (effectiveSheen) {
         val transition = rememberInfiniteTransition(label = "liquidGlassSheen")
         val value by transition.animateFloat(
             initialValue = -0.35f,
@@ -196,7 +209,7 @@ fun Modifier.liquidGlassSurface(
         // draws only this rect, strictly before this node's own children
         // are drawn (never after, never wrapping them), so `alpha` here
         // dims just the glass fill — content on top stays fully legible.
-        .drawBehind { drawRect(brush = baseBrush, alpha = baseAlpha) }
+        .drawBehind { drawRect(brush = baseBrush, alpha = effectiveBaseAlpha) }
         // PERF: drawWithCache (not drawWithContent) so the Brush objects
         // below are only rebuilt when `drift`/`sheenProgress` or the
         // surface's `size` actually change — not on every recomposition. On
@@ -321,6 +334,11 @@ fun GlassIconButton(
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonScale"
     )
+    // AppColorMode.GLASS pushes every glass element further toward
+    // see-through; every other mode keeps the existing 0.16/0.30 values.
+    val glassModeActive = LocalGlassMode.current
+    val fillAlpha = if (glassModeActive) 0.10f else 0.16f
+    val rimAlpha = if (glassModeActive) 0.38f else 0.30f
 
     IconButton(
         onClick = onClick,
@@ -335,8 +353,8 @@ fun GlassIconButton(
             // same 0.30 every other glass edge in the app uses (was a
             // brighter 0.40, which read as a heavier ring than the panel
             // border it sits on).
-            .background(Color.White.copy(alpha = 0.16f))
-            .border(1.dp, Color.White.copy(alpha = 0.30f), CircleShape)
+            .background(Color.White.copy(alpha = fillAlpha))
+            .border(1.dp, Color.White.copy(alpha = rimAlpha), CircleShape)
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(size * 0.5f))
     }
