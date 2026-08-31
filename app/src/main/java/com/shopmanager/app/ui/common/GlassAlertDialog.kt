@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -224,17 +225,6 @@ fun GlassAlertDialog(
         ).copy(alpha = fillAlphaBottom)
 
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            // The blurred screenshot, filling the whole dialog window so it
-            // lines up with the real screen behind it — only the part
-            // under the translucent panel below actually reads as "glass".
-            frostedBackdrop?.let { bmp ->
-                Image(
-                    bitmap = bmp.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().alpha(contentAlpha),
-                    contentScale = ContentScale.Crop
-                )
-            }
             Box(
                 modifier
                     .graphicsLayer {
@@ -242,7 +232,12 @@ fun GlassAlertDialog(
                         scaleY = scale
                     }
                     .alpha(contentAlpha)
-                    .widthIn(min = 280.dp, max = 400.dp)
+                    // BUG FIXED ("المربع كبير شوي" — the box is a bit too
+                    // big): 400.dp on a normal ~360–400dp-wide phone left
+                    // almost no side margin, reading as edge-to-edge rather
+                    // than a floating card. Narrower cap (340.dp) leaves a
+                    // visible gutter on both sides, same as an iOS alert.
+                    .widthIn(min = 260.dp, max = 340.dp)
                     .liquidGlassSurface(
                         shape = shape,
                         baseBrush = Brush.verticalGradient(
@@ -254,6 +249,32 @@ fun GlassAlertDialog(
                         animated = false
                     )
             ) {
+            // BUG FIXED ("تحته كلشي مشوه مو بلور" — everything under it is
+            // distorted, not blurred): this used to be a *separate*, full
+            // dialog-window-sized Image drawn behind everything — since the
+            // dialog window is the *whole screen* (usePlatformDefaultWidth
+            // = false), that meant the blurred screenshot covered the
+            // entire screen, not just the area under this panel. Outside
+            // the panel that's wrong on two counts: it has no business
+            // being visible there at all (that region should just be the
+            // normal dim scrim), and at full screen size the same blurred
+            // bitmap stretched no differently than before, so it read as a
+            // warped, smeared version of the real background rather than
+            // a blur. Moving the Image to be *this Box's own child* (using
+            // matchParentSize, so it's sized to exactly this panel, not
+            // the screen) and relying on liquidGlassSurface's own
+            // `.clip(shape)` (already applied via the modifier chain above
+            // — clipping applies to every child, including this Image)
+            // confines the blurred image to precisely the panel's rounded
+            // bounds. Everywhere outside the panel is untouched by it now.
+            frostedBackdrop?.let { bmp ->
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
             Column {
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
                     icon?.let {
