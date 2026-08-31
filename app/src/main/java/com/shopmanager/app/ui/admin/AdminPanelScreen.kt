@@ -131,7 +131,13 @@ fun AdminPanelScreen(
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+                // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
+                // — راجع الشرح بـ DashboardScreen.kt.
+                modifier = Modifier.liquidGlassSurface(
+                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                    highlight = false,
+                    baseAlpha = 0.72f
+                )
             )
         }
     ) { padding ->
