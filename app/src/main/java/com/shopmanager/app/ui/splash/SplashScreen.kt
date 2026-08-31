@@ -1,10 +1,17 @@
 package com.shopmanager.app.ui.splash
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.EaseOutCubic
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,7 +31,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -66,6 +77,32 @@ import com.shopmanager.app.ui.common.liquidGlassSurface
 fun AppSplashScreen(modifier: Modifier = Modifier) {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
+    // iOS-style staggered launch sequence: the logo pops in first (a soft
+    // spring scale+fade, the same "arriving with a little life" feel as
+    // an iOS app icon zooming into its splash), then the title, then the
+    // subtitle, then the spinner — each stage waiting for the previous
+    // one's own animation to be mostly finished before starting, instead
+    // of every element fading in as one flat block. On LOW tier every
+    // stage starts immediately (no staggering delay) and uses only a
+    // instant fade, matching the "skip infinite/expensive animations on
+    // LOW" convention used everywhere else in this screen — the sequence
+    // still exists (so the layout doesn't jump-cut into place) but costs
+    // nothing extra.
+    var stage by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        if (isLowTier) {
+            stage = 4
+        } else {
+            stage = 1
+            kotlinx.coroutines.delay(90)
+            stage = 2
+            kotlinx.coroutines.delay(110)
+            stage = 3
+            kotlinx.coroutines.delay(110)
+            stage = 4
+        }
+    }
+
     Box(
         modifier
             .fillMaxSize()
@@ -88,39 +125,68 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
             verticalArrangement = Arrangement.Center,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp)
         ) {
-            LiquidGlassLogo(isLowTier = isLowTier)
+            AnimatedVisibility(
+                visible = stage >= 1,
+                enter = scaleIn(
+                    initialScale = 0.72f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+                ) + fadeIn(tween(220, easing = EaseOutCubic))
+            ) {
+                LiquidGlassLogo(isLowTier = isLowTier)
+            }
 
             Spacer(Modifier.height(28.dp))
 
-            Text(
-                "إدارة المحل",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 30.sp),
-                textAlign = TextAlign.Center
-            )
+            AnimatedVisibility(
+                visible = stage >= 2,
+                enter = slideInVertically(
+                    initialOffsetY = { it / 4 },
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
+                ) + fadeIn(tween(240, easing = EaseOutCubic))
+            ) {
+                Text(
+                    "إدارة المحل",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = 30.sp),
+                    textAlign = TextAlign.Center
+                )
+            }
             Spacer(Modifier.height(6.dp))
-            Text(
-                "استقرار لإدارة المحل",
-                color = Color.White.copy(alpha = 0.82f),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center
-            )
+            AnimatedVisibility(
+                visible = stage >= 3,
+                enter = slideInVertically(
+                    initialOffsetY = { it / 4 },
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
+                ) + fadeIn(tween(240, easing = EaseOutCubic))
+            ) {
+                Text(
+                    "استقرار لإدارة المحل",
+                    color = Color.White.copy(alpha = 0.82f),
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center
+                )
+            }
 
             Spacer(Modifier.height(36.dp))
 
             // Deliberately generic — a plain indeterminate spinner, not a
             // checklist of internal init steps. It only says "still
             // working", nothing more specific about what.
-            CircularProgressIndicator(
-                strokeWidth = 2.5.dp,
-                color = Color.White.copy(alpha = 0.75f),
-                modifier = Modifier.size(28.dp)
-            )
+            AnimatedVisibility(
+                visible = stage >= 4,
+                enter = fadeIn(tween(200, easing = EaseOutCubic))
+            ) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.5.dp,
+                    color = Color.White.copy(alpha = 0.75f),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
         }
 
         Text(
-            "تحت تطوير المعالج الفيزيائي سلمان",
+            "@slman",
             color = Color.White.copy(alpha = 0.55f),
             style = MaterialTheme.typography.labelMedium,
             textAlign = TextAlign.Center,
