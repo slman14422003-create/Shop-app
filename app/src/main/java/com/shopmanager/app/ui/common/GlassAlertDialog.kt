@@ -140,9 +140,18 @@ fun GlassAlertDialog(
     // and pure bitmap math with no OS version or hardware requirement.
     val hostView = LocalView.current
     var frostedBackdrop by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(Unit) {
+    // "زد نسبة البلور... فقط في الوضع الزجاجي": AppColorMode.GLASS gets one
+    // extra halving pass (6 instead of 5) — each pass is a mild, well-
+    // sampled 2x reduction (see frostBitmap's own doc), so one more step
+    // roughly halves the remaining detail again, a noticeably heavier frost
+    // for the mode that's actually named "glass". MANUAL/CLASSIC keep the
+    // original 5-pass strength unchanged.
+    val glassModeActiveForBlur = LocalGlassMode.current
+    LaunchedEffect(glassModeActiveForBlur) {
         val snapshot = runCatching { hostView.drawToBitmap() }.getOrNull()
-        frostedBackdrop = snapshot?.let { withContext(Dispatchers.Default) { frostBitmap(it) } }
+        frostedBackdrop = snapshot?.let {
+            withContext(Dispatchers.Default) { frostBitmap(it, passes = if (glassModeActiveForBlur) 6 else 5) }
+        }
     }
     DisposableEffect(Unit) {
         onDispose { frostedBackdrop?.recycle() }
@@ -224,9 +233,15 @@ fun GlassAlertDialog(
         // earlier pass (0.26/0.18) — that low an alpha let the blurred
         // background's own colored icons show through as visible blobs of
         // color, which read as glare just as much as a highlight would.
+        // "زد ... الوضوح قليلاً فقط في الوضع الزجاجي": nudged up from
+        // 0.36/0.28 — the panel's own text sat a touch too faint against
+        // the (now heavier) blur behind it. Still clearly more see-through
+        // than the 0.42/0.34 MANUAL/CLASSIC resting value, so glass mode
+        // keeps its own distinct, more-transparent character — just
+        // readable rather than right at the edge of legibility.
         val glassModeActive = LocalGlassMode.current
-        val fillAlphaTop = if (glassModeActive) 0.36f else 0.42f
-        val fillAlphaBottom = if (glassModeActive) 0.28f else 0.34f
+        val fillAlphaTop = if (glassModeActive) 0.40f else 0.42f
+        val fillAlphaBottom = if (glassModeActive) 0.32f else 0.34f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
         ).copy(alpha = fillAlphaTop)
@@ -375,14 +390,16 @@ private fun Color.isSpecified(): Boolean = this != Color.Unspecified
  * problem), and is still just [Bitmap] math with no OS version or
  * hardware requirement.
  */
-private fun frostBitmap(source: Bitmap): Bitmap {
+private fun frostBitmap(source: Bitmap, passes: Int = 5): Bitmap {
     return try {
         var current = source
-        // 5 halvings ≈ final size is ~1/32 of the original in each
-        // dimension (~0.1% of the pixel count) — heavy enough to erase
-        // all text/icon detail, reached gently enough (one mild 2x step
-        // at a time) to stay smooth instead of blocky.
-        repeat(5) {
+        // `passes` halvings — 5 (the original, non-glass-mode strength)
+        // lands around ~1/32 per dimension (~0.1% of the pixel count);
+        // each extra pass roughly halves what detail is left again, so 6
+        // (glass mode) is a visibly heavier, softer frost, still reached
+        // gently (one mild 2x step at a time) to stay smooth instead of
+        // blocky.
+        repeat(passes) {
             val nextWidth = maxOf(1, current.width / 2)
             val nextHeight = maxOf(1, current.height / 2)
             val next = Bitmap.createScaledBitmap(current, nextWidth, nextHeight, true)
