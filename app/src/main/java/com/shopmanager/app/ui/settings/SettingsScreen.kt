@@ -86,7 +86,6 @@ import com.shopmanager.app.ui.theme.AppColorMode
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.SuccessGreen
-import com.shopmanager.app.ui.theme.isDynamicColorSupported
 import com.shopmanager.app.ui.theme.paletteColorsFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -361,7 +360,6 @@ fun SettingsScreen(
                 ColorModeSection(
                     colorMode = colorMode,
                     colorPalette = colorPalette,
-                    dynamicSupported = isDynamicColorSupported(),
                     onModeSelected = { mode ->
                         colorMode = mode
                         settings.colorMode = mode
@@ -789,9 +787,13 @@ fun SettingsScreen(
  * "لوحة الألوان" redesign — three ways to color the app, each a segment
  * in the pill selector at the top instead of the mode being buried among
  * unrelated switches:
- *   • ديناميكي: matches the device wallpaper (Android 12+ only, see
- *     [dynamicSupported] — the segment isn't even shown on older Android
- *     since it can't actually do anything there).
+ *   • زجاج: "الجلاس الشفاف الكامل" — replaces the old wallpaper-driven
+ *     "ديناميكي" mode. Uses the same 20-swatch hue picker as مخصص below,
+ *     but renders the header, dialogs, buttons and the floating bottom bar
+ *     as animated, fully see-through liquid glass (see
+ *     [com.shopmanager.app.ui.theme.LocalGlassMode]) instead of solid
+ *     panels — available on every Android version, unlike the dynamic mode
+ *     it replaces.
  *   • مخصص (manual): the original 20-swatch grid, now sitting in its own
  *     tonal surfaceContainer card instead of floating directly on the
  *     section background — more separation, more Material 3 "container"
@@ -804,20 +806,11 @@ fun SettingsScreen(
 private fun ColorModeSection(
     colorMode: AppColorMode,
     colorPalette: AppColorPalette,
-    dynamicSupported: Boolean,
     onModeSelected: (AppColorMode) -> Unit,
     onPaletteSelected: (AppColorPalette) -> Unit
 ) {
-    val modes = if (dynamicSupported) {
-        listOf(AppColorMode.DYNAMIC, AppColorMode.MANUAL, AppColorMode.CLASSIC)
-    } else {
-        listOf(AppColorMode.MANUAL, AppColorMode.CLASSIC)
-    }
-    // Falls back visually to MANUAL if DYNAMIC is somehow selected on a
-    // device that doesn't support it — mirrors ShopManagerTheme's own
-    // fallback so the settings screen and the actual applied theme always
-    // agree on what's "selected".
-    val effectiveMode = if (colorMode == AppColorMode.DYNAMIC && !dynamicSupported) AppColorMode.MANUAL else colorMode
+    val modes = listOf(AppColorMode.GLASS, AppColorMode.MANUAL, AppColorMode.CLASSIC)
+    val effectiveMode = colorMode
 
     Text(
         "لوحة الألوان",
@@ -859,7 +852,7 @@ private fun ColorModeSection(
             ) {
                 Text(
                     when (mode) {
-                        AppColorMode.DYNAMIC -> "ديناميكي"
+                        AppColorMode.GLASS -> "زجاج"
                         AppColorMode.MANUAL -> "مخصص"
                         AppColorMode.CLASSIC -> "كلاسيكي"
                     },
@@ -875,21 +868,36 @@ private fun ColorModeSection(
     Spacer(Modifier.height(12.dp))
 
     when (effectiveMode) {
-        AppColorMode.DYNAMIC -> Row(
+        AppColorMode.GLASS -> Column(
             Modifier
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.medium)
                 .background(MaterialTheme.colorScheme.secondaryContainer)
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(14.dp)
         ) {
-            Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "ألوان التطبيق تتبع خلفية جهازك تلقائياً — غيّر الخلفية وسيتغيّر اللون معها.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "زجاج شفاف بالكامل — الرأس والأزرار والحوارات والشريط السفلي كلها تتحول لألواح زجاجية شفافة ومتحركة بنفس لون اللوحة المختارة.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AppColorPalette.entries.forEach { palette ->
+                    ColorPaletteSwatch(
+                        palette = palette,
+                        selected = colorPalette == palette,
+                        onClick = { onPaletteSelected(palette) }
+                    )
+                }
+            }
         }
 
         AppColorMode.MANUAL -> Column(
