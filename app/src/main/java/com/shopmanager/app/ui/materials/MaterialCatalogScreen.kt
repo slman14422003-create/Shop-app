@@ -98,7 +98,13 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.liquidGlassSurface(RectangleShape)
+                // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
+                // — راجع الشرح بـ DashboardScreen.kt.
+                modifier = Modifier.liquidGlassSurface(
+                    RectangleShape,
+                    highlight = false,
+                    baseAlpha = 0.72f
+                )
             )
         },
         // FIX: adding a new catalog name used to be a permanently-visible

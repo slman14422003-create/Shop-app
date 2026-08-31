@@ -286,7 +286,13 @@ private fun MaterialsHeader(
     Column(
         Modifier
             .fillMaxWidth()
-            .liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp))
+            // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
+            // — راجع الشرح بـ DashboardScreen.kt.
+            .liquidGlassSurface(
+                RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                highlight = false,
+                baseAlpha = 0.72f
+            )
             // The glass panel itself (background/border above) already
             // fills this Column's full bounds, which now extend up behind
             // the transparent status bar; this only pushes the *content*
