@@ -8,16 +8,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -124,6 +130,13 @@ private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 // enough for the splash to actually be seen before it crossfades away.
 private const val SPLASH_MIN_DISPLAY_MS = 1500L
 
+// Apple's own standard screen-transition curve (UIView's system easing for
+// view controller push/pop and modal presentation) — reused here for the
+// splash→app hand-off, and already used for the bottom-nav page transitions
+// further down this file, so every major transition in the app shares the
+// same "iOS-smooth" curve instead of each one picking its own.
+private val iosStandardEasing = CubicBezierEasing(0.32f, 0f, 0.24f, 1f)
+
 class MainActivity : ComponentActivity() {
     // Class-level (not inside setContent) so onNewIntent below - fired when
     // the app is already running and a *second* notification is tapped -
@@ -198,7 +211,9 @@ class MainActivity : ComponentActivity() {
             // detection signals.
             val tier = DevicePerformance.detectTier(applicationContext)
 
-            BackgroundSyncWorker.schedule(applicationContext)
+            // Weak/economic devices get a lighter, battery-guarded sync
+            // schedule automatically — see BackgroundSyncWorker.schedule.
+            BackgroundSyncWorker.schedule(applicationContext, tier)
             // Silent, fully local daily backup — no notification, ever
             // (see DailyBackupWorker/BackupManager). Scheduled here, off
             // the main thread, same as BackgroundSyncWorker above.
@@ -269,13 +284,39 @@ class MainActivity : ComponentActivity() {
                 )
 
                 Surface {
-                    // A one-time crossfade from the in-app splash into the
-                    // real UI once isReady flips true — smoother than the
-                    // hard cut a plain `if` would give, and it only ever
-                    // runs once per cold start so it's not worth gating
-                    // behind the LOW-tier "skip animations" convention used
-                    // for the Pager/route transitions elsewhere in this file.
-                    Crossfade(targetState = isReady, label = "splashToApp") { ready ->
+                    // A one-time transition from the in-app splash into the
+                    // real UI once isReady flips true. On STANDARD/HIGH this
+                    // is a soft iOS-style "zoom + fade" hand-off (the splash
+                    // very slightly scales up and fades out while the real
+                    // UI scales in from a touch smaller than full size) —
+                    // the same "settling into place" feel as an iOS app's
+                    // launch screen dissolving into its first real screen,
+                    // rather than a flat opacity cut. LOW tier keeps this to
+                    // a cheap, near-instant plain fade — same convention as
+                    // every other animation in this file — since this only
+                    // ever runs once per cold start either way, so it's not
+                    // a recurring cost worth guarding further.
+                    val isLowTierForHandoff = performanceTier == PerformanceTier.LOW
+                    AnimatedContent(
+                        targetState = isReady,
+                        label = "splashToApp",
+                        transitionSpec = {
+                            if (isLowTierForHandoff) {
+                                fadeIn(tween(90)) togetherWith fadeOut(tween(90))
+                            } else {
+                                (fadeIn(tween(360, easing = iosStandardEasing)) +
+                                    scaleIn(
+                                        initialScale = 0.96f,
+                                        animationSpec = tween(360, easing = iosStandardEasing)
+                                    )) togetherWith
+                                    (fadeOut(tween(260, easing = iosStandardEasing)) +
+                                        scaleOut(
+                                            targetScale = 1.04f,
+                                            animationSpec = tween(260, easing = iosStandardEasing)
+                                        ))
+                            }
+                        }
+                    ) { ready ->
                         if (!ready) {
                             AppSplashScreen()
                         } else {
