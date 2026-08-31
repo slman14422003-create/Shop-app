@@ -44,19 +44,22 @@ enum class AppColorPalette(val label: String) {
  * - [MANUAL]: one of the 20 hand-tuned [AppColorPalette] hues below,
  *   picked from the swatch grid — the app's original behavior, and the
  *   default so nobody's look changes on update.
- * - [DYNAMIC]: Android 12+'s Material You wallpaper-derived colors
- *   ([androidx.compose.material3.dynamicLightColorScheme]/
- *   dynamicDarkColorScheme) — the app's accent literally matches whatever
- *   the person's home screen wallpaper looks like. Only offered where the
- *   OS actually supports it; [ShopManagerTheme] falls back to [MANUAL]'s
- *   selected palette on older Android automatically if this is somehow
- *   still stored (e.g. after a downgrade).
+ * - [GLASS]: "الجلاس الشفاف الكامل" — replaces the old wallpaper-driven
+ *   dynamic-color mode entirely. Uses the same selected [AppColorPalette]
+ *   hue pair as [MANUAL], but every surface a Card/Dialog/Sheet/Menu paints
+ *   from is genuinely translucent (see [glassLightScheme]/[glassDarkScheme])
+ *   instead of a solid fill, and [LocalGlassMode] switches on
+ *   [com.shopmanager.app.ui.common.liquidGlassSurface]'s animated drift/
+ *   sheen motion for the header, floating bottom nav, and every dialog —
+ *   so the whole app, not just the header, reads as one continuous sheet
+ *   of moving liquid glass. That extra motion is scoped to this mode only;
+ *   [MANUAL]/[CLASSIC] keep their existing calm, static glass panels.
  * - [CLASSIC]: the "إيقاف لوحة الألوان" escape hatch — no accent hue at
  *   all, just true neutral grays on white (light) / near-black (dark), for
  *   anyone who wants the plain two-tone look and nothing more.
  */
 enum class AppColorMode(val label: String) {
-    DYNAMIC("ديناميكي (حسب خلفية الجهاز)"),
+    GLASS("زجاج شفاف كامل"),
     MANUAL("لوحة ألوان مخصصة"),
     CLASSIC("أبيض وأسود كلاسيكي"),
 }
@@ -246,44 +249,6 @@ private fun blend(base: Color, tint: Color, amount: Float): Color = Color(
     alpha = 1f
 )
 
-/**
- * BUG FIXED ("الألوان الديناميكية غلط" — bad contrast, doesn't harmonize
- * with the background): [AppColorMode.DYNAMIC]'s header gradient used to be
- * built straight from the wallpaper-derived `colors.primary`/`colors.tertiary`
- * tones, on the same assumption every hand-tuned MANUAL palette's
- * gradientStart/End already satisfies — that the gradient is always deep
- * enough to pair with the header's white text/icons ([BrandOnGradient]).
- * That assumption only holds for MANUAL, because its gradient colors are
- * fixed, hand-picked dark tones, independent of theme.
- *
- * It does NOT hold for Material You's dynamic scheme: `dynamicDarkColorScheme`
- * deliberately hands back a LIGHT primary/tertiary (tone ~80), meant to sit
- * as an accent on a dark surface with dark `onPrimary` text — not to be used
- * as a full-bleed background behind white text. Used that way, a light
- * pastel wallpaper tone directly behind white text is exactly the washed-out,
- * low-contrast look being reported. Even in light mode, a low-chroma/pastel
- * wallpaper can land too close in lightness to the app's own surfaces to read
- * as a distinct, harmonious header.
- *
- * This blends the color toward black only as far as needed to bring it under
- * a safe luminance ceiling, leaving already-dark colors (a saturated/dark
- * wallpaper) completely untouched — so the header still visibly tracks the
- * wallpaper's actual hue, just guaranteed dark enough to stay legible and
- * consistent with the rest of the app's glass headers.
- */
-internal fun ensureDarkEnoughForWhiteText(color: Color): Color {
-    val luminance = 0.2126f * color.red + 0.7152f * color.green + 0.0722f * color.blue
-    val maxLuminance = 0.32f
-    if (luminance <= maxLuminance) return color
-    val amount = ((luminance - maxLuminance) / luminance).coerceIn(0f, 1f)
-    return Color(
-        red = color.red * (1f - amount),
-        green = color.green * (1f - amount),
-        blue = color.blue * (1f - amount),
-        alpha = 1f
-    )
-}
-
 /** The two header/gradient colors used in [AppColorMode.CLASSIC] — true
  * neutral grays instead of any hue, kept the same in light and dark for
  * the same reason [BrandGradientStart]/[BrandGradientEnd] are. */
@@ -436,6 +401,104 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme = darkColorScheme(
     surfaceContainerHighest = blend(DarkSurface, p.primaryDark, 0.22f),
     error = Color(0xFFFF6B6B),
 )
+
+/**
+ * [AppColorMode.GLASS]'s color scheme: the same 20 hand-tuned palette hues
+ * as [lightSchemeFor]/[darkSchemeFor], but every token a Card/Dialog/Sheet/
+ * Menu/Button reads its background from carries real alpha < 1 instead of
+ * a solid fill. Because Compose's `Modifier.background(Color)` respects a
+ * Color's own alpha channel, this alone is what turns every *ordinary*
+ * Material3 surface in the app — not just the hand-built
+ * [com.shopmanager.app.ui.common.liquidGlassSurface] panels — into frosted
+ * glass that lets whatever's behind it show through, without every screen
+ * needing its own bespoke glass code. `primary`/`onPrimary` are kept
+ * opaque so button/header text stays legible; only the *container* tones
+ * (what a translucent panel's fill actually is) go see-through.
+ */
+internal fun glassLightScheme(p: PaletteColors): ColorScheme = lightColorScheme(
+    primary = p.primaryLight,
+    onPrimary = Color.White,
+    primaryContainer = p.primaryContainerLight.copy(alpha = 0.55f),
+    onPrimaryContainer = p.primaryLight,
+    secondary = p.secondaryLight,
+    onSecondary = Color.White,
+    secondaryContainer = p.secondaryContainerLight.copy(alpha = 0.55f),
+    onSecondaryContainer = p.secondaryLight,
+    tertiary = p.secondaryLight,
+    onTertiary = Color.White,
+    tertiaryContainer = p.secondaryContainerLight.copy(alpha = 0.55f),
+    background = LightBackground,
+    onBackground = Color(0xFF1C1B1F),
+    surface = LightSurface.copy(alpha = 0.55f),
+    onSurface = Color(0xFF1C1B1F),
+    surfaceVariant = LightSurfaceVariant.copy(alpha = 0.50f),
+    onSurfaceVariant = LightOnSurfaceVariant,
+    surfaceTint = p.primaryLight,
+    outline = blend(LightOnSurfaceVariant, p.primaryLight, 0.18f).copy(alpha = 0.55f),
+    outlineVariant = blend(LightSurfaceVariant, p.primaryLight, 0.10f).copy(alpha = 0.45f),
+    inverseSurface = Color(0xFF2F2D33),
+    inverseOnSurface = Color(0xFFF4EFF4),
+    inversePrimary = p.primaryContainerLight,
+    surfaceContainerLowest = Color.White.copy(alpha = 0.35f),
+    surfaceContainerLow = blend(LightSurface, p.primaryLight, 0.04f).copy(alpha = 0.42f),
+    surfaceContainer = blend(LightSurface, p.primaryLight, 0.08f).copy(alpha = 0.50f),
+    surfaceContainerHigh = blend(LightSurface, p.primaryLight, 0.12f).copy(alpha = 0.58f),
+    surfaceContainerHighest = blend(LightSurface, p.primaryLight, 0.16f).copy(alpha = 0.66f),
+    error = DangerRed,
+)
+
+internal fun glassDarkScheme(p: PaletteColors): ColorScheme = darkColorScheme(
+    primary = p.primaryDark,
+    onPrimary = p.onPrimaryDark,
+    primaryContainer = p.primaryContainerDark.copy(alpha = 0.50f),
+    onPrimaryContainer = Color.White,
+    secondary = p.secondaryDark,
+    onSecondary = p.onSecondaryDark,
+    secondaryContainer = p.secondaryContainerDark.copy(alpha = 0.50f),
+    onSecondaryContainer = Color.White,
+    tertiary = p.secondaryDark,
+    onTertiary = p.onSecondaryDark,
+    tertiaryContainer = p.secondaryContainerDark.copy(alpha = 0.50f),
+    background = DarkBackground,
+    onBackground = Color(0xFFE7E2EA),
+    surface = DarkSurface.copy(alpha = 0.45f),
+    onSurface = Color(0xFFE7E2EA),
+    surfaceVariant = DarkSurfaceVariant.copy(alpha = 0.42f),
+    onSurfaceVariant = DarkOnSurfaceVariant,
+    surfaceTint = p.primaryDark,
+    outline = blend(DarkOnSurfaceVariant, p.primaryDark, 0.22f).copy(alpha = 0.55f),
+    outlineVariant = blend(DarkSurfaceVariant, p.primaryDark, 0.14f).copy(alpha = 0.45f),
+    inverseSurface = Color(0xFFE7E2EA),
+    inverseOnSurface = Color(0xFF2F2D33),
+    inversePrimary = p.primaryContainerDark,
+    surfaceContainerLowest = blend(DarkBackground, Color.Black, 0.35f).copy(alpha = 0.35f),
+    surfaceContainerLow = blend(DarkSurface, p.primaryDark, 0.07f).copy(alpha = 0.40f),
+    surfaceContainer = blend(DarkSurface, p.primaryDark, 0.11f).copy(alpha = 0.48f),
+    surfaceContainerHigh = blend(DarkSurface, p.primaryDark, 0.16f).copy(alpha = 0.56f),
+    surfaceContainerHighest = blend(DarkSurface, p.primaryDark, 0.22f).copy(alpha = 0.64f),
+    error = Color(0xFFFF6B6B),
+)
+
+/** The header/gradient colors for [AppColorMode.GLASS] — the selected
+ * palette's own gradient pair, softened toward translucent so the header
+ * itself reads as a pane of glass rather than a solid banner. Never fully
+ * invisible: [com.shopmanager.app.ui.common.liquidGlassSurface]'s own
+ * layered highlight/rim (switched on for this mode via [LocalGlassMode])
+ * keeps the panel readable on top of whatever scrolls near it. */
+internal fun glassGradientColors(p: PaletteColors): List<Color> = listOf(
+    p.gradientStart.copy(alpha = 0.60f),
+    p.gradientEnd.copy(alpha = 0.60f)
+)
+
+/** True only when [AppColorMode.GLASS] is the active color mode. Read by
+ * [com.shopmanager.app.ui.common.liquidGlassSurface],
+ * [com.shopmanager.app.ui.common.GlassAlertDialog], and the glass buttons
+ * in [com.shopmanager.app.ui.common.GlassButton]/
+ * [com.shopmanager.app.ui.common.LiquidGlass] to switch on their animated
+ * drift/sheen motion and push their translucency further — scoped to this
+ * mode alone so [AppColorMode.MANUAL]/[AppColorMode.CLASSIC]'s existing
+ * calm, static glass panels never change. */
+val LocalGlassMode = staticCompositionLocalOf { false }
 
 /** Carries the selected palette's brand-gradient colors down to
  * [com.shopmanager.app.ui.common.BrandGradient] without threading a
