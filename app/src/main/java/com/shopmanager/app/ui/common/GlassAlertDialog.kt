@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.drawToBitmap
+import com.shopmanager.app.ui.theme.LocalGlassMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -214,8 +215,15 @@ fun GlassAlertDialog(
         // (the bright glow visible top-left in the screenshot) — that
         // parameter didn't exist until now; `highlight = false` turns it
         // off, leaving just the tinted gradient fill + thin glass rim.
-        val fillAlphaTop = 0.42f
-        val fillAlphaBottom = 0.34f
+        // "وضع الجلاس الشفاف الكامل": in AppColorMode.GLASS this dialog
+        // pushes noticeably more see-through than its resting 0.42/0.34,
+        // and switches on the same animated sheen/highlight motion every
+        // other glass surface gets in this mode (see `liquidGlassSurface`
+        // call below) — every other color mode keeps the exact calm, flat
+        // panel it already had.
+        val glassModeActive = LocalGlassMode.current
+        val fillAlphaTop = if (glassModeActive) 0.26f else 0.42f
+        val fillAlphaBottom = if (glassModeActive) 0.18f else 0.34f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
         ).copy(alpha = fillAlphaTop)
@@ -243,9 +251,9 @@ fun GlassAlertDialog(
                             listOf(gradientTop, gradientBottom)
                         ),
                         elevation = 24.dp,
-                        sheen = false,
-                        highlight = false,
-                        animated = false
+                        sheen = glassModeActive,
+                        highlight = glassModeActive,
+                        animated = glassModeActive
                     )
             ) {
             // BUG FIXED ("تحته كلشي مشوه مو بلور" — everything under it is
