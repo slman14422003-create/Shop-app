@@ -1,12 +1,14 @@
 package com.shopmanager.app.ui.common
 
-import android.os.Build
+import android.graphics.Bitmap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -19,6 +21,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,7 +33,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -38,7 +43,9 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.drawToBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * "iOS 26 / زجاج سائل" replacement for [androidx.compose.material3.AlertDialog].
@@ -110,7 +117,49 @@ fun GlassAlertDialog(
     textContentColor: Color = Color.Unspecified,
     properties: DialogProperties = DialogProperties()
 ) {
-    Dialog(onDismissRequest = onDismissRequest, properties = properties) {
+    // BUG FIXED ("اللمعه والشفافية ضباب مو مبينة... بدون اضدار اندرويد
+    // مطلوب" — the fog isn't showing, and it must not depend on a specific
+    // Android version): the previous pass used `Window.setBackgroundBlurRadius`,
+    // a real OS blur — but it's API 31+ only, and evidently didn't actually
+    // engage on this device either way, so lowering the panel's own alpha
+    // just exposed the sharp, unblurred names underneath (exactly what the
+    // follow-up screenshot showed). That approach is dropped entirely
+    // rather than re-tuned, since no OS blur API works identically (or at
+    // all) below API 31, and the user explicitly asked for something that
+    // doesn't depend on which Android version the phone is running.
+    //
+    // Instead, this captures a plain screenshot of whatever's on screen
+    // *before* the dialog opens — the parent screen's own view, still
+    // sitting in its own window untouched by the dialog's separate
+    // overlay window — then shrinks it down hard and scales it back up.
+    // That down/up scale is the blur: shrinking to a few dozen pixels
+    // wide throws away all the fine detail (text edges, icons), and
+    // stretching it back out just smears the few remaining color blobs
+    // across the full size — a real pixel blur, not a transparency trick,
+    // and pure bitmap math with no OS version or hardware requirement.
+    val hostView = LocalView.current
+    var frostedBackdrop by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(Unit) {
+        val snapshot = runCatching { hostView.drawToBitmap() }.getOrNull()
+        frostedBackdrop = snapshot?.let { withContext(Dispatchers.Default) { frostBitmap(it) } }
+    }
+    DisposableEffect(Unit) {
+        onDispose { frostedBackdrop?.recycle() }
+    }
+
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        // usePlatformDefaultWidth must be off so this Dialog's own root can
+        // fillMaxSize() (matching the screenshot it just took) instead of
+        // shrink-wrapping to the panel — the panel itself still keeps its
+        // own 280–400dp cap below, untouched.
+        properties = DialogProperties(
+            dismissOnBackPress = properties.dismissOnBackPress,
+            dismissOnClickOutside = properties.dismissOnClickOutside,
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = properties.decorFitsSystemWindows
+        )
+    ) {
         // Springy pop-in instead of Dialog's default hard cut — kicked off
         // once on entry (Dialog hosts this composable in its own window, so
         // there's no risk of re-triggering on unrelated recomposition).
@@ -126,35 +175,6 @@ fun GlassAlertDialog(
             animationSpec = tween(180),
             label = "glassDialogAlpha"
         )
-
-        // BUG FIXED ("البلور مو شفاف بل انه مغبش فعليا" — the "blur" wasn't
-        // actually transparent, it was just a solid foggy-looking panel):
-        // everything above this point fakes glass with color + highlights,
-        // but never actually blurs what's behind the dialog — so on a real
-        // device it reads as a flat opaque gray card, not glass. Real
-        // cross-window backdrop blur (Window.setBackgroundBlurRadius) is
-        // API 31+ only, which is exactly why the previous pass ripped it
-        // out — it silently did nothing on older devices, leaving raw
-        // unblurred transparency (the list rows behind, showing through
-        // messily) with no fallback. The fix isn't "remove it", it's
-        // "gate it": apply real blur only where the OS actually supports
-        // it, and only lower the panel's own alpha (so the blur is
-        // actually visible through it) on exactly those devices — every
-        // device below API 31 keeps today's near-opaque tinted fallback
-        // untouched, so nothing regresses there.
-        val isBlurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        if (isBlurSupported) {
-            val view = LocalView.current
-            LaunchedEffect(Unit) {
-                val window = (view.parent as? DialogWindowProvider)?.window ?: return@LaunchedEffect
-                window.setBackgroundBlurRadius(140)
-                // Compose's Dialog applies a fairly dark default scrim
-                // behind the panel; a real blur reads as glass, not fog,
-                // only when that scrim is light enough to let it show —
-                // iOS 26's own sheets sit on a soft, barely-there dim.
-                window.setDimAmount(0.28f)
-            }
-        }
 
         val resolvedContainer = if (containerColor.isSpecified()) containerColor
         else MaterialTheme.colorScheme.surfaceContainerHigh
@@ -184,15 +204,13 @@ fun GlassAlertDialog(
         // much closer to opaque (0.95 / 0.92) — still technically
         // translucent so it never looks like a flat painted card, but far
         // enough from `1f` that the row behind it never reads clearly.
-        // On API 31+ the window behind this panel is now genuinely blurred
-        // (see isBlurSupported above), so the fill can drop back down to
-        // real glass-level translucency (0.95/0.92 → 0.62/0.55) without
-        // turning messy — what shows through is a soft blur, not sharp
-        // list rows. Devices without real blur keep the original
-        // near-opaque values, since on those there's nothing but sharp
-        // content behind the panel to hide.
-        val fillAlphaTop = if (isBlurSupported) 0.62f else 0.95f
-        val fillAlphaBottom = if (isBlurSupported) 0.55f else 0.92f
+        // On every Android version now (see the screenshot-blur capture
+        // above), there's a genuinely blurred image sitting behind this
+        // panel, so the fill can drop back down to real glass-level
+        // translucency (0.95/0.92 → 0.62/0.55) without turning messy —
+        // what shows through is a soft blur, never sharp list rows.
+        val fillAlphaTop = 0.62f
+        val fillAlphaBottom = 0.55f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
         ).copy(alpha = fillAlphaTop)
@@ -200,24 +218,36 @@ fun GlassAlertDialog(
             resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.30f
         ).copy(alpha = fillAlphaBottom)
 
-        Box(
-            modifier
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }
-                .alpha(contentAlpha)
-                .widthIn(min = 280.dp, max = 400.dp)
-                .liquidGlassSurface(
-                    shape = shape,
-                    baseBrush = Brush.verticalGradient(
-                        listOf(gradientTop, gradientBottom)
-                    ),
-                    elevation = 24.dp,
-                    sheen = false,
-                    animated = false
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            // The blurred screenshot, filling the whole dialog window so it
+            // lines up with the real screen behind it — only the part
+            // under the translucent panel below actually reads as "glass".
+            frostedBackdrop?.let { bmp ->
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().alpha(contentAlpha),
+                    contentScale = ContentScale.Crop
                 )
-        ) {
+            }
+            Box(
+                modifier
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }
+                    .alpha(contentAlpha)
+                    .widthIn(min = 280.dp, max = 400.dp)
+                    .liquidGlassSurface(
+                        shape = shape,
+                        baseBrush = Brush.verticalGradient(
+                            listOf(gradientTop, gradientBottom)
+                        ),
+                        elevation = 24.dp,
+                        sheen = false,
+                        animated = false
+                    )
+            ) {
             Column {
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
                     icon?.let {
@@ -279,11 +309,36 @@ fun GlassAlertDialog(
                     }
                 }
             }
+            }
         }
     }
 }
 
 private fun Color.isSpecified(): Boolean = this != Color.Unspecified
+
+/**
+ * Cheap, version-independent blur: shrink the screenshot down to a few
+ * dozen pixels wide, then stretch it back up to full size. Shrinking
+ * throws away all the fine detail (text edges, icons); the upscale then
+ * smears what's left across the full image with bilinear filtering — a
+ * real blur of the actual pixels, not a transparency trick, and it's
+ * plain [Bitmap] math with no RenderEffect/OS version requirement, so it
+ * runs the same on every Android version this app supports.
+ */
+private fun frostBitmap(source: Bitmap): Bitmap {
+    return try {
+        val downscale = 0.06f
+        val smallWidth = maxOf(1, (source.width * downscale).toInt())
+        val smallHeight = maxOf(1, (source.height * downscale).toInt())
+        val tiny = Bitmap.createScaledBitmap(source, smallWidth, smallHeight, true)
+        val blurred = Bitmap.createScaledBitmap(tiny, source.width, source.height, true)
+        if (tiny !== blurred) tiny.recycle()
+        source.recycle()
+        blurred
+    } catch (t: Throwable) {
+        source
+    }
+}
 
 /**
  * BUG FIXED ("لازم لما اضغط عالمربع كله يتنفذ الامر مو بس الكلمة" — tapping
