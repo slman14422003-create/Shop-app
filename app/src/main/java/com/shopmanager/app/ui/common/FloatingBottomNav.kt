@@ -141,7 +141,12 @@ fun FloatingBottomNav(
         modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 28.dp, vertical = 14.dp),
+            // طلب "تعميم ستايل الزجاج": نفس روح "تصغير المربع" اللي صارت
+            // بـ GlassAlertDialog (400.dp → 340.dp عرض أقصى، هامش أوضح من
+            // حواف الشاشة) — الهامش الأفقي زاد شوي (28.dp → 32.dp) عشان
+            // الكبسولة تبين عائمة بمسافة أوضح عن حافة الشاشة بدل ما تكون
+            // شبه ملاصقة لها.
+            .padding(horizontal = 32.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
@@ -167,7 +172,9 @@ fun FloatingBottomNav(
             // rounded highlight slides between segments with a spring
             // (see `indicatorOffset` below) — the signature iOS 26 tab-bar
             // motion — instead of the bar itself resizing.
-            val itemWidth = 66.dp
+            // طلب "تعميم ستايل الزجاج": 66.dp → 62.dp، نفس روح "تصغير
+            // المربع" — كبسولة أخف/أدق بدل الحجم الأعرض السابق.
+            val itemWidth = 62.dp
             val indicatorOffset by animateDpAsState(
                 targetValue = itemWidth * selectedIndex,
                 animationSpec = MotionSpecs.tabIndicatorSpring(),
@@ -175,7 +182,15 @@ fun FloatingBottomNav(
             )
             Box(
                 Modifier
-                    .liquidGlassSurface(RoundedCornerShape(50))
+                    // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha
+                    // = 0.72f — نفس القيمة الموحّدة لكل لوحات الزجاج
+                    // بالهيدرات (راجع الشرح بـ DashboardScreen.kt) عشان
+                    // الشريط العلوي والسفلي يبينوا بنفس "لغة" الزجاج.
+                    .liquidGlassSurface(
+                        RoundedCornerShape(50),
+                        highlight = false,
+                        baseAlpha = 0.72f
+                    )
                     .padding(6.dp)
             ) {
                 // Sliding selection highlight — a single rounded segment
@@ -232,7 +247,14 @@ private fun QuickActionFab(action: QuickAction) {
         Modifier
             .scale(scale)
             .size(52.dp)
-            .liquidGlassSurface(CircleShape, elevation = 10.dp)
+            // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha =
+            // 0.72f — نفس قيمة الكبسولة المجاورة لها بالضبط.
+            .liquidGlassSurface(
+                CircleShape,
+                elevation = 10.dp,
+                highlight = false,
+                baseAlpha = 0.72f
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

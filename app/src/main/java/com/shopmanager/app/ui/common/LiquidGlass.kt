@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -109,7 +110,20 @@ fun Modifier.liquidGlassSurface(
     // highlight layers; the base gradient + rim border still render, so
     // it still reads as a distinct glass panel — just without any glare.
     highlight: Boolean = true,
-    animated: Boolean = false
+    animated: Boolean = false,
+    // طلب "تعميم ستايل الزجاج": every header/bottom-nav call used to paint
+    // `baseBrush` fully opaque (`.background(baseBrush)`, alpha always 1f) —
+    // fine for [GlassAlertDialog] since it bakes its own translucency into
+    // the Color stops it hands in as `baseBrush`, but every *other* caller
+    // (headers, FloatingBottomNav, GlassIconButton's panel siblings) never
+    // had a way to be genuinely see-through at all, only "glare on/off".
+    // `baseAlpha` (1f = old behavior, unchanged for every existing caller
+    // that doesn't pass it) multiplies on top of `baseBrush`'s own colors —
+    // applied to the background fill only (see the `drawBehind` below,
+    // which runs *before* `drawContent()`), never to the text/icon
+    // children this surface hosts, so turning it down can't wash out
+    // readability the way a whole-node `Modifier.alpha` would.
+    baseAlpha: Float = 1f
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
@@ -174,7 +188,15 @@ fun Modifier.liquidGlassSurface(
             else it
         }
         .clip(shape)
-        .background(baseBrush)
+        // BUG FIXED/طلب: was `.background(baseBrush)`, which always painted
+        // at full alpha no matter what `baseAlpha` says — a plain
+        // `Modifier.background` has no alpha parameter of its own, and
+        // wrapping the *whole* node in `Modifier.alpha(baseAlpha)` would
+        // have faded the header's text/icons along with it. `drawBehind`
+        // draws only this rect, strictly before this node's own children
+        // are drawn (never after, never wrapping them), so `alpha` here
+        // dims just the glass fill — content on top stays fully legible.
+        .drawBehind { drawRect(brush = baseBrush, alpha = baseAlpha) }
         // PERF: drawWithCache (not drawWithContent) so the Brush objects
         // below are only rebuilt when `drift`/`sheenProgress` or the
         // surface's `size` actually change — not on every recomposition. On
@@ -307,8 +329,14 @@ fun GlassIconButton(
             .size(size)
             .scale(scale)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.20f))
-            .border(1.dp, Color.White.copy(alpha = 0.40f), CircleShape)
+            // طلب "تعميم ستايل الزجاج": pushed a bit more see-through
+            // (0.20 → 0.16), same direction as the header/bottom-nav
+            // panels' new `baseAlpha`, and the rim brought down to the
+            // same 0.30 every other glass edge in the app uses (was a
+            // brighter 0.40, which read as a heavier ring than the panel
+            // border it sits on).
+            .background(Color.White.copy(alpha = 0.16f))
+            .border(1.dp, Color.White.copy(alpha = 0.30f), CircleShape)
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(size * 0.5f))
     }

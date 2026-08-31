@@ -87,7 +87,13 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape)
+                // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
+                // — راجع الشرح بـ DashboardScreen.kt.
+                modifier = Modifier.liquidGlassSurface(
+                    androidx.compose.ui.graphics.RectangleShape,
+                    highlight = false,
+                    baseAlpha = 0.72f
+                )
             )
         }
     ) { padding ->
