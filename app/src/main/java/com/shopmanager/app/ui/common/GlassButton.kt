@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.ui.theme.LocalGlassMode
 
 /**
  * "أزرار الزجاج السائل" (glass-mode text/filled buttons) — the text-button
@@ -55,14 +56,20 @@ fun GlassFilledButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
     icon: (@Composable () -> Unit)? = null
 ) {
+    // AppColorMode.GLASS pushes this button's own fill further toward
+    // see-through than its resting 0.22/0.10 — every other color mode
+    // keeps those original values unchanged.
+    val glassModeActive = LocalGlassMode.current
+    val fillAlpha = if (glassModeActive) (if (enabled) 0.14f else 0.06f) else (if (enabled) 0.22f else 0.10f)
+    val rimAlpha = if (glassModeActive) (if (enabled) 0.55f else 0.24f) else (if (enabled) 0.45f else 0.20f)
     GlassButtonBase(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
         shape = shape,
         contentPadding = contentPadding,
-        background = Color.White.copy(alpha = if (enabled) 0.22f else 0.10f),
-        borderAlpha = if (enabled) 0.45f else 0.20f,
+        background = Color.White.copy(alpha = fillAlpha),
+        borderAlpha = rimAlpha,
         textColor = BrandOnGradient.copy(alpha = if (enabled) 1f else 0.5f),
         icon = icon,
         text = text
@@ -82,6 +89,8 @@ fun GlassOutlinedButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
     icon: (@Composable () -> Unit)? = null
 ) {
+    val glassModeActive = LocalGlassMode.current
+    val rimAlpha = if (glassModeActive) (if (enabled) 0.50f else 0.22f) else (if (enabled) 0.40f else 0.18f)
     GlassButtonBase(
         onClick = onClick,
         modifier = modifier,
@@ -89,7 +98,7 @@ fun GlassOutlinedButton(
         shape = shape,
         contentPadding = contentPadding,
         background = Color.Transparent,
-        borderAlpha = if (enabled) 0.40f else 0.18f,
+        borderAlpha = rimAlpha,
         textColor = BrandOnGradient.copy(alpha = if (enabled) 0.92f else 0.5f),
         icon = icon,
         text = text
