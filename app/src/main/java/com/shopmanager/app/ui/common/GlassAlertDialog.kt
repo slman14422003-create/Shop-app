@@ -212,18 +212,21 @@ fun GlassAlertDialog(
         // what shows through is a soft blur, never sharp list rows.
         // BUG FIXED ("اللمعه ما بدي ياها" — don't want the shine): this
         // panel used to get [liquidGlassSurface]'s glare unconditionally
-        // (the bright glow visible top-left in the screenshot) — that
-        // parameter didn't exist until now; `highlight = false` turns it
-        // off, leaving just the tinted gradient fill + thin glass rim.
-        // "وضع الجلاس الشفاف الكامل": in AppColorMode.GLASS this dialog
-        // pushes noticeably more see-through than its resting 0.42/0.34,
-        // and switches on the same animated sheen/highlight motion every
-        // other glass surface gets in this mode (see `liquidGlassSurface`
-        // call below) — every other color mode keeps the exact calm, flat
-        // panel it already had.
+        // "المربع لازم يكون بدون لمعة" — the glare/glow blobs (bright
+        // white/tinted circles) came specifically from turning `highlight`
+        // on for this panel; it stays OFF unconditionally, in every color
+        // mode including GLASS, so this dialog is always a flat, calm
+        // frosted panel — never the glowing-orb look. Only the fill's own
+        // opacity and its (optional, subtle) sheen streak change with
+        // glass mode.
+        // "وضع الجلاس الشفاف الكامل": pushes this dialog a bit more
+        // see-through than its resting 0.42/0.34, but not as far as an
+        // earlier pass (0.26/0.18) — that low an alpha let the blurred
+        // background's own colored icons show through as visible blobs of
+        // color, which read as glare just as much as a highlight would.
         val glassModeActive = LocalGlassMode.current
-        val fillAlphaTop = if (glassModeActive) 0.26f else 0.42f
-        val fillAlphaBottom = if (glassModeActive) 0.18f else 0.34f
+        val fillAlphaTop = if (glassModeActive) 0.36f else 0.42f
+        val fillAlphaBottom = if (glassModeActive) 0.28f else 0.34f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
         ).copy(alpha = fillAlphaTop)
@@ -251,8 +254,11 @@ fun GlassAlertDialog(
                             listOf(gradientTop, gradientBottom)
                         ),
                         elevation = 24.dp,
+                        // A gentle diagonal glide only in glass mode — no
+                        // corner glow (`highlight` above), just a faint,
+                        // slow streak; MANUAL/CLASSIC stay fully static.
                         sheen = glassModeActive,
-                        highlight = glassModeActive,
+                        highlight = false,
                         animated = glassModeActive
                     )
             ) {
