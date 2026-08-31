@@ -10,6 +10,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.google.firebase.firestore.Source
 import com.shopmanager.app.data.FirebaseModule
+import com.shopmanager.app.data.performance.DevicePerformance
+import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.data.settings.SettingsRepository
 import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
@@ -158,13 +160,29 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
          * next time the worker is (re)scheduled without any extra code,
          * since KEEP only skips scheduling when a worker under this name
          * already exists — it doesn't need to match the old interval.
+         *
+         * "أداء الأجهزة الاقتصادية": on a device that auto-detected (or was
+         * manually set) as [PerformanceTier.LOW], this silent background
+         * check is also the kind of thing that quietly drains a weak
+         * phone's battery/data over a day without the person ever seeing
+         * it running — there's no UI to blame. So on LOW tier the interval
+         * is stretched to 30 minutes (still just an occasional cheap read,
+         * simply less often) and an extra `setRequiresBatteryNotLow(true)`
+         * constraint is added, so the OS skips a cycle entirely on a phone
+         * that's already low on battery instead of waking radios/CPU for a
+         * network read at exactly the worst moment. STANDARD/HIGH devices
+         * keep the original 15-minute, battery-unconstrained schedule
+         * unchanged.
          */
-        fun schedule(context: Context) {
+        fun schedule(context: Context, tier: PerformanceTier = DevicePerformance.detectTier(context)) {
+            val isLowTier = tier == PerformanceTier.LOW
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
+                .apply { if (isLowTier) setRequiresBatteryNotLow(true) }
                 .build()
 
-            val request = PeriodicWorkRequestBuilder<BackgroundSyncWorker>(15, TimeUnit.MINUTES)
+            val intervalMinutes = if (isLowTier) 30L else 15L
+            val request = PeriodicWorkRequestBuilder<BackgroundSyncWorker>(intervalMinutes, TimeUnit.MINUTES)
                 .setConstraints(constraints)
                 .build()
 

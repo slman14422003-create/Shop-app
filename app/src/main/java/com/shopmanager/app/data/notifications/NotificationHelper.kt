@@ -31,15 +31,46 @@ object NotificationHelper {
     private const val NOTIF_ID_DEBT = 1002
     private const val NOTIF_ID_PAID_BASE = 2000
 
+    // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
+    // *group*, with a silent summary notification posted alongside the
+    // individual ones. Without a group, several debt-paid notifications
+    // fired back-to-back (e.g. paying off 3 debts in a row, or the
+    // background worker catching up after being closed for a while) just
+    // stack as separate unrelated entries; with a group, Android (API 24+)
+    // automatically visually clusters them under the shop name instead, and
+    // the summary line gives an at-a-glance count without opening the
+    // shade — the same "grouped alerts" behavior iOS notification
+    // grouping and modern Android apps both use.
+    private const val GROUP_DEBTS = "com.shopmanager.app.GROUP_DEBTS"
+    private const val NOTIF_ID_DEBTS_SUMMARY = 1900
+
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_SHOPPING_LIST, "قائمة النواقص والمشتريات", NotificationManager.IMPORTANCE_DEFAULT)
-            )
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL_DEBTS, "تنبيهات الديون", NotificationManager.IMPORTANCE_DEFAULT)
-            )
+
+            val shoppingChannel = NotificationChannel(
+                CHANNEL_SHOPPING_LIST, "قائمة النواقص والمشتريات", NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "تنبيه عند تغيّر قائمة المواد الناقصة"
+                enableLights(true)
+            }
+
+            // Debt alerts are money-related and time-sensitive (a new debt,
+            // a payment coming in) — bumped to HIGH importance so they post
+            // as a heads-up/banner notification with sound instead of
+            // silently landing in the shade, plus a short distinct
+            // vibration pattern so it's recognizable by feel alone.
+            val debtsChannel = NotificationChannel(
+                CHANNEL_DEBTS, "تنبيهات الديون", NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "تنبيه فوري عند إضافة دين جديد أو تسديده"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 180, 90, 180)
+            }
+
+            manager.createNotificationChannel(shoppingChannel)
+            manager.createNotificationChannel(debtsChannel)
         }
     }
 
@@ -85,6 +116,7 @@ object NotificationHelper {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, NOTIF_ID_SHOPPING_LIST, NotificationAction.ShoppingList(shortageNames)))
             .build()
@@ -102,12 +134,16 @@ object NotificationHelper {
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("💰 عميل جديد بالديون")
             .setContentText("$personName — $amount $currencySymbol")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$personName — $amount $currencySymbol"))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setGroup(GROUP_DEBTS)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, NOTIF_ID_DEBT, NotificationAction.NewDebt(personName, amount, currencySymbol)))
             .build()
 
         NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBT, notification)
+        postDebtsGroupSummary(context)
     }
 
     /**
@@ -123,11 +159,39 @@ object NotificationHelper {
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("✅ تم سداد دين")
             .setContentText("$personName وفى $amount $currencySymbol")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$personName وفى $amount $currencySymbol"))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setGroup(GROUP_DEBTS)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.DebtPaid(personName, amount, currencySymbol)))
             .build()
 
         NotificationManagerCompat.from(context).notify(id, notification)
+        postDebtsGroupSummary(context)
+    }
+
+    /**
+     * The silent group-summary notification required (API 24+) for
+     * multiple grouped debt notifications to actually cluster visually
+     * instead of just sharing an invisible group tag. `setGroupSummary`
+     * marks it as the "stack cover" rather than a notification in its own
+     * right, and it deliberately carries no sound/vibration of its own
+     * (the individual notification that triggered it already made noise) —
+     * it exists purely so the shade shows "٣ إشعارات" collapsed instead of
+     * three separate cards.
+     */
+    private fun postDebtsGroupSummary(context: Context) {
+        if (!hasPermission(context)) return
+        val summary = NotificationCompat.Builder(context, CHANNEL_DEBTS)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("تنبيهات الديون")
+            .setStyle(NotificationCompat.InboxStyle().setSummaryText("إدارة المحل"))
+            .setGroup(GROUP_DEBTS)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBTS_SUMMARY, summary)
     }
 }
