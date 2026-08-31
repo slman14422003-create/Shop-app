@@ -104,7 +104,13 @@ fun PersonDetailScreen(
                     navigationIconContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape),
+                // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
+                // — راجع الشرح بـ DashboardScreen.kt.
+                modifier = Modifier.liquidGlassSurface(
+                    androidx.compose.ui.graphics.RectangleShape,
+                    highlight = false,
+                    baseAlpha = 0.72f
+                ),
                 actions = {
                     GlassIconButton(
                         icon = Icons.Default.Delete,
@@ -257,7 +263,16 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
             // same glass panel instead of a second one with a shadow/
             // highlight/border seam at the boundary — see the bug note on
             // `topFlush` in LiquidGlass.kt.
-            .liquidGlassSurface(androidx.compose.ui.graphics.RectangleShape, topFlush = true)
+            // طلب "تعميم ستايل الزجاج": highlight = false (topFlush وحدها ما
+            // كانت تطفي topHighlight — راجع تعريفه بـ LiquidGlass.kt) +
+            // baseAlpha = 0.72f بنفس قيمة اللوحة اللي فوقها مباشرة، عشان
+            // تضل تبين كصفيحة زجاج واحدة مستمرة.
+            .liquidGlassSurface(
+                androidx.compose.ui.graphics.RectangleShape,
+                topFlush = true,
+                highlight = false,
+                baseAlpha = 0.72f
+            )
             .padding(20.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -142,7 +142,14 @@ fun DebtsScreen(
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                modifier = Modifier.liquidGlassSurface(RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)),
+                // طلب "تعميم ستايل الزجاج": نفس التعديل الموحّد لكل الهيدرات
+                // (highlight = false + baseAlpha = 0.72f) — راجع الشرح
+                // بـ DashboardScreen.kt.
+                modifier = Modifier.liquidGlassSurface(
+                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                    highlight = false,
+                    baseAlpha = 0.72f
+                ),
                 actions = {
                     GlassIconButton(
                         icon = Icons.Default.Share,
