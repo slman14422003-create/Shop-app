@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
@@ -62,13 +63,24 @@ fun GlassFilledButton(
     val glassModeActive = LocalGlassMode.current
     val fillAlpha = if (glassModeActive) (if (enabled) 0.14f else 0.06f) else (if (enabled) 0.22f else 0.10f)
     val rimAlpha = if (glassModeActive) (if (enabled) 0.55f else 0.24f) else (if (enabled) 0.45f else 0.20f)
+    // "رقّي شكل الأزرار الزجاجية": a flat translucent fill reads as a
+    // tinted rectangle, not glass. A soft top-to-bottom gradient — brighter
+    // near the top edge, settling to the base fillAlpha by the bottom —
+    // gives the button the same "light catching the top of the glass" cue
+    // every other glass panel in the app already uses.
+    val fillBrush = Brush.verticalGradient(
+        listOf(
+            Color.White.copy(alpha = (fillAlpha + 0.10f).coerceAtMost(1f)),
+            Color.White.copy(alpha = fillAlpha)
+        )
+    )
     GlassButtonBase(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
         shape = shape,
         contentPadding = contentPadding,
-        background = Color.White.copy(alpha = fillAlpha),
+        background = fillBrush,
         borderAlpha = rimAlpha,
         textColor = BrandOnGradient.copy(alpha = if (enabled) 1f else 0.5f),
         icon = icon,
@@ -97,7 +109,7 @@ fun GlassOutlinedButton(
         enabled = enabled,
         shape = shape,
         contentPadding = contentPadding,
-        background = Color.Transparent,
+        background = Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent)),
         borderAlpha = rimAlpha,
         textColor = BrandOnGradient.copy(alpha = if (enabled) 0.92f else 0.5f),
         icon = icon,
@@ -113,7 +125,7 @@ private fun GlassButtonBase(
     enabled: Boolean,
     shape: Shape,
     contentPadding: PaddingValues,
-    background: Color,
+    background: Brush,
     borderAlpha: Float,
     textColor: Color,
     icon: (@Composable () -> Unit)?
@@ -125,13 +137,21 @@ private fun GlassButtonBase(
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassButtonScale"
     )
+    // "رقّي التفاعل عند الضغط": the rim brightens briefly on press, same
+    // spring as the scale, so the button reads as reacting to touch rather
+    // than only shrinking — matching the new press-glow on [GlassIconButton].
+    val pressedBorderAlpha by animateFloatAsState(
+        targetValue = if (pressed && enabled) (borderAlpha + 0.20f).coerceAtMost(1f) else borderAlpha,
+        animationSpec = MotionSpecs.pressSpring(),
+        label = "glassButtonRim"
+    )
 
     Row(
         modifier = modifier
             .scale(scale)
             .clip(shape)
             .background(background)
-            .border(1.dp, BrandOnGradient.copy(alpha = borderAlpha), shape)
+            .border(1.dp, BrandOnGradient.copy(alpha = pressedBorderAlpha), shape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
