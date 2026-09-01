@@ -181,10 +181,27 @@ fun Modifier.liquidGlassSurface(
     // `highlight` combined with it. Only surfaces that explicitly opt in
     // (`sheen = true`) get the streak; the rest just get plain, animation-
     // free transparency.
+    // "فصل الوضع الزجاجي عن الوضع العام للتطبيق" (separate glass mode from
+    // the app's general mode): every glass-only trait — the drift/sheen
+    // motion, the translucent fill, the blurred light patches, the bright
+    // rim/edge glare — used to render unconditionally on top of whichever
+    // color mode was active, so MANUAL/CLASSIC ended up wearing the same
+    // "liquid glass" look as AppColorMode.GLASS itself, just calmer. This
+    // is the one function every header/bottom-nav/dialog panel in the app
+    // already funnels through, so gating the whole glass *identity* here
+    // — not just the motion — is what makes every one of those surfaces
+    // fall back to a plain, solid, stock-Android-style panel the instant
+    // GLASS isn't the active mode, without editing each screen separately.
     val glassModeActive = LocalGlassMode.current
-    val effectiveAnimated = (animated || glassModeActive) && !isLowTier
+    val effectiveAnimated = glassModeActive && animated && !isLowTier
     val effectiveSheen = sheen && effectiveAnimated
-    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.78f).coerceIn(0f, 1f) else baseAlpha
+    // Outside GLASS mode this surface is fully opaque — no see-through fill
+    // at all — regardless of whatever `baseAlpha` a caller passes in (most
+    // callers only ever tuned that value *for* the glass look in the first
+    // place; a general-mode panel should just read as a normal solid brand
+    // surface).
+    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.78f).coerceIn(0f, 1f) else 1f
+    val effectiveHighlight = glassModeActive && highlight
 
     // PERF (low-end tier): Modifier.shadow forces its own offscreen
     // graphicsLayer + a blur pass every frame it's on screen — on a weak
@@ -210,7 +227,7 @@ fun Modifier.liquidGlassSurface(
     // per-frame compositing cost in this file (see [LiquidGlassGlow]'s own
     // identical gate). `rememberGraphicsLayer()` is cheap to hold even when
     // unused, but only actually requested when it'll be drawn into below.
-    val canRealBlur = highlight && !isLowTier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val canRealBlur = effectiveHighlight && !isLowTier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     val frostedCoreLayer = if (canRealBlur) rememberGraphicsLayer() else null
 
     // Fixed, calm highlight position when `animated` is false (the new
@@ -284,7 +301,7 @@ fun Modifier.liquidGlassSurface(
             // Only built when the real-blur path (below, in onDrawWithContent)
             // is unavailable — the flat, un-blurred fallback exactly as
             // before, so API<31/LOW-tier devices see no change at all.
-            val topHighlight = if (highlight && frostedCoreLayer == null) Brush.radialGradient(
+            val topHighlight = if (effectiveHighlight && frostedCoreLayer == null) Brush.radialGradient(
                 colors = listOf(Color.White.copy(alpha = 0.20f), Color.White.copy(alpha = 0f)),
                 center = Offset(w * drift, -h * 0.25f),
                 radius = w * 0.75f
@@ -296,7 +313,7 @@ fun Modifier.liquidGlassSurface(
             // a single coherent sheet of glass — removed rather than tuned,
             // since `topHighlight` alone already carries the "light drifting
             // across glass" read that this was meant to reinforce.
-            val topEdge = if (topFlush || !highlight) null else Brush.verticalGradient(
+            val topEdge = if (topFlush || !effectiveHighlight) null else Brush.verticalGradient(
                 colors = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0f)),
                 startY = 0f,
                 endY = h * 0.12f
@@ -342,7 +359,7 @@ fun Modifier.liquidGlassSurface(
             // separately — and it's unconditional (not gated behind
             // `sheen`/`animated`), so it's part of this surface's resting
             // look everywhere, not an extra opt-in effect.
-            val dropletGlint = if (highlight && frostedCoreLayer == null) Brush.radialGradient(
+            val dropletGlint = if (effectiveHighlight && frostedCoreLayer == null) Brush.radialGradient(
                 colors = listOf(
                     Color.White.copy(alpha = 0.50f),
                     Color.White.copy(alpha = 0.16f),
@@ -358,7 +375,7 @@ fun Modifier.liquidGlassSurface(
             // shadow. Pairing a dark bottom edge with the existing bright
             // top edge is what reads as a panel with real thickness rather
             // than a flat, evenly-lit rectangle.
-            val innerBaseShadow = if (highlight && !topFlush) Brush.verticalGradient(
+            val innerBaseShadow = if (effectiveHighlight && !topFlush) Brush.verticalGradient(
                 colors = listOf(Color.Black.copy(alpha = 0f), Color.Black.copy(alpha = 0.10f)),
                 startY = h * 0.80f,
                 endY = h
@@ -418,7 +435,19 @@ fun Modifier.liquidGlassSurface(
             // Slightly brighter glass rim (0.22 → 0.30) so the edge reads as
             // a distinct rim of light catching the border of the glass/
             // droplet, matching the stronger `dropletGlint` highlight above.
-            if (topFlush) it else it.border(1.dp, rimColor.copy(alpha = 0.30f), shape)
+            // The bright glass "rim" (a hairline meant to read as light
+            // catching the edge of a pane of glass) only makes sense while
+            // this surface is actually glass — outside AppColorMode.GLASS
+            // it's replaced with a much quieter, near-invisible edge (or
+            // none at all for `rimColor = Color.White` callers, since a
+            // faint white line on a solid brand-colored panel reads as a
+            // stray seam rather than an intentional border).
+            when {
+                topFlush -> it
+                glassModeActive -> it.border(1.dp, rimColor.copy(alpha = 0.30f), shape)
+                rimColor == Color.White -> it
+                else -> it.border(1.dp, rimColor.copy(alpha = 0.12f), shape)
+            }
         }
 }
 
@@ -450,11 +479,14 @@ fun GlassIconButton(
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonScale"
     )
-    // AppColorMode.GLASS pushes every glass element further toward
-    // see-through; every other mode keeps the existing 0.16/0.30 values.
+    // "فصل الوضع الزجاجي عن الوضع العام": outside AppColorMode.GLASS this
+    // is no longer a translucent glass chip at all — it settles to a
+    // plain, solidly-tinted circular icon button, the normal stock-Android
+    // read for an icon sitting on a colored surface. GLASS mode keeps the
+    // existing see-through fill + bright rim.
     val glassModeActive = LocalGlassMode.current
-    val restingFillAlpha = if (glassModeActive) 0.10f else 0.16f
-    val restingRimAlpha = if (glassModeActive) 0.38f else 0.30f
+    val restingFillAlpha = if (glassModeActive) 0.10f else 0.22f
+    val restingRimAlpha = if (glassModeActive) 0.38f else 0f
     // "رقّي التفاعل عند الضغط": a brief brighten on press — both the fill
     // and rim animate a touch lighter, on the same spring as the scale —
     // so tapping the button reads as light momentarily catching the glass,
