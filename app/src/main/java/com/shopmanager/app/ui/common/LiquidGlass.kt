@@ -28,33 +28,62 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.ui.theme.LocalGlassMode
+import kotlin.math.roundToInt
 
 /**
  * "زجاج سائل" (liquid glass): the frosted, glossy surface behind every
  * header/top bar and its circular buttons.
  *
- * HONEST LIMITATION: real backdrop blur (sampling whatever scrolls
- * *underneath* a translucent bar, the way iOS's frosted nav bars work)
- * isn't something Compose exposes without a dedicated blur library — and
- * none of this app's headers actually sit on top of moving content (each
- * one is the first LazyColumn item, or a non-overlapping Scaffold topBar),
- * so there is nothing behind them to sample anyway. What reads as "glass"
- * here is layered instead, all drawn on the surface's own background —
- * never on top of its text/icon children, so nothing is ever blurred
- * unreadable: the brand gradient underneath, a soft translucent highlight
- * that slowly drifts across it like light moving through liquid, a bright
- * top edge, and a thin glass-rim border. Cheaper on LOW tier (fixed
- * highlight position, no per-frame animation) exactly like [BrandGradient]
- * already degrades there.
+ * iOS 26 LIQUID GLASS UPGRADE ("البلور... تحسين وعمق ووضوح"): the panel's
+ * soft light patches (the drifting highlight + the corner "droplet"
+ * glint) used to be flat, un-blurred radial gradients — cheap and safe,
+ * but a hard-edged color patch reads as a sticker painted on top of the
+ * glass, not as light actually diffusing *through* a translucent,
+ * refractive material. On API 31+ (RenderEffect-backed blur) and
+ * STANDARD/HIGH performance tier, those same shapes are now recorded into
+ * an offscreen [androidx.compose.ui.graphics.layer.GraphicsLayer] and put
+ * through a genuine Gaussian blur ([BlurEffect] — the exact same real
+ * blur [LiquidGlassGlow] already used for its standalone decorative orb,
+ * now folded into every glass panel's own resting look) before being
+ * composited. Paired with a new soft inner shadow hugging the panel's
+ * *bottom* inside edge (opposite the existing bright top edge), this is
+ * what actually reads as a panel with real thickness — light gathering
+ * unevenly through a solid slab of glass — instead of a flat gradient
+ * rectangle with a color patch drawn on it.
+ *
+ * That blur is applied to abstract decorative shapes ONLY, composited in
+ * its own separate draw pass — [drawContent] (this surface's real
+ * text/icons) always runs first, in its own always-sharp pass, so there
+ * is zero risk of the blur ever touching anything the person needs to
+ * read. Below API 31 / on LOW tier, the exact same flat, un-blurred
+ * gradients from before are drawn instead (see `canRealBlur` below) — no
+ * regression there, same graceful degradation as every other effect in
+ * this file.
+ *
+ * STILL AN HONEST LIMITATION: this is a real blur of this panel's own
+ * decorative light, not a true "backdrop filter" that samples whatever
+ * scrolls *underneath* a translucent bar (the way iOS's frosted nav bars
+ * work) — Compose has no first-party API for sampling sibling content
+ * that way. Most headers in this app don't actually sit on top of moving
+ * content anyway (each is the first LazyColumn item, or a non-overlapping
+ * Scaffold topBar), so there's nothing behind them to sample regardless.
+ * [FloatingBottomNav] is the one surface that genuinely does float over
+ * live scrolling content — it gets the same richer blurred-core treatment
+ * as everything else here, just without a literal blurred view of the
+ * list rows immediately behind it.
  */
 @Composable
 fun Modifier.liquidGlassSurface(
@@ -161,6 +190,17 @@ fun Modifier.liquidGlassSurface(
     // never a heavy floating-card drop shadow.
     val effectiveElevation = if (isLowTier || topFlush) 0.dp else elevation
 
+    // iOS 26 LIQUID GLASS UPGRADE: real Gaussian blur is only worth paying
+    // for where it's actually visible (`highlight == false` panels, like
+    // GlassAlertDialog's flat mode, draw no light patches at all) and only
+    // where the hardware/tier can afford it — RenderEffect-backed blur
+    // needs API 31 and is skipped on LOW tier exactly like every other
+    // per-frame compositing cost in this file (see [LiquidGlassGlow]'s own
+    // identical gate). `rememberGraphicsLayer()` is cheap to hold even when
+    // unused, but only actually requested when it'll be drawn into below.
+    val canRealBlur = highlight && !isLowTier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val frostedCoreLayer = if (canRealBlur) rememberGraphicsLayer() else null
+
     // Fixed, calm highlight position when `animated` is false (the new
     // default for every top bar/bottom nav) — still gives the surface a
     // single soft light source like glass catching light from one angle,
@@ -228,7 +268,11 @@ fun Modifier.liquidGlassSurface(
         .drawWithCache {
             val w = size.width
             val h = size.height
-            val topHighlight = if (highlight) Brush.radialGradient(
+            val frostedCoreSize = IntSize(w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1))
+            // Only built when the real-blur path (below, in onDrawWithContent)
+            // is unavailable — the flat, un-blurred fallback exactly as
+            // before, so API<31/LOW-tier devices see no change at all.
+            val topHighlight = if (highlight && frostedCoreLayer == null) Brush.radialGradient(
                 colors = listOf(Color.White.copy(alpha = 0.20f), Color.White.copy(alpha = 0f)),
                 center = Offset(w * drift, -h * 0.25f),
                 radius = w * 0.75f
@@ -286,7 +330,7 @@ fun Modifier.liquidGlassSurface(
             // separately — and it's unconditional (not gated behind
             // `sheen`/`animated`), so it's part of this surface's resting
             // look everywhere, not an extra opt-in effect.
-            val dropletGlint = if (highlight) Brush.radialGradient(
+            val dropletGlint = if (highlight && frostedCoreLayer == null) Brush.radialGradient(
                 colors = listOf(
                     Color.White.copy(alpha = 0.50f),
                     Color.White.copy(alpha = 0.16f),
@@ -295,15 +339,59 @@ fun Modifier.liquidGlassSurface(
                 center = Offset(w * 0.22f, h * 0.14f),
                 radius = w * 0.30f
             ) else null
+            // NEW (thickness/depth): a soft, dark gradient hugging just the
+            // *inside* bottom edge — the mirror of `topEdge`'s bright rim
+            // above. Real glass/acrylic isn't lit evenly all over: the top
+            // catches ambient light, the underside falls into its own soft
+            // shadow. Pairing a dark bottom edge with the existing bright
+            // top edge is what reads as a panel with real thickness rather
+            // than a flat, evenly-lit rectangle.
+            val innerBaseShadow = if (highlight && !topFlush) Brush.verticalGradient(
+                colors = listOf(Color.Black.copy(alpha = 0f), Color.Black.copy(alpha = 0.10f)),
+                startY = h * 0.80f,
+                endY = h
+            ) else null
             onDrawWithContent {
                 // Content (text/icons) drawn first so every highlight below
                 // is layered strictly on top of the surface itself — never
                 // a blur pass over the content, so nothing ever turns
                 // illegible.
                 drawContent()
-                if (topHighlight != null) drawRect(brush = topHighlight)
+                val layer = frostedCoreLayer
+                if (layer != null) {
+                    // Record just the two abstract light-patch shapes (never
+                    // real content — that already finished drawing above, in
+                    // its own separate, always-sharp pass) into an offscreen
+                    // layer, blur that layer for real, then composite it —
+                    // see the function doc for why this is safe.
+                    layer.record(this, layoutDirection, frostedCoreSize) {
+                        drawRect(
+                            brush = Brush.radialGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.34f), Color.White.copy(alpha = 0f)),
+                                center = Offset(w * drift, -h * 0.20f),
+                                radius = w * 0.65f
+                            )
+                        )
+                        drawRect(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.62f),
+                                    Color.White.copy(alpha = 0.20f),
+                                    Color.White.copy(alpha = 0f)
+                                ),
+                                center = Offset(w * 0.22f, h * 0.14f),
+                                radius = w * 0.28f
+                            )
+                        )
+                    }
+                    layer.renderEffect = BlurEffect(28f, 28f, TileMode.Decal)
+                    drawLayer(layer)
+                } else {
+                    if (topHighlight != null) drawRect(brush = topHighlight)
+                    if (dropletGlint != null) drawRect(brush = dropletGlint)
+                }
                 if (topEdge != null) drawRect(brush = topEdge)
-                if (dropletGlint != null) drawRect(brush = dropletGlint)
+                if (innerBaseShadow != null) drawRect(brush = innerBaseShadow)
                 if (sheenBrush != null) drawRect(brush = sheenBrush)
             }
         }
