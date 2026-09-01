@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -49,12 +50,30 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     private val _hasSyncError = MutableStateFlow(false)
     val hasSyncError: StateFlow<Boolean> = _hasSyncError
 
+    // BUG FIXED (النسخ الاحتياطي التلقائي لا يعمل إلا على الجهاز الذي أضاف
+    // المادة): InstantBackupWorker used to be requested only from this
+    // ViewModel's own add/edit/delete functions further below — i.e. only
+    // on the device where the person physically made the change. Every
+    // other device signed into the same shop only ever learns about that
+    // change through this same Firestore listener (personsFlow/
+    // debtsFlow), so it never took its own local snapshot until *its own*
+    // user happened to add something. personsFlow/debtsFlow below now
+    // request a local instant backup on every real update they see —
+    // regardless of which device produced it — so every signed-in device
+    // stays backed up together instead of only the one that made the
+    // edit. That onEach also resets [_hasSyncError] back to false: it
+    // used to only ever be set true (on a listener error) and never
+    // cleared, so a single network blip left Settings offering to
+    // restore from the local backup forever afterward, even long after
+    // the connection and live data had fully recovered.
     private val personsFlow = repo.listenPersons()
         .catch { _hasSyncError.value = true; emit(emptyList()) }
         .distinctUntilChanged()
+        .onEach { _hasSyncError.value = false; InstantBackupWorker.requestNow(getApplication()) }
     private val debtsFlow = repo.listenAllDebts()
         .catch { _hasSyncError.value = true; emit(emptyList()) }
         .distinctUntilChanged()
+        .onEach { _hasSyncError.value = false; InstantBackupWorker.requestNow(getApplication()) }
 
     /**
      * BUG FIXED: `persons.amount` used to be a separately-maintained field
