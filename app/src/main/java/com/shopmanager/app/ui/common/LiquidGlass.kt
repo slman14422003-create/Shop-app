@@ -153,7 +153,18 @@ fun Modifier.liquidGlassSurface(
     // which runs *before* `drawContent()`), never to the text/icon
     // children this surface hosts, so turning it down can't wash out
     // readability the way a whole-node `Modifier.alpha` would.
-    baseAlpha: Float = 1f
+    baseAlpha: Float = 1f,
+    // "رقّي شكل الحواف... تبين أوضح بالوضعين": the rim border used to be
+    // hardcoded pure white — fine for every header/bottom-nav panel (they
+    // always sit on the app's own colored gradient, where a white rim
+    // always reads as a bright edge), but wrong for [GlassAlertDialog],
+    // which sits on a *tonal* surface that goes light in day mode. A pure
+    // white rim at low alpha is nearly invisible against a light
+    // background — exactly what made the dialog look edge-less/flat in
+    // light mode. Kept `Color.White` as the default so every existing
+    // caller's look is byte-for-byte unchanged; only the dialog opts into
+    // a theme-derived color instead.
+    rimColor: Color = Color.White
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
 
@@ -407,7 +418,7 @@ fun Modifier.liquidGlassSurface(
             // Slightly brighter glass rim (0.22 → 0.30) so the edge reads as
             // a distinct rim of light catching the border of the glass/
             // droplet, matching the stronger `dropletGlint` highlight above.
-            if (topFlush) it else it.border(1.dp, Color.White.copy(alpha = 0.30f), shape)
+            if (topFlush) it else it.border(1.dp, rimColor.copy(alpha = 0.30f), shape)
         }
 }
 
