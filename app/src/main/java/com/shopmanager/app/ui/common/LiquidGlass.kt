@@ -384,7 +384,14 @@ fun Modifier.liquidGlassSurface(
                             )
                         )
                     }
-                    layer.renderEffect = BlurEffect(28f, 28f, TileMode.Decal)
+                    // "رقّي شكل الزجاج لأحدث مظهر": 28f → 34f — a slightly
+                    // heavier real Gaussian blur on the frosted core so the
+                    // drifting highlight/droplet glint reads as light
+                    // diffusing through a thicker slab of glass rather than
+                    // a tighter, more contained soft patch. Still the same
+                    // safe two-pass approach (content drawn sharp first,
+                    // this blur only ever touches the decorative shapes).
+                    layer.renderEffect = BlurEffect(34f, 34f, TileMode.Decal)
                     drawLayer(layer)
                 } else {
                     if (topHighlight != null) drawRect(brush = topHighlight)
@@ -434,8 +441,23 @@ fun GlassIconButton(
     // AppColorMode.GLASS pushes every glass element further toward
     // see-through; every other mode keeps the existing 0.16/0.30 values.
     val glassModeActive = LocalGlassMode.current
-    val fillAlpha = if (glassModeActive) 0.10f else 0.16f
-    val rimAlpha = if (glassModeActive) 0.38f else 0.30f
+    val restingFillAlpha = if (glassModeActive) 0.10f else 0.16f
+    val restingRimAlpha = if (glassModeActive) 0.38f else 0.30f
+    // "رقّي التفاعل عند الضغط": a brief brighten on press — both the fill
+    // and rim animate a touch lighter, on the same spring as the scale —
+    // so tapping the button reads as light momentarily catching the glass,
+    // not just a bare size change. Settles back to the resting values the
+    // instant the press ends.
+    val fillAlpha by animateFloatAsState(
+        targetValue = if (pressed) restingFillAlpha + 0.10f else restingFillAlpha,
+        animationSpec = MotionSpecs.pressSpring(),
+        label = "glassIconButtonFill"
+    )
+    val rimAlpha by animateFloatAsState(
+        targetValue = if (pressed) restingRimAlpha + 0.14f else restingRimAlpha,
+        animationSpec = MotionSpecs.pressSpring(),
+        label = "glassIconButtonRim"
+    )
 
     IconButton(
         onClick = onClick,
