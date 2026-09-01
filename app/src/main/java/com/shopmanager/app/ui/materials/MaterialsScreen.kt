@@ -619,7 +619,7 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
             totalCount = catalogItems.size,
             totalValue = totalValue,
             currency = currency,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, top = 12.dp, bottom = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
         )
         OutlinedTextField(
             value = search,
