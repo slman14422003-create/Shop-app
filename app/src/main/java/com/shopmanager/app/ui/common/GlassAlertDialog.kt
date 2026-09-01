@@ -102,6 +102,21 @@ import kotlinx.coroutines.withContext
  * the dialog reads as unmistakably "this app's color" while staying dark
  * enough/neutral enough for the existing onSurface/onSurfaceVariant text
  * to stay legible on top of it.
+ *
+ * "رقّي الديالوغ ليبين أوضح بالوضعين" (screenshots showed a nearly edge-less,
+ * flat-looking panel in light mode specifically): two follow-up fixes,
+ * both theme-aware rather than hardcoded to a single look:
+ *   - the outer glass rim and the button-row dividers used to be a flat
+ *     `Color.White` at low alpha — invisible against this dialog's own
+ *     light-mode fill, which is exactly what read as "no border" in the
+ *     light-mode screenshot. Both now derive from `colorScheme.onSurface`
+ *     (blended with a touch of `primary` for the outer rim), so there's
+ *     always a legible edge in *either* theme instead of one that only
+ *     shows up in dark mode.
+ *   - the brand-color blend in the fill gradient nudged up (0.42/0.30 →
+ *     0.48/0.34, alpha 0.42/0.34 → 0.48/0.38) — still soft enough to keep
+ *     text legible, but enough of a lift that the panel reads as clearly
+ *     tinted with the app's own color rather than a nearly neutral card.
  */
 @Composable
 fun GlassAlertDialog(
@@ -240,14 +255,26 @@ fun GlassAlertDialog(
         // keeps its own distinct, more-transparent character — just
         // readable rather than right at the edge of legibility.
         val glassModeActive = LocalGlassMode.current
-        val fillAlphaTop = if (glassModeActive) 0.40f else 0.42f
-        val fillAlphaBottom = if (glassModeActive) 0.32f else 0.34f
+        val fillAlphaTop = if (glassModeActive) 0.46f else 0.48f
+        val fillAlphaBottom = if (glassModeActive) 0.36f else 0.38f
         val gradientTop = androidx.compose.ui.graphics.lerp(
-            resolvedContainer, MaterialTheme.colorScheme.primary, 0.42f
+            resolvedContainer, MaterialTheme.colorScheme.primary, 0.48f
         ).copy(alpha = fillAlphaTop)
         val gradientBottom = androidx.compose.ui.graphics.lerp(
-            resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.30f
+            resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.34f
         ).copy(alpha = fillAlphaBottom)
+        // "رقّي الحواف لتبين بالوضعين": see `rimColor`'s own doc in
+        // LiquidGlass.kt — a flat white rim washes out against this
+        // dialog's light-mode background, which is exactly what read as
+        // "edge-less" in the light-mode screenshot. Blending onSurface
+        // (the theme's own "ink" — dark in light mode, light in dark mode)
+        // with a touch of primary gives a rim that's always legible
+        // against *this* panel's own fill, in both themes, while still
+        // carrying a hint of the app's brand color rather than a plain
+        // gray line.
+        val dialogRimColor = androidx.compose.ui.graphics.lerp(
+            MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.primary, 0.35f
+        )
 
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Box(
@@ -274,7 +301,8 @@ fun GlassAlertDialog(
                         // slow streak; MANUAL/CLASSIC stay fully static.
                         sheen = glassModeActive,
                         highlight = false,
-                        animated = glassModeActive
+                        animated = glassModeActive,
+                        rimColor = dialogRimColor
                     )
             ) {
             // BUG FIXED ("تحته كلشي مشوه مو بلور" — everything under it is
@@ -351,13 +379,13 @@ fun GlassAlertDialog(
                 // border), and each button sits in an equal-width half
                 // (single button = full width) instead of floating at one
                 // corner.
-                HorizontalDivider(color = Color.White.copy(alpha = 0.14f), thickness = 1.dp)
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), thickness = 1.dp)
                 Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (dismissButton != null) {
                         DialogButtonCell(Modifier.weight(1f).fillMaxHeight()) {
                             dismissButton()
                         }
-                        VerticalDivider(color = Color.White.copy(alpha = 0.14f), thickness = 1.dp)
+                        VerticalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), thickness = 1.dp)
                     }
                     DialogButtonCell(Modifier.weight(1f).fillMaxHeight()) {
                         confirmButton()
