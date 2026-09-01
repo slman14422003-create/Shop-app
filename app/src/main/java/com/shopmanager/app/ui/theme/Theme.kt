@@ -1,11 +1,15 @@
 package com.shopmanager.app.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -59,6 +63,22 @@ fun rememberIsDarkTheme(themeMode: AppThemeMode): Boolean {
  * content anywhere, so layout direction is now forced to RTL unconditionally
  * instead of following the system locale.
  */
+/**
+ * "وضع الألوان الخاص بالأندرويد الخام" (stock/raw Android color mode): on
+ * Android 12+ (API 31, `Build.VERSION_CODES.S`), the platform can generate a
+ * whole Material color scheme straight from the user's wallpaper — the same
+ * "Material You" engine the rest of stock Android (Settings, Photos,
+ * launcher…) themes itself with. [AppColorMode.MANUAL] ("مخصص" in Settings)
+ * now uses exactly that instead of one of the 20 hand-tuned
+ * [AppColorPalette] hues: the person's own device colors flow into every
+ * screen, matching how a native Android app looks on their exact phone
+ * rather than a fixed palette picked at build time. Below API 31 — where
+ * `dynamicLightColorScheme`/`dynamicDarkColorScheme` don't exist — this
+ * falls back to the previous hand-tuned [lightSchemeFor]/[darkSchemeFor]
+ * behavior so older devices are never left without a color scheme.
+ */
+private val dynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
 @Composable
 fun ShopManagerTheme(
     themeMode: AppThemeMode = AppThemeMode.SYSTEM,
@@ -67,24 +87,34 @@ fun ShopManagerTheme(
     content: @Composable () -> Unit
 ) {
     val useDark = rememberIsDarkTheme(themeMode)
+    val context = LocalContext.current
 
     val paletteColors = remember(colorPalette) { paletteColorsFor(colorPalette) }
-    val colors = remember(colorMode, paletteColors, useDark) {
-        when (colorMode) {
-            AppColorMode.GLASS ->
+    val useDynamic = colorMode == AppColorMode.MANUAL && dynamicColorSupported
+    val colors = remember(colorMode, paletteColors, useDark, useDynamic) {
+        when {
+            useDynamic ->
+                if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            colorMode == AppColorMode.GLASS ->
                 if (useDark) glassDarkScheme(paletteColors) else glassLightScheme(paletteColors)
-            AppColorMode.CLASSIC ->
+            colorMode == AppColorMode.CLASSIC ->
                 if (useDark) neutralDarkScheme() else neutralLightScheme()
-            AppColorMode.MANUAL ->
+            else ->
                 if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
         }
     }
 
-    val gradientColors = remember(colorMode, paletteColors) {
-        when (colorMode) {
-            AppColorMode.GLASS -> glassGradientColors(paletteColors)
-            AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
-            AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
+    // The header/status-bar gradient can't come from a palette pick anymore
+    // once MANUAL is wallpaper-driven — it's derived from the same dynamic
+    // scheme's own primary/secondary tones instead, so the header always
+    // matches whatever the system just generated rather than a stale fixed
+    // gradient left over from the old palette-based look.
+    val gradientColors = remember(colorMode, paletteColors, colors, useDynamic) {
+        when {
+            useDynamic -> listOf(colors.primary, colors.secondary)
+            colorMode == AppColorMode.GLASS -> glassGradientColors(paletteColors)
+            colorMode == AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
+            else -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
         }
     }
 
@@ -94,7 +124,10 @@ fun ShopManagerTheme(
         // Scoped switch for the animated liquid-glass motion (drift/sheen)
         // and the extra translucency in liquidGlassSurface/GlassAlertDialog/
         // the glass buttons — on only for AppColorMode.GLASS, so MANUAL and
-        // CLASSIC keep their existing calm, static glass panels untouched.
+        // CLASSIC keep their existing calm, static *flat* panels (see
+        // liquidGlassSurface's own `glassModeActive` branch) and never pick
+        // up any glass translucency, matching stock Android's own solid
+        // Material surfaces.
         LocalGlassMode provides (colorMode == AppColorMode.GLASS)
     ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
