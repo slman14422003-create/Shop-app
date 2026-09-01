@@ -47,7 +47,16 @@ import java.util.Locale
 enum class BackupKind(val filePrefix: String) {
     /** Once a day, via [com.shopmanager.app.data.backup.DailyBackupWorker]. */
     DAILY("backup_daily_"),
-    /** Right after an add/edit/delete, via [InstantBackupWorker]. */
+    /**
+     * Right after a real data change, via [InstantBackupWorker]. Requested
+     * both from a local add/edit/delete (see DebtsViewModel/
+     * MaterialsViewModel's action functions) AND from those same
+     * ViewModels' live Firestore listeners (personsFlow/debtsFlow/
+     * materialsFlow/pricesFlow) — so a change made on *another* device
+     * signed into the same shop also produces a fresh local snapshot on
+     * *this* device the moment it's seen, not only on the device that
+     * made the change.
+     */
     INSTANT("backup_instant_")
 }
 
