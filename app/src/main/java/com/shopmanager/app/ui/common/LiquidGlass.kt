@@ -42,7 +42,39 @@ import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.ui.theme.LocalGlassMode
+import androidx.compose.ui.geometry.Size
 import kotlin.math.roundToInt
+
+/**
+ * "قطرات الماء" (water droplets) — AppColorMode.GLASS's own visual
+ * signature. One diffuse corner glow used to be the whole "glass" read;
+ * this is a small, fixed field of bead-like highlights of different sizes
+ * scattered near the top of the panel, each trailing a thin soft streak
+ * beneath it, the way individual drops of water collect unevenly on a
+ * pane of glass and trickle down under their own weight. Fixed positions
+ * (not random per composition) so the same panel always reads the same
+ * way and this stays a `remember`/`drawWithCache`-friendly constant rather
+ * than something reallocated every frame.
+ */
+private data class DropletSpec(
+    val cx: Float,
+    val cy: Float,
+    val radius: Float,
+    val coreAlpha: Float,
+    val midAlpha: Float,
+    val trailLength: Float,
+    val trailAlpha: Float
+)
+
+private val LiquidGlassDroplets = listOf(
+    // The large "primary" bead — the same top-left position the old single
+    // dropletGlint used, kept as the anchor of the field.
+    DropletSpec(cx = 0.16f, cy = 0.15f, radius = 0.32f, coreAlpha = 0.62f, midAlpha = 0.22f, trailLength = 0.60f, trailAlpha = 0.16f),
+    // Two smaller secondary beads scattered further along the panel so the
+    // glass reads as genuinely wet/uneven rather than one lit corner.
+    DropletSpec(cx = 0.60f, cy = 0.06f, radius = 0.15f, coreAlpha = 0.46f, midAlpha = 0.16f, trailLength = 0.42f, trailAlpha = 0.11f),
+    DropletSpec(cx = 0.88f, cy = 0.22f, radius = 0.10f, coreAlpha = 0.38f, midAlpha = 0.12f, trailLength = 0.28f, trailAlpha = 0.08f)
+)
 
 /**
  * "زجاج سائل" (liquid glass): the frosted, glossy surface behind every
@@ -200,7 +232,14 @@ fun Modifier.liquidGlassSurface(
     // callers only ever tuned that value *for* the glass look in the first
     // place; a general-mode panel should just read as a normal solid brand
     // surface).
-    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.78f).coerceIn(0f, 1f) else 1f
+    // RADICAL UPGRADE ("تحسينات جذرية... الشفافية على الوضع كامل"): GLASS
+    // mode's own multiplier pushed further toward see-through (0.78 → 0.60)
+    // — a noticeably more liquid, less solid fill across every panel this
+    // function draws, paired with [glassLightScheme]/[glassDarkScheme]'s
+    // own lower container alphas in Palette.kt so the extra transparency
+    // isn't just the header/nav — it runs through every ordinary card,
+    // dialog, and sheet in GLASS mode too.
+    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.60f).coerceIn(0f, 1f) else 1f
     val effectiveHighlight = glassModeActive && highlight
 
     // PERF (low-end tier): Modifier.shadow forces its own offscreen
@@ -302,7 +341,7 @@ fun Modifier.liquidGlassSurface(
             // is unavailable — the flat, un-blurred fallback exactly as
             // before, so API<31/LOW-tier devices see no change at all.
             val topHighlight = if (effectiveHighlight && frostedCoreLayer == null) Brush.radialGradient(
-                colors = listOf(Color.White.copy(alpha = 0.20f), Color.White.copy(alpha = 0f)),
+                colors = listOf(Color.White.copy(alpha = 0.24f), Color.White.copy(alpha = 0f)),
                 center = Offset(w * drift, -h * 0.25f),
                 radius = w * 0.75f
             ) else null
@@ -313,8 +352,11 @@ fun Modifier.liquidGlassSurface(
             // a single coherent sheet of glass — removed rather than tuned,
             // since `topHighlight` alone already carries the "light drifting
             // across glass" read that this was meant to reinforce.
+            // Bumped slightly (0.28 → 0.32) to keep the panel's top edge
+            // readable now that the fill itself sits at a much lower resting
+            // alpha (see `effectiveBaseAlpha`'s 0.60 multiplier above).
             val topEdge = if (topFlush || !effectiveHighlight) null else Brush.verticalGradient(
-                colors = listOf(Color.White.copy(alpha = 0.28f), Color.White.copy(alpha = 0f)),
+                colors = listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0f)),
                 startY = 0f,
                 endY = h * 0.12f
             )
@@ -341,33 +383,27 @@ fun Modifier.liquidGlassSurface(
                     end = Offset(center + bandWidth, h)
                 )
             }
-            // BUG FIXED ("بدي ياه بلوز زجاجي... متل نقطة ماء وبلور" — this
-            // panel needs a real "water droplet" glass read, and the same
-            // treatment on the top/bottom bars too): `topHighlight` alone is
-            // a soft, wide drift with no bright core, so on its own it reads
-            // as a faint color wash, not glass catching light. A genuine
-            // optical blur/refraction pass isn't something Compose exposes
-            // for content drawn elsewhere on screen, but a tight,
-            // bright-cored radial highlight fixed in one corner — the way
-            // light collects at the curved center of a bead of water and
-            // fades sharply outward — is a real, well-established way to
-            // fake exactly that "droplet" read cheaply. It's added here, in
-            // the one function every glass surface in the app already goes
-            // through ([DashboardScreen]'s header, [FloatingBottomNav], and
-            // [GlassAlertDialog]), so all three automatically pick up the
-            // same "نفس المبدأ" droplet glint without editing each of them
-            // separately — and it's unconditional (not gated behind
-            // `sheen`/`animated`), so it's part of this surface's resting
-            // look everywhere, not an extra opt-in effect.
-            val dropletGlint = if (effectiveHighlight && frostedCoreLayer == null) Brush.radialGradient(
-                colors = listOf(
-                    Color.White.copy(alpha = 0.50f),
-                    Color.White.copy(alpha = 0.16f),
-                    Color.White.copy(alpha = 0f)
-                ),
-                center = Offset(w * 0.22f, h * 0.14f),
-                radius = w * 0.30f
-            ) else null
+            // RADICAL UPGRADE ("تحسينات جذرية... قطرات ماء... الشفافية على
+            // الوضع كامل"): the single corner glint is replaced by the full
+            // [LiquidGlassDroplets] bead field — every droplet gets its own
+            // bright core + soft mid ring (the "bead of water" read) AND a
+            // thin vertical trail fading away beneath it (water beginning
+            // to run down the glass), scaled to this panel's own size. Only
+            // built in the flat fallback path — the real-blur path below
+            // records the same field into its offscreen layer instead.
+            val dropletBrushes: List<Pair<Brush, Offset>> = if (effectiveHighlight && frostedCoreLayer == null) {
+                LiquidGlassDroplets.map { d ->
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = d.coreAlpha),
+                            Color.White.copy(alpha = d.midAlpha),
+                            Color.White.copy(alpha = 0f)
+                        ),
+                        center = Offset(w * d.cx, h * d.cy),
+                        radius = w * d.radius
+                    ) to Offset(w * d.cx, h * d.cy)
+                }
+            } else emptyList()
             // NEW (thickness/depth): a soft, dark gradient hugging just the
             // *inside* bottom edge — the mirror of `topEdge`'s bright rim
             // above. Real glass/acrylic isn't lit evenly all over: the top
@@ -388,9 +424,9 @@ fun Modifier.liquidGlassSurface(
                 drawContent()
                 val layer = frostedCoreLayer
                 if (layer != null) {
-                    // Record just the two abstract light-patch shapes (never
-                    // real content — that already finished drawing above, in
-                    // its own separate, always-sharp pass) into an offscreen
+                    // Record the drift highlight plus the *entire* droplet
+                    // field (core, mid ring, and trail — never real content,
+                    // that already finished drawing above) into an offscreen
                     // layer, blur that layer for real, then composite it —
                     // see the function doc for why this is safe.
                     layer.record(this, layoutDirection, frostedCoreSize) {
@@ -401,30 +437,72 @@ fun Modifier.liquidGlassSurface(
                                 radius = w * 0.65f
                             )
                         )
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = 0.62f),
-                                    Color.White.copy(alpha = 0.20f),
-                                    Color.White.copy(alpha = 0f)
-                                ),
-                                center = Offset(w * 0.22f, h * 0.14f),
-                                radius = w * 0.28f
-                            )
-                        )
+                        if (effectiveHighlight) {
+                            LiquidGlassDroplets.forEach { d ->
+                                val center = Offset(w * d.cx, h * d.cy)
+                                drawRect(
+                                    brush = Brush.radialGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = d.coreAlpha),
+                                            Color.White.copy(alpha = d.midAlpha),
+                                            Color.White.copy(alpha = 0f)
+                                        ),
+                                        center = center,
+                                        radius = w * d.radius
+                                    )
+                                )
+                                // The trickle: a narrow soft streak dropping
+                                // straight down from the bead's own center,
+                                // fading out over `trailLength` of the
+                                // panel's height — like a drop of water
+                                // starting to run under its own weight.
+                                val trailWidth = (w * d.radius * 0.55f).coerceAtLeast(1f)
+                                drawRect(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.White.copy(alpha = d.trailAlpha),
+                                            Color.White.copy(alpha = 0f)
+                                        ),
+                                        startY = center.y,
+                                        endY = center.y + h * d.trailLength
+                                    ),
+                                    topLeft = Offset(center.x - trailWidth / 2f, center.y),
+                                    size = Size(trailWidth, h * d.trailLength)
+                                )
+                            }
+                        }
                     }
-                    // "رقّي شكل الزجاج لأحدث مظهر": 28f → 34f — a slightly
-                    // heavier real Gaussian blur on the frosted core so the
-                    // drifting highlight/droplet glint reads as light
-                    // diffusing through a thicker slab of glass rather than
-                    // a tighter, more contained soft patch. Still the same
-                    // safe two-pass approach (content drawn sharp first,
-                    // this blur only ever touches the decorative shapes).
-                    layer.renderEffect = BlurEffect(34f, 34f, TileMode.Decal)
+                    // "رقّي شكل الزجاج لأحدث مظهر": a heavier real Gaussian
+                    // blur (34f → 44f) on the frosted core so the drift
+                    // highlight and the whole droplet field read as light
+                    // genuinely diffusing through a thicker slab of wet
+                    // glass, not a tighter, more contained soft patch. Still
+                    // the same safe two-pass approach (content drawn sharp
+                    // first, this blur only ever touches the decorative
+                    // shapes).
+                    layer.renderEffect = BlurEffect(44f, 44f, TileMode.Decal)
                     drawLayer(layer)
                 } else {
                     if (topHighlight != null) drawRect(brush = topHighlight)
-                    if (dropletGlint != null) drawRect(brush = dropletGlint)
+                    dropletBrushes.forEach { (brush, _) -> drawRect(brush = brush) }
+                    if (effectiveHighlight) {
+                        LiquidGlassDroplets.forEach { d ->
+                            val center = Offset(w * d.cx, h * d.cy)
+                            val trailWidth = (w * d.radius * 0.55f).coerceAtLeast(1f)
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        Color.White.copy(alpha = d.trailAlpha),
+                                        Color.White.copy(alpha = 0f)
+                                    ),
+                                    startY = center.y,
+                                    endY = center.y + h * d.trailLength
+                                ),
+                                topLeft = Offset(center.x - trailWidth / 2f, center.y),
+                                size = Size(trailWidth, h * d.trailLength)
+                            )
+                        }
+                    }
                 }
                 if (topEdge != null) drawRect(brush = topEdge)
                 if (innerBaseShadow != null) drawRect(brush = innerBaseShadow)
@@ -432,7 +510,7 @@ fun Modifier.liquidGlassSurface(
             }
         }
         .let {
-            // Slightly brighter glass rim (0.22 → 0.30) so the edge reads as
+            // Brighter glass rim (0.22 → 0.36) so the edge reads as
             // a distinct rim of light catching the border of the glass/
             // droplet, matching the stronger `dropletGlint` highlight above.
             // The bright glass "rim" (a hairline meant to read as light
@@ -444,7 +522,7 @@ fun Modifier.liquidGlassSurface(
             // stray seam rather than an intentional border).
             when {
                 topFlush -> it
-                glassModeActive -> it.border(1.dp, rimColor.copy(alpha = 0.30f), shape)
+                glassModeActive -> it.border(1.dp, rimColor.copy(alpha = 0.36f), shape)
                 rimColor == Color.White -> it
                 else -> it.border(1.dp, rimColor.copy(alpha = 0.12f), shape)
             }
@@ -484,9 +562,12 @@ fun GlassIconButton(
     // plain, solidly-tinted circular icon button, the normal stock-Android
     // read for an icon sitting on a colored surface. GLASS mode keeps the
     // existing see-through fill + bright rim.
+    // RADICAL UPGRADE: GLASS mode's resting fill pushed even further
+    // toward see-through (0.10 → 0.07), matching the same across-the-board
+    // transparency bump as [liquidGlassSurface]'s `effectiveBaseAlpha`.
     val glassModeActive = LocalGlassMode.current
-    val restingFillAlpha = if (glassModeActive) 0.10f else 0.22f
-    val restingRimAlpha = if (glassModeActive) 0.38f else 0f
+    val restingFillAlpha = if (glassModeActive) 0.07f else 0.22f
+    val restingRimAlpha = if (glassModeActive) 0.40f else 0f
     // "رقّي التفاعل عند الضغط": a brief brighten on press — both the fill
     // and rim animate a touch lighter, on the same spring as the scale —
     // so tapping the button reads as light momentarily catching the glass,
@@ -503,6 +584,9 @@ fun GlassIconButton(
         label = "glassIconButtonRim"
     )
 
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val dropletRadiusPx = with(density) { (size * 3.2f).toPx() }
+
     IconButton(
         onClick = onClick,
         interactionSource = interactionSource,
@@ -510,13 +594,24 @@ fun GlassIconButton(
             .size(size)
             .scale(scale)
             .clip(CircleShape)
-            // طلب "تعميم ستايل الزجاج": pushed a bit more see-through
-            // (0.20 → 0.16), same direction as the header/bottom-nav
-            // panels' new `baseAlpha`, and the rim brought down to the
-            // same 0.30 every other glass edge in the app uses (was a
-            // brighter 0.40, which read as a heavier ring than the panel
-            // border it sits on).
-            .background(Color.White.copy(alpha = fillAlpha))
+            // "قطرات الماء" carried down to the small circular buttons too:
+            // in GLASS mode the fill is a tiny off-center radial bead (a
+            // bright droplet-core near the top-left, fading to the same
+            // resting alpha everywhere else) instead of one flat wash — the
+            // same bead-of-water read as the big panels, at button scale.
+            // Every other mode keeps a perfectly flat, opaque-tinted fill.
+            .background(
+                if (glassModeActive) {
+                    Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = (fillAlpha + 0.30f).coerceAtMost(1f)),
+                            Color.White.copy(alpha = fillAlpha)
+                        ),
+                        center = Offset.Zero,
+                        radius = dropletRadiusPx
+                    )
+                } else Brush.linearGradient(listOf(Color.White.copy(alpha = fillAlpha), Color.White.copy(alpha = fillAlpha)))
+            )
             .border(1.dp, Color.White.copy(alpha = rimAlpha), CircleShape)
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(size * 0.5f))
