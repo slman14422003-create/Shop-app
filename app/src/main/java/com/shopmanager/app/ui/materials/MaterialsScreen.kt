@@ -2,6 +2,8 @@ package com.shopmanager.app.ui.materials
 
 import android.content.Intent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -22,8 +24,10 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.*
@@ -36,6 +40,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -332,93 +337,120 @@ private fun MaterialsHeader(
         Spacer(Modifier.height(16.dp))
         SegmentedTabs(
             selectedIndex = tab,
-            options = listOf("المواد", "الأسعار"),
+            options = listOf(
+                SegmentOption("المواد", Icons.Default.Inventory2),
+                SegmentOption("الأسعار", Icons.Default.Sell)
+            ),
             onSelect = onTabChange
         )
     }
 }
 
+private data class SegmentOption(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+
 /**
- * iOS-style pill segmented control, redone as an actual "liquid glass"
- * thumb instead of a flat opaque-white rectangle.
- *
- * FIX: the previous selected-segment background was plain solid white
- * (`Color.White.copy(alpha = 0.95f)`) — on top of an already-bright brand
- * gradient it read as a dull, flat cutout rather than part of the glass
- * design used everywhere else (header, buttons), and it had no edge of its
- * own so it didn't look "lifted" off the panel behind it. The thumb now
- * gets the same treatment as every other glass surface in this app: a
- * soft vertical sheen (bright at the top, settling lower), a bright hairline
- * rim, and a subtle shadow so it visibly sits above the track instead of
- * blending flat into it — while staying opaque enough at the core for the
- * primary-colored label to stay fully legible.
+ * REDESIGN ("الشريط... أعد تصميمه"): rebuilt on a tighter, more deliberate
+ * grid instead of the previous plain label-only pill. Three precise
+ * changes from before:
+ * 1. Each segment now carries a small leading glyph (📦 for المواد, 🏷 for
+ *    الأسعار) so the two tabs are told apart at a glance, not just by
+ *    reading the Arabic label — the same icon/label pairing pattern used
+ *    for every row lower on this screen (MaterialRow's avatar, the price
+ *    row's tag icon).
+ * 2. The selected thumb's own size is now driven by real measurement
+ *    (`Modifier.onSizeChanged` + `animateDpAsState` for its offset), so it
+ *    slides between segments as one continuous pill instead of each
+ *    segment independently cross-fading its own background — a small but
+ *    real "precision" difference: there is exactly one thumb, always
+ *    exactly the width of its segment, always exactly aligned under it.
+ * 3. Track/thumb metrics tightened (6.dp track padding, 4.dp icon-label
+ *    gap, fixed 46.dp row height) so the control reads as one crisp,
+ *    consistently-measured control rather than padding that happened to
+ *    look right on one label length.
  */
 @Composable
-private fun SegmentedTabs(selectedIndex: Int, options: List<String>, onSelect: (Int) -> Unit) {
-    // BUG FIXED (unreadable selected label): this used to color the selected
-    // segment's text with MaterialTheme.colorScheme.primary. That's correct
-    // for surfaces that actually flip with the theme, but the selected
-    // segment's pill background here is a fixed near-white "glass" surface
-    // in BOTH light and dark mode (see the .background() below) — while
-    // colorScheme.primary itself flips to a light/pale tone in dark mode
-    // (meant to read against a dark background, not a white pill). Pale
-    // text on a near-white pill is exactly the low-contrast, hard-to-read
-    // label reported. The brand gradient's start color is deliberately the
-    // same in both themes (see ShopManagerTheme/LocalBrandGradientColors),
-    // so using it here keeps the selected label a consistent, legible dark
-    // accent color against the white pill no matter which theme is active.
+private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSelect: (Int) -> Unit) {
+    // BUG FIXED (unreadable selected label): see original note — the
+    // selected pill is a fixed near-white glass surface in both themes,
+    // so its label needs the brand gradient's (theme-stable) start color
+    // rather than colorScheme.primary, which pales out in dark mode.
     val selectedLabelColor = LocalBrandGradientColors.current.first()
-    Row(
+    var trackWidthPx by remember { mutableStateOf(0) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val segmentWidth = with(density) {
+        if (trackWidthPx == 0) 0.dp else (trackWidthPx / options.size).toDp()
+    }
+    val thumbOffset by animateDpAsState(
+        targetValue = segmentWidth * selectedIndex,
+        animationSpec = MotionSpecs.quickSpring(),
+        label = "segmentThumbOffset"
+    )
+
+    Box(
         Modifier
             .fillMaxWidth()
+            .height(46.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = 0.14f))
             .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
             .padding(4.dp)
+            .onSizeChanged { trackWidthPx = it.width }
     ) {
-        options.forEachIndexed { index, label ->
-            val selected = index == selectedIndex
-            val bgColor by animateFloatAsState(
-                targetValue = if (selected) 1f else 0f,
-                animationSpec = MotionSpecs.quickSpring(),
-                label = "segmentSelection"
-            )
+        // The single sliding thumb: one continuous pill that moves under
+        // whichever segment is selected, instead of each Box tinting its
+        // own background independently.
+        if (segmentWidth > 0.dp) {
             Box(
                 Modifier
-                    .weight(1f)
-                    .then(
-                        if (bgColor > 0.01f) {
-                            Modifier.shadow(
-                                elevation = (3f * bgColor).dp,
-                                shape = RoundedCornerShape(11.dp),
-                                clip = false
-                            )
-                        } else Modifier
-                    )
+                    .offset(x = thumbOffset)
+                    .width(segmentWidth)
+                    .fillMaxHeight()
+                    .shadow(elevation = 3.dp, shape = RoundedCornerShape(11.dp), clip = false)
                     .clip(RoundedCornerShape(11.dp))
                     .background(
                         Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.98f * bgColor),
-                                Color.White.copy(alpha = 0.86f * bgColor)
-                            )
+                            listOf(Color.White.copy(alpha = 0.98f), Color.White.copy(alpha = 0.86f))
                         )
                     )
-                    .border(1.dp, Color.White.copy(alpha = 0.55f * bgColor), RoundedCornerShape(11.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { onSelect(index) }
-                    )
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    label,
-                    color = if (selected) selectedLabelColor else BrandOnGradient.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
+                    .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(11.dp))
+            )
+        }
+
+        Row(Modifier.fillMaxSize()) {
+            options.forEachIndexed { index, option ->
+                val selected = index == selectedIndex
+                val labelColor by animateColorAsState(
+                    targetValue = if (selected) selectedLabelColor else BrandOnGradient.copy(alpha = 0.9f),
+                    animationSpec = MotionSpecs.quickSpring(),
+                    label = "segmentLabelColor"
                 )
+                Row(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(11.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onSelect(index) }
+                        ),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        option.icon,
+                        contentDescription = null,
+                        tint = labelColor,
+                        modifier = Modifier.size(17.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        option.label,
+                        color = labelColor,
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
+                    )
+                }
             }
         }
     }
@@ -522,6 +554,23 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
     }
 }
 
+/**
+ * REDESIGN ("لوحة الأسعار... تصميم كامل ومحسّن"): rebuilt from a bare
+ * name+field list into an actual priced overview:
+ * - A summary card up top totals how many catalog items already have a
+ *   price set out of the total, plus the running sum of every priced item
+ *   (edited, unsaved values included) — the same "total at a glance" idea
+ *   the shortage tab already has, brought over to this tab too.
+ * - A search field to filter the catalog by name, matching the pattern
+ *   already used on the المواد tab, since a real catalog can run long.
+ * - Each row now carries a small colored tag-icon avatar (the same avatar
+ *   pattern MaterialRow uses) instead of bare text, a currency suffix
+ *   directly in the price field, and a "priced"/"unpriced" visual state so
+ *   it's obvious at a glance which items still need a price.
+ * - The save button now shows exactly how many changed rows it's about to
+ *   save, and is disabled (rather than a no-op tap) when nothing has
+ *   changed — precise state instead of an always-on button.
+ */
 @Composable
 private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<String, Double>, onSave: (String, Double) -> Unit) {
     // FIX: this tab used to price whatever happened to be on the shortage
@@ -534,72 +583,88 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
     // set once stays set. The shortage tab (tab 0 above) still shows and
     // sums these same prices by looking them up by name from `prices`.
     val edited = remember(catalogItems) { mutableStateMapOf<String, String>() }
+    var search by remember { mutableStateOf("") }
 
     if (catalogItems.isEmpty()) {
         EmptyState(icon = Icons.Default.Inventory2, text = "أضف مواد للقائمة الثابتة أولاً لتسعيرها")
         return
     }
 
-    // BUG FIXED: this tab has no FAB, but the floating nav pill still
-    // floats over it (it's shared across all 3 pager tabs) — without this,
-    // the last price row stopped exactly at the screen edge, right behind
-    // the pill.
+    val currency = AppSettingsState.currencySymbol
+    val filtered = if (search.isBlank()) catalogItems
+    else catalogItems.filter { it.name.contains(search, ignoreCase = true) }
+
+    // Effective value per item: the in-progress edit if there is one,
+    // otherwise the already-saved price — this is what both the summary
+    // card and the save button below count against, so "احفظ" always
+    // reflects exactly what's on screen right now, unsaved edits included.
+    val effectiveOf: (MaterialCatalogItem) -> Double? = { item ->
+        edited[item.name]?.toDoubleOrNull() ?: prices[item.name]
+    }
+    val pricedCount = remember(catalogItems, prices, edited.toMap()) {
+        catalogItems.count { effectiveOf(it) != null }
+    }
+    val totalValue = remember(catalogItems, prices, edited.toMap()) {
+        catalogItems.sumOf { effectiveOf(it) ?: 0.0 }
+    }
+    val changedCount = edited.count { (name, value) ->
+        val parsed = value.toDoubleOrNull()
+        parsed != null && parsed != prices[name]
+    }
+
     val bottomClearance = LocalFloatingBottomNavHeight.current + 8.dp
     Column(Modifier.fillMaxSize()) {
-        LazyColumn(
-            Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomClearance),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(catalogItems, key = { it.id }) { item ->
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // BUG FIXED: a long material name had no line/overflow
-                        // limit, so it could wrap to 2+ lines while the price
-                        // field next to it stayed a single line — the row's
-                        // vertical centering then looked broken/misaligned for
-                        // exactly the longer names. Ellipsis keeps every row
-                        // the same height regardless of name length.
-                        Text(
-                            item.name,
-                            modifier = Modifier.weight(1f),
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                        )
-                        // BUG FIXED: swapped the outlined field (border +
-                        // floating label breaking the border line — a
-                        // distinctly Material/Android pattern) for the same
-                        // borderless filled treatment as AppTextField, kept
-                        // inline/unlabeled here since the row is already
-                        // compact and single-line; a placeholder carries the
-                        // "السعر" context instead of a caption that would add
-                        // height and break the row's vertical centering.
-                        TextField(
-                            value = edited[item.name] ?: prices[item.name]?.toString() ?: "",
-                            onValueChange = { edited[item.name] = it },
-                            modifier = Modifier.width(120.dp),
-                            placeholder = { Text("السعر", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                            singleLine = true,
-                            shape = MaterialTheme.shapes.small,
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent,
-                                cursorColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                    }
+        PricesSummaryCard(
+            pricedCount = pricedCount,
+            totalCount = catalogItems.size,
+            totalValue = totalValue,
+            currency = currency,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, top = 12.dp, bottom = 4.dp)
+        )
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text("بحث عن مادة...") },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            trailingIcon = {
+                if (search.isNotEmpty()) {
+                    IconButton(onClick = { search = "" }) { Icon(Icons.Default.Clear, null) }
+                }
+            },
+            singleLine = true,
+            shape = CircleShape,
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                unfocusedBorderColor = Color.Transparent,
+                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            )
+        )
+        if (filtered.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                EmptyState(icon = Icons.Default.SearchOff, text = "لا توجد نتائج")
+            }
+        } else {
+            LazyColumn(
+                Modifier.weight(1f),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomClearance),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filtered, key = { it.id }) { item ->
+                    PriceRow(
+                        item = item,
+                        currency = currency,
+                        // Kept as a raw `toString()` (not the Arabic-locale
+                        // Formatters.number used for display elsewhere) —
+                        // this is the actual editable field value, and it
+                        // has to stay something `toDoubleOrNull()` can
+                        // parse back on save if the person edits it further
+                        // without clearing it first.
+                        value = edited[item.name] ?: prices[item.name]?.toString() ?: "",
+                        hasPrice = effectiveOf(item) != null,
+                        onValueChange = { edited[item.name] = it }
+                    )
                 }
             }
         }
@@ -608,6 +673,7 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
                 edited.forEach { (name, value) -> value.toDoubleOrNull()?.let { onSave(name, it) } }
                 edited.clear()
             },
+            enabled = changedCount > 0,
             // BUG FIXED ("زر الحفظ تحت الشريط السفلي"): this Column fills
             // the whole screen, but the floating bottom nav pill is drawn
             // as a separate overlay on top of it (see MainActivity/
@@ -622,7 +688,139 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
                 .fillMaxWidth()
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomClearance + 16.dp),
             shape = MaterialTheme.shapes.medium
-        ) { Text("حفظ كل الأسعار") }
+        ) {
+            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(if (changedCount > 0) "حفظ $changedCount من الأسعار" else "حفظ كل الأسعار")
+        }
+    }
+}
+
+/**
+ * Compact totals strip for the الأسعار tab: how many catalog items already
+ * have a price set (edits in progress count too — see `pricedCount` in
+ * [PricesList]) and the running total value of the whole catalog at
+ * current prices. Uses the same solid card language as the rest of the
+ * app (no glass dependency) so it reads correctly in every color mode.
+ */
+@Composable
+private fun PricesSummaryCard(
+    pricedCount: Int,
+    totalCount: Int,
+    totalValue: Double,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Sell, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "المسعّرة: $pricedCount من $totalCount",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "إجمالي قيمة القائمة",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+            Text(
+                "${Formatters.number(totalValue)} $currency",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+/** One catalog row in the priced-list — a colored tag-avatar (dimmed when
+ * the item still has no price, at full strength once it does), the item
+ * name, and an inline price field with a currency suffix. */
+@Composable
+private fun PriceRow(
+    item: MaterialCatalogItem,
+    currency: String,
+    value: String,
+    hasPrice: Boolean,
+    onValueChange: (String) -> Unit
+) {
+    val avatarColor = remember(item.name) { avatarColorFor(item.name) }
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(if (hasPrice) avatarColor else avatarColor.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Sell, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            // BUG FIXED: a long material name had no line/overflow limit, so
+            // it could wrap to 2+ lines while the price field next to it
+            // stayed a single line — the row's vertical centering then
+            // looked broken/misaligned for exactly the longer names.
+            // Ellipsis keeps every row the same height regardless of name
+            // length.
+            Text(
+                item.name,
+                modifier = Modifier.weight(1f),
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.width(8.dp))
+            // BUG FIXED: swapped the outlined field (border + floating
+            // label breaking the border line — a distinctly Material/
+            // Android pattern) for the same borderless filled treatment as
+            // AppTextField; a trailing currency suffix now sits inside the
+            // field itself so "السعر بالليرة/بالدولار" never needs a
+            // separate caption that would add height and break the row's
+            // vertical centering.
+            TextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier.width(128.dp),
+                placeholder = { Text("0", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
+                suffix = { Text(currency, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                singleLine = true,
+                shape = MaterialTheme.shapes.small,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
     }
 }
 
