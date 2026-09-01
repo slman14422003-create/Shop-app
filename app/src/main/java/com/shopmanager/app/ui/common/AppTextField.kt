@@ -1,5 +1,11 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,8 +18,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -48,6 +59,28 @@ import androidx.compose.ui.unit.dp
  * than whatever `surfaceContainerHigh`-or-lower surface this field sits on
  * (a plain AlertDialog today, any other card/sheet later) while staying in
  * the same neutral family — visible without turning into a harsh outline.
+ *
+ * "رقّي شكل حقول الإدخال بالوضعين": this used to be a genuinely flat, borderless
+ * fill with every indicator color forced to `Color.Transparent` — meaning
+ * there was literally zero visual feedback when a field was focused (no
+ * border, no glow, nothing), and the box itself read as a dead gray/dark
+ * rectangle in both light and dark mode (exactly what the screenshots
+ * showed). Two real, theme-adaptive additions:
+ *   - a hairline rim around the field at all times (`onSurface` at a very
+ *     low alpha) so the field reads as a distinct, tappable shape instead of
+ *     a borderless patch of color that blends into whatever surface sits
+ *     behind it — subtle in both themes since it's derived from `onSurface`,
+ *     which is always the "ink" color for whichever mode is active.
+ *   - that rim brightens into a real `primary`-tinted glow the moment the
+ *     field is focused (or `error`-tinted when `isError`), animated on the
+ *     same spring every other press/focus feedback in the app already uses,
+ *     so typing into a field now visibly "lights up" instead of giving no
+ *     feedback at all.
+ * The fill itself also picked up a barely-there vertical lift (a few
+ * percent of `onSurface` blended into the top stop only) — the same
+ * "light catches the top of the glass" cue used everywhere else in this
+ * app's glass system, kept subtle enough here that it reads as depth, not
+ * as a visible stripe, in either theme.
  */
 @Composable
 fun AppTextField(
@@ -94,36 +127,71 @@ fun AppTextField(
                 modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
             )
         }
-        TextField(
-            value = value,
-            onValueChange = onValueChange,
-            enabled = enabled,
-            placeholder = placeholder?.let {
-                { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) }
-            },
-            singleLine = singleLine,
-            minLines = minLines,
-            maxLines = maxLines,
-            keyboardOptions = keyboardOptions,
-            keyboardActions = keyboardActions,
-            visualTransformation = visualTransformation,
-            leadingIcon = leadingIcon?.let {
-                { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            },
-            isError = isError,
-            shape = RoundedCornerShape(14.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f),
-                errorContainerColor = MaterialTheme.colorScheme.errorContainer,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent,
-                errorIndicatorColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary
-            ),
-            modifier = Modifier.fillMaxWidth()
+
+        val interactionSource = remember { MutableInteractionSource() }
+        val focused by interactionSource.collectIsFocusedAsState()
+        val shape = RoundedCornerShape(16.dp)
+
+        val baseFill = if (enabled) MaterialTheme.colorScheme.surfaceContainerHighest
+        else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.6f)
+        // Barely-there top lift (5% of the theme's own "ink" color) — same
+        // direction as every other glass surface's top highlight, tuned
+        // down hard so it reads as depth rather than a visible seam.
+        val fillBrush = Brush.verticalGradient(
+            listOf(lerp(baseFill, MaterialTheme.colorScheme.onSurface, 0.05f), baseFill)
         )
+
+        val targetRimColor = when {
+            isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.65f)
+            focused -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+            !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+        }
+        val rimColor by animateColorAsState(
+            targetValue = targetRimColor,
+            animationSpec = MotionSpecs.quickSpring(),
+            label = "appTextFieldRim"
+        )
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(shape)
+                .background(fillBrush)
+                .border(1.dp, rimColor, shape)
+        ) {
+            TextField(
+                value = value,
+                onValueChange = onValueChange,
+                enabled = enabled,
+                interactionSource = interactionSource,
+                placeholder = placeholder?.let {
+                    { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) }
+                },
+                singleLine = singleLine,
+                minLines = minLines,
+                maxLines = maxLines,
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                visualTransformation = visualTransformation,
+                leadingIcon = leadingIcon?.let {
+                    { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                },
+                isError = isError,
+                shape = shape,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    errorContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    errorIndicatorColor = Color.Transparent,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
