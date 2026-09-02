@@ -73,6 +73,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.ShopManager.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
