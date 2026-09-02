@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -400,7 +401,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ShopManagerApp(
     settings: SettingsRepository,
@@ -461,17 +462,18 @@ private fun ShopManagerApp(
     // regardless, on the assumption the pill was still there to avoid.
     // With the keyboard up that clearance reserves for nothing — it's
     // dead space between the last visible row and the keyboard, which is
-    // exactly the black gap being reported. `isImeVisible` (real-time,
-    // driven by the live WindowInsets — see the `adjustResize` manifest
-    // fix alongside this one) collapses that reservation to 0 the instant
-    // the keyboard opens, and the pill itself fades out below rather than
-    // sitting there uselessly hidden behind the keyboard. Kept as its own
-    // `pillVisible` flag rather than folded into `showBottomBar` itself —
-    // NavHost's own bottom-inset toggle just below still needs
-    // `showBottomBar` to mean "is this the pager route", independent of
-    // the keyboard, or it would start double-padding for the exact same
-    // reason `adjustResize` was added for in the first place.
-    val imeVisible = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+    // exactly the black gap being reported. `imeVisible` (real-time,
+    // driven by the live `WindowInsets.ime` bottom inset — see the
+    // `adjustResize` manifest fix alongside this one) collapses that
+    // reservation to 0 the instant the keyboard opens, and the pill
+    // itself fades out below rather than sitting there uselessly hidden
+    // behind the keyboard. Kept as its own `pillVisible` flag rather than
+    // folded into `showBottomBar` itself — NavHost's own bottom-inset
+    // toggle just below still needs `showBottomBar` to mean "is this the
+    // pager route", independent of the keyboard, or it would start
+    // double-padding for the exact same reason `adjustResize` was added
+    // for in the first place.
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val pillVisible = showBottomBar && !imeVisible
 
     // PERF (low-end tier): a fade still allocates a graphicsLayer and runs
