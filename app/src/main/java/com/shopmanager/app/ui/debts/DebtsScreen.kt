@@ -201,8 +201,13 @@ fun DebtsScreen(
                 )
             )
 
-            val filtered = if (search.value.isBlank()) state.persons
-            else state.persons.filter { it.name.contains(search.value, ignoreCase = true) }
+            // PERF: same remember-keyed fix as the materials tabs — skip
+            // re-filtering the whole person list unless `search` or
+            // `state.persons` actually changed.
+            val filtered = remember(search.value, state.persons) {
+                if (search.value.isBlank()) state.persons
+                else state.persons.filter { it.name.contains(search.value, ignoreCase = true) }
+            }
 
             if (filtered.isEmpty()) {
                 EmptyState(
