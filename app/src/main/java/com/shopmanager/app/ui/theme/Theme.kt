@@ -1,15 +1,11 @@
 package com.shopmanager.app.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -64,21 +60,22 @@ fun rememberIsDarkTheme(themeMode: AppThemeMode): Boolean {
  * instead of following the system locale.
  */
 /**
- * "وضع الألوان الخاص بالأندرويد الخام" (stock/raw Android color mode): on
- * Android 12+ (API 31, `Build.VERSION_CODES.S`), the platform can generate a
- * whole Material color scheme straight from the user's wallpaper — the same
- * "Material You" engine the rest of stock Android (Settings, Photos,
- * launcher…) themes itself with. [AppColorMode.MANUAL] ("مخصص" in Settings)
- * now uses exactly that instead of one of the 20 hand-tuned
- * [AppColorPalette] hues: the person's own device colors flow into every
- * screen, matching how a native Android app looks on their exact phone
- * rather than a fixed palette picked at build time. Below API 31 — where
- * `dynamicLightColorScheme`/`dynamicDarkColorScheme` don't exist — this
- * falls back to the previous hand-tuned [lightSchemeFor]/[darkSchemeFor]
- * behavior so older devices are never left without a color scheme.
+ * BUG FIXED ("الوضع المخصص لا يغيّر اللون"): [AppColorMode.MANUAL] ("مخصص"
+ * in Settings) used to silently switch to `dynamicLightColorScheme`/
+ * `dynamicDarkColorScheme` — Android 12+'s wallpaper-driven "Material You"
+ * engine — the moment the device was on API 31+, completely ignoring
+ * whichever of the 20 hand-tuned [AppColorPalette] swatches the person had
+ * actually tapped. That's exactly why picking a swatch in "مخصص" appeared
+ * to do nothing on most modern phones: the app was always painting itself
+ * from the wallpaper instead, no matter which color was selected, and on
+ * a dark/muted wallpaper that could land on near-black tones throughout
+ * the app (buttons, the floating quick-add circle, etc.) with no way to
+ * override it from Settings. "مخصص" now always uses the selected
+ * [AppColorPalette] directly — the same fixed-palette behavior every
+ * Android version before 12's dynamic color had (and the only behavior
+ * this mode's own swatch grid ever implied it would have) — regardless of
+ * OS version or wallpaper.
  */
-private val dynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-
 @Composable
 fun ShopManagerTheme(
     themeMode: AppThemeMode = AppThemeMode.SYSTEM,
@@ -87,34 +84,27 @@ fun ShopManagerTheme(
     content: @Composable () -> Unit
 ) {
     val useDark = rememberIsDarkTheme(themeMode)
-    val context = LocalContext.current
 
     val paletteColors = remember(colorPalette) { paletteColorsFor(colorPalette) }
-    val useDynamic = colorMode == AppColorMode.MANUAL && dynamicColorSupported
-    val colors = remember(colorMode, paletteColors, useDark, useDynamic) {
-        when {
-            useDynamic ->
-                if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            colorMode == AppColorMode.GLASS ->
+    val colors = remember(colorMode, paletteColors, useDark) {
+        when (colorMode) {
+            AppColorMode.GLASS ->
                 if (useDark) glassDarkScheme(paletteColors) else glassLightScheme(paletteColors)
-            colorMode == AppColorMode.CLASSIC ->
+            AppColorMode.CLASSIC ->
                 if (useDark) neutralDarkScheme() else neutralLightScheme()
-            else ->
+            AppColorMode.MANUAL ->
                 if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
         }
     }
 
-    // The header/status-bar gradient can't come from a palette pick anymore
-    // once MANUAL is wallpaper-driven — it's derived from the same dynamic
-    // scheme's own primary/secondary tones instead, so the header always
-    // matches whatever the system just generated rather than a stale fixed
-    // gradient left over from the old palette-based look.
-    val gradientColors = remember(colorMode, paletteColors, colors, useDynamic) {
-        when {
-            useDynamic -> listOf(colors.primary, colors.secondary)
-            colorMode == AppColorMode.GLASS -> glassGradientColors(paletteColors)
-            colorMode == AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
-            else -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
+    // The header/status-bar gradient always comes from the selected
+    // palette's own gradient pair now — there's no wallpaper-driven scheme
+    // left to derive it from instead.
+    val gradientColors = remember(colorMode, paletteColors) {
+        when (colorMode) {
+            AppColorMode.GLASS -> glassGradientColors(paletteColors)
+            AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
+            AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
         }
     }
 
