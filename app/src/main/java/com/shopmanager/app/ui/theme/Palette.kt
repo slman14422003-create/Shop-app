@@ -342,7 +342,20 @@ internal fun lightSchemeFor(p: PaletteColors): ColorScheme = lightColorScheme(
     tertiary = p.secondaryLight,
     onTertiary = Color.White,
     tertiaryContainer = p.secondaryContainerLight,
-    background = LightBackground,
+    // BUG FIXED ("فراغ أسود في الشاشة" — the plain neutral `background`
+    // showing through anywhere a screen doesn't paint its own card/surface
+    // over it, e.g. the reserved clearance below a bottom button or the
+    // floating nav pill's transparent margins): this token got left out
+    // of the "الألوان ينقصها شيء" pass below — every surfaceContainer*
+    // tone was tinted toward the selected palette, but `background`
+    // itself stayed flat and un-tinted regardless of which vivid palette
+    // was active. Since Scaffold paints `background` behind literally
+    // everything by default, any gap not covered by a tinted card read as
+    // a stray, colorless patch next to the tinted surfaces around it. A
+    // faint blend (same spirit as surfaceContainerLow, just subtler since
+    // this sits behind everything) keeps the original neutral read while
+    // no longer looking like a foreign, un-themed hole.
+    background = blend(LightBackground, p.primaryLight, 0.03f),
     onBackground = Color(0xFF1C1B1F),
     surface = LightSurface,
     onSurface = Color(0xFF1C1B1F),
@@ -382,7 +395,10 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme = darkColorScheme(
     tertiary = p.secondaryDark,
     onTertiary = p.onSecondaryDark,
     tertiaryContainer = p.secondaryContainerDark,
-    background = DarkBackground,
+    // See lightSchemeFor's matching comment — same fix, dark side. A
+    // slightly stronger blend than light mode (0.05 vs 0.03) since dark
+    // neutrals need a touch more tint to read as anything but flat black.
+    background = blend(DarkBackground, p.primaryDark, 0.05f),
     onBackground = Color(0xFFE7E2EA),
     surface = DarkSurface,
     onSurface = Color(0xFFE7E2EA),
@@ -434,7 +450,12 @@ internal fun glassLightScheme(p: PaletteColors): ColorScheme = lightColorScheme(
     tertiary = p.secondaryLight,
     onTertiary = Color.White,
     tertiaryContainer = p.secondaryContainerLight.copy(alpha = 0.38f),
-    background = LightBackground,
+    // Same "فراغ أسود" fix as lightSchemeFor — kept opaque (no alpha) even
+    // in GLASS mode since `background` is the true opaque backdrop behind
+    // every translucent panel; only the panels themselves should be
+    // see-through, or there'd be nothing solid left for them to float
+    // over.
+    background = blend(LightBackground, p.primaryLight, 0.03f),
     onBackground = Color(0xFF1C1B1F),
     surface = LightSurface.copy(alpha = 0.38f),
     onSurface = Color(0xFF1C1B1F),
@@ -466,7 +487,8 @@ internal fun glassDarkScheme(p: PaletteColors): ColorScheme = darkColorScheme(
     tertiary = p.secondaryDark,
     onTertiary = p.onSecondaryDark,
     tertiaryContainer = p.secondaryContainerDark.copy(alpha = 0.34f),
-    background = DarkBackground,
+    // Same fix, dark GLASS side — see lightSchemeFor's comment.
+    background = blend(DarkBackground, p.primaryDark, 0.05f),
     onBackground = Color(0xFFE7E2EA),
     surface = DarkSurface.copy(alpha = 0.30f),
     onSurface = Color(0xFFE7E2EA),
