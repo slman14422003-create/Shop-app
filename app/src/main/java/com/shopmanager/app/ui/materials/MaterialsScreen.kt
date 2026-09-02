@@ -93,8 +93,17 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    val filtered = if (search.isBlank()) state.materials
-    else state.materials.filter { it.name.contains(search, ignoreCase = true) }
+    // PERF: this used to re-run the .filter{} scan over the whole
+    // materials list on *every* recomposition of this screen — including
+    // ones triggered by completely unrelated state (a dialog opening, the
+    // snackbar message clearing, etc.), not just an actual `search` or
+    // `state.materials` change. `remember` keyed on the two inputs this
+    // computation actually depends on makes it skip that rescan unless
+    // one of them genuinely changed.
+    val filtered = remember(search, state.materials) {
+        if (search.isBlank()) state.materials
+        else state.materials.filter { it.name.contains(search, ignoreCase = true) }
+    }
 
     Scaffold(
         // Edge-to-edge: the status bar is transparent (see
@@ -591,8 +600,14 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
     }
 
     val currency = AppSettingsState.currencySymbol
-    val filtered = if (search.isBlank()) catalogItems
-    else catalogItems.filter { it.name.contains(search, ignoreCase = true) }
+    // PERF: same fix as the shortage tab above — skip the rescan unless
+    // `search` or `catalogItems` actually changed, instead of re-filtering
+    // on every keystroke edit to an unrelated price field in the list
+    // below (every `edited[...]` write recomposes this whole composable).
+    val filtered = remember(search, catalogItems) {
+        if (search.isBlank()) catalogItems
+        else catalogItems.filter { it.name.contains(search, ignoreCase = true) }
+    }
 
     // Effective value per item: the in-progress edit if there is one,
     // otherwise the already-saved price — this is what both the summary

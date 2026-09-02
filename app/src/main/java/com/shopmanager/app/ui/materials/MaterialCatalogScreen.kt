@@ -60,7 +60,13 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    val filtered = if (search.isBlank()) catalog else catalog.filter { it.name.contains(search, ignoreCase = true) }
+    // PERF: same remember-keyed fix as MaterialsScreen — skip re-filtering
+    // the whole catalog on every unrelated recomposition (dialogs opening,
+    // the snackbar message clearing), only on an actual search/catalog
+    // change.
+    val filtered = remember(search, catalog) {
+        if (search.isBlank()) catalog else catalog.filter { it.name.contains(search, ignoreCase = true) }
+    }
 
     Scaffold(
         // Off-pager screen (no bottom nav bar of its own) — the outer app
