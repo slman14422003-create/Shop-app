@@ -64,6 +64,33 @@ object DevicePerformance {
     private const val LOW_RAM_THRESHOLD_MB = 3072L
     private const val LOW_CORE_THRESHOLD = 4
 
+    /** FEATURE ADDED (Settings → الأداء diagnostics): the raw signals
+     * [detectTier] measures, exposed on their own so the person can see
+     * *why* their device landed on a given tier instead of it being an
+     * opaque decision — useful context right next to the new "إعادة فحص
+     * أداء الجهاز" button. Always measures fresh (never reads the cached
+     * tier), so this reflects the device's current state even if the
+     * cached classification is stale. */
+    data class DeviceInfo(
+        val totalRamMb: Long,
+        val cores: Int,
+        val osFlaggedLowRam: Boolean,
+        val tier: PerformanceTier
+    )
+
+    fun currentDeviceInfo(context: Context): DeviceInfo {
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val memoryInfo = ActivityManager.MemoryInfo()
+        activityManager?.getMemoryInfo(memoryInfo)
+        val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
+        val cores = Runtime.getRuntime().availableProcessors()
+        val osFlaggedLowRam = activityManager?.isLowRamDevice == true
+        val lowRam = totalRamMb in 1..LOW_RAM_THRESHOLD_MB
+        val lowCores = cores in 1..LOW_CORE_THRESHOLD
+        val tier = if (osFlaggedLowRam || (lowRam && lowCores)) PerformanceTier.LOW else PerformanceTier.STANDARD
+        return DeviceInfo(totalRamMb, cores, osFlaggedLowRam, tier)
+    }
+
     /**
      * Reads the cached tier if this device has been classified before
      * (every launch after the first), otherwise measures it once and
@@ -76,30 +103,13 @@ object DevicePerformance {
             return runCatching { PerformanceTier.valueOf(cached) }.getOrDefault(PerformanceTier.STANDARD)
         }
 
-        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val memoryInfo = ActivityManager.MemoryInfo()
-        activityManager?.getMemoryInfo(memoryInfo)
-        val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
-        val cores = Runtime.getRuntime().availableProcessors()
-        val osFlaggedLowRam = activityManager?.isLowRamDevice == true
-        val lowRam = totalRamMb in 1..LOW_RAM_THRESHOLD_MB
-        val lowCores = cores in 1..LOW_CORE_THRESHOLD
-
-        // BUG FIXED (device detection): this used to flag LOW the moment
-        // *any one* signal tripped — including just "quad-core", which
-        // also matches plenty of perfectly capable phones with a small
-        // number of very fast cores. That misclassified real mid-range
-        // devices as low-end (visible as "the app doesn't seem to apply
-        // the right mode for this phone"). isLowRamDevice is Android/the
-        // OEM's own explicit low-RAM flag, so it's trusted on its own;
-        // otherwise RAM *and* core count both have to point the same way
-        // before a device is treated as entry-level.
-        val tier = if (osFlaggedLowRam || (lowRam && lowCores)) {
-            PerformanceTier.LOW
-        } else {
-            PerformanceTier.STANDARD
-        }
-
+        // Reuses the exact same signals/thresholds as [currentDeviceInfo]
+        // (see the BUG FIXED note that used to live here: LOW only when
+        // isLowRamDevice OR both RAM *and* core count point that way, never
+        // from a single weak signal alone) — one shared implementation, so
+        // the diagnostics shown in Settings can never silently drift from
+        // what actually decided the cached tier.
+        val tier = currentDeviceInfo(context).tier
         prefs.edit().putString(KEY_TIER, tier.name).apply()
         return tier
     }
