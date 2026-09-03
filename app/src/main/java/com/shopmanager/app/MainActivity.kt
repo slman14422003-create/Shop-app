@@ -245,6 +245,17 @@ class MainActivity : ComponentActivity() {
             val performanceTier by remember {
                 derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference) }
             }
+            // FEATURE ADDED ("إعادة فحص أداء الجهاز" in Settings → الأداء):
+            // DevicePerformance.resetCachedTier existed already but had no
+            // caller — wiring it up needs both steps done together (clear
+            // the cached classification, then re-measure) and the result
+            // written back into this same `detectedTier` state so the UI
+            // actually picks up the new tier immediately, without asking
+            // the person to restart the app.
+            val onRecheckDevicePerformance: () -> Unit = {
+                DevicePerformance.resetCachedTier(applicationContext)
+                detectedTier = DevicePerformance.detectTier(applicationContext)
+            }
 
             // Dismiss the static system splash screen as soon as Compose has
             // a frame ready to draw — see the composeSplashAttached comment
@@ -352,6 +363,7 @@ class MainActivity : ComponentActivity() {
                                         onColorPaletteChanged = { colorPalette = it },
                                         onColorModeChanged = { colorMode = it },
                                         onPerformancePreferenceChanged = { performancePreference = it },
+                                        onRecheckDevicePerformance = onRecheckDevicePerformance,
                                         pendingNotificationAction = pendingNotificationAction,
                                         onConsumeNotificationAction = { pendingNotificationAction = null }
                                     )
@@ -409,6 +421,7 @@ private fun ShopManagerApp(
     onColorPaletteChanged: (AppColorPalette) -> Unit,
     onColorModeChanged: (AppColorMode) -> Unit,
     onPerformancePreferenceChanged: (PerformanceMode) -> Unit,
+    onRecheckDevicePerformance: () -> Unit = {},
     pendingNotificationAction: NotificationAction? = null,
     onConsumeNotificationAction: () -> Unit = {}
 ) {
@@ -659,6 +672,7 @@ private fun ShopManagerApp(
                     onColorPaletteChanged = onColorPaletteChanged,
                     onColorModeChanged = onColorModeChanged,
                     onPerformancePreferenceChanged = onPerformancePreferenceChanged,
+                    onRecheckDevicePerformance = onRecheckDevicePerformance,
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
                     onOpenHelp = { navController.navigate(ROUTE_HELP) },
