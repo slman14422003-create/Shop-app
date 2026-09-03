@@ -156,6 +156,21 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     // metadata-only ack) still correctly notifies nothing.
     private var lastNotifiedMaterials: Map<String, String>? = null
 
+    /**
+     * BUG FIXED (إشعار قائمة المشتريات يوصل لنفس الجهاز اللي عدّل القائمة):
+     * the notify condition below used to be just "signature changed at
+     * all" — so adding, editing, or deleting a material on THIS device
+     * notified the very person who just did it, on top of the in-app
+     * "تمت إضافة/تعديل/حذف..." message already shown for the same action.
+     * Every local write that touches a material's id now records it here
+     * first; the diff below only counts an id as a real (notify-worthy)
+     * change when it ISN'T one of these self-touched ids, and consumes
+     * (removes) it either way so the set never grows unbounded. A change
+     * that came from another device — the actual point of this
+     * notification — still notifies exactly as before.
+     */
+    private val selfTouchedMaterialIds = mutableSetOf<String>()
+
     init {
         viewModelScope.launch {
             NotificationHelper.ensureChannels(getApplication())
@@ -167,8 +182,17 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                     val shortageNames = state.materials.map { it.name }.distinct()
                     if (shortageNames.isEmpty()) {
                         NotificationHelper.cancelShoppingListNotification(getApplication())
-                    } else if (settings.notificationsEnabled) {
-                        NotificationHelper.showShoppingListNotification(getApplication(), shortageNames)
+                    } else {
+                        val changedIds = (signature.keys + previous.keys)
+                            .filter { signature[it] != previous[it] }
+                            .toSet()
+                        // Consume every changed id from the self-touched set
+                        // (order matters: `remove` must run for every id, not
+                        // just until the first non-self-touched one is found).
+                        val hasExternalChange = changedIds.count { !selfTouchedMaterialIds.remove(it) } > 0
+                        if (hasExternalChange && settings.notificationsEnabled) {
+                            NotificationHelper.showShoppingListNotification(getApplication(), shortageNames)
+                        }
                     }
                 }
                 lastNotifiedMaterials = signature
@@ -179,7 +203,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun addMaterial(name: String, quantity: Double, unit: String) {
         viewModelScope.launch {
             try {
-                repo.addMaterial(name, quantity, unit, section.value)
+                selfTouchedMaterialIds += repo.addMaterial(name, quantity, unit, section.value)
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
@@ -191,6 +215,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateMaterial(id: String, name: String, quantity: Double, unit: String) {
         viewModelScope.launch {
             try {
+                selfTouchedMaterialIds += id
                 repo.updateMaterial(id, name, quantity, unit, section.value)
                 _message.value = "تم تعديل النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
@@ -203,6 +228,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun deleteMaterial(id: String) {
         viewModelScope.launch {
             try {
+                selfTouchedMaterialIds += id
                 repo.deleteMaterial(id)
                 _message.value = "تم حذف المادة بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
@@ -223,6 +249,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         if (ids.isEmpty()) return
         viewModelScope.launch {
             try {
+                selfTouchedMaterialIds += ids
                 repo.deleteMaterials(ids)
                 _message.value = "تم حذف كل المواد (${ids.size})"
                 InstantBackupWorker.requestNow(getApplication())
