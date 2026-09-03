@@ -9,6 +9,7 @@ import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.data.sync.SyncStatusStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -67,12 +68,21 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }.catch { _hasSyncError.value = true; emit(emptyList()) }
         .distinctUntilChanged()
-        .onEach { _hasSyncError.value = false; InstantBackupWorker.requestNow(getApplication()) }
+        .onEach {
+            _hasSyncError.value = false
+            InstantBackupWorker.requestNow(getApplication())
+            // "طبقة مساعدة للمزامنة" — see SyncStatus.kt.
+            SyncStatusStore.recordSuccess(getApplication())
+        }
 
     private val pricesFlow = repo.listenPrices()
         .catch { _hasSyncError.value = true; emit(emptyMap()) }
         .distinctUntilChanged()
-        .onEach { _hasSyncError.value = false; InstantBackupWorker.requestNow(getApplication()) }
+        .onEach {
+            _hasSyncError.value = false
+            InstantBackupWorker.requestNow(getApplication())
+            SyncStatusStore.recordSuccess(getApplication())
+        }
 
     // Same fix as DebtsViewModel.uiState: debounce the cache→server settle
     // burst on cold start so the dashboard's "قائمة النواقص" counter counts
