@@ -104,6 +104,7 @@ fun SettingsScreen(
     onColorPaletteChanged: (AppColorPalette) -> Unit = {},
     onColorModeChanged: (AppColorMode) -> Unit = {},
     onPerformancePreferenceChanged: (PerformanceMode) -> Unit = {},
+    onRecheckDevicePerformance: () -> Unit = {},
     debtsViewModel: DebtsViewModel? = null,
     materialsViewModel: MaterialsViewModel? = null,
     onOpenHelp: () -> Unit = {},
@@ -150,6 +151,7 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     var performanceMode by remember { mutableStateOf(settings.performanceMode) }
+    var recheckTick by remember { mutableStateOf(0) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showExportShareChoice by remember { mutableStateOf(false) }
     val brandColor = LocalBrandGradientColors.current.first().toArgb()
@@ -221,6 +223,24 @@ fun SettingsScreen(
     val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
     val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
     var dismissedServerErrorBanner by remember { mutableStateOf(false) }
+
+    // المزامنة: real connectivity + "آخر مزامنة ناجحة" (see data/sync/SyncStatus.kt).
+    // collectAsState(initial=...) reads the connectivity synchronously on
+    // first composition instead of assuming "متصل" until the first
+    // callback lands, which would otherwise flash the wrong state for a
+    // frame on a device that opens this screen while already offline.
+    val isOnline by com.shopmanager.app.data.sync.SyncConnectivityObserver.observe(context)
+        .collectAsState(initial = true)
+    var lastSyncedAt by remember { mutableStateOf(com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)) }
+    var isManualSyncing by remember { mutableStateOf(false) }
+    // Re-read the stored timestamp whenever a listener records a fresh
+    // success (debtsSyncError/materialsSyncError flipping back to false is
+    // the same signal DebtsViewModel/MaterialsViewModel already use to
+    // call SyncStatusStore.recordSuccess) so this stays live without its
+    // own polling loop.
+    LaunchedEffect(debtsSyncError, materialsSyncError) {
+        lastSyncedAt = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
+    }
 
     fun runRestore(backup: BackupManager.BackupInfo) {
         isRestoring = true
@@ -455,6 +475,54 @@ fun SettingsScreen(
                 }
             }
 
+            // المزامنة — new section: real connectivity + last successful
+            // sync time + a manual "مزامنة الآن" retry, built on the new
+            // sync helper layer (data/sync/SyncStatus.kt) instead of the
+            // old sync-error banner being the only signal in the whole
+            // screen about sync health.
+            SettingsSection(title = "المزامنة", icon = Icons.Default.CloudDownload) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(if (isOnline) SuccessGreen else MaterialTheme.colorScheme.error)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isOnline) "متصل" else "غير متصل بالإنترنت", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    if (lastSyncedAt != null) "آخر مزامنة ناجحة: ${formatBackupDate(lastSyncedAt!!)}"
+                    else "لم تتم أي مزامنة على هذا الجهاز بعد",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = {
+                        isManualSyncing = true
+                        scope.launch {
+                            com.shopmanager.app.data.sync.SyncRetry.forceReconnect()
+                            lastSyncedAt = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
+                            isManualSyncing = false
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isManualSyncing
+                ) {
+                    if (isManualSyncing) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("جاري إعادة المحاولة...")
+                    } else {
+                        Text("مزامنة الآن")
+                    }
+                }
+            }
+
             // الأداء (performance) — lets the person override the
             // automatic per-device detection with an explicit choice, so a
             // phone that got misclassified (or someone who just prefers a
@@ -480,6 +548,37 @@ fun SettingsScreen(
                             onPerformancePreferenceChanged(mode)
                         }
                     )
+                }
+                // FEATURE ADDED: DevicePerformance.resetCachedTier already
+                // existed for exactly this ("Not wired to any screen yet"
+                // per its own doc comment) but had no UI hook anywhere —
+                // a device misclassified on its very first launch (e.g.
+                // caught mid-boot, or a borderline RAM/core reading) had
+                // no way to be re-measured short of a full reinstall. This
+                // only matters in "تلقائي" mode — a manual HIGH/LOW choice
+                // already overrides detection outright regardless of what
+                // it says.
+                if (performanceMode == PerformanceMode.AUTO) {
+                    Spacer(Modifier.height(6.dp))
+                    // FEATURE ADDED: shows the raw signals behind the
+                    // detection instead of it being an opaque decision —
+                    // uses DevicePerformance.currentDeviceInfo (fresh
+                    // measurement) so this stays accurate right after
+                    // tapping "إعادة فحص" below, not just on first load.
+                    val deviceInfo = remember(recheckTick) {
+                        com.shopmanager.app.data.performance.DevicePerformance.currentDeviceInfo(context)
+                    }
+                    Text(
+                        "الجهاز الحالي: ${deviceInfo.totalRamMb} MB رام، ${deviceInfo.cores} أنوية" +
+                            if (deviceInfo.osFlaggedLowRam) " — مصنّف من النظام كجهاز منخفض الموارد" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    TextButton(onClick = {
+                        onRecheckDevicePerformance()
+                        recheckTick++
+                    }) { Text("إعادة فحص أداء الجهاز") }
                 }
             }
 
