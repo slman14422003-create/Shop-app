@@ -82,8 +82,9 @@ object BackupManager {
      * Reads current data straight from Firestore — which itself already
      * falls back to its local offline cache automatically when there's no
      * network (see FirebaseModule's persistent cache setup) — and writes
-     * one timestamped JSON snapshot, then prunes anything past
-     * [MAX_BACKUPS_KEPT]. Throws only if there's truly nothing synced yet
+     * one timestamped JSON snapshot, then prunes every other snapshot (see
+     * [pruneOldBackups] - only one is ever kept). Throws only if there's
+     * truly nothing synced yet
      * (e.g. very first run, no network, empty cache); the daily worker
      * treats that as "try again next scheduled run", never as something
      * worth surfacing to the person.
@@ -160,12 +161,25 @@ object BackupManager {
     ) {
         val json = JSONObject(backup.file.readText())
 
-        val persons = json.getJSONArray("persons").toObjectList { it.toPerson() }
-        val debts = json.getJSONArray("debts").toObjectList { it.toDebt() }
-        val materials = json.getJSONArray("materials").toObjectList { it.toMaterial() }
-        val catalog = json.getJSONArray("catalog").toObjectList { it.toCatalogItem() }
-        val pricesJson = json.getJSONObject("prices")
-        val prices = pricesJson.keys().asSequence().associateWith { pricesJson.getDouble(it) }
+        // BUG FIXED (استعادة تفشل بالكامل): only ONE snapshot is ever kept
+        // on disk (see the class doc above) - there is no older backup to
+        // fall back on if this single file's shape doesn't exactly match
+        // what performBackup currently writes. `getJSONArray`/
+        // `getJSONObject` throw the moment a key is missing, so a snapshot
+        // written before a field existed (e.g. "catalog" was added after
+        // "persons"/"debts"), or a JSON file that lost one field to disk
+        // corruption, used to fail the *entire* restore - every section,
+        // even the ones that parsed fine - and the person's only local
+        // safety net was gone. Switched to the `opt*` variants (empty
+        // array/object when the key is absent) so each section restores
+        // independently: a missing/corrupt "catalog" no longer takes
+        // "persons"/"debts"/"materials"/"prices" down with it.
+        val persons = json.optJSONArray("persons")?.toObjectList { it.toPerson() } ?: emptyList()
+        val debts = json.optJSONArray("debts")?.toObjectList { it.toDebt() } ?: emptyList()
+        val materials = json.optJSONArray("materials")?.toObjectList { it.toMaterial() } ?: emptyList()
+        val catalog = json.optJSONArray("catalog")?.toObjectList { it.toCatalogItem() } ?: emptyList()
+        val pricesJson = json.optJSONObject("prices")
+        val prices = pricesJson?.keys()?.asSequence()?.associateWith { pricesJson.optDouble(it, 0.0) } ?: emptyMap()
 
         debtsRepo.restoreFromBackup(persons, debts)
         materialsRepo.restoreFromBackup(materials, prices, catalog)
