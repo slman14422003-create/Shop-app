@@ -45,6 +45,14 @@ object NotificationHelper {
     private const val GROUP_DEBTS = "com.shopmanager.app.GROUP_DEBTS"
     private const val NOTIF_ID_DEBTS_SUMMARY = 1900
 
+    // Same brand indigo as res/values/colors.xml's brand_indigo / the
+    // in-app theme (see ui/theme/Color.kt) — applied via setColor() below
+    // so the small icon's accent circle (API 21+ notification shade) and
+    // any heads-up banner tint match the rest of the app instead of
+    // falling back to a generic system grey, another piece of "الإشعارات
+    // مش متطورة" (the icon itself is fixed too — see ic_stat_notify.xml).
+    private val BRAND_COLOR = android.graphics.Color.parseColor("#4F46E5")
+
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -112,7 +120,8 @@ object NotificationHelper {
         else shortageNames.take(4).joinToString("، ") + " و${shortageNames.size - 4} أخرى"
 
         val notification = NotificationCompat.Builder(context, CHANNEL_SHOPPING_LIST)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
             .setContentTitle("🛒 قائمة مشتريات: ${shortageNames.size} مادة ناقصة")
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -149,7 +158,8 @@ object NotificationHelper {
         if (!hasPermission(context)) return
         val id = if (debtId.isEmpty()) NOTIF_ID_DEBT else NOTIF_ID_NEW_DEBT_BASE + (debtId.hashCode() and 0xFFF)
         val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
             .setContentTitle("💰 عميل جديد بالديون")
             .setContentText("$personName — $amount $currencySymbol")
             .setStyle(NotificationCompat.BigTextStyle().bigText("$personName — $amount $currencySymbol"))
@@ -174,7 +184,8 @@ object NotificationHelper {
         if (!hasPermission(context)) return
         val id = NOTIF_ID_PAID_BASE + (debtId.hashCode() and 0xFFF)
         val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
             .setContentTitle("✅ تم سداد دين")
             .setContentText("$personName وفى $amount $currencySymbol")
             .setStyle(NotificationCompat.BigTextStyle().bigText("$personName وفى $amount $currencySymbol"))
@@ -202,7 +213,8 @@ object NotificationHelper {
     private fun postDebtsGroupSummary(context: Context) {
         if (!hasPermission(context)) return
         val summary = NotificationCompat.Builder(context, CHANNEL_DEBTS)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
             .setContentTitle("تنبيهات الديون")
             .setStyle(NotificationCompat.InboxStyle().setSummaryText("إدارة المحل"))
             .setGroup(GROUP_DEBTS)
