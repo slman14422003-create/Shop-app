@@ -30,6 +30,7 @@ object NotificationHelper {
     private const val NOTIF_ID_SHOPPING_LIST = 1001
     private const val NOTIF_ID_DEBT = 1002
     private const val NOTIF_ID_PAID_BASE = 2000
+    private const val NOTIF_ID_NEW_DEBT_BASE = 3000
 
     // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
     // *group*, with a silent summary notification posted alongside the
@@ -128,8 +129,25 @@ object NotificationHelper {
         NotificationManagerCompat.from(context).cancel(NOTIF_ID_SHOPPING_LIST)
     }
 
-    fun showNewDebtNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س") {
+    /**
+     * BUG FIXED (اشعارات دين جديد تختفي): this used to post every "new
+     * debt" notification under the same fixed [NOTIF_ID_DEBT] id. Both
+     * callers (DebtsViewModel's live-listener diff and
+     * BackgroundSyncWorker's periodic diff) can detect *several* new debts
+     * at once — e.g. reconnecting after being offline, or another device
+     * adding two debts in a row — and loop over them calling this once per
+     * debt. Since `NotificationManagerCompat.notify(id, ...)` replaces any
+     * existing notification already posted under that same id, only the
+     * *last* debt in the loop ever stayed visible; every earlier one in
+     * the same batch was silently overwritten before the person ever saw
+     * it. [showDebtPaidNotification] already avoided exactly this by
+     * deriving its id from the debt id - this now does the same (falling
+     * back to the shared [NOTIF_ID_DEBT] only when no id is available, so
+     * existing behavior for a single new debt is unchanged).
+     */
+    fun showNewDebtNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س", debtId: String = "") {
         if (!hasPermission(context)) return
+        val id = if (debtId.isEmpty()) NOTIF_ID_DEBT else NOTIF_ID_NEW_DEBT_BASE + (debtId.hashCode() and 0xFFF)
         val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("💰 عميل جديد بالديون")
@@ -139,10 +157,10 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setGroup(GROUP_DEBTS)
             .setAutoCancel(true)
-            .setContentIntent(buildContentIntent(context, NOTIF_ID_DEBT, NotificationAction.NewDebt(personName, amount, currencySymbol)))
+            .setContentIntent(buildContentIntent(context, id, NotificationAction.NewDebt(personName, amount, currencySymbol)))
             .build()
 
-        NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBT, notification)
+        NotificationManagerCompat.from(context).notify(id, notification)
         postDebtsGroupSummary(context)
     }
 
