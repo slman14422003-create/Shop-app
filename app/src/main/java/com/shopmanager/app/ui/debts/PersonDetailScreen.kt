@@ -123,23 +123,43 @@ fun PersonDetailScreen(
                     baseAlpha = 0.72f
                 ),
                 actions = {
-                    GlassIconButton(
-                        icon = Icons.Default.Edit,
-                        contentDescription = "تعديل اسم العميل",
-                        onClick = {
-                            editNameText = person.name
-                            showEditNameDialog = true
-                        },
-                        modifier = Modifier.padding(end = 4.dp),
-                        size = 36.dp
-                    )
-                    GlassIconButton(
-                        icon = Icons.Default.Delete,
-                        contentDescription = "حذف العميل",
-                        onClick = { showDeletePersonConfirm = true },
-                        modifier = Modifier.padding(end = 8.dp),
-                        size = 36.dp
-                    )
+                    // BUG FIXED (الزرين فايتين ببعض / overlapping icons):
+                    // each button previously carried its own `padding(end
+                    // = ...)`, which pads OUTSIDE that button's own box —
+                    // it doesn't reserve any space from its *neighbor*.
+                    // TopAppBar's actions slot is a Row that measures each
+                    // child at its natural (unconstrained) width and packs
+                    // them back-to-back with zero gap of its own, so with
+                    // two icon buttons sitting side by side here, only
+                    // 4.dp of the intended gap actually separated the two
+                    // circles — nowhere near enough once IconButton's own
+                    // ~48.dp minimum touch target (larger than the visible
+                    // 36.dp circle drawn inside it) is added in, which is
+                    // exactly what visually crowded/overlapped in the
+                    // screenshot. A Row with `spacedBy` inserts a real gap
+                    // *between* children instead of relying on each
+                    // child's own outside padding to add up correctly.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        GlassIconButton(
+                            icon = Icons.Default.Edit,
+                            contentDescription = "تعديل اسم العميل",
+                            onClick = {
+                                editNameText = person.name
+                                showEditNameDialog = true
+                            },
+                            size = 36.dp
+                        )
+                        GlassIconButton(
+                            icon = Icons.Default.Delete,
+                            contentDescription = "حذف العميل",
+                            onClick = { showDeletePersonConfirm = true },
+                            size = 36.dp
+                        )
+                    }
                 }
             )
         }
