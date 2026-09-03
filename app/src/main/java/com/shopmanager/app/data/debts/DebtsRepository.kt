@@ -146,7 +146,19 @@ class DebtsRepository {
      * and gets rejected as PERMISSION_DENIED. Every debt document now has
      * an identical field set no matter which code path created it.
      */
-    suspend fun addPerson(name: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
+    /**
+     * BUG FIXED (self-notification / "إشعار عميل جديد عند إضافتي أنا له"):
+     * this used to return Unit, discarding the ids generated for the new
+     * person/debt documents. DebtsViewModel's "new debt" notification is
+     * driven by diffing the live debts listener (so it also catches debts
+     * added from *other* devices) — without the id coming back from here,
+     * it had no way to tell that particular apart from "I just added this
+     * myself, seconds ago, on this exact screen" and notified the same
+     * device that just typed it in. Returning the new debt id (when one was
+     * created) lets the caller mark it as a local/self change so the diff
+     * can skip notifying for it — see DebtsViewModel.selfCreatedDebtIds.
+     */
+    suspend fun addPerson(name: String, amount: Double, date: String): String? = withTimeout(WRITE_TIMEOUT_MS) {
         val personRef = db.collection("persons").document()
         val batch = db.batch()
         batch.set(
@@ -158,8 +170,10 @@ class DebtsRepository {
                 "createdAt" to System.currentTimeMillis()
             )
         )
+        var debtId: String? = null
         if (amount > 0) {
             val debtRef = db.collection("debts").document()
+            debtId = debtRef.id
             batch.set(
                 debtRef,
                 mapOf(
@@ -172,7 +186,7 @@ class DebtsRepository {
             )
         }
         batch.commit().await()
-        Unit
+        debtId
     }
 
     suspend fun updatePerson(id: String, name: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
@@ -206,7 +220,8 @@ class DebtsRepository {
         Unit
     }
 
-    suspend fun addDebt(personId: String, amount: Double, date: String, note: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
+    /** Returns the new debt's id — see [addPerson] for why the caller needs it. */
+    suspend fun addDebt(personId: String, amount: Double, date: String, note: String = ""): String = withTimeout(WRITE_TIMEOUT_MS) {
         val data = mapOf(
             "personId" to personId,
             "amount" to amount,
@@ -214,8 +229,7 @@ class DebtsRepository {
             "note" to note,
             "createdAt" to System.currentTimeMillis()
         )
-        db.collection("debts").add(data).await()
-        Unit
+        db.collection("debts").add(data).await().id
     }
 
     suspend fun updateDebt(id: String, amount: Double, date: String, note: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
