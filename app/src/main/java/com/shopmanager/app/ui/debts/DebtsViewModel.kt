@@ -10,6 +10,7 @@ import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.data.sync.SyncStatusStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -69,11 +70,22 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     private val personsFlow = repo.listenPersons()
         .catch { _hasSyncError.value = true; emit(emptyList()) }
         .distinctUntilChanged()
-        .onEach { _hasSyncError.value = false; InstantBackupWorker.requestNow(getApplication()) }
+        .onEach {
+            _hasSyncError.value = false
+            InstantBackupWorker.requestNow(getApplication())
+            // "طبقة مساعدة للمزامنة": record that this device just proved it
+            // has current data, so Settings → المزامنة can show a real
+            // "آخر مزامنة" time instead of nothing. See SyncStatus.kt.
+            SyncStatusStore.recordSuccess(getApplication())
+        }
     private val debtsFlow = repo.listenAllDebts()
         .catch { _hasSyncError.value = true; emit(emptyList()) }
         .distinctUntilChanged()
-        .onEach { _hasSyncError.value = false; InstantBackupWorker.requestNow(getApplication()) }
+        .onEach {
+            _hasSyncError.value = false
+            InstantBackupWorker.requestNow(getApplication())
+            SyncStatusStore.recordSuccess(getApplication())
+        }
 
     /**
      * BUG FIXED: `persons.amount` used to be a separately-maintained field
