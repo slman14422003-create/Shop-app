@@ -61,6 +61,17 @@ fun PersonDetailScreen(
     var showDeletePersonConfirm by remember { mutableStateOf(false) }
     var deleteDebtTarget by remember { mutableStateOf<String?>(null) }
     var payDebtTarget by remember { mutableStateOf<Debt?>(null) }
+    // FEATURE ADDED ("تعديل اسم الشخص من واجهة تفاصيل الديون"): the
+    // update-person write path (DebtsViewModel.savePerson with a non-null
+    // existingId -> DebtsRepository.updatePerson) already existed, but
+    // nothing in the UI ever called it with an id — DebtsScreen only ever
+    // calls savePerson(null, ...) to create a *new* person, so renaming an
+    // existing customer had no entry point anywhere in the app. This adds
+    // one here, right where it's needed most: while already looking at
+    // that specific customer's page.
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var editNameText by remember { mutableStateOf("") }
+    var isSavingName by remember { mutableStateOf(false) }
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
 
@@ -112,6 +123,16 @@ fun PersonDetailScreen(
                     baseAlpha = 0.72f
                 ),
                 actions = {
+                    GlassIconButton(
+                        icon = Icons.Default.Edit,
+                        contentDescription = "تعديل اسم العميل",
+                        onClick = {
+                            editNameText = person.name
+                            showEditNameDialog = true
+                        },
+                        modifier = Modifier.padding(end = 4.dp),
+                        size = 36.dp
+                    )
                     GlassIconButton(
                         icon = Icons.Default.Delete,
                         contentDescription = "حذف العميل",
@@ -249,6 +270,51 @@ fun PersonDetailScreen(
                 }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { payDebtTarget = null }) { Text("إلغاء") } }
+        )
+    }
+    if (showEditNameDialog) {
+        GlassAlertDialog(
+            onDismissRequest = { if (!isSavingName) showEditNameDialog = false },
+            icon = { Icon(Icons.Default.Edit, contentDescription = null, tint = InfoBlue) },
+            title = { Text("تعديل اسم العميل") },
+            text = {
+                AppTextField(
+                    value = editNameText,
+                    onValueChange = { editNameText = it },
+                    label = "اسم العميل",
+                    enabled = !isSavingName
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = editNameText.isNotBlank() && !isSavingName,
+                    onClick = {
+                        val newName = editNameText.trim()
+                        if (newName.isNotEmpty() && newName != person.name) {
+                            isSavingName = true
+                            // Only the name changes here — amount/date are
+                            // passed through unchanged (updatePerson writes
+                            // all three together), so this can't silently
+                            // clobber the customer's existing balance/date.
+                            viewModel.savePerson(person.id, newName, person.amount, person.date) { success ->
+                                isSavingName = false
+                                if (success) showEditNameDialog = false
+                            }
+                        } else {
+                            showEditNameDialog = false
+                        }
+                    }
+                ) {
+                    if (isSavingName) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("حفظ")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !isSavingName, onClick = { showEditNameDialog = false }) { Text("إلغاء") }
+            }
         )
     }
 }

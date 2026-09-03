@@ -166,6 +166,21 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     // only ever notifying about the first.
     private var knownDebtIds: Set<String>? = null
 
+    /**
+     * BUG FIXED (إشعار "عميل جديد بالديون" يوصل لنفس الجهاز اللي أضاف الدين):
+     * the diff below fires for ANY debt id that's new since the last
+     * emission — including one this exact device just wrote a moment ago
+     * through [savePerson]/[addOrUpdateDebt]. Firestore's listener re-fires
+     * from its own local write almost immediately, so the person adding a
+     * debt would immediately get notified about their own action, on top of
+     * the in-app "تم إضافة الدين" message already shown. Every local write
+     * that creates a new debt id now records it here first; the diff below
+     * consumes (removes) an id from this set instead of notifying for it,
+     * so genuinely new debts from OTHER devices still notify exactly as
+     * before.
+     */
+    private val selfCreatedDebtIds = mutableSetOf<String>()
+
     init {
         viewModelScope.launch {
             NotificationHelper.ensureChannels(getApplication())
@@ -174,7 +189,9 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 val currentDebtIds = state.debts.map { it.id }.toSet()
                 val previous = knownDebtIds
                 if (previous != null) {
-                    val newDebtIds = currentDebtIds - previous
+                    val newDebtIds = (currentDebtIds - previous)
+                        .filterNot { selfCreatedDebtIds.remove(it) }
+                        .toSet()
                     if (newDebtIds.isNotEmpty() && settings.notificationsEnabled) {
                         val personsById = state.persons.associateBy { it.id }
                         state.debts.filter { it.id in newDebtIds }.forEach { debt ->
@@ -216,7 +233,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         // name with no amount would be told a debt was
                         // added when nothing was written at all.
                         if (amount > 0) {
-                            repo.addDebt(existingPersonId, amount, date)
+                            selfCreatedDebtIds += repo.addDebt(existingPersonId, amount, date)
                             _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
                             InstantBackupWorker.requestNow(getApplication())
                         } else {
@@ -225,7 +242,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         onDone(true)
                         return@launch
                     }
-                    repo.addPerson(name, amount, date)
+                    repo.addPerson(name, amount, date)?.let { selfCreatedDebtIds += it }
                     _message.value = "تم إضافة \"$name\""
                     InstantBackupWorker.requestNow(getApplication())
                 } else {
@@ -259,7 +276,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 if (existingId == null) {
-                    repo.addDebt(personId, amount, date, note)
+                    selfCreatedDebtIds += repo.addDebt(personId, amount, date, note)
                     _message.value = "تم إضافة الدين"
                 } else {
                     repo.updateDebt(existingId, amount, date, note)
