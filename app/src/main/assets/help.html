@@ -66,12 +66,40 @@
     background: rgba(124,58,237,0.15);
     font-size: 15px;
   }
+  /* FEATURE ADDED: quick-jump chips under the header so a long page isn't
+     pure top-to-bottom scrolling — tap a section name to jump straight to
+     it. Sticky so it's still reachable after scrolling past the header. */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    -webkit-overflow-scrolling: touch;
+  }
+  nav.toc a {
+    flex: none;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .card { scroll-margin-top: 56px; } /* keeps a jumped-to card clear of the sticky nav above */
   footer {
     text-align: center;
     color: var(--muted);
     font-size: 12px;
     margin-top: 20px;
   }
+  footer .updated { margin-top: 4px; opacity: 0.8; }
 </style>
 </head>
 <body>
@@ -80,13 +108,20 @@
     <p>كل ما تحتاج معرفته لتشغيل تطبيقك بأفضل شكل</p>
   </header>
 
+  <nav class="toc" aria-label="فهرس سريع">
+    <a href="#home">🏠 الرئيسية</a>
+    <a href="#debts">💰 الديون</a>
+    <a href="#materials">📦 المواد</a>
+    <a href="#settings">⚙️ الإعدادات</a>
+  </nav>
+
   <main>
-    <div class="card">
+    <div class="card" id="home">
       <h2><span class="badge">🏠</span> الرئيسية</h2>
       <p>تعرض إجمالي الديون، عدد المواد الناقصة، وآخر النشاطات. تنقلك مباشرة إلى تبويبي الديون والمواد.</p>
     </div>
 
-    <div class="card">
+    <div class="card" id="debts">
       <h2><span class="badge">💰</span> الديون</h2>
       <ul>
         <li>اضغط على أي عميل لعرض سجل ديونه بالتفصيل.</li>
@@ -95,7 +130,7 @@
       </ul>
     </div>
 
-    <div class="card">
+    <div class="card" id="materials">
       <h2><span class="badge">📦</span> المواد (قائمة النواقص)</h2>
       <p>هذا التبويب هو قائمة تسوّق حيّة: كل مادة فيه هي شيء ناقص يحتاج المحل لشرائه، وليس مخزونًا مستمرًا.</p>
       <ul>
@@ -107,19 +142,24 @@
       </ul>
     </div>
 
-    <div class="card">
+    <div class="card" id="settings">
       <h2><span class="badge">⚙️</span> الإعدادات</h2>
       <ul>
         <li><b>المظهر:</b> فاتح / داكن / حسب النظام.</li>
         <li><b>العملة:</b> غيّرها لتنعكس بكل الشاشات فورًا.</li>
         <li><b>الإشعارات:</b> إيقاف/تشغيل تنبيهات قائمة المشتريات والديون الجديدة.</li>
         <li><b>الحماية:</b> قفل التطبيق برمز PIN محلي على هذا الجهاز.</li>
+        <li><b>المزامنة:</b> يعرض حالة الاتصال وآخر مزامنة ناجحة، مع زر "مزامنة الآن" لإعادة المحاولة يدويًا.</li>
+        <li><b>الأداء:</b> تلقائي/مرتفع/منخفض، مع خيار "إعادة فحص أداء الجهاز" إذا شعرت أن التصنيف غير دقيق لجهازك.</li>
         <li><b>نسخة احتياطية:</b> نسخ تلقائية يومية محليًا، مع إمكانية الاستعادة أو تصدير كل بياناتك كنص جاهز للمشاركة.</li>
         <li><b>سياسة الخصوصية:</b> تشرح ما يُخزَّن من بيانات وأين.</li>
       </ul>
     </div>
 
-    <footer>تطوير: سلمان — هذه الصفحة تعمل بدون اتصال بالإنترنت داخل التطبيق.</footer>
+    <footer>
+      تطوير: سلمان — هذه الصفحة تعمل بدون اتصال بالإنترنت داخل التطبيق.
+      <div class="updated">آخر تحديث لهذا الدليل: 2026</div>
+    </footer>
   </main>
 </body>
 </html>
