@@ -66,12 +66,41 @@
     background: rgba(124,58,237,0.15);
     font-size: 15px;
   }
+  /* FEATURE ADDED: same sticky quick-jump pattern as help.html — a privacy
+     policy is exactly the kind of page someone opens looking for one
+     specific answer ("أين تُخزَّن بياناتي؟") rather than reading top to
+     bottom, so letting them jump straight there matters even more here. */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    -webkit-overflow-scrolling: touch;
+  }
+  nav.toc a {
+    flex: none;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .card { scroll-margin-top: 56px; }
   footer {
     text-align: center;
     color: var(--muted);
     font-size: 12px;
     margin-top: 20px;
   }
+  footer .updated { margin-top: 4px; opacity: 0.8; }
 </style>
 </head>
 <body>
@@ -80,45 +109,57 @@
     <p>ما يخزّنه تطبيق إدارة المحل ولماذا</p>
   </header>
 
+  <nav class="toc" aria-label="فهرس سريع">
+    <a href="#data">📋 البيانات المخزّنة</a>
+    <a href="#where">☁️ أين تُخزَّن</a>
+    <a href="#pin">🔑 رمز القفل</a>
+    <a href="#sharing">🚫 المشاركة</a>
+    <a href="#notifications">🔔 الإشعارات</a>
+    <a href="#deletion">🗑️ حذف البيانات</a>
+  </nav>
+
   <main>
-    <div class="card">
+    <div class="card" id="data">
       <h2><span class="badge">📋</span> البيانات التي يتم تخزينها</h2>
       <p>لتشغيل التطبيق (سجل الديون، قائمة المواد الناقصة، الأسعار)، يتم تخزين:</p>
       <ul>
         <li>أسماء العملاء ومبالغ ديونهم وتاريخ كل عملية.</li>
         <li>أسماء المواد وكمياتها ووحداتها ضمن قائمة النواقص والقائمة الثابتة.</li>
         <li>أسعار المواد التي تدخلها.</li>
-        <li>إعداداتك في التطبيق (العملة، المظهر، رمز القفل، تفضيل الإشعارات).</li>
+        <li>إعداداتك في التطبيق (العملة، المظهر، رمز القفل، تفضيل الإشعارات، تفضيل الأداء).</li>
       </ul>
       <p>هذه البيانات خاصة بمحلك وحده، ولا يتم جمع أي معلومات عنك شخصيًا (لا اسمك، ولا رقم هاتفك، ولا موقعك).</p>
     </div>
 
-    <div class="card">
+    <div class="card" id="where">
       <h2><span class="badge">☁️</span> أين تُخزَّن</h2>
-      <p>البيانات تُحفظ على خوادم Firebase (Google) لمزامنتها بين أجهزتك، بالإضافة إلى نسخة احتياطية محلية يومية صامتة على جهازك نفسه لا تُرسل لأي مكان.</p>
+      <p>البيانات تُحفظ على خوادم Firebase (Google) لمزامنتها بين أجهزتك، بالإضافة إلى نسخة احتياطية محلية يومية صامتة على جهازك نفسه لا تُرسل لأي مكان. كل الاتصال بالخادم مشفّر (HTTPS) دائمًا — التطبيق لا يقبل أي اتصال غير مشفّر إطلاقًا.</p>
     </div>
 
-    <div class="card">
+    <div class="card" id="pin">
       <h2><span class="badge">🔑</span> رمز القفل (PIN)</h2>
       <p>إذا فعّلت قفل التطبيق، يُخزَّن رمز الـPIN على جهازك فقط، ولا يُرسل أو يُخزَّن على أي خادم.</p>
     </div>
 
-    <div class="card">
+    <div class="card" id="sharing">
       <h2><span class="badge">🚫</span> المشاركة مع أطراف أخرى</h2>
-      <p>لا يشارك التطبيق بياناتك مع أي طرف ثالث لأغراض إعلانية أو تسويقية، ولا يحتوي على إعلانات أو أدوات تتبع.</p>
+      <p>لا يشارك التطبيق بياناتك مع أي طرف ثالث لأغراض إعلانية أو تسويقية، ولا يحتوي على إعلانات أو أدوات تتبع. المتصفح الداخلي المستخدم لعرض هذه الصفحة نفسها معطّل فيه جمع إحصاءات الاستخدام أيضًا.</p>
     </div>
 
-    <div class="card">
+    <div class="card" id="notifications">
       <h2><span class="badge">🔔</span> الإشعارات</h2>
       <p>تُستخدم الإشعارات فقط لتنبيهك داخل جهازك بسداد دين أو نقص مادة أو عميل جديد، ولا تُستخدم لأي غرض آخر.</p>
     </div>
 
-    <div class="card">
+    <div class="card" id="deletion">
       <h2><span class="badge">🗑️</span> حذف البيانات</h2>
       <p>يمكنك حذف أي عميل أو مادة في أي وقت من داخل التطبيق. حذف العنصر يزيله نهائيًا من السجل.</p>
     </div>
 
-    <footer>تطوير: سلمان — هذه الصفحة تعمل بدون اتصال بالإنترنت داخل التطبيق.</footer>
+    <footer>
+      تطوير: سلمان — هذه الصفحة تعمل بدون اتصال بالإنترنت داخل التطبيق.
+      <div class="updated">آخر تحديث لسياسة الخصوصية: 2026</div>
+    </footer>
   </main>
 </body>
 </html>
