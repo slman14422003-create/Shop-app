@@ -90,8 +90,13 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
                     val amount = doc.getDouble("amount") ?: 0.0
                     if (amount > 0) {
                         val name = personNamesById[personId] ?: "عميل"
+                        // BUG FIXED: pass doc.id (the debt id) so several new
+                        // debts caught in the same background sync cycle
+                        // (e.g. after being offline a while) each get their
+                        // own notification instead of overwriting one
+                        // another - see NotificationHelper.showNewDebtNotification.
                         NotificationHelper.showNewDebtNotification(
-                            applicationContext, name, formatAmount(amount), settings.currencySymbol
+                            applicationContext, name, formatAmount(amount), settings.currencySymbol, doc.id
                         )
                     }
                 }
