@@ -241,6 +241,26 @@ fun SettingsScreen(
     LaunchedEffect(debtsSyncError, materialsSyncError) {
         lastSyncedAt = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
     }
+    // BUG FIXED (زر "مزامنة الآن" يبدو أنه لا يعمل): the effect above is
+    // the ONLY thing that ever refreshed [lastSyncedAt] on this screen —
+    // and it's keyed on the sync-error flags, which stay `false` the
+    // entire time everything is working normally. So on the overwhelming
+    // majority of taps (nothing was actually broken, the listener was just
+    // stuck in a backoff or the connection briefly flapped) the value
+    // shown never changed: forceReconnect() below genuinely reconnects and
+    // the listeners genuinely record a new success, but this screen kept
+    // displaying whatever timestamp it first loaded with, no matter how
+    // many times the button was pressed - indistinguishable from the
+    // button doing nothing at all. A light poll while this screen is open
+    // picks up that same already-correct signal on a timer instead of
+    // waiting for an error to flip first.
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(2000)
+            val fresh = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
+            if (fresh != lastSyncedAt) lastSyncedAt = fresh
+        }
+    }
 
     fun runRestore(backup: BackupManager.BackupInfo) {
         isRestoring = true
@@ -505,7 +525,28 @@ fun SettingsScreen(
                     onClick = {
                         isManualSyncing = true
                         scope.launch {
+                            val before = lastSyncedAt
                             com.shopmanager.app.data.sync.SyncRetry.forceReconnect()
+                            // BUG FIXED: forceReconnect() only drops/reopens
+                            // the connection - it returns as soon as that
+                            // handshake completes, not once a listener has
+                            // actually received fresh data and called
+                            // SyncStatusStore.recordSuccess(). Reading the
+                            // timestamp immediately after almost always read
+                            // the OLD value, so the button appeared to do
+                            // nothing even when the reconnect genuinely
+                            // worked. Give the listeners a short window to
+                            // report back in before giving up the spinner.
+                            var waited = 0L
+                            while (waited < 5000) {
+                                val fresh = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
+                                if (fresh != before) {
+                                    lastSyncedAt = fresh
+                                    break
+                                }
+                                kotlinx.coroutines.delay(250)
+                                waited += 250
+                            }
                             lastSyncedAt = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
                             isManualSyncing = false
                         }
