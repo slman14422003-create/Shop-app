@@ -167,8 +167,12 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         val personsById = state.persons.associateBy { it.id }
                         state.debts.filter { it.id in newDebtIds }.forEach { debt ->
                             val personName = personsById[debt.personId]?.name ?: "عميل"
+                            // BUG FIXED: pass debt.id so several new debts
+                            // detected in the same update each get their own
+                            // notification id instead of overwriting one
+                            // another - see NotificationHelper.showNewDebtNotification.
                             NotificationHelper.showNewDebtNotification(
-                                getApplication(), personName, Formatters.number(debt.amount), settings.currencySymbol
+                                getApplication(), personName, Formatters.number(debt.amount), settings.currencySymbol, debt.id
                             )
                         }
                     }
