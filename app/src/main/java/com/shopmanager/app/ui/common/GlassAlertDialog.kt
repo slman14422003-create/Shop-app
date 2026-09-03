@@ -155,17 +155,28 @@ fun GlassAlertDialog(
     // and pure bitmap math with no OS version or hardware requirement.
     val hostView = LocalView.current
     var frostedBackdrop by remember { mutableStateOf<Bitmap?>(null) }
-    // "زد نسبة البلور... فقط في الوضع الزجاجي": AppColorMode.GLASS gets one
-    // extra halving pass (6 instead of 5) — each pass is a mild, well-
-    // sampled 2x reduction (see frostBitmap's own doc), so one more step
-    // roughly halves the remaining detail again, a noticeably heavier frost
-    // for the mode that's actually named "glass". MANUAL/CLASSIC keep the
-    // original 5-pass strength unchanged.
+    // BUG FIXED ("الوضع العادي لازم يشيل تأثيرات الشفافية" — normal/non-glass
+    // mode must drop the transparency effects entirely, while glass mode
+    // stays exactly as it is): this used to capture and frost a screenshot
+    // of whatever's behind the dialog *unconditionally* — MANUAL/CLASSIC
+    // ("الوضع العادي") got the exact same blurred-backdrop screenshot and a
+    // translucent fill as GLASS did, just with a slightly lighter frost (5
+    // passes vs 6) and no sheen/highlight. That's still a transparency
+    // effect in "normal" mode, which is exactly what was asked to be
+    // removed. Now the (expensive) screenshot+blur work is skipped
+    // entirely outside glass mode — frostedBackdrop simply stays null — and
+    // the fill below is fully opaque for MANUAL/CLASSIC instead of
+    // partially see-through. GLASS mode's own capture/frost strength (6
+    // passes) is unchanged.
     val glassModeActiveForBlur = LocalGlassMode.current
     LaunchedEffect(glassModeActiveForBlur) {
+        if (!glassModeActiveForBlur) {
+            frostedBackdrop = null
+            return@LaunchedEffect
+        }
         val snapshot = runCatching { hostView.drawToBitmap() }.getOrNull()
         frostedBackdrop = snapshot?.let {
-            withContext(Dispatchers.Default) { frostBitmap(it, passes = if (glassModeActiveForBlur) 6 else 5) }
+            withContext(Dispatchers.Default) { frostBitmap(it, passes = 6) }
         }
     }
     DisposableEffect(Unit) {
@@ -255,8 +266,15 @@ fun GlassAlertDialog(
         // keeps its own distinct, more-transparent character — just
         // readable rather than right at the edge of legibility.
         val glassModeActive = LocalGlassMode.current
-        val fillAlphaTop = if (glassModeActive) 0.46f else 0.48f
-        val fillAlphaBottom = if (glassModeActive) 0.36f else 0.38f
+        // BUG FIXED (see the frostedBackdrop note above): MANUAL/CLASSIC
+        // ("الوضع العادي") used to sit at 0.48/0.38 alpha — still visibly
+        // translucent, just without a blur behind it (since the backdrop
+        // capture used to run unconditionally). Now that no backdrop is
+        // captured for non-glass mode at all, the fill goes fully opaque
+        // (1f/1f) to match — no transparency effect left in normal mode.
+        // GLASS mode's own resting alpha (0.46/0.36) is unchanged.
+        val fillAlphaTop = if (glassModeActive) 0.46f else 1f
+        val fillAlphaBottom = if (glassModeActive) 0.36f else 1f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.48f
         ).copy(alpha = fillAlphaTop)
