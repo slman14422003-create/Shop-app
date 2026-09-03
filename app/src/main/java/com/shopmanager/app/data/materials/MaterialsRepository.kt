@@ -85,7 +85,18 @@ class MaterialsRepository {
         awaitClose { registration.remove() }
     }
 
-    suspend fun addMaterial(name: String, quantity: Double, unit: String, section: String) =
+    /**
+     * BUG FIXED (self-notification / "إشعار عند إضافتي أنا للمادة"): this
+     * used to discard the id Firestore assigns on `add()`. Without it,
+     * MaterialsViewModel had no way to tell "this material just changed
+     * because *I* added/edited it on this exact device" apart from "someone
+     * (any device) changed the shared list" — so every add fired a shopping-
+     * list notification straight back at whoever just made it, even though
+     * they obviously already know what they just typed. Returning the new
+     * document id lets the caller mark it as a local/self change and skip
+     * notifying for it (see MaterialsViewModel.selfTouchedMaterialIds).
+     */
+    suspend fun addMaterial(name: String, quantity: Double, unit: String, section: String): String =
         withTimeout(WRITE_TIMEOUT_MS) {
             val data = mapOf(
                 "name" to name,
@@ -94,8 +105,7 @@ class MaterialsRepository {
                 "section" to section,
                 "timestamp" to System.currentTimeMillis()
             )
-            db.collection(materialsCollection).add(data).await()
-            Unit
+            db.collection(materialsCollection).add(data).await().id
         }
 
     suspend fun updateMaterial(id: String, name: String, quantity: Double, unit: String, section: String) =
