@@ -142,7 +142,12 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
                                 val wv = webViewRef
                                 if (wv != null && wv.canGoBack()) wv.goBack() else onBack()
                             },
-                            modifier = Modifier.padding(start = 8.dp),
+                            // BUG FIXED (نفس مشكلة زر الرجوع لاصق بالعنوان):
+                            // missing `end` padding meant nothing separated
+                            // the button from the title next to it — added
+                            // to match the fix on the other screens' back
+                            // buttons (Settings/MaterialCatalog/PersonDetail).
+                            modifier = Modifier.padding(start = 8.dp, end = 12.dp),
                             size = 36.dp
                         )
                     },
