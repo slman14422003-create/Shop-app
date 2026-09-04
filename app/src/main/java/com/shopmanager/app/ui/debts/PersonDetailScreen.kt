@@ -101,11 +101,20 @@ fun PersonDetailScreen(
                     )
                 },
                 navigationIcon = {
+                    // BUG FIXED (السهم والاسم فايتين ببعض / back button
+                    // glued to the title): only `start` padding (space from
+                    // the screen edge) was set here — nothing separated the
+                    // button from the title text sitting right after it in
+                    // the navigation-icon slot, so the person's name ended
+                    // up crammed against the button. `end` padding opens a
+                    // real gap before the title, matching the same fix
+                    // already applied on Settings/MaterialCatalog's back
+                    // buttons.
                     GlassIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
                         onClick = onBack,
-                        modifier = Modifier.padding(start = 8.dp),
+                        modifier = Modifier.padding(start = 8.dp, end = 12.dp),
                         size = 36.dp
                     )
                 },
