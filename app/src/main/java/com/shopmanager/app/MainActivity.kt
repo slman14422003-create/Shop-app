@@ -37,6 +37,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
@@ -444,6 +445,17 @@ private fun ShopManagerApp(
     // watches it and opens its "عميل جديد" dialog when it turns true (see
     // DebtsScreen's `addPersonRequested` parameter).
     var addPersonRequested by remember { mutableStateOf(false) }
+    // "دمج زر حفظ الأسعار مع الشريط السفلي": mirrors addPersonRequested's
+    // own request/handled pattern just above, but for the الأسعار tab's
+    // save action instead — see MaterialsScreen's matching parameters for
+    // the full explanation. `materialsPricesTabActive` and
+    // `pricesChangedCount` are reported live by MaterialsScreen (it owns
+    // the tab state and the in-progress price edits) so the secondary
+    // pill button below only appears, and only shows a changed-count
+    // description, while that specific tab is actually on screen.
+    var materialsPricesTabActive by remember { mutableStateOf(false) }
+    var pricesChangedCount by remember { mutableStateOf(0) }
+    var savePricesRequested by remember { mutableStateOf(false) }
     val pagerScope = rememberCoroutineScope()
 
     @OptIn(ExperimentalFoundationApi::class)
@@ -654,7 +666,11 @@ private fun ShopManagerApp(
                         )
                         else -> MaterialsScreen(
                             viewModel = materialsViewModel,
-                            onAddNew = { navController.navigate(ROUTE_MATERIAL_CATALOG) }
+                            onAddNew = { navController.navigate(ROUTE_MATERIAL_CATALOG) },
+                            onPricesTabActiveChanged = { materialsPricesTabActive = it },
+                            onPricesChangedCountChanged = { pricesChangedCount = it },
+                            savePricesRequested = savePricesRequested,
+                            onSavePricesRequestHandled = { savePricesRequested = false }
                         )
                     }
                 }
@@ -743,6 +759,23 @@ private fun ShopManagerApp(
                 )
                 else -> null
             }
+            // "من الجهة اليسرى حسب الصورة": rendered via `secondaryAction`,
+            // the opposite end of the same pill row from `quickAction`
+            // above (see FloatingBottomNav's own doc comment on that
+            // param) — only while the المواد والأسعار page's الأسعار tab
+            // is actually the one showing, same as `quickAction` itself is
+            // page-scoped. Label mirrors the old full-width button's own
+            // text ("حفظ N من الأسعار" once something's changed, "حفظ كل
+            // الأسعار" otherwise); tapping it just raises
+            // `savePricesRequested`, which MaterialsScreen watches and
+            // clears once the save actually runs.
+            val secondaryAction = if (pagerState.currentPage == PAGE_MATERIALS && materialsPricesTabActive) {
+                QuickAction(
+                    icon = Icons.Default.Save,
+                    contentDescription = if (pricesChangedCount > 0) "حفظ $pricesChangedCount من الأسعار" else "حفظ كل الأسعار",
+                    onClick = { savePricesRequested = true }
+                )
+            } else null
             FloatingBottomNav(
                 items = listOf(
                     BottomNavItem(Icons.Default.Home, "الرئيسية"),
@@ -752,6 +785,7 @@ private fun ShopManagerApp(
                 selectedIndex = pagerState.currentPage,
                 onSelect = { page -> openPager(page) },
                 quickAction = quickAction,
+                secondaryAction = secondaryAction,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     // Real measured layout height (margins included, since
