@@ -141,7 +141,7 @@ fun PersonDetailScreen(
                     // child's own outside padding to add up correctly.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
                         GlassIconButton(
