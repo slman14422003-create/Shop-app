@@ -106,7 +106,17 @@ fun FloatingBottomNav(
     // a sibling of the pill inside the very same Row, it always sits
     // directly beside the pill and moves/resizes with it automatically —
     // there is no separate position to keep in sync.
-    quickAction: QuickAction? = null
+    quickAction: QuickAction? = null,
+    // "زر ثانوي من الجهة اليسرى": a second optional circular action, drawn
+    // as the LAST child of the same Row as the pill (quickAction is the
+    // FIRST child) — so in this app's forced-RTL layout it lands on the
+    // opposite side from `quickAction` (right) instead of stacking on top
+    // of it. Added for actions that only make sense on one particular tab
+    // of one particular page (e.g. "حفظ كل الأسعار" on المواد والأسعار's
+    // الأسعار tab) without disturbing `quickAction`'s own page-level
+    // meaning (e.g. "مادة جديدة", still shown on the same page). Same
+    // null-hides-with-fade behavior as `quickAction`.
+    secondaryAction: QuickAction? = null
 ) {
     // Keeps rendering the last non-null action while its own exit
     // animation plays, so switching to a page with no action (Home) fades
@@ -114,6 +124,8 @@ fun FloatingBottomNav(
     // `quickAction` turns null.
     var lastQuickAction by remember { mutableStateOf<QuickAction?>(null) }
     LaunchedEffect(quickAction) { if (quickAction != null) lastQuickAction = quickAction }
+    var lastSecondaryAction by remember { mutableStateOf<QuickAction?>(null) }
+    LaunchedEffect(secondaryAction) { if (secondaryAction != null) lastSecondaryAction = secondaryAction }
 
     // ROOT FIX ("الشريط العائم خلفيته بيضاء/سوداء"): this composable itself
     // was never the problem — it was always transparent outside the pill
@@ -217,6 +229,15 @@ fun FloatingBottomNav(
                             onClick = { onSelect(index) }
                         )
                     }
+                }
+            }
+            AnimatedVisibility(
+                visible = secondaryAction != null,
+                enter = fadeIn(MotionSpecs.popInSpring()) + androidx.compose.animation.scaleIn(animationSpec = MotionSpecs.popInSpring(), initialScale = 0.6f),
+                exit = fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.6f)
+            ) {
+                lastSecondaryAction?.let { action ->
+                    QuickActionFab(action)
                 }
             }
         }
