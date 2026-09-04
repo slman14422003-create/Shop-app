@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
@@ -68,7 +67,22 @@ import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () -> Unit = {}) {
+fun MaterialsScreen(
+    viewModel: MaterialsViewModel = viewModel(),
+    onAddNew: () -> Unit = {},
+    // "دمج زر حفظ الأسعار مع الشريط السفلي": these four let MainActivity
+    // show/drive a "حفظ الأسعار" action beside the floating nav pill
+    // (FloatingBottomNav's `secondaryAction`, opposite side from the
+    // existing "+" — see MainActivity) instead of this screen drawing its
+    // own full-width save button. Same request/handled pattern already
+    // used for "عميل جديد" (see DebtsScreen's addPersonRequested): tapping
+    // the pill's button just raises `savePricesRequested`, this screen
+    // watches it and performs the actual save, then reports it handled.
+    onPricesTabActiveChanged: (Boolean) -> Unit = {},
+    onPricesChangedCountChanged: (Int) -> Unit = {},
+    savePricesRequested: Boolean = false,
+    onSavePricesRequestHandled: () -> Unit = {}
+) {
     val state by viewModel.uiState.collectAsState()
     val catalog by viewModel.catalog.collectAsState()
     val message by viewModel.message.collectAsState()
@@ -103,6 +117,28 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
     val filtered = remember(search, state.materials) {
         if (search.isBlank()) state.materials
         else state.materials.filter { it.name.contains(search, ignoreCase = true) }
+    }
+
+    // MOVED UP from PricesList: this in-progress price-edits buffer used to
+    // live entirely inside PricesList, private to that tab, since only its
+    // own full-width save button ever read it. Now that saving is
+    // triggered externally (from the floating pill's merged button — see
+    // `savePricesRequested` above), this screen needs to reach the same
+    // buffer to actually perform the save, so it's hoisted here and passed
+    // down to PricesList instead of PricesList creating its own.
+    val editedPrices = remember(catalog) { mutableStateMapOf<String, String>() }
+    val pricesChangedCount = editedPrices.count { (name, value) ->
+        val parsed = value.toDoubleOrNull()
+        parsed != null && parsed != state.prices[name]
+    }
+    LaunchedEffect(tab) { onPricesTabActiveChanged(tab == 1) }
+    LaunchedEffect(pricesChangedCount) { onPricesChangedCountChanged(pricesChangedCount) }
+    LaunchedEffect(savePricesRequested) {
+        if (savePricesRequested) {
+            editedPrices.forEach { (name, value) -> value.toDoubleOrNull()?.let { viewModel.setPrice(name, it) } }
+            editedPrices.clear()
+            onSavePricesRequestHandled()
+        }
     }
 
     Scaffold(
@@ -201,7 +237,7 @@ fun MaterialsScreen(viewModel: MaterialsViewModel = viewModel(), onAddNew: () ->
                     )
                 }
             } else {
-                PricesList(catalogItems = catalog, prices = state.prices, onSave = viewModel::setPrice)
+                PricesList(catalogItems = catalog, prices = state.prices, edited = editedPrices)
             }
         }
         }
@@ -576,12 +612,20 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
  *   pattern MaterialRow uses) instead of bare text, a currency suffix
  *   directly in the price field, and a "priced"/"unpriced" visual state so
  *   it's obvious at a glance which items still need a price.
- * - The save button now shows exactly how many changed rows it's about to
- *   save, and is disabled (rather than a no-op tap) when nothing has
- *   changed — precise state instead of an always-on button.
+ * - The "حفظ الأسعار" action itself now lives beside the floating nav pill
+ *   at the bottom of the screen (see MaterialsScreen's `editedPrices`/
+ *   `savePricesRequested` and FloatingBottomNav's `secondaryAction`,
+ *   wired up in MainActivity) instead of a full-width button drawn here —
+ *   it reads as one attached unit with the pill, the same way "مادة
+ *   جديدة" already does, rather than a separate button with its own
+ *   reserved strip of empty space below the list.
  */
 @Composable
-private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<String, Double>, onSave: (String, Double) -> Unit) {
+private fun PricesList(
+    catalogItems: List<MaterialCatalogItem>,
+    prices: Map<String, Double>,
+    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>
+) {
     // FIX: this tab used to price whatever happened to be on the shortage
     // list (state.materials) — which meant a material's price disappeared
     // the moment it was bought and removed from the shortage list, and had
@@ -591,7 +635,10 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
     // just because something is or isn't currently a shortage, so a price
     // set once stays set. The shortage tab (tab 0 above) still shows and
     // sums these same prices by looking them up by name from `prices`.
-    val edited = remember(catalogItems) { mutableStateMapOf<String, String>() }
+    // NOTE: `edited` is now passed in from MaterialsScreen (see its own
+    // comment) rather than created here, so the externally-triggered save
+    // action can reach the same in-progress buffer this list is writing
+    // into.
     var search by remember { mutableStateOf("") }
 
     if (catalogItems.isEmpty()) {
@@ -622,12 +669,13 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
     val totalValue = remember(catalogItems, prices, edited.toMap()) {
         catalogItems.sumOf { effectiveOf(it) ?: 0.0 }
     }
-    val changedCount = edited.count { (name, value) ->
-        val parsed = value.toDoubleOrNull()
-        parsed != null && parsed != prices[name]
-    }
 
-    val bottomClearance = LocalFloatingBottomNavHeight.current + 8.dp
+    // "بدل هذا الارتفاع": used to also add the full-width save button's own
+    // height on top of the pill clearance here, which is what left that
+    // tall dead strip below the button in the old layout. The save action
+    // no longer lives in this list at all (see the class doc comment
+    // above), so the list only needs to clear the pill itself now.
+    val bottomClearance = LocalFloatingBottomNavHeight.current + 16.dp
     Column(Modifier.fillMaxSize()) {
         PricesSummaryCard(
             pricedCount = pricedCount,
@@ -682,31 +730,6 @@ private fun PricesList(catalogItems: List<MaterialCatalogItem>, prices: Map<Stri
                     )
                 }
             }
-        }
-        Button(
-            onClick = {
-                edited.forEach { (name, value) -> value.toDoubleOrNull()?.let { onSave(name, it) } }
-                edited.clear()
-            },
-            enabled = changedCount > 0,
-            // BUG FIXED ("زر الحفظ تحت الشريط السفلي"): this Column fills
-            // the whole screen, but the floating bottom nav pill is drawn
-            // as a separate overlay on top of it (see MainActivity/
-            // LocalFloatingBottomNavHeight's own doc comment) rather than
-            // reserving real layout space — so a plain 16.dp bottom padding
-            // here only cleared the true screen edge, not the pill sitting
-            // in front of it, and the button ended up hidden behind it.
-            // Adding the pill's own measured height (bottomClearance, same
-            // value already used for the list above) lifts the button
-            // above it, matching the FAB's own clearance elsewhere.
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = bottomClearance + 16.dp),
-            shape = MaterialTheme.shapes.medium
-        ) {
-            Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(if (changedCount > 0) "حفظ $changedCount من الأسعار" else "حفظ كل الأسعار")
         }
     }
 }
