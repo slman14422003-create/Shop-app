@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -271,6 +272,25 @@ class MainActivity : ComponentActivity() {
             // actually sees while the background init finishes.
             LaunchedEffect(Unit) { composeSplashAttached = true }
 
+            // "دعم كثافات الشاشة (DPI) بشكل أفضل": هذا التطبيق يستخدم dp/sp
+            // في كل مكان أصلاً، لذا يتوسّع تلقائيًا بشكل سليم عبر كل
+            // كثافات الشاشة العادية (mdpi..xxxhdpi). لكن عند تفعيل أكبر
+            // إعداد نظام لحجم الخط (إعدادات إمكانية الوصول)، `fontScale`
+            // قد يتجاوز 1.8-2x، وعندها تبدأ العناوين والأزرار الثابتة
+            // الحجم بالتراكب فوق بعضها بدل التمرير بلطف. تحديد أعلى قيمة
+            // معقولة (1.3x) يحافظ على استجابة التطبيق لتفضيل الشخص دون
+            // كسر تخطيط الشاشات ذات العناصر الثابتة (الهيدر، الأزرار
+            // العائمة)، نفس الأسلوب الذي توصي به وثائق Compose نفسها لدعم
+            // مقاييس خط متطرفة بأمان.
+            val baseDensity = LocalDensity.current
+            val clampedDensity = remember(baseDensity) {
+                Density(
+                    density = baseDensity.density,
+                    fontScale = baseDensity.fontScale.coerceIn(0.85f, 1.3f)
+                )
+            }
+
+            CompositionLocalProvider(LocalDensity provides clampedDensity) {
             ShopManagerTheme(themeMode = themeMode, colorMode = colorMode, colorPalette = colorPalette) {
                 // "زجاجي بالكامل" (fully glass): the status bar is now
                 // always fully transparent (see the edge-to-edge window
@@ -381,6 +401,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+            } // CompositionLocalProvider(LocalDensity) — clamped fontScale
         }
     }
 
