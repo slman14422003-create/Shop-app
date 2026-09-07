@@ -63,4 +63,5 @@ object FirebaseModule {
 
     val debtsDb: FirebaseFirestore get() = sharedDb
     val materialsDb: FirebaseFirestore get() = sharedDb
+    val notesDb: FirebaseFirestore get() = sharedDb
 }
