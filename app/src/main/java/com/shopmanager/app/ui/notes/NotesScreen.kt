@@ -1,17 +1,21 @@
 package com.shopmanager.app.ui.notes
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.PushPin
@@ -21,6 +25,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -30,9 +35,14 @@ import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.notes.ImportantNote
 import com.shopmanager.app.data.notes.NoteLinkType
+import com.shopmanager.app.ui.common.ActionIconButton
+import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
+import com.shopmanager.app.ui.common.MotionSpecs
+import com.shopmanager.app.ui.common.liquidGlassSurface
+import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -47,7 +57,19 @@ private enum class NoteFilter(val label: String) {
  * MaterialEditDialog's own "ملاحظة" fields) since those live and die with
  * one specific record, while these are their own standalone list with
  * optional reminders and an optional link to a customer or material.
+ *
+ * REDESIGN: brought in line with the rest of the app's "iOS 26" look -
+ * same liquid-glass TopAppBar used by Debts/Materials/Dashboard (instead
+ * of a plain in-column title), the same flat bordered row surface with a
+ * press-scale (see PersonRow in DebtsScreen), the shared circular
+ * [ActionIconButton]/[DeleteIconButton] affordances instead of a bare
+ * IconButton, the same private [EmptyState] look, and the same
+ * pill-height + FAB-height bottom-clearance formula every other tab with
+ * a floating quick-add button already uses (this tab has one too - see
+ * MainActivity's PAGE_NOTES QuickAction - so the last row now actually
+ * clears it, which it previously didn't).
  */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun NotesScreen(
     persons: List<Person>,
@@ -67,6 +89,13 @@ fun NotesScreen(
     var isSaving by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ImportantNote?>(null) }
     var filter by remember { mutableStateOf(NoteFilter.ALL) }
+
+    // Same formula as DebtsScreen/MaterialsScreen: pill height + the
+    // floating "+" button's own fixed height + a small breathing gap, so
+    // the last row in the list scrolls fully clear of both instead of
+    // stopping underneath either one.
+    val fabHeight = 56.dp
+    val listBottomClearance = LocalFloatingBottomNavHeight.current + fabHeight + 24.dp
 
     // The shared "+" beside the bottom nav pill can't reach into this
     // screen's own dialog state directly - same request/handled pattern as
@@ -97,23 +126,38 @@ fun NotesScreen(
     }
 
     Scaffold(
+        // Same edge-to-edge treatment as DebtsScreen: the outer app-level
+        // Scaffold in MainActivity already pads for the bottom nav/system
+        // bar once, so only bottom+horizontal safe-area insets are kept
+        // here to avoid double-padding a gap above the floating nav bar.
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         containerColor = Color.Transparent,
-        snackbarHost = { SnackbarHost(snackbarHost) }
+        snackbarHost = { SnackbarHost(snackbarHost) },
+        topBar = {
+            TopAppBar(
+                title = { Text("ملاحظات هامة", fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = BrandOnGradient,
+                    actionIconContentColor = BrandOnGradient
+                ),
+                // نفس تعميم ستايل الزجاج المستخدم بكل هيدرات التطبيق
+                // (highlight = false + baseAlpha = 0.72f) - راجع الشرح
+                // بـ DashboardScreen.kt.
+                modifier = Modifier.liquidGlassSurface(
+                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                    highlight = false,
+                    baseAlpha = 0.72f
+                )
+            )
+        }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Text(
-                "ملاحظات هامة",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-            )
-
             Row(
                 Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 8.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 NoteFilter.entries.forEach { f ->
@@ -126,27 +170,27 @@ fun NotesScreen(
             }
 
             if (state.isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            } else if (filtered.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Notes, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(8.dp))
-                        Text("لا توجد ملاحظات", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
+            } else if (filtered.isEmpty()) {
+                EmptyState(
+                    icon = Icons.Default.Notes,
+                    text = if (filter == NoteFilter.ALL) "لا توجد ملاحظات بعد\nاضغط \"+\" لإضافة ملاحظة" else "لا توجد ملاحظات هنا"
+                )
             } else {
                 LazyColumn(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
                         start = 16.dp, end = 16.dp, top = 4.dp,
-                        bottom = LocalFloatingBottomNavHeight.current + 16.dp
+                        bottom = listBottomClearance
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filtered, key = { it.id }) { note ->
                         NoteRow(
                             note = note,
+                            modifier = Modifier.animateItemPlacement(MotionSpecs.reorderSpring()),
                             onToggleDone = { viewModel.setDone(note, !note.isDone) },
                             onTogglePinned = { viewModel.setPinned(note, !note.isPinned) },
                             onEdit = { editingNote = note; showEditDialog = true },
@@ -203,10 +247,29 @@ fun NotesScreen(
     }
 }
 
+// Same look as DebtsScreen's private EmptyState: 56dp outline-tinted icon,
+// 12dp gap, bodyMedium onSurfaceVariant text - one shared "nothing here"
+// read across every tab instead of each screen inventing its own spacing.
+@Composable
+private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                icon, contentDescription = null,
+                modifier = Modifier.size(56.dp),
+                tint = MaterialTheme.colorScheme.outlineVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NoteRow(
     note: ImportantNote,
+    modifier: Modifier = Modifier,
     onToggleDone: () -> Unit,
     onTogglePinned: () -> Unit,
     onEdit: () -> Unit,
@@ -214,72 +277,91 @@ private fun NoteRow(
     onOpenLink: () -> Unit
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                interactionSource = interactionSource,
-                indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = onEdit,
-                onLongClick = onTogglePinned
-            ),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
-            IconButton(onClick = onToggleDone, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    if (note.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+    val pressed by interactionSource.collectIsPressedAsState()
+    // Same press-scale spring as PersonRow/MaterialRow, and kept on a
+    // separate outer Box from the card's own shadow for the same reason
+    // documented on PersonRow (scaling a shadow-casting layer can
+    // rasterize as a solid block on some low-end GPUs) - belt-and-braces
+    // here too even though shadowElevation is already 0.
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.98f else 1f,
+        animationSpec = MotionSpecs.pressSpring(),
+        label = "noteRowScale"
+    )
+
+    Box(modifier.fillMaxWidth().scale(scale)) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = androidx.compose.foundation.LocalIndication.current,
+                    onClick = onEdit,
+                    onLongClick = onTogglePinned
+                ),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
+                ActionIconButton(
+                    icon = if (note.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    tint = if (note.isDone) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
                     contentDescription = "تم",
-                    tint = if (note.isDone) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    onClick = onToggleDone
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (note.isPinned) {
+                            Icon(Icons.Default.PushPin, contentDescription = "مثبتة", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(
+                            note.title,
+                            fontWeight = FontWeight.Medium,
+                            textDecoration = if (note.isDone) TextDecoration.LineThrough else null,
+                            color = if (note.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    if (note.content.isNotBlank()) {
+                        Text(
+                            note.content,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3
+                        )
+                    }
+                    if (note.reminderAt > 0 || note.linkType != NoteLinkType.NONE) {
+                        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            if (note.reminderAt > 0) {
+                                InfoChip(
+                                    icon = Icons.Default.Schedule,
+                                    text = remember(note.reminderAt) {
+                                        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(note.reminderAt))
+                                    }
+                                )
+                            }
+                            if (note.linkType != NoteLinkType.NONE && note.linkedName.isNotBlank()) {
+                                InfoChip(
+                                    icon = if (note.linkType == NoteLinkType.PERSON) Icons.Default.AttachMoney else Icons.Default.Inventory2,
+                                    text = note.linkedName,
+                                    onClick = onOpenLink
+                                )
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.width(4.dp))
+                DeleteIconButton(onClick = onDelete, contentDescription = "حذف الملاحظة")
+                Spacer(Modifier.width(10.dp))
+                Icon(
+                    Icons.Default.ChevronLeft, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outlineVariant
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (note.isPinned) {
-                        Icon(Icons.Default.PushPin, contentDescription = "مثبتة", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                    }
-                    Text(
-                        note.title,
-                        fontWeight = FontWeight.Medium,
-                        textDecoration = if (note.isDone) TextDecoration.LineThrough else null,
-                        color = if (note.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                if (note.content.isNotBlank()) {
-                    Text(
-                        note.content,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3
-                    )
-                }
-                if (note.reminderAt > 0 || note.linkType != NoteLinkType.NONE) {
-                    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (note.reminderAt > 0) {
-                            InfoChip(
-                                icon = Icons.Default.Schedule,
-                                text = remember(note.reminderAt) {
-                                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(note.reminderAt))
-                                }
-                            )
-                        }
-                        if (note.linkType != NoteLinkType.NONE && note.linkedName.isNotBlank()) {
-                            InfoChip(
-                                icon = if (note.linkType == NoteLinkType.PERSON) Icons.Default.AttachMoney else Icons.Default.Inventory2,
-                                text = note.linkedName,
-                                onClick = onOpenLink
-                            )
-                        }
-                    }
-                }
-            }
-            DeleteIconButton(onClick = onDelete, contentDescription = "حذف الملاحظة")
         }
     }
 }
