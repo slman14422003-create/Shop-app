@@ -239,7 +239,15 @@ fun Modifier.liquidGlassSurface(
     // own lower container alphas in Palette.kt so the extra transparency
     // isn't just the header/nav — it runs through every ordinary card,
     // dialog, and sheet in GLASS mode too.
-    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.60f).coerceIn(0f, 1f) else 1f
+    // iPhone 17 / iOS 26 LIQUID GLASS PASS ("مراية نظيفة ووراها تمويه"):
+    // pushed once more (0.60 → 0.52) so the panel reads as a genuinely
+    // clean, clear pane — like a polished mirror — with the frosted blur
+    // doing the work of suggesting depth behind it, instead of the panel
+    // itself looking milky/opaque. Paired with the deeper blur radius and
+    // the gradient rim below, which is what actually sells "glass" once
+    // the fill alone gets this transparent — without them, this alone
+    // would just look washed out.
+    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.52f).coerceIn(0f, 1f) else 1f
     val effectiveHighlight = glassModeActive && highlight
 
     // PERF (low-end tier): Modifier.shadow forces its own offscreen
@@ -480,7 +488,15 @@ fun Modifier.liquidGlassSurface(
                     // the same safe two-pass approach (content drawn sharp
                     // first, this blur only ever touches the decorative
                     // shapes).
-                    layer.renderEffect = BlurEffect(44f, 44f, TileMode.Decal)
+                    // IPHONE 17 GLASS PASS (44f → 58f): pushed deeper again
+                    // so the diffused light spreads soft and wide the way
+                    // real frosted/etched glass scatters light behind a
+                    // clean front pane, rather than sitting as a smaller,
+                    // more contained glow. Combined with the lower
+                    // `effectiveBaseAlpha` above, the panel now reads as
+                    // "clear glass, blur happening behind it" instead of
+                    // "a foggy panel" — the distinction the person asked for.
+                    layer.renderEffect = BlurEffect(58f, 58f, TileMode.Decal)
                     drawLayer(layer)
                 } else {
                     if (topHighlight != null) drawRect(brush = topHighlight)
@@ -522,7 +538,23 @@ fun Modifier.liquidGlassSurface(
             // stray seam rather than an intentional border).
             when {
                 topFlush -> it
-                glassModeActive -> it.border(1.dp, rimColor.copy(alpha = 0.36f), shape)
+                // IPHONE 17 GLASS PASS: the rim used to be one flat alpha
+                // all the way around — real light catching the edge of a
+                // pane of glass is never even, it's brightest where the
+                // "top" light source hits and fades toward the bottom, the
+                // same top/bottom asymmetry `topEdge`/`innerBaseShadow`
+                // already give the fill. A vertical-gradient rim (0.55 at
+                // the top edge fading to 0.16 at the bottom) reads as a
+                // single continuous band of light wrapping a curved,
+                // reflective surface instead of a uniform outline traced
+                // around a flat shape.
+                glassModeActive -> it.border(
+                    1.dp,
+                    Brush.verticalGradient(
+                        listOf(rimColor.copy(alpha = 0.55f), rimColor.copy(alpha = 0.16f))
+                    ),
+                    shape
+                )
                 rimColor == Color.White -> it
                 else -> it.border(1.dp, rimColor.copy(alpha = 0.12f), shape)
             }
@@ -566,8 +598,13 @@ fun GlassIconButton(
     // toward see-through (0.10 → 0.07), matching the same across-the-board
     // transparency bump as [liquidGlassSurface]'s `effectiveBaseAlpha`.
     val glassModeActive = LocalGlassMode.current
-    val restingFillAlpha = if (glassModeActive) 0.07f else 0.22f
-    val restingRimAlpha = if (glassModeActive) 0.40f else 0f
+    // IPHONE 17 GLASS PASS: fill pushed a touch more see-through
+    // (0.07 → 0.05) and the rim a touch crisper (0.40 → 0.46) to match
+    // [liquidGlassSurface]'s own "clean mirror, blur behind it" pass —
+    // the small circular buttons sit on the same panels, so they read as
+    // cut from the same glass rather than a slightly muddier version of it.
+    val restingFillAlpha = if (glassModeActive) 0.05f else 0.22f
+    val restingRimAlpha = if (glassModeActive) 0.46f else 0f
     // "رقّي التفاعل عند الضغط": a brief brighten on press — both the fill
     // and rim animate a touch lighter, on the same spring as the scale —
     // so tapping the button reads as light momentarily catching the glass,
@@ -612,7 +649,19 @@ fun GlassIconButton(
                     )
                 } else Brush.linearGradient(listOf(Color.White.copy(alpha = fillAlpha), Color.White.copy(alpha = fillAlpha)))
             )
-            .border(1.dp, Color.White.copy(alpha = rimAlpha), CircleShape)
+            // Same top-bright/bottom-fade rim treatment as the big glass
+            // panels, at button scale, instead of one flat ring — a small
+            // consistency detail that keeps every glass surface reading as
+            // the same physical material.
+            .border(
+                1.dp,
+                if (glassModeActive) {
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = (rimAlpha + 0.08f).coerceAtMost(1f)), Color.White.copy(alpha = rimAlpha * 0.4f))
+                    )
+                } else Brush.linearGradient(listOf(Color.White.copy(alpha = rimAlpha), Color.White.copy(alpha = rimAlpha))),
+                CircleShape
+            )
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(size * 0.5f))
     }
@@ -635,7 +684,11 @@ fun GlassIconButton(
 fun LiquidGlassGlow(
     modifier: Modifier = Modifier,
     color: Color = Color.White,
-    blurRadius: Dp = 24.dp
+    // IPHONE 17 GLASS PASS: softened a touch further (24.dp → 30.dp) to
+    // match the deeper frosted-core blur above so the decorative glow and
+    // every glass panel's own diffused light read as the same softness of
+    // material.
+    blurRadius: Dp = 30.dp
 ) {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     val canBlur = !isLowTier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
