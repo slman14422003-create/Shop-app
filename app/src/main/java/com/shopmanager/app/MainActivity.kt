@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,6 +85,8 @@ import com.shopmanager.app.ui.lock.LockScreen
 import com.shopmanager.app.ui.materials.MaterialCatalogScreen
 import com.shopmanager.app.ui.materials.MaterialsScreen
 import com.shopmanager.app.ui.materials.MaterialsViewModel
+import com.shopmanager.app.ui.notes.NotesScreen
+import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BottomNavItem
 import com.shopmanager.app.ui.common.FloatingBottomNav
@@ -113,6 +116,10 @@ private const val ROUTE_MAIN_PAGER = "mainPager"
 private const val PAGE_DASHBOARD = 0
 private const val PAGE_DEBTS = 1
 private const val PAGE_MATERIALS = 2
+// ملاحظات هامة (Important Notes) - the 4th main tab, added alongside
+// Home/Debts/Materials in the same HorizontalPager/FloatingBottomNav so it
+// gets the exact same swipe-between-tabs behavior described above for free.
+private const val PAGE_NOTES = 3
 private const val ROUTE_SETTINGS = "settings"
 // لوحة المسؤول السرية: not exposed through any visible nav item — reached
 // only via the hidden dot on the dashboard header + the PIN dialog it
@@ -431,11 +438,12 @@ private fun ShopManagerApp(
     // spinning up duplicate Firestore listeners per screen.
     val debtsViewModel: DebtsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val materialsViewModel: MaterialsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val notesViewModel: NotesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
     // Hoisted above the NavHost (rather than inside the pager's own
     // composable) so it survives navigating away to Settings/Help and back,
     // and so the bottom bar can read/drive the current page directly.
-    val pagerState = rememberPagerState(initialPage = PAGE_DASHBOARD) { 3 }
+    val pagerState = rememberPagerState(initialPage = PAGE_DASHBOARD) { 4 }
     // REDESIGN ("زر عميل جديد بجانب الشريط السفلي"): the "+" that used to
     // be each tab's own FloatingActionButton is now a single shared button
     // rendered as part of FloatingBottomNav itself (see its `quickAction`
@@ -445,6 +453,9 @@ private fun ShopManagerApp(
     // watches it and opens its "عميل جديد" dialog when it turns true (see
     // DebtsScreen's `addPersonRequested` parameter).
     var addPersonRequested by remember { mutableStateOf(false) }
+    // Same request/handled pattern as addPersonRequested just above, for
+    // the ملاحظات هامة tab's own "+" quick action.
+    var addNoteRequested by remember { mutableStateOf(false) }
     // "دمج زر حفظ الأسعار مع الشريط السفلي": mirrors addPersonRequested's
     // own request/handled pattern just above, but for the الأسعار tab's
     // save action instead — see MaterialsScreen's matching parameters for
@@ -471,6 +482,7 @@ private fun ShopManagerApp(
         when (pendingNotificationAction) {
             is NotificationAction.DebtPaid, is NotificationAction.NewDebt -> openPager(PAGE_DEBTS)
             is NotificationAction.ShoppingList -> openPager(PAGE_MATERIALS)
+            is NotificationAction.NoteReminder -> openPager(PAGE_NOTES)
             null -> {}
         }
     }
@@ -664,13 +676,22 @@ private fun ShopManagerApp(
                             addPersonRequested = addPersonRequested,
                             onAddPersonRequestHandled = { addPersonRequested = false }
                         )
-                        else -> MaterialsScreen(
+                        PAGE_MATERIALS -> MaterialsScreen(
                             viewModel = materialsViewModel,
                             onAddNew = { navController.navigate(ROUTE_MATERIAL_CATALOG) },
                             onPricesTabActiveChanged = { materialsPricesTabActive = it },
                             onPricesChangedCountChanged = { pricesChangedCount = it },
                             savePricesRequested = savePricesRequested,
                             onSavePricesRequestHandled = { savePricesRequested = false }
+                        )
+                        else -> NotesScreen(
+                            viewModel = notesViewModel,
+                            persons = debtsViewModel.uiState.collectAsState().value.persons,
+                            materials = materialsViewModel.uiState.collectAsState().value.materials,
+                            onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.navigate("personDetail/$personId") },
+                            onOpenMaterials = { openPager(PAGE_MATERIALS) },
+                            addNoteRequested = addNoteRequested,
+                            onAddNoteRequestHandled = { addNoteRequested = false }
                         )
                     }
                 }
@@ -757,6 +778,11 @@ private fun ShopManagerApp(
                     contentDescription = "مادة جديدة",
                     onClick = { navController.navigate(ROUTE_MATERIAL_CATALOG) }
                 )
+                PAGE_NOTES -> QuickAction(
+                    icon = Icons.Default.Add,
+                    contentDescription = "ملاحظة جديدة",
+                    onClick = { addNoteRequested = true }
+                )
                 else -> null
             }
             // "من الجهة اليسرى حسب الصورة": rendered via `secondaryAction`,
@@ -780,7 +806,8 @@ private fun ShopManagerApp(
                 items = listOf(
                     BottomNavItem(Icons.Default.Home, "الرئيسية"),
                     BottomNavItem(Icons.Default.AttachMoney, "الديون"),
-                    BottomNavItem(Icons.Default.Inventory2, "المواد والأسعار")
+                    BottomNavItem(Icons.Default.Inventory2, "المواد والأسعار"),
+                    BottomNavItem(Icons.Default.Notes, "ملاحظات هامة")
                 ),
                 selectedIndex = pagerState.currentPage,
                 onSelect = { page -> openPager(page) },
@@ -831,6 +858,13 @@ private fun ShopManagerApp(
                 },
                 confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
             )
+            // Tapping a note's reminder just needs to land on the ملاحظات
+            // هامة tab (already handled by the LaunchedEffect above) - the
+            // note itself is right there in the list, so a confirmation
+            // dialog on top of it would just be a redundant extra tap.
+            is NotificationAction.NoteReminder -> {
+                LaunchedEffect(action) { onConsumeNotificationAction() }
+            }
         }
     }
 }
