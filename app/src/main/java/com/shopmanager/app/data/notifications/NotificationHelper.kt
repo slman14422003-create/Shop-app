@@ -7,11 +7,16 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.shopmanager.app.MainActivity
+import com.shopmanager.app.ui.common.avatarColorFor
 
 /**
  * Local (on-device) notifications - no server/FCM setup required. Two kinds:
@@ -130,6 +135,59 @@ object NotificationHelper {
     }
 
     /**
+     * "إشعارات أكثر تطورًا وكفاءة": a broadcast-backed action button that
+     * does its work (snooze a reminder, dismiss the shopping-list card)
+     * directly from the notification shade via [NotificationActionReceiver]
+     * — no need to open [MainActivity] first the way every `contentIntent`
+     * tap above does. Distinct `requestCode`s per action/id (same rotating-
+     * id convention as [buildContentIntent]) so several action buttons
+     * across different notifications never collide and silently overwrite
+     * one another's extras.
+     */
+    private fun buildActionIntent(context: Context, requestCode: Int, intent: Intent): PendingIntent =
+        PendingIntent.getBroadcast(
+            context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    /**
+     * A small circular "avatar" bitmap — the customer's own brand color
+     * (via [avatarColorFor], the exact same deterministic palette every
+     * in-app debt/customer avatar already uses) with their first letter
+     * centered on it — used as the notification's `setLargeIcon`. Purely
+     * decorative/drawn on-device (no network image), so this never adds a
+     * loading state or a failure path; the small brand-colored status
+     * icon (`ic_stat_notify`) stays as-is alongside it, exactly like a
+     * messaging app pairs a contact photo with its own small app glyph.
+     */
+    private fun buildAvatarBitmap(name: String, sizePx: Int = 128): Bitmap {
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val composeColor = avatarColorFor(name)
+        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.argb(
+                (composeColor.alpha * 255).toInt(),
+                (composeColor.red * 255).toInt(),
+                (composeColor.green * 255).toInt(),
+                (composeColor.blue * 255).toInt()
+            )
+        }
+        val radius = sizePx / 2f
+        canvas.drawCircle(radius, radius, radius, backgroundPaint)
+
+        val initial = name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "؟"
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            textSize = sizePx * 0.46f
+            typeface = Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
+        val textY = radius - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(initial, radius, textY, textPaint)
+        return bitmap
+    }
+
+    /**
      * Fires a note's reminder - see [com.shopmanager.app.data.notifications.NoteReminderWorker].
      * Id is derived from the note id (same rotating-id pattern as the debt
      * notifications above) so several reminders firing close together each
@@ -139,6 +197,13 @@ object NotificationHelper {
         if (!hasPermission(context)) return
         val id = NOTIF_ID_NOTE_BASE + (noteId.hashCode() and 0xFFF)
         val body = content.ifBlank { "تذكير بملاحظة هامة" }
+        val snoozeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_SNOOZE_NOTE
+            putExtra(NotificationActionReceiver.EXTRA_NOTE_ID, noteId)
+            putExtra(NotificationActionReceiver.EXTRA_NOTE_TITLE, title)
+            putExtra(NotificationActionReceiver.EXTRA_NOTE_CONTENT, content)
+            putExtra(NotificationActionReceiver.EXTRA_NOTIF_ID, id)
+        }
         val notification = NotificationCompat.Builder(context, CHANNEL_NOTES)
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
@@ -147,8 +212,12 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, title)))
+            // "كفاءة أعلى": تأجيل التذكير ساعة كاملة دون فتح التطبيق —
+            // يُنفَّذ مباشرة عبر NotificationActionReceiver.
+            .addAction(0, "تأجيل ساعة", buildActionIntent(context, id, snoozeIntent))
             .build()
 
         NotificationManagerCompat.from(context).notify(id, notification)
@@ -163,6 +232,9 @@ object NotificationHelper {
         if (!hasPermission(context) || shortageNames.isEmpty()) return
         val body = if (shortageNames.size <= 4) shortageNames.joinToString("، ")
         else shortageNames.take(4).joinToString("، ") + " و${shortageNames.size - 4} أخرى"
+        val dismissIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_DISMISS_SHOPPING
+        }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_SHOPPING_LIST)
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
@@ -172,8 +244,13 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(true)
+            // عدد المواد الناقصة كـ"شارة" رقمية على أيقونة الإشعار
+            // (المكان الذي تدعمه واجهة المستخدم) — لمحة سريعة دون فتح الشريط.
+            .setNumber(shortageNames.size)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, NOTIF_ID_SHOPPING_LIST, NotificationAction.ShoppingList(shortageNames)))
+            .addAction(0, "تم الشراء", buildActionIntent(context, NOTIF_ID_SHOPPING_LIST, dismissIntent))
             .build()
 
         NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_LIST, notification)
@@ -205,12 +282,17 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
+            // "صورة رمزية": نفس لون ولون الحرف الأول اللذين يستخدمهما تطبيق
+            // العملاء داخليًا (avatarColorFor) — تُظهر هوية العميل مباشرة
+            // من شريط الإشعارات بدل الاعتماد على الأيقونة العامة فقط.
+            .setLargeIcon(buildAvatarBitmap(personName))
             .setContentTitle("💰 عميل جديد بالديون")
             .setContentText("$personName — $amount $currencySymbol")
             .setStyle(NotificationCompat.BigTextStyle().bigText("$personName — $amount $currencySymbol"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setGroup(GROUP_DEBTS)
+            .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NewDebt(personName, amount, currencySymbol)))
             .build()
@@ -231,12 +313,14 @@ object NotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
+            .setLargeIcon(buildAvatarBitmap(personName))
             .setContentTitle("✅ تم سداد دين")
             .setContentText("$personName وفى $amount $currencySymbol")
             .setStyle(NotificationCompat.BigTextStyle().bigText("$personName وفى $amount $currencySymbol"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setGroup(GROUP_DEBTS)
+            .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.DebtPaid(personName, amount, currencySymbol)))
             .build()
