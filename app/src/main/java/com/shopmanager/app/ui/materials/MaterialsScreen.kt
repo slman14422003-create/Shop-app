@@ -244,12 +244,17 @@ fun MaterialsScreen(
     }
 
     editingMaterial?.let { m ->
+        var isSavingMaterial by remember { mutableStateOf(false) }
         MaterialEditDialog(
             initial = m,
-            onDismiss = { editingMaterial = null },
-            onSave = { name, qty, unit ->
-                viewModel.updateMaterial(m.id, name, qty, unit)
-                editingMaterial = null
+            isSaving = isSavingMaterial,
+            onDismiss = { if (!isSavingMaterial) editingMaterial = null },
+            onSave = { name, qty, unit, notes ->
+                isSavingMaterial = true
+                viewModel.updateMaterial(m.id, name, qty, unit, notes) { success ->
+                    isSavingMaterial = false
+                    if (success) editingMaterial = null
+                }
             }
         )
     }
@@ -590,6 +595,14 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (material.notes.isNotBlank()) {
+                    Text(
+                        material.notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1
+                    )
+                }
             }
             IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
             Spacer(Modifier.width(2.dp))

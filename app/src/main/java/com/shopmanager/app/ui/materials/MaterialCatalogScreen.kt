@@ -192,16 +192,21 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     }
 
     pickedItem?.let { item ->
+        var isAddingMaterial by remember { mutableStateOf(false) }
         QuantityEntryDialog(
             materialName = item.name,
-            onDismiss = { pickedItem = null },
-            onSave = { quantity, unit ->
+            isSaving = isAddingMaterial,
+            onDismiss = { if (!isAddingMaterial) pickedItem = null },
+            onSave = { quantity, unit, notes ->
                 // Every material added here is, by the nature of this list,
                 // something the shop is short on and needs to buy - so it's
                 // simply added with the quantity needed, no threshold or
                 // stock-level bookkeeping involved.
-                viewModel.addMaterial(item.name, quantity, unit)
-                pickedItem = null
+                isAddingMaterial = true
+                viewModel.addMaterial(item.name, quantity, unit, notes) { success ->
+                    isAddingMaterial = false
+                    if (success) pickedItem = null
+                }
             }
         )
     }
@@ -311,8 +316,9 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
 @Composable
 private fun QuantityEntryDialog(
     materialName: String,
+    isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (quantity: Double, unit: String) -> Unit
+    onSave: (quantity: Double, unit: String, notes: String) -> Unit
 ) {
     // FIX: same free-typed-decimal issue as MaterialEditDialog (see its
     // comment) - this is the dialog actually used every time a new
@@ -321,10 +327,11 @@ private fun QuantityEntryDialog(
     // "1.5" for a كيلو entry, plus the two new نص كيلو / ربع كيلو units.
     var quantity by remember { mutableStateOf(1) }
     var unit by remember { mutableStateOf(MaterialUnit.KG) }
+    var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     GlassAlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(materialName) },
         text = {
             Column {
@@ -336,6 +343,7 @@ private fun QuantityEntryDialog(
                 QuantityStepper(
                     value = quantity,
                     unitLabel = unit.label,
+                    enabled = !isSaving,
                     onValueChange = { quantity = it.coerceAtLeast(1) }
                 )
                 Text(
@@ -343,19 +351,35 @@ private fun QuantityEntryDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
                 )
-                UnitPicker(selected = unit, onSelected = { unit = it })
+                UnitPicker(selected = unit, enabled = !isSaving, onSelected = { unit = it })
+                AppTextField(
+                    value = notes, onValueChange = { notes = it }, enabled = !isSaving,
+                    label = "ملاحظة (اختياري)",
+                    singleLine = false, minLines = 1, maxLines = 3,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                )
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                if (quantity <= 0) {
-                    error = "أدخل كمية صحيحة"
-                } else {
-                    onSave(quantity.toDouble(), unit.label)
+            TextButton(
+                enabled = !isSaving,
+                onClick = {
+                    if (quantity <= 0) {
+                        error = "أدخل كمية صحيحة"
+                    } else {
+                        error = null
+                        onSave(quantity.toDouble(), unit.label, notes.trim())
+                    }
                 }
-            }) { Text("حفظ") }
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("حفظ")
+                }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("إلغاء") } }
     )
 }

@@ -7,6 +7,7 @@ import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsRepository
+import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.sync.SyncStatusStore
@@ -196,31 +197,44 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
                 lastNotifiedMaterials = signature
+                // Keep the background worker's own baseline in sync too -
+                // see BackgroundSyncWorker.syncKnownMaterialsSignature for
+                // why this runs on every emission, not just self-touched
+                // ones.
+                BackgroundSyncWorker.syncKnownMaterialsSignature(getApplication(), state.materials)
             }
         }
     }
 
-    fun addMaterial(name: String, quantity: Double, unit: String) {
+    // BUG FIXED (لا يوجد مؤشر تحميل بواجهة إضافة/تعديل مادة): مثل نفس
+    // مشكلة PersonEditDialog قديماً - onDone هون تسمح للواجهة (MaterialEditDialog/
+    // QuantityEntryDialog) توقف زر الحفظ وتعرض دائرة تحميل لحد ما الكتابة
+    // بفايرستور تخلص فعلياً، بدل ما توهم إنها علقت أو تسمح بضغطات متكررة.
+    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
-                selfTouchedMaterialIds += repo.addMaterial(name, quantity, unit, section.value)
+                selfTouchedMaterialIds += repo.addMaterial(name, quantity, unit, section.value, notes)
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
+                onDone(true)
             } catch (e: Exception) {
                 _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
+                onDone(false)
             }
         }
     }
 
-    fun updateMaterial(id: String, name: String, quantity: Double, unit: String) {
+    fun updateMaterial(id: String, name: String, quantity: Double, unit: String, notes: String = "", onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
                 selfTouchedMaterialIds += id
-                repo.updateMaterial(id, name, quantity, unit, section.value)
+                repo.updateMaterial(id, name, quantity, unit, section.value, notes)
                 _message.value = "تم تعديل النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
+                onDone(true)
             } catch (e: Exception) {
                 _message.value = "تعذر التعديل: ${e.message ?: "تحقق من الاتصال"}"
+                onDone(false)
             }
         }
     }

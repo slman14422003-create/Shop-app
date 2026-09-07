@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,8 +37,9 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 @Composable
 fun MaterialEditDialog(
     initial: Material?,
+    isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (name: String, quantity: Double, unit: String) -> Unit
+    onSave: (name: String, quantity: Double, unit: String, notes: String) -> Unit
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     // FIX: quantity used to be a free-typed decimal field, which is why
@@ -49,6 +52,7 @@ fun MaterialEditDialog(
         mutableStateOf((initial?.quantity?.toInt() ?: 1).coerceAtLeast(1))
     }
     var unit by remember { mutableStateOf(MaterialUnit.fromLabel(initial?.unit ?: MaterialUnit.KG.label)) }
+    var notes by remember { mutableStateOf(initial?.notes ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     // FIX: a fixed fraction size (نص كيلو، ربع كيلو، لوقية، نص لوقية، ربع
@@ -62,12 +66,12 @@ fun MaterialEditDialog(
     val showQuantityStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
 
     GlassAlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
         text = {
             Column {
                 AppTextField(
-                    value = name, onValueChange = { name = it },
+                    value = name, onValueChange = { name = it }, enabled = !isSaving,
                     label = "اسم المادة", modifier = Modifier.fillMaxWidth()
                 )
 
@@ -81,6 +85,7 @@ fun MaterialEditDialog(
                     QuantityStepper(
                         value = quantity,
                         unitLabel = unit.label,
+                        enabled = !isSaving,
                         onValueChange = { quantity = it.coerceAtLeast(1) }
                     )
                 } else {
@@ -102,25 +107,45 @@ fun MaterialEditDialog(
                 )
                 UnitPicker(
                     selected = unit,
+                    enabled = !isSaving,
                     onSelected = {
                         unit = it
                         if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
                     }
                 )
 
+                AppTextField(
+                    value = notes, onValueChange = { notes = it }, enabled = !isSaving,
+                    label = "ملاحظة (اختياري)",
+                    singleLine = false, minLines = 1, maxLines = 3,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                )
+
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                when {
-                    name.isBlank() -> error = "يرجى إدخال اسم المادة"
-                    quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
-                    else -> onSave(name.trim(), quantity.toDouble(), unit.label)
+            TextButton(
+                enabled = !isSaving,
+                onClick = {
+                    when {
+                        name.isBlank() -> error = "يرجى إدخال اسم المادة"
+                        quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
+                        else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim()) }
+                    }
                 }
-            }) { Text("حفظ") }
+            ) {
+                if (isSaving) {
+                    Row {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+                        Text("  جارِ الحفظ...")
+                    }
+                } else {
+                    Text("حفظ")
+                }
+            }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
@@ -139,7 +164,7 @@ fun MaterialEditDialog(
  * never merge into one typed value.
  */
 @Composable
-fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit) {
+fun QuantityStepper(value: Int, unitLabel: String, enabled: Boolean = true, onValueChange: (Int) -> Unit) {
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -149,7 +174,7 @@ fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit)
             icon = Icons.Default.Remove,
             tint = MaterialTheme.colorScheme.primary,
             contentDescription = "إنقاص",
-            onClick = { if (value > 1) onValueChange(value - 1) }
+            onClick = { if (enabled && value > 1) onValueChange(value - 1) }
         )
 
         // iOS-style borderless stepper field — matches AppTextField's flat
@@ -162,6 +187,7 @@ fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit)
                 onValueChange(digitsOnly.toIntOrNull() ?: 0)
             },
             modifier = Modifier.width(84.dp),
+            enabled = enabled,
             singleLine = true,
             textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.Center),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -179,7 +205,7 @@ fun QuantityStepper(value: Int, unitLabel: String, onValueChange: (Int) -> Unit)
             icon = Icons.Default.Add,
             tint = MaterialTheme.colorScheme.primary,
             contentDescription = "زيادة",
-            onClick = { onValueChange(value + 1) }
+            onClick = { if (enabled) onValueChange(value + 1) }
         )
 
         if (unitLabel.isNotBlank()) {
@@ -220,7 +246,7 @@ private val MaterialUnit.pickerLabel: String
  * than another weight size.
  */
 @Composable
-fun UnitPicker(selected: MaterialUnit, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
+fun UnitPicker(selected: MaterialUnit, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
     val weightRows = listOf(
         listOf(MaterialUnit.KG, MaterialUnit.HALF_KG, MaterialUnit.QUARTER_KG),
         listOf(MaterialUnit.OKE, MaterialUnit.HALF_OKE, MaterialUnit.QUARTER_OKE)
@@ -239,16 +265,16 @@ fun UnitPicker(selected: MaterialUnit, onSelected: (MaterialUnit) -> Unit, modif
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 row.forEach { option ->
-                    UnitPill(option = option, isSelected = option == selected, onSelected = onSelected, modifier = Modifier.weight(1f))
+                    UnitPill(option = option, isSelected = option == selected, enabled = enabled, onSelected = onSelected, modifier = Modifier.weight(1f))
                 }
             }
         }
-        UnitPill(option = MaterialUnit.NONE, isSelected = selected == MaterialUnit.NONE, onSelected = onSelected, modifier = Modifier.fillMaxWidth())
+        UnitPill(option = MaterialUnit.NONE, isSelected = selected == MaterialUnit.NONE, enabled = enabled, onSelected = onSelected, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
-private fun UnitPill(option: MaterialUnit, isSelected: Boolean, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
+private fun UnitPill(option: MaterialUnit, isSelected: Boolean, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
     val bgColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
         animationSpec = MotionSpecs.quickSpring(), label = "unitPillBg"
@@ -266,7 +292,7 @@ private fun UnitPill(option: MaterialUnit, isSelected: Boolean, onSelected: (Mat
         modifier
             .clip(RoundedCornerShape(11.dp))
             .background(bgColor)
-            .clickable(onClick = { onSelected(option) })
+            .clickable(enabled = enabled, onClick = { onSelected(option) })
             .padding(vertical = verticalPad),
         contentAlignment = Alignment.Center
     ) {
