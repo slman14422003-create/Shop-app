@@ -32,17 +32,25 @@ private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(D
  * it had already saved - and repeated taps could race and create duplicate
  * customers. Now the confirm button disables and shows a spinner the moment
  * saving starts, until the parent screen confirms success or failure.
+ *
+ * BUG FIXED (خانة الملاحظات ناقصة بواجهة "عميل جديد"): "إضافة دين" على
+ * عميل موجود مسبقاً (AddDebtCard بواجهة تفاصيل العميل) كان دايماً فيه خانة
+ * "ملاحظة (اختياري)" تنحفظ مع الدين - لكن أول دين بينخلق تلقائياً وقت إضافة
+ * عميل جديد من هالنافذة كان دايماً بملاحظة فارغة "" لأنه ما كان في خانة
+ * أصلاً هون. أضفنا نفس خانة الملاحظة هون كمان، فأول دين لعميل جديد صار فيه
+ * نفس ميزة الملاحظة متل أي دين ثاني.
  */
 @Composable
 fun PersonEditDialog(
     initial: Person?,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (name: String, amount: Double, date: String) -> Unit
+    onSave: (name: String, amount: Double, date: String, note: String) -> Unit
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var amount by remember { mutableStateOf(initial?.amount?.toString() ?: "") }
     var date by remember { mutableStateOf(initial?.date?.ifBlank { today() } ?: today()) }
+    var note by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     GlassAlertDialog(
@@ -64,6 +72,12 @@ fun PersonEditDialog(
                     value = date, onValueChange = { date = it }, enabled = !isSaving,
                     label = "التاريخ (yyyy-MM-dd)", modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                 )
+                AppTextField(
+                    value = note, onValueChange = { note = it }, enabled = !isSaving,
+                    label = "ملاحظة (اختياري)",
+                    singleLine = false, minLines = 1, maxLines = 3,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                )
                 error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
             }
         },
@@ -76,7 +90,7 @@ fun PersonEditDialog(
                         name.isBlank() -> error = "الرجاء إدخال اسم العميل"
                         amountValue == null || amountValue < 0 -> error = "الرجاء إدخال مبلغ صحيح"
                         date.isBlank() -> error = "الرجاء اختيار التاريخ"
-                        else -> { error = null; onSave(name.trim(), amountValue, date) }
+                        else -> { error = null; onSave(name.trim(), amountValue, date, note.trim()) }
                     }
                 }
             ) {

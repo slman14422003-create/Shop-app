@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.backup.InstantBackupWorker
+import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.DebtsRepository
@@ -207,13 +208,17 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 knownDebtIds = currentDebtIds
+                // Keep the background worker's own baseline in sync too -
+                // see BackgroundSyncWorker.syncKnownDebtIds for why this is
+                // needed on every emission, not just self-created ones.
+                BackgroundSyncWorker.syncKnownDebtIds(getApplication(), currentDebtIds)
             }
         }
     }
 
     fun clearMessage() { _message.value = null }
 
-    fun savePerson(existingId: String?, name: String, amount: Double, date: String, onDone: (Boolean) -> Unit) {
+    fun savePerson(existingId: String?, name: String, amount: Double, date: String, note: String = "", onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
                 if (existingId == null) {
@@ -233,7 +238,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         // name with no amount would be told a debt was
                         // added when nothing was written at all.
                         if (amount > 0) {
-                            selfCreatedDebtIds += repo.addDebt(existingPersonId, amount, date)
+                            selfCreatedDebtIds += repo.addDebt(existingPersonId, amount, date, note)
                             _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
                             InstantBackupWorker.requestNow(getApplication())
                         } else {
@@ -242,7 +247,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         onDone(true)
                         return@launch
                     }
-                    repo.addPerson(name, amount, date)?.let { selfCreatedDebtIds += it }
+                    repo.addPerson(name, amount, date, note)?.let { selfCreatedDebtIds += it }
                     _message.value = "تم إضافة \"$name\""
                     InstantBackupWorker.requestNow(getApplication())
                 } else {
