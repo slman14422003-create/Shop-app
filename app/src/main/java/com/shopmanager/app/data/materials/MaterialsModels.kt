@@ -52,6 +52,11 @@ data class Material(
     val quantity: Double = 0.0,
     val unit: String = MaterialUnit.KG.label,
     val section: String = "main",
+    // FEATURE ADDED: optional free-text note per shortage row (e.g. "خذها
+    // من محل أبو خالد" أو "أولوية - خلصت تماماً") - same "ملاحظة (اختياري)"
+    // concept already used for a debt (see data.debts.Debt.note), now
+    // available on a material shortage too.
+    val notes: String = "",
     val updatedAt: Long = 0L
 )
 

@@ -43,6 +43,7 @@ class MaterialsRepository {
                             quantity = doc.getDouble("quantity") ?: 0.0,
                             unit = doc.getString("unit") ?: MaterialUnit.KG.label,
                             section = doc.getString("section") ?: "main",
+                            notes = doc.getString("notes") ?: "",
                             updatedAt = doc.getLong("timestamp") ?: 0L
                         )
                     }
@@ -96,25 +97,27 @@ class MaterialsRepository {
      * document id lets the caller mark it as a local/self change and skip
      * notifying for it (see MaterialsViewModel.selfTouchedMaterialIds).
      */
-    suspend fun addMaterial(name: String, quantity: Double, unit: String, section: String): String =
+    suspend fun addMaterial(name: String, quantity: Double, unit: String, section: String, notes: String = ""): String =
         withTimeout(WRITE_TIMEOUT_MS) {
             val data = mapOf(
                 "name" to name,
                 "quantity" to quantity,
                 "unit" to unit,
                 "section" to section,
+                "notes" to notes,
                 "timestamp" to System.currentTimeMillis()
             )
             db.collection(materialsCollection).add(data).await().id
         }
 
-    suspend fun updateMaterial(id: String, name: String, quantity: Double, unit: String, section: String) =
+    suspend fun updateMaterial(id: String, name: String, quantity: Double, unit: String, section: String, notes: String = "") =
         withTimeout(WRITE_TIMEOUT_MS) {
             val data = mapOf(
                 "name" to name,
                 "quantity" to quantity,
                 "unit" to unit,
                 "section" to section,
+                "notes" to notes,
                 "timestamp" to System.currentTimeMillis()
             )
             db.collection(materialsCollection).document(id).update(data).await()
@@ -188,6 +191,7 @@ class MaterialsRepository {
                     quantity = doc.getDouble("quantity") ?: 0.0,
                     unit = doc.getString("unit") ?: MaterialUnit.KG.label,
                     section = doc.getString("section") ?: "main",
+                    notes = doc.getString("notes") ?: "",
                     updatedAt = doc.getLong("timestamp") ?: 0L
                 )
             }
@@ -225,7 +229,7 @@ class MaterialsRepository {
         val materialWrites = materials.filter { it.id.isNotBlank() }.map {
             db.collection(materialsCollection).document(it.id) to mapOf(
                 "name" to it.name, "quantity" to it.quantity, "unit" to it.unit,
-                "section" to it.section, "timestamp" to it.updatedAt
+                "section" to it.section, "notes" to it.notes, "timestamp" to it.updatedAt
             )
         }
         val priceWrites = prices.map { (name, price) ->
