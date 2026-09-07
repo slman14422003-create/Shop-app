@@ -158,7 +158,7 @@ class DebtsRepository {
      * created) lets the caller mark it as a local/self change so the diff
      * can skip notifying for it — see DebtsViewModel.selfCreatedDebtIds.
      */
-    suspend fun addPerson(name: String, amount: Double, date: String): String? = withTimeout(WRITE_TIMEOUT_MS) {
+    suspend fun addPerson(name: String, amount: Double, date: String, note: String = ""): String? = withTimeout(WRITE_TIMEOUT_MS) {
         val personRef = db.collection("persons").document()
         val batch = db.batch()
         batch.set(
@@ -180,7 +180,13 @@ class DebtsRepository {
                     "personId" to personRef.id,
                     "amount" to amount,
                     "date" to date,
-                    "note" to "",
+                    // BUG FIXED: this initial debt used to always be written
+                    // with a hardcoded empty note, even though the "عميل
+                    // جديد" dialog now collects one (see PersonEditDialog) -
+                    // every debt added afterward through addDebt()/
+                    // updateDebt() already supported a note, so the very
+                    // first debt was the only one that couldn't have one.
+                    "note" to note,
                     "createdAt" to System.currentTimeMillis()
                 )
             )
