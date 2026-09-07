@@ -176,7 +176,16 @@ fun GlassAlertDialog(
         }
         val snapshot = runCatching { hostView.drawToBitmap() }.getOrNull()
         frostedBackdrop = snapshot?.let {
-            withContext(Dispatchers.Default) { frostBitmap(it, passes = 6) }
+            // IPHONE 17 GLASS PASS (6 → 7 halving passes): one more mild
+            // 2x reduction stacked on top of the existing five/six — a
+            // deeper, softer frost behind the panel to match the same
+            // "clean mirror, heavier blur behind it" pass made to
+            // [liquidGlassSurface]'s own RenderEffect blur radius
+            // (58f, up from 44f) in LiquidGlass.kt. This dialog uses a
+            // real screenshot blur instead of that RenderEffect (see the
+            // function doc below for why), but the *direction* of the
+            // change — go deeper — is the same.
+            withContext(Dispatchers.Default) { frostBitmap(it, passes = 7) }
         }
     }
     DisposableEffect(Unit) {
@@ -265,6 +274,12 @@ fun GlassAlertDialog(
         // than the 0.42/0.34 MANUAL/CLASSIC resting value, so glass mode
         // keeps its own distinct, more-transparent character — just
         // readable rather than right at the edge of legibility.
+        // IPHONE 17 GLASS PASS ("مراية نظيفة ووراها تمويه"): pushed once
+        // more transparent (0.46/0.36 → 0.40/0.30), the same direction as
+        // [liquidGlassSurface]'s own `effectiveBaseAlpha` pass, now that
+        // the screenshot backdrop behind it blurs one pass deeper (see
+        // `passes = 7` above) — the panel itself can afford to be clearer
+        // since what shows through it is softer.
         val glassModeActive = LocalGlassMode.current
         // BUG FIXED (see the frostedBackdrop note above): MANUAL/CLASSIC
         // ("الوضع العادي") used to sit at 0.48/0.38 alpha — still visibly
@@ -272,9 +287,10 @@ fun GlassAlertDialog(
         // capture used to run unconditionally). Now that no backdrop is
         // captured for non-glass mode at all, the fill goes fully opaque
         // (1f/1f) to match — no transparency effect left in normal mode.
-        // GLASS mode's own resting alpha (0.46/0.36) is unchanged.
-        val fillAlphaTop = if (glassModeActive) 0.46f else 1f
-        val fillAlphaBottom = if (glassModeActive) 0.36f else 1f
+        // GLASS mode's own resting alpha is now 0.40/0.30 (see the
+        // IPHONE 17 GLASS PASS note just above).
+        val fillAlphaTop = if (glassModeActive) 0.40f else 1f
+        val fillAlphaBottom = if (glassModeActive) 0.30f else 1f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.48f
         ).copy(alpha = fillAlphaTop)
