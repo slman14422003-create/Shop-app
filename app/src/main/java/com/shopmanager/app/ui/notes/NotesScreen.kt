@@ -263,7 +263,7 @@ private fun NoteRow(
                             InfoChip(
                                 icon = Icons.Default.Schedule,
                                 text = remember(note.reminderAt) {
-                                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(note.reminderAt)
+                                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(note.reminderAt))
                                 }
                             )
                         }
