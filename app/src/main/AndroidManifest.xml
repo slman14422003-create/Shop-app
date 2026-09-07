@@ -108,6 +108,18 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!--
+          "إشعارات أكثر تطورًا وكفاءة": يستقبل أزرار الإجراءات الملحقة
+          بإشعارات NotificationHelper (تأجيل تذكير، تجاهل قائمة المشتريات)
+          وينفّذها مباشرة دون فتح التطبيق. exported="false" لأن كل
+          PendingIntent موجّه لهذا المستقبل يُبنى داخل التطبيق نفسه (انظر
+          NotificationHelper.buildActionIntent) — لا شيء خارجي يستطيع
+          استدعاءه.
+        -->
+        <receiver
+            android:name=".data.notifications.NotificationActionReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
