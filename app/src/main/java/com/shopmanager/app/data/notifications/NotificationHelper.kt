@@ -27,10 +27,12 @@ object NotificationHelper {
 
     private const val CHANNEL_SHOPPING_LIST = "low_stock_channel"
     private const val CHANNEL_DEBTS = "debts_channel"
+    private const val CHANNEL_NOTES = "notes_channel"
     private const val NOTIF_ID_SHOPPING_LIST = 1001
     private const val NOTIF_ID_DEBT = 1002
     private const val NOTIF_ID_PAID_BASE = 2000
     private const val NOTIF_ID_NEW_DEBT_BASE = 3000
+    private const val NOTIF_ID_NOTE_BASE = 4000
 
     // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
     // *group*, with a silent summary notification posted alongside the
@@ -80,6 +82,19 @@ object NotificationHelper {
 
             manager.createNotificationChannel(shoppingChannel)
             manager.createNotificationChannel(debtsChannel)
+
+            // "الملاحظات الهامة" reminders - their own channel (not the
+            // generic shopping-list one) since a person may want reminders
+            // to make sound/vibrate distinctly from a shortage-list update.
+            val notesChannel = NotificationChannel(
+                CHANNEL_NOTES, "تذكيرات الملاحظات الهامة", NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "تنبيه عند حلول موعد تذكير لملاحظة هامة"
+                enableLights(true)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 180, 90, 180)
+            }
+            manager.createNotificationChannel(notesChannel)
         }
     }
 
@@ -112,6 +127,36 @@ object NotificationHelper {
             context, requestCode, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+    }
+
+    /**
+     * Fires a note's reminder - see [com.shopmanager.app.data.notifications.NoteReminderWorker].
+     * Id is derived from the note id (same rotating-id pattern as the debt
+     * notifications above) so several reminders firing close together each
+     * stay visible instead of overwriting one another.
+     */
+    fun showNoteReminderNotification(context: Context, noteId: String, title: String, content: String) {
+        if (!hasPermission(context)) return
+        val id = NOTIF_ID_NOTE_BASE + (noteId.hashCode() and 0xFFF)
+        val body = content.ifBlank { "تذكير بملاحظة هامة" }
+        val notification = NotificationCompat.Builder(context, CHANNEL_NOTES)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle("📌 $title")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, title)))
+            .build()
+
+        NotificationManagerCompat.from(context).notify(id, notification)
+    }
+
+    fun cancelNoteReminderNotification(context: Context, noteId: String) {
+        val id = NOTIF_ID_NOTE_BASE + (noteId.hashCode() and 0xFFF)
+        NotificationManagerCompat.from(context).cancel(id)
     }
 
     fun showShoppingListNotification(context: Context, shortageNames: List<String>) {

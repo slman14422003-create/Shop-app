@@ -152,6 +152,39 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
         private const val UNIQUE_WORK_NAME = "shop_manager_background_sync"
 
         /**
+         * BUG FIXED (إشعار يوصل لنفس الجهاز اللي أضاف العنصر، بعد تأخير):
+         * the in-app live listeners (DebtsViewModel.selfCreatedDebtIds /
+         * MaterialsViewModel.selfTouchedMaterialIds) already skip notifying
+         * about a change made on THIS device the moment it happens - but
+         * this worker keeps its own, completely separate "known ids/
+         * signature" baseline in SharedPreferences, only updated once every
+         * 15-30 minutes when it actually runs. So a debt/material added
+         * in-app (already shown via the in-app message, no notification)
+         * could still look brand-new to THIS SAME baseline the next time
+         * the periodic worker wakes up - firing a second, delayed
+         * notification for an action the person already saw confirmed live.
+         * The two view models now call these right after every local
+         * write/every live update they see (whether it originated here or
+         * on another device), keeping this worker's own baseline
+         * continuously in sync with whatever the live listener already
+         * accounted for - so a background wake-up only ever reports
+         * something that genuinely happened while the app was fully
+         * closed, on every device, exactly matching what the in-app
+         * suppression already achieves while it's open.
+         */
+        fun syncKnownDebtIds(context: Context, debtIds: Set<String>) {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            prefs.edit().putStringSet(KEY_KNOWN_DEBTS, debtIds).apply()
+        }
+
+        fun syncKnownMaterialsSignature(context: Context, materials: List<com.shopmanager.app.data.materials.Material>) {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val signature = materials.associate { it.id to "${it.name}|${it.quantity}|${it.unit}" }
+            val encoded = signature.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
+            prefs.edit().putString(KEY_KNOWN_MATERIALS, encoded).apply()
+        }
+
+        /**
          * Every 15 minutes — WorkManager's absolute minimum periodic
          * interval; anything shorter than this is silently clamped up to
          * it by the OS, so 15 is the fastest this check can ever actually

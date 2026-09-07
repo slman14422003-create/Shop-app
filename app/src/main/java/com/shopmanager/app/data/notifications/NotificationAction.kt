@@ -44,16 +44,27 @@ sealed class NotificationAction {
         }
     }
 
+    data class NoteReminder(val noteId: String, val title: String) : NotificationAction() {
+        override fun applyExtras(intent: Intent) {
+            intent.putExtra(EXTRA_ACTION_TYPE, TYPE_NOTE_REMINDER)
+            intent.putExtra(EXTRA_NOTE_ID, noteId)
+            intent.putExtra(EXTRA_NOTE_TITLE, title)
+        }
+    }
+
     companion object {
         private const val EXTRA_ACTION_TYPE = "notif_action_type"
         private const val EXTRA_PERSON_NAME = "notif_person_name"
         private const val EXTRA_AMOUNT = "notif_amount"
         private const val EXTRA_CURRENCY = "notif_currency"
         private const val EXTRA_MATERIALS = "notif_materials"
+        private const val EXTRA_NOTE_ID = "notif_note_id"
+        private const val EXTRA_NOTE_TITLE = "notif_note_title"
 
         private const val TYPE_DEBT_PAID = "debt_paid"
         private const val TYPE_NEW_DEBT = "new_debt"
         private const val TYPE_SHOPPING_LIST = "shopping_list"
+        private const val TYPE_NOTE_REMINDER = "note_reminder"
 
         /** Reads back whichever [NotificationAction] (if any) the Intent that
          * launched/resumed the Activity was carrying. Returns null for an
@@ -70,6 +81,10 @@ sealed class NotificationAction {
                     NewDebt(name, intent.getStringExtra(EXTRA_AMOUNT) ?: "", intent.getStringExtra(EXTRA_CURRENCY) ?: "ل.س")
                 }
                 TYPE_SHOPPING_LIST -> ShoppingList(intent.getStringArrayListExtra(EXTRA_MATERIALS) ?: emptyList())
+                TYPE_NOTE_REMINDER -> {
+                    val noteId = intent.getStringExtra(EXTRA_NOTE_ID) ?: return null
+                    NoteReminder(noteId, intent.getStringExtra(EXTRA_NOTE_TITLE) ?: "")
+                }
                 else -> null
             }
         }
