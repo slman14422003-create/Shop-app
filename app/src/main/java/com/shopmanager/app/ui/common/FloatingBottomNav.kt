@@ -11,7 +11,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
@@ -25,8 +24,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -40,7 +37,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -83,11 +79,22 @@ val LocalFloatingBottomNavHeight = compositionLocalOf { 0.dp }
  * drop shadow — so the top header and this bottom bar read as one
  * cohesive glass design language rather than two different styles.
  *
- * iOS 26 REDESIGN: every item is a fixed-width segment showing icon +
- * label at all times (a real iOS tab bar never hides a tab's label), and
- * a single rounded highlight slides between segments with a spring as the
- * selection changes, instead of the whole capsule growing/shrinking to
- * fit a label that only the selected tab used to show.
+ * ICON-ONLY REDESIGN: every item shows just its icon (no label under it)
+ * — a single rounded highlight still slides between segments with a
+ * spring as the selection changes, same motion as before, just without
+ * the text. This isn't only a style choice: with a label under every one
+ * of the 4 tabs, the pill was wide enough that on the one screen where
+ * BOTH [quickAction] and [secondaryAction] show at once (المواد والأسعار's
+ * الأسعار tab — "مادة جديدة" + "حفظ الأسعار") the combined row (pill +
+ * both circular buttons) no longer fit most phone screens. The outer Box
+ * here only centers the Row, it never scrolls or shrinks it, so the
+ * overflow didn't get clipped/scrolled into view — it was pushed
+ * off-screen entirely, and since [secondaryAction] is the Row's LAST
+ * child (which lands on the far LEFT in this app's forced-RTL layout —
+ * see its own doc comment below), it was consistently the one that
+ * silently disappeared off the left edge. Icon-only items are narrow
+ * enough that the full row (even with both buttons showing) comfortably
+ * fits within a normal screen width again.
  */
 @Composable
 fun FloatingBottomNav(
@@ -158,11 +165,16 @@ fun FloatingBottomNav(
             // حواف الشاشة) — الهامش الأفقي زاد شوي (28.dp → 32.dp) عشان
             // الكبسولة تبين عائمة بمسافة أوضح عن حافة الشاشة بدل ما تكون
             // شبه ملاصقة لها.
-            .padding(horizontal = 32.dp, vertical = 14.dp),
+            // Narrowed from 32.dp: icon-only items already freed up most of
+            // the width this was compensating for; the smaller margin
+            // gives a touch more room back for the two circular buttons on
+            // the one screen where both show at once (see the class doc
+            // comment above).
+            .padding(horizontal = 20.dp, vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AnimatedVisibility(
@@ -174,19 +186,16 @@ fun FloatingBottomNav(
                     QuickActionFab(action)
                 }
             }
-            // iOS 26 REDESIGN: real iOS tab bars keep every item's icon +
-            // label visible all the time — only the tint changes on
-            // selection — instead of collapsing unselected items down to a
-            // bare icon and morphing the whole capsule's width as the
-            // selection changes (the previous "only the selected item gets
-            // a label" pill). Each item is now a fixed-width segment, so
-            // the capsule's overall width is constant, and a single
-            // rounded highlight slides between segments with a spring
-            // (see `indicatorOffset` below) — the signature iOS 26 tab-bar
-            // motion — instead of the bar itself resizing.
-            // طلب "تعميم ستايل الزجاج": 66.dp → 62.dp، نفس روح "تصغير
-            // المربع" — كبسولة أخف/أدق بدل الحجم الأعرض السابق.
-            val itemWidth = 62.dp
+            // Every item is still a fixed-width segment (so the capsule's
+            // overall width stays constant) and a single rounded highlight
+            // still slides between segments with a spring
+            // (`indicatorOffset` below) as the selection changes — only
+            // the label under each icon is gone now. Narrowed from 62.dp
+            // now that there's no label text to leave room for; this is
+            // the main saving that lets the full row (pill + both
+            // circular buttons) fit on screen — see the class doc comment
+            // above.
+            val itemWidth = 46.dp
             val indicatorOffset by animateDpAsState(
                 targetValue = itemWidth * selectedIndex,
                 animationSpec = MotionSpecs.tabIndicatorSpring(),
@@ -208,11 +217,13 @@ fun FloatingBottomNav(
                 // Sliding selection highlight — a single rounded segment
                 // that springs from one item's position to the next,
                 // instead of each item drawing its own separate highlight.
+                // Height shrunk to match the icon-only item (was sized for
+                // icon+label before).
                 Box(
                     Modifier
                         .offset(x = indicatorOffset)
                         .width(itemWidth)
-                        .height(56.dp)
+                        .height(44.dp)
                         .padding(horizontal = 4.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .background(Color.White.copy(alpha = 0.22f))
@@ -267,7 +278,12 @@ private fun QuickActionFab(action: QuickAction) {
     Box(
         Modifier
             .scale(scale)
-            .size(52.dp)
+            // Narrowed from 52.dp along with the rest of the pill (see the
+            // class doc comment on FloatingBottomNav) — this button and
+            // its "حفظ الأسعار" sibling being 52.dp each was a meaningful
+            // chunk of why the full row used to overflow the screen when
+            // both showed at once.
+            .size(46.dp)
             // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha =
             // 0.72f — نفس قيمة الكبسولة المجاورة لها بالضبط.
             .liquidGlassSurface(
@@ -287,20 +303,20 @@ private fun QuickActionFab(action: QuickAction) {
             action.icon,
             contentDescription = action.contentDescription,
             tint = BrandOnGradient,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(22.dp)
         )
     }
 }
 
 
 /**
- * iOS 26 REDESIGN: a real iOS tab-bar item — icon stacked above its label,
- * both always visible (not just for the selected tab; the previous
- * design only showed a label next to the selected icon and hid the rest,
- * which reads as an Android/Material bottom-nav pattern, not iOS). Only
- * the tint animates between selected/unselected — the sliding highlight
- * segment behind it (drawn once by the parent, see [FloatingBottomNav])
- * is what actually communicates which tab is active.
+ * ICON-ONLY REDESIGN: a single centered icon, no label underneath. The
+ * item's [BottomNavItem.label] is kept and still used as the
+ * `contentDescription` for accessibility (screen readers still announce
+ * "الرئيسية", "الديون", etc.) — it's only the on-screen text that's
+ * gone. Only the tint animates between selected/unselected — the sliding
+ * highlight segment behind it (drawn once by the parent, see
+ * [FloatingBottomNav]) is what actually communicates which tab is active.
  */
 @Composable
 private fun FloatingNavItem(item: BottomNavItem, selected: Boolean, width: Dp, onClick: () -> Unit) {
@@ -317,32 +333,24 @@ private fun FloatingNavItem(item: BottomNavItem, selected: Boolean, width: Dp, o
         label = "floatingNavItemTint"
     )
 
-    Column(
+    Box(
         modifier = Modifier
             .width(width)
+            .height(44.dp)
             .scale(scale)
             .clip(RoundedCornerShape(18.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
-            )
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            ),
+        contentAlignment = Alignment.Center
     ) {
         Icon(
             item.icon,
             contentDescription = item.label,
             tint = BrandOnGradient.copy(alpha = tintAlpha),
             modifier = Modifier.size(22.dp)
-        )
-        Text(
-            item.label,
-            color = BrandOnGradient.copy(alpha = tintAlpha),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1
         )
     }
 }
