@@ -57,11 +57,12 @@ fun GlassFilledButton(
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
     icon: (@Composable () -> Unit)? = null
 ) {
-    // AppColorMode.GLASS pushes this button's own fill further toward
-    // see-through than its resting 0.22/0.10 — every other color mode
-    // keeps those original values unchanged.
+    // CLARITY PASS: GLASS mode's fill was pushed down to 0.14/0.06 —
+    // fine on top of the solid brand gradient, but the button's own label
+    // still needs a distinct enough chip behind it to read clearly.
+    // Raised to 0.22/0.10, matching MANUAL/CLASSIC's own resting values.
     val glassModeActive = LocalGlassMode.current
-    val fillAlpha = if (glassModeActive) (if (enabled) 0.14f else 0.06f) else (if (enabled) 0.22f else 0.10f)
+    val fillAlpha = if (glassModeActive) (if (enabled) 0.22f else 0.10f) else (if (enabled) 0.22f else 0.10f)
     val rimAlpha = if (glassModeActive) (if (enabled) 0.55f else 0.24f) else (if (enabled) 0.45f else 0.20f)
     // "رقّي شكل الأزرار الزجاجية": a flat translucent fill reads as a
     // tinted rectangle, not glass. A soft top-to-bottom gradient — brighter
