@@ -39,6 +39,7 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassIconButton
+import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
@@ -133,7 +134,7 @@ fun DebtsScreen(
         // TopAppBar itself, same pattern as the other two tabs) removes
         // the double-padding and the gap with it.
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
-        snackbarHost = { SnackbarHost(snackbarHost) },
+        snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = { Text("الديون", fontWeight = FontWeight.Bold) },

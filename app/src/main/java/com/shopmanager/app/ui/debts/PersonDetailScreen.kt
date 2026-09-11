@@ -30,6 +30,7 @@ import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassIconButton
+import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
@@ -89,7 +90,7 @@ fun PersonDetailScreen(
         // twice. The TopAppBar below still handles the status bar inset
         // entirely on its own regardless of this setting.
         contentWindowInsets = WindowInsets(0.dp),
-        snackbarHost = { SnackbarHost(snackbarHost) },
+        snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = {
