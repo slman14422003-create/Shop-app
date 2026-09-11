@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -67,6 +69,30 @@ data class BottomNavItem(val icon: ImageVector, val label: String)
  * sit flush against the pill.
  */
 val LocalFloatingBottomNavHeight = compositionLocalOf { 0.dp }
+
+/**
+ * BUG FIXED ("رسالة تم الحذف/السداد تظهر تحت الشريط السفلي"): every
+ * screen's own `Scaffold(snackbarHost = { SnackbarHost(snackbarHost) })`
+ * places that host at the true bottom edge of the screen's content — the
+ * same edge [FloatingBottomNav] floats over. Since the nav pill is drawn
+ * *after* (see MainActivity's Box: NavHost first, [FloatingBottomNav]
+ * layered on top of it), it visually sits in front of a plain
+ * `SnackbarHost`, hiding the exact "تم الحذف"/"تم السداد" confirmation
+ * the person needs to see right after deleting/settling something. Every
+ * screen with a snackbar (Debts/PersonDetail/Materials/MaterialCatalog/
+ * Notes) should call this instead of `SnackbarHost` directly: it pads the
+ * host up by [LocalFloatingBottomNavHeight] (plus a small extra gap) so
+ * it always lands above the floating pill — and by exactly 0.dp extra
+ * when the pill isn't showing, so nothing shifts on screens/states where
+ * there's no pill to clear.
+ */
+@Composable
+fun GlassSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
+    SnackbarHost(
+        hostState = hostState,
+        modifier = modifier.padding(bottom = LocalFloatingBottomNavHeight.current + 12.dp)
+    )
+}
 
 /**
  * "الشريط السفلي العائم" (One UI 8.5-style floating bottom nav): a single
