@@ -53,6 +53,7 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
         return try {
             checkNewDebts(settings)
             checkShortageList()
+            checkNewNotes()
             Result.success()
         } catch (e: Exception) {
             // Network blip / offline — try again on the next scheduled run
@@ -138,6 +139,34 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
     private fun formatAmount(amount: Double): String =
         if (amount == amount.toLong().toDouble()) amount.toLong().toString() else amount.toString()
 
+    /**
+     * BUG FIXED ("ما ترسل إشعار لبقية الأجهزة إني ضفت ملاحظة"): notes had
+     * no equivalent of [checkNewDebts]/[checkShortageList] at all, so a
+     * note added while every other device had the app fully closed was
+     * never reported to them even once they woke up — the live in-app
+     * listener in NotesViewModel only covers devices that currently have
+     * the app open. Same diff-by-id pattern as debts.
+     */
+    private suspend fun checkNewNotes() {
+        val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val db = FirebaseModule.notesDb
+        val snapshot = db.collection("important_notes").get(Source.SERVER).await()
+
+        val knownIds = prefs.getStringSet(KEY_KNOWN_NOTES, null)
+        if (knownIds != null) {
+            for (doc in snapshot.documents) {
+                if (doc.id !in knownIds) {
+                    val title = doc.getString("title") ?: ""
+                    val content = doc.getString("content") ?: ""
+                    NotificationHelper.showNewNoteNotification(applicationContext, title, content, doc.id)
+                }
+            }
+        }
+        prefs.edit()
+            .putStringSet(KEY_KNOWN_NOTES, snapshot.documents.map { it.id }.toSet())
+            .apply()
+    }
+
     companion object {
         private const val PREFS = "shop_manager_sync"
         private const val KEY_KNOWN_PERSONS = "known_person_ids"
@@ -149,6 +178,7 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
         // sidesteps that entirely (worst case: one silent reseed on the
         // first run after updating, same as a fresh install).
         private const val KEY_KNOWN_MATERIALS = "known_material_signature"
+        private const val KEY_KNOWN_NOTES = "known_note_ids"
         private const val UNIQUE_WORK_NAME = "shop_manager_background_sync"
 
         /**
@@ -182,6 +212,14 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
             val signature = materials.associate { it.id to "${it.name}|${it.quantity}|${it.unit}" }
             val encoded = signature.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
             prefs.edit().putString(KEY_KNOWN_MATERIALS, encoded).apply()
+        }
+
+        /** Same purpose as [syncKnownDebtIds], for notes — keeps this
+         * worker's own baseline in sync with whatever NotesViewModel's live
+         * listener already accounted for, on every emission. */
+        fun syncKnownNoteIds(context: Context, noteIds: Set<String>) {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            prefs.edit().putStringSet(KEY_KNOWN_NOTES, noteIds).apply()
         }
 
         /**

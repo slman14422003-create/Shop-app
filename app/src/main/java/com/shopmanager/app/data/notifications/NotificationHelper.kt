@@ -38,6 +38,7 @@ object NotificationHelper {
     private const val NOTIF_ID_PAID_BASE = 2000
     private const val NOTIF_ID_NEW_DEBT_BASE = 3000
     private const val NOTIF_ID_NOTE_BASE = 4000
+    private const val NOTIF_ID_NEW_NOTE_BASE = 5000
 
     // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
     // *group*, with a silent summary notification posted alongside the
@@ -226,6 +227,45 @@ object NotificationHelper {
     fun cancelNoteReminderNotification(context: Context, noteId: String) {
         val id = NOTIF_ID_NOTE_BASE + (noteId.hashCode() and 0xFFF)
         NotificationManagerCompat.from(context).cancel(id)
+    }
+
+    /**
+     * BUG FIXED ("ما ترسل إشعار لبقية الأجهزة إني ضفت ملاحظة"): unlike
+     * debts ([showNewDebtNotification]) and the shortage list
+     * ([showShoppingListNotification]), important notes never had a
+     * "someone added one" notification at all — only the *reminder* this
+     * same note's own creator scheduled locally
+     * ([showNoteReminderNotification], via [NoteReminderWorker]), which
+     * fires on the device that made it, not the others sharing this shop.
+     * Fired the same way [showNewDebtNotification] is: from
+     * [com.shopmanager.app.ui.notes.NotesViewModel]'s live-listener diff
+     * (while the app's open on another device) and from
+     * [BackgroundSyncWorker]'s periodic check (while it's fully closed) —
+     * both skip the device that actually created the note. Reuses
+     * [NotificationAction.NoteReminder] for the tap target since it already
+     * does exactly what's needed here too: open the app straight to that
+     * note. A rotating id derived from the note id keeps several new notes
+     * (e.g. after reconnecting) each visible instead of overwriting one another.
+     */
+    fun showNewNoteNotification(context: Context, title: String, content: String, noteId: String) {
+        if (!hasPermission(context)) return
+        val id = NOTIF_ID_NEW_NOTE_BASE + (noteId.hashCode() and 0xFFF)
+        val displayTitle = title.ifBlank { "ملاحظة جديدة" }
+        val body = content.ifBlank { "أُضيفت ملاحظة جديدة" }
+        val notification = NotificationCompat.Builder(context, CHANNEL_NOTES)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle("📝 ملاحظة جديدة: $displayTitle")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(true)
+            .setAutoCancel(true)
+            .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
+            .build()
+
+        NotificationManagerCompat.from(context).notify(id, notification)
     }
 
     fun showShoppingListNotification(context: Context, shortageNames: List<String>) {
