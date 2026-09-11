@@ -5,6 +5,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import kotlin.math.roundToInt
+import android.graphics.Color as AndroidColor
 
 /**
  * "لوحة الألوان" (Settings → المظهر): the accent color pair used across the
@@ -241,13 +244,41 @@ internal fun paletteColorsFor(palette: AppColorPalette): PaletteColors = when (p
  * derived from that palette's own primary color instead, so choosing e.g.
  * Emerald gives an app that's tinted green throughout, not green buttons
  * on a purple-neutral shell.
+ *
+ * TONE ENGINE — HSV instead of a direct RGB mix: the old approach here
+ * blended (lerp'd) each palette's raw RGB straight toward white/black,
+ * which doesn't hold brightness steady — depending on the palette's own
+ * hue, two "same amount" blends could land at visibly different perceived
+ * brightness, occasionally leaving a surface and the text sitting on it
+ * too close in lightness to read comfortably. [tone] instead converts the
+ * palette's hue to HSV once and fixes saturation (S) and brightness (V)
+ * *explicitly* for every single surface role, so:
+ *
+ * - the brightness gap between a surface and whatever sits on it is
+ *   large and identical across all 20 palettes and both light/dark —
+ *   never something that quietly varies by hue;
+ * - the "elevated" surfaces (surfaceContainerHigh/Highest — raised cards,
+ *   the glass bars) are given a deliberately *higher* saturation than
+ *   resting surfaces so they read as lifted into the light and tinted
+ *   with the palette's identity, not just a flat gray a shade lighter;
+ * - turning saturation to zero for every role (see [neutralLightScheme]/
+ *   [neutralDarkScheme]) is the entire "بدون تلوين" mode — the same
+ *   brightness ladder, just hueless.
  */
-private fun blend(base: Color, tint: Color, amount: Float): Color = Color(
-    red = base.red + (tint.red - base.red) * amount,
-    green = base.green + (tint.green - base.green) * amount,
-    blue = base.blue + (tint.blue - base.blue) * amount,
-    alpha = 1f
-)
+private fun tone(hue: Float, saturation: Float, value: Float, alpha: Float = 1f): Color {
+    val hsv = floatArrayOf(hue, saturation.coerceIn(0f, 1f), value.coerceIn(0f, 1f))
+    return Color(AndroidColor.HSVToColor((alpha.coerceIn(0f, 1f) * 255f).roundToInt(), hsv))
+}
+
+/** Extracts the base hue (0–360°) driving every tonal surface for a given
+ * palette, straight from that palette's own hand-tuned primary color — so
+ * the neutral shell always tracks whichever accent is actually selected
+ * without a second, separately-maintained hue table. */
+private fun hueOf(color: Color): Float {
+    val hsv = FloatArray(3)
+    AndroidColor.colorToHSV(color.toArgb(), hsv)
+    return hsv[0]
+}
 
 /** The two header/gradient colors used in [AppColorMode.CLASSIC] — true
  * neutral grays instead of any hue, kept the same in light and dark for
@@ -264,8 +295,10 @@ val ClassicGradientEnd = Color(0xFF2D2D30)
  * [darkSchemeFor] build every other palette, just tinted toward gray
  * instead of toward a color.
  */
-private val ClassicGray = Color(0xFF49454E)
-
+// Saturation forced to zero everywhere below — the hue argument to [tone]
+// is therefore irrelevant and left at 0f. This *is* the README's "NONE"
+// palette: identical brightness ladder to every colored scheme, just
+// hueless, true neutral gray.
 internal fun neutralLightScheme(): ColorScheme = lightColorScheme(
     primary = Color(0xFF3A3A3D),
     onPrimary = Color.White,
@@ -278,23 +311,23 @@ internal fun neutralLightScheme(): ColorScheme = lightColorScheme(
     tertiary = Color(0xFF5C5C60),
     onTertiary = Color.White,
     tertiaryContainer = Color(0xFFE7E6EA),
-    background = LightBackground,
+    background = tone(0f, 0f, 0.985f),
     onBackground = Color(0xFF1C1B1F),
-    surface = LightSurface,
+    surface = tone(0f, 0f, 0.995f),
     onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = LightSurfaceVariant,
+    surfaceVariant = tone(0f, 0f, 0.95f),
     onSurfaceVariant = LightOnSurfaceVariant,
     surfaceTint = Color(0xFF3A3A3D),
-    outline = blend(LightOnSurfaceVariant, ClassicGray, 0.18f),
-    outlineVariant = blend(LightSurfaceVariant, ClassicGray, 0.10f),
+    outline = tone(0f, 0f, 0.55f),
+    outlineVariant = tone(0f, 0f, 0.82f),
     inverseSurface = Color(0xFF2F2D33),
     inverseOnSurface = Color(0xFFF4EFF4),
     inversePrimary = Color(0xFFE2E1E5),
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = blend(LightSurface, ClassicGray, 0.02f),
-    surfaceContainer = blend(LightSurface, ClassicGray, 0.05f),
-    surfaceContainerHigh = blend(LightSurface, ClassicGray, 0.08f),
-    surfaceContainerHighest = blend(LightSurface, ClassicGray, 0.11f),
+    surfaceContainerLowest = tone(0f, 0f, 1f),
+    surfaceContainerLow = tone(0f, 0f, 0.98f),
+    surfaceContainer = tone(0f, 0f, 0.965f),
+    surfaceContainerHigh = tone(0f, 0f, 0.95f),
+    surfaceContainerHighest = tone(0f, 0f, 0.935f),
     error = DangerRed,
 )
 
@@ -310,27 +343,29 @@ internal fun neutralDarkScheme(): ColorScheme = darkColorScheme(
     tertiary = Color(0xFFC7C6CA),
     onTertiary = Color(0xFF1C1B1F),
     tertiaryContainer = Color(0xFF454549),
-    background = DarkBackground,
+    background = tone(0f, 0f, 0.09f),
     onBackground = Color(0xFFE7E2EA),
-    surface = DarkSurface,
+    surface = tone(0f, 0f, 0.12f),
     onSurface = Color(0xFFE7E2EA),
-    surfaceVariant = DarkSurfaceVariant,
+    surfaceVariant = tone(0f, 0f, 0.19f),
     onSurfaceVariant = DarkOnSurfaceVariant,
     surfaceTint = Color(0xFFE2E1E5),
-    outline = blend(DarkOnSurfaceVariant, ClassicGray, 0.22f),
-    outlineVariant = blend(DarkSurfaceVariant, ClassicGray, 0.14f),
+    outline = tone(0f, 0f, 0.62f),
+    outlineVariant = tone(0f, 0f, 0.32f),
     inverseSurface = Color(0xFFE7E2EA),
     inverseOnSurface = Color(0xFF2F2D33),
     inversePrimary = Color(0xFF454549),
-    surfaceContainerLowest = blend(DarkBackground, Color.Black, 0.35f),
-    surfaceContainerLow = blend(DarkSurface, ClassicGray, 0.04f),
-    surfaceContainer = blend(DarkSurface, ClassicGray, 0.07f),
-    surfaceContainerHigh = blend(DarkSurface, ClassicGray, 0.11f),
-    surfaceContainerHighest = blend(DarkSurface, ClassicGray, 0.15f),
+    surfaceContainerLowest = tone(0f, 0f, 0.06f),
+    surfaceContainerLow = tone(0f, 0f, 0.145f),
+    surfaceContainer = tone(0f, 0f, 0.165f),
+    surfaceContainerHigh = tone(0f, 0f, 0.20f),
+    surfaceContainerHighest = tone(0f, 0f, 0.235f),
     error = Color(0xFFFF6B6B),
 )
 
-internal fun lightSchemeFor(p: PaletteColors): ColorScheme = lightColorScheme(
+internal fun lightSchemeFor(p: PaletteColors): ColorScheme {
+    val hue = hueOf(p.primaryLight)
+    return lightColorScheme(
     primary = p.primaryLight,
     onPrimary = Color.White,
     primaryContainer = p.primaryContainerLight,
@@ -345,45 +380,46 @@ internal fun lightSchemeFor(p: PaletteColors): ColorScheme = lightColorScheme(
     // BUG FIXED ("فراغ أسود في الشاشة" — the plain neutral `background`
     // showing through anywhere a screen doesn't paint its own card/surface
     // over it, e.g. the reserved clearance below a bottom button or the
-    // floating nav pill's transparent margins): this token got left out
-    // of the "الألوان ينقصها شيء" pass below — every surfaceContainer*
-    // tone was tinted toward the selected palette, but `background`
-    // itself stayed flat and un-tinted regardless of which vivid palette
-    // was active. Since Scaffold paints `background` behind literally
+    // floating nav pill's transparent margins): every surfaceContainer*
+    // tone was tinted toward the selected palette, but `background` itself
+    // used to stay flat and un-tinted regardless of which vivid palette was
+    // active. Since Scaffold paints `background` behind literally
     // everything by default, any gap not covered by a tinted card read as
     // a stray, colorless patch next to the tinted surfaces around it. A
-    // faint blend (same spirit as surfaceContainerLow, just subtler since
+    // faint tone (same spirit as surfaceContainerLow, just subtler since
     // this sits behind everything) keeps the original neutral read while
     // no longer looking like a foreign, un-themed hole.
-    background = blend(LightBackground, p.primaryLight, 0.03f),
+    background = tone(hue, 0.05f, 0.985f),
     onBackground = Color(0xFF1C1B1F),
-    surface = LightSurface,
+    surface = tone(hue, 0.02f, 0.995f),
     onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = LightSurfaceVariant,
+    surfaceVariant = tone(hue, 0.10f, 0.955f),
     onSurfaceVariant = LightOnSurfaceVariant,
     surfaceTint = p.primaryLight,
-    outline = blend(LightOnSurfaceVariant, p.primaryLight, 0.18f),
-    outlineVariant = blend(LightSurfaceVariant, p.primaryLight, 0.10f),
+    outline = tone(hue, 0.22f, 0.55f),
+    outlineVariant = tone(hue, 0.14f, 0.82f),
     inverseSurface = Color(0xFF2F2D33),
     inverseOnSurface = Color(0xFFF4EFF4),
     inversePrimary = p.primaryContainerLight,
-    // BUG FIXED ("الألوان ينقصها شيء لتبدو زاهية وفخمة"): these blends used
-    // to be very faint (2–11%), so every card/dialog/sheet in the app read
-    // as close to flat neutral gray no matter which vivid palette was
-    // selected — the accent hue only really showed up on buttons/headers,
-    // never on the surfaces behind them. Raised so cards/sheets carry a
-    // visibly richer tint of the selected color, closer to how iOS's own
-    // "material" surfaces pick up a tint from whatever's behind/around them
-    // instead of sitting as plain gray boxes.
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = blend(LightSurface, p.primaryLight, 0.04f),
-    surfaceContainer = blend(LightSurface, p.primaryLight, 0.08f),
-    surfaceContainerHigh = blend(LightSurface, p.primaryLight, 0.12f),
-    surfaceContainerHighest = blend(LightSurface, p.primaryLight, 0.16f),
+    // "الألوان ينقصها شيء لتبدو زاهية وفخمة": each surfaceContainer step up
+    // is deliberately both a touch darker AND a touch *more saturated* than
+    // the one below it (0.02→0.20 saturation) instead of a flat gray a
+    // shade darker — the same "elevated surfaces catch more of the
+    // palette's color" idea the README's tone system calls for, so
+    // cards/dialogs/sheets read as lifted into richer light rather than
+    // just dimmed.
+    surfaceContainerLowest = tone(hue, 0.01f, 1f),
+    surfaceContainerLow = tone(hue, 0.07f, 0.98f),
+    surfaceContainer = tone(hue, 0.11f, 0.965f),
+    surfaceContainerHigh = tone(hue, 0.16f, 0.95f),
+    surfaceContainerHighest = tone(hue, 0.20f, 0.935f),
     error = DangerRed,
-)
+    )
+}
 
-internal fun darkSchemeFor(p: PaletteColors): ColorScheme = darkColorScheme(
+internal fun darkSchemeFor(p: PaletteColors): ColorScheme {
+    val hue = hueOf(p.primaryDark)
+    return darkColorScheme(
     primary = p.primaryDark,
     onPrimary = p.onPrimaryDark,
     primaryContainer = p.primaryContainerDark,
@@ -395,28 +431,34 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme = darkColorScheme(
     tertiary = p.secondaryDark,
     onTertiary = p.onSecondaryDark,
     tertiaryContainer = p.secondaryContainerDark,
-    // See lightSchemeFor's matching comment — same fix, dark side. A
-    // slightly stronger blend than light mode (0.05 vs 0.03) since dark
-    // neutrals need a touch more tint to read as anything but flat black.
-    background = blend(DarkBackground, p.primaryDark, 0.05f),
+    // See lightSchemeFor's matching comment — same fix, dark side. Dark
+    // neutrals sit at a much lower fixed brightness (V=0.10) than light
+    // mode's, with slightly higher saturation (0.16 vs 0.05) since dark
+    // surfaces need more of it to read as tinted rather than flat black.
+    background = tone(hue, 0.16f, 0.10f),
     onBackground = Color(0xFFE7E2EA),
-    surface = DarkSurface,
+    surface = tone(hue, 0.14f, 0.135f),
     onSurface = Color(0xFFE7E2EA),
-    surfaceVariant = DarkSurfaceVariant,
+    surfaceVariant = tone(hue, 0.16f, 0.19f),
     onSurfaceVariant = DarkOnSurfaceVariant,
     surfaceTint = p.primaryDark,
-    outline = blend(DarkOnSurfaceVariant, p.primaryDark, 0.22f),
-    outlineVariant = blend(DarkSurfaceVariant, p.primaryDark, 0.14f),
+    outline = tone(hue, 0.24f, 0.62f),
+    outlineVariant = tone(hue, 0.18f, 0.32f),
     inverseSurface = Color(0xFFE7E2EA),
     inverseOnSurface = Color(0xFF2F2D33),
     inversePrimary = p.primaryContainerDark,
-    surfaceContainerLowest = blend(DarkBackground, Color.Black, 0.35f),
-    surfaceContainerLow = blend(DarkSurface, p.primaryDark, 0.07f),
-    surfaceContainer = blend(DarkSurface, p.primaryDark, 0.11f),
-    surfaceContainerHigh = blend(DarkSurface, p.primaryDark, 0.16f),
-    surfaceContainerHighest = blend(DarkSurface, p.primaryDark, 0.22f),
+    // Same rising-saturation ladder as the light scheme: each elevation
+    // step is both brighter AND more saturated than the one below it, so
+    // raised cards/dialogs/the glass bars read as catching more of the
+    // palette's own light rather than just fading to a lighter gray.
+    surfaceContainerLowest = tone(hue, 0.20f, 0.065f),
+    surfaceContainerLow = tone(hue, 0.16f, 0.145f),
+    surfaceContainer = tone(hue, 0.18f, 0.165f),
+    surfaceContainerHigh = tone(hue, 0.22f, 0.20f),
+    surfaceContainerHighest = tone(hue, 0.26f, 0.235f),
     error = Color(0xFFFF6B6B),
-)
+    )
+}
 
 /**
  * [AppColorMode.GLASS]'s color scheme: the same 20 hand-tuned palette hues
@@ -438,7 +480,9 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme = darkColorScheme(
  * `effectiveBaseAlpha`) into every ordinary card, list row, and dialog
  * body GLASS mode touches anywhere in the app.
  */
-internal fun glassLightScheme(p: PaletteColors): ColorScheme = lightColorScheme(
+internal fun glassLightScheme(p: PaletteColors): ColorScheme {
+    val hue = hueOf(p.primaryLight)
+    return lightColorScheme(
     primary = p.primaryLight,
     onPrimary = Color.White,
     primaryContainer = p.primaryContainerLight.copy(alpha = 0.38f),
@@ -455,27 +499,35 @@ internal fun glassLightScheme(p: PaletteColors): ColorScheme = lightColorScheme(
     // every translucent panel; only the panels themselves should be
     // see-through, or there'd be nothing solid left for them to float
     // over.
-    background = blend(LightBackground, p.primaryLight, 0.03f),
+    background = tone(hue, 0.05f, 0.985f),
     onBackground = Color(0xFF1C1B1F),
-    surface = LightSurface.copy(alpha = 0.38f),
+    surface = tone(hue, 0.02f, 0.995f, alpha = 0.38f),
     onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = LightSurfaceVariant.copy(alpha = 0.34f),
+    surfaceVariant = tone(hue, 0.10f, 0.955f, alpha = 0.34f),
     onSurfaceVariant = LightOnSurfaceVariant,
     surfaceTint = p.primaryLight,
-    outline = blend(LightOnSurfaceVariant, p.primaryLight, 0.18f).copy(alpha = 0.46f),
-    outlineVariant = blend(LightSurfaceVariant, p.primaryLight, 0.10f).copy(alpha = 0.34f),
+    outline = tone(hue, 0.22f, 0.55f, alpha = 0.46f),
+    outlineVariant = tone(hue, 0.14f, 0.82f, alpha = 0.34f),
     inverseSurface = Color(0xFF2F2D33),
     inverseOnSurface = Color(0xFFF4EFF4),
     inversePrimary = p.primaryContainerLight,
-    surfaceContainerLowest = Color.White.copy(alpha = 0.22f),
-    surfaceContainerLow = blend(LightSurface, p.primaryLight, 0.04f).copy(alpha = 0.28f),
-    surfaceContainer = blend(LightSurface, p.primaryLight, 0.08f).copy(alpha = 0.34f),
-    surfaceContainerHigh = blend(LightSurface, p.primaryLight, 0.12f).copy(alpha = 0.42f),
-    surfaceContainerHighest = blend(LightSurface, p.primaryLight, 0.16f).copy(alpha = 0.48f),
+    // Same rising-saturation elevation ladder as lightSchemeFor, with the
+    // glass mode's own alpha ramp layered on top — each step up is
+    // brighter, more saturated, AND less see-through than the last, so a
+    // raised glass card reads as thicker/denser glass catching more light,
+    // not just a bigger flat wash of the same translucency.
+    surfaceContainerLowest = tone(hue, 0.01f, 1f, alpha = 0.22f),
+    surfaceContainerLow = tone(hue, 0.07f, 0.98f, alpha = 0.28f),
+    surfaceContainer = tone(hue, 0.11f, 0.965f, alpha = 0.34f),
+    surfaceContainerHigh = tone(hue, 0.16f, 0.95f, alpha = 0.42f),
+    surfaceContainerHighest = tone(hue, 0.20f, 0.935f, alpha = 0.48f),
     error = DangerRed,
-)
+    )
+}
 
-internal fun glassDarkScheme(p: PaletteColors): ColorScheme = darkColorScheme(
+internal fun glassDarkScheme(p: PaletteColors): ColorScheme {
+    val hue = hueOf(p.primaryDark)
+    return darkColorScheme(
     primary = p.primaryDark,
     onPrimary = p.onPrimaryDark,
     primaryContainer = p.primaryContainerDark.copy(alpha = 0.34f),
@@ -488,25 +540,26 @@ internal fun glassDarkScheme(p: PaletteColors): ColorScheme = darkColorScheme(
     onTertiary = p.onSecondaryDark,
     tertiaryContainer = p.secondaryContainerDark.copy(alpha = 0.34f),
     // Same fix, dark GLASS side — see lightSchemeFor's comment.
-    background = blend(DarkBackground, p.primaryDark, 0.05f),
+    background = tone(hue, 0.16f, 0.10f),
     onBackground = Color(0xFFE7E2EA),
-    surface = DarkSurface.copy(alpha = 0.30f),
+    surface = tone(hue, 0.14f, 0.135f, alpha = 0.30f),
     onSurface = Color(0xFFE7E2EA),
-    surfaceVariant = DarkSurfaceVariant.copy(alpha = 0.28f),
+    surfaceVariant = tone(hue, 0.16f, 0.19f, alpha = 0.28f),
     onSurfaceVariant = DarkOnSurfaceVariant,
     surfaceTint = p.primaryDark,
-    outline = blend(DarkOnSurfaceVariant, p.primaryDark, 0.22f).copy(alpha = 0.46f),
-    outlineVariant = blend(DarkSurfaceVariant, p.primaryDark, 0.14f).copy(alpha = 0.34f),
+    outline = tone(hue, 0.24f, 0.62f, alpha = 0.46f),
+    outlineVariant = tone(hue, 0.18f, 0.32f, alpha = 0.34f),
     inverseSurface = Color(0xFFE7E2EA),
     inverseOnSurface = Color(0xFF2F2D33),
     inversePrimary = p.primaryContainerDark,
-    surfaceContainerLowest = blend(DarkBackground, Color.Black, 0.35f).copy(alpha = 0.22f),
-    surfaceContainerLow = blend(DarkSurface, p.primaryDark, 0.07f).copy(alpha = 0.26f),
-    surfaceContainer = blend(DarkSurface, p.primaryDark, 0.11f).copy(alpha = 0.32f),
-    surfaceContainerHigh = blend(DarkSurface, p.primaryDark, 0.16f).copy(alpha = 0.38f),
-    surfaceContainerHighest = blend(DarkSurface, p.primaryDark, 0.22f).copy(alpha = 0.44f),
+    surfaceContainerLowest = tone(hue, 0.20f, 0.065f, alpha = 0.22f),
+    surfaceContainerLow = tone(hue, 0.16f, 0.145f, alpha = 0.26f),
+    surfaceContainer = tone(hue, 0.18f, 0.165f, alpha = 0.32f),
+    surfaceContainerHigh = tone(hue, 0.22f, 0.20f, alpha = 0.38f),
+    surfaceContainerHighest = tone(hue, 0.26f, 0.235f, alpha = 0.44f),
     error = Color(0xFFFF6B6B),
-)
+    )
+}
 
 /** The header/gradient colors for [AppColorMode.GLASS] — the selected
  * palette's own gradient pair, softened toward translucent so the header
