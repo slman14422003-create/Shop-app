@@ -51,6 +51,7 @@ import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.Formatters
+import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.GradientIconButton
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
@@ -151,7 +152,7 @@ fun MaterialsScreen(
         // leaving a plain gap above it. Bottom/horizontal safe-area insets
         // (gesture nav bar, cutouts) are kept as-is.
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
-        snackbarHost = { SnackbarHost(snackbarHost) },
+        snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             MaterialsHeader(
                 tab = tab,
