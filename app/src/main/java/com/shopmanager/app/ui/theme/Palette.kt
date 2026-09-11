@@ -473,27 +473,30 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme {
  * opaque so button/header text stays legible; only the *container* tones
  * (what a translucent panel's fill actually is) go see-through.
  *
- * RADICAL UPGRADE ("تحسينات جذرية... الشفافية على الوضع كامل"): every
- * alpha below dropped by roughly a third from the previous pass — this is
- * the lever that spreads the extra transparency past just the header/nav
- * (see [com.shopmanager.app.ui.common.liquidGlassSurface]'s own
- * `effectiveBaseAlpha`) into every ordinary card, list row, and dialog
- * body GLASS mode touches anywhere in the app.
+ * CLARITY PASS ("خلية اكتر وضوح بدل ما كلشي خلفة مبين بكل التطبيق"): the
+ * previous "RADICAL UPGRADE" pass dropped every alpha here by roughly a
+ * third in pursuit of a more "liquid" look, but spread across every
+ * ordinary card/list row/dialog body in the app that meant whatever sat
+ * behind each surface (the row above it, text scrolling past) stayed
+ * clearly readable through it — exactly the "everything shows what's
+ * behind it" complaint. Every alpha below is raised back into a range
+ * where the surface still reads as translucent glass but its own
+ * content is never fighting the background for legibility.
  */
 internal fun glassLightScheme(p: PaletteColors): ColorScheme {
     val hue = hueOf(p.primaryLight)
     return lightColorScheme(
     primary = p.primaryLight,
     onPrimary = Color.White,
-    primaryContainer = p.primaryContainerLight.copy(alpha = 0.38f),
+    primaryContainer = p.primaryContainerLight.copy(alpha = 0.64f),
     onPrimaryContainer = p.primaryLight,
     secondary = p.secondaryLight,
     onSecondary = Color.White,
-    secondaryContainer = p.secondaryContainerLight.copy(alpha = 0.38f),
+    secondaryContainer = p.secondaryContainerLight.copy(alpha = 0.64f),
     onSecondaryContainer = p.secondaryLight,
     tertiary = p.secondaryLight,
     onTertiary = Color.White,
-    tertiaryContainer = p.secondaryContainerLight.copy(alpha = 0.38f),
+    tertiaryContainer = p.secondaryContainerLight.copy(alpha = 0.64f),
     // Same "فراغ أسود" fix as lightSchemeFor — kept opaque (no alpha) even
     // in GLASS mode since `background` is the true opaque backdrop behind
     // every translucent panel; only the panels themselves should be
@@ -501,13 +504,13 @@ internal fun glassLightScheme(p: PaletteColors): ColorScheme {
     // over.
     background = tone(hue, 0.05f, 0.985f),
     onBackground = Color(0xFF1C1B1F),
-    surface = tone(hue, 0.02f, 0.995f, alpha = 0.38f),
+    surface = tone(hue, 0.02f, 0.995f, alpha = 0.66f),
     onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = tone(hue, 0.10f, 0.955f, alpha = 0.34f),
+    surfaceVariant = tone(hue, 0.10f, 0.955f, alpha = 0.60f),
     onSurfaceVariant = LightOnSurfaceVariant,
     surfaceTint = p.primaryLight,
-    outline = tone(hue, 0.22f, 0.55f, alpha = 0.46f),
-    outlineVariant = tone(hue, 0.14f, 0.82f, alpha = 0.34f),
+    outline = tone(hue, 0.22f, 0.55f, alpha = 0.62f),
+    outlineVariant = tone(hue, 0.14f, 0.82f, alpha = 0.50f),
     inverseSurface = Color(0xFF2F2D33),
     inverseOnSurface = Color(0xFFF4EFF4),
     inversePrimary = p.primaryContainerLight,
@@ -516,11 +519,11 @@ internal fun glassLightScheme(p: PaletteColors): ColorScheme {
     // brighter, more saturated, AND less see-through than the last, so a
     // raised glass card reads as thicker/denser glass catching more light,
     // not just a bigger flat wash of the same translucency.
-    surfaceContainerLowest = tone(hue, 0.01f, 1f, alpha = 0.22f),
-    surfaceContainerLow = tone(hue, 0.07f, 0.98f, alpha = 0.28f),
-    surfaceContainer = tone(hue, 0.11f, 0.965f, alpha = 0.34f),
-    surfaceContainerHigh = tone(hue, 0.16f, 0.95f, alpha = 0.42f),
-    surfaceContainerHighest = tone(hue, 0.20f, 0.935f, alpha = 0.48f),
+    surfaceContainerLowest = tone(hue, 0.01f, 1f, alpha = 0.50f),
+    surfaceContainerLow = tone(hue, 0.07f, 0.98f, alpha = 0.58f),
+    surfaceContainer = tone(hue, 0.11f, 0.965f, alpha = 0.66f),
+    surfaceContainerHigh = tone(hue, 0.16f, 0.95f, alpha = 0.74f),
+    surfaceContainerHighest = tone(hue, 0.20f, 0.935f, alpha = 0.82f),
     error = DangerRed,
     )
 }
@@ -530,33 +533,33 @@ internal fun glassDarkScheme(p: PaletteColors): ColorScheme {
     return darkColorScheme(
     primary = p.primaryDark,
     onPrimary = p.onPrimaryDark,
-    primaryContainer = p.primaryContainerDark.copy(alpha = 0.34f),
+    primaryContainer = p.primaryContainerDark.copy(alpha = 0.60f),
     onPrimaryContainer = Color.White,
     secondary = p.secondaryDark,
     onSecondary = p.onSecondaryDark,
-    secondaryContainer = p.secondaryContainerDark.copy(alpha = 0.34f),
+    secondaryContainer = p.secondaryContainerDark.copy(alpha = 0.60f),
     onSecondaryContainer = Color.White,
     tertiary = p.secondaryDark,
     onTertiary = p.onSecondaryDark,
-    tertiaryContainer = p.secondaryContainerDark.copy(alpha = 0.34f),
+    tertiaryContainer = p.secondaryContainerDark.copy(alpha = 0.60f),
     // Same fix, dark GLASS side — see lightSchemeFor's comment.
     background = tone(hue, 0.16f, 0.10f),
     onBackground = Color(0xFFE7E2EA),
-    surface = tone(hue, 0.14f, 0.135f, alpha = 0.30f),
+    surface = tone(hue, 0.14f, 0.135f, alpha = 0.62f),
     onSurface = Color(0xFFE7E2EA),
-    surfaceVariant = tone(hue, 0.16f, 0.19f, alpha = 0.28f),
+    surfaceVariant = tone(hue, 0.16f, 0.19f, alpha = 0.58f),
     onSurfaceVariant = DarkOnSurfaceVariant,
     surfaceTint = p.primaryDark,
-    outline = tone(hue, 0.24f, 0.62f, alpha = 0.46f),
-    outlineVariant = tone(hue, 0.18f, 0.32f, alpha = 0.34f),
+    outline = tone(hue, 0.24f, 0.62f, alpha = 0.62f),
+    outlineVariant = tone(hue, 0.18f, 0.32f, alpha = 0.50f),
     inverseSurface = Color(0xFFE7E2EA),
     inverseOnSurface = Color(0xFF2F2D33),
     inversePrimary = p.primaryContainerDark,
-    surfaceContainerLowest = tone(hue, 0.20f, 0.065f, alpha = 0.22f),
-    surfaceContainerLow = tone(hue, 0.16f, 0.145f, alpha = 0.26f),
-    surfaceContainer = tone(hue, 0.18f, 0.165f, alpha = 0.32f),
-    surfaceContainerHigh = tone(hue, 0.22f, 0.20f, alpha = 0.38f),
-    surfaceContainerHighest = tone(hue, 0.26f, 0.235f, alpha = 0.44f),
+    surfaceContainerLowest = tone(hue, 0.20f, 0.065f, alpha = 0.50f),
+    surfaceContainerLow = tone(hue, 0.16f, 0.145f, alpha = 0.58f),
+    surfaceContainer = tone(hue, 0.18f, 0.165f, alpha = 0.64f),
+    surfaceContainerHigh = tone(hue, 0.22f, 0.20f, alpha = 0.72f),
+    surfaceContainerHighest = tone(hue, 0.26f, 0.235f, alpha = 0.80f),
     error = Color(0xFFFF6B6B),
     )
 }
@@ -568,8 +571,8 @@ internal fun glassDarkScheme(p: PaletteColors): ColorScheme {
  * layered highlight/rim (switched on for this mode via [LocalGlassMode])
  * keeps the panel readable on top of whatever scrolls near it. */
 internal fun glassGradientColors(p: PaletteColors): List<Color> = listOf(
-    p.gradientStart.copy(alpha = 0.60f),
-    p.gradientEnd.copy(alpha = 0.60f)
+    p.gradientStart.copy(alpha = 0.78f),
+    p.gradientEnd.copy(alpha = 0.78f)
 )
 
 /** True only when [AppColorMode.GLASS] is the active color mode. Read by
