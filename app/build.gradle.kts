@@ -155,6 +155,30 @@ android {
 
     kotlinOptions {
         jvmTarget = "21"
+        // PERF (general Compose smoothness): "strong skipping mode" makes
+        // the Compose compiler treat a composable as skippable even when
+        // one of its parameters is an *unstable* type (a plain lambda that
+        // isn't `remember`ed, a List/Map passed straight from a ViewModel,
+        // etc.) as long as that same parameter instance didn't change
+        // since last time — the compiler now compares by reference/equality
+        // at runtime instead of refusing to skip the whole composable just
+        // because the type itself isn't provably stable. This app passes
+        // exactly that shape of parameter constantly (every list row takes
+        // `onEdit: () -> Unit`/`onDelete: () -> Unit` lambdas built fresh
+        // each parent recomposition, every screen takes `persons`/
+        // `materials` lists straight from a StateFlow) — without this,
+        // those rows/screens were never skippable at all, so *any*
+        // recomposition of a parent (e.g. a Firestore snapshot arriving,
+        // a sibling text field changing) forced Compose to re-run every
+        // such child's body just to check its content, even when nothing
+        // it actually displays changed. This is a compiler-level flag, not
+        // a per-file fix — it improves exactly this pattern everywhere in
+        // the app at once, on top of (not instead of) the scoping fixes
+        // already made in specific hot spots like the pricing screen.
+        freeCompilerArgs += listOf(
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true"
+        )
     }
 
     buildFeatures {
@@ -196,6 +220,24 @@ dependencies {
     // first real frame is fully ready. This is what fixes the startup
     // jitter/flash.
     implementation("androidx.core:core-splashscreen:1.0.1")
+    // PERF (general smoothness, release builds): ART can run an app off an
+    // ahead-of-time "baseline profile" instead of interpreting/JIT-warming
+    // every class from scratch on first use — this is what makes cold
+    // start and the first few seconds of scrolling/animating noticeably
+    // smoother, especially on a slow-flash low-RAM phone. Jetpack Compose's
+    // own artifacts (compose-ui, material3, ...) already ship a baseline
+    // profile bundled inside their AARs, but ART only ever installs and
+    // uses it if this dependency is present in the final APK — without it,
+    // that shipped profile just sits unused and this app was always
+    // running the slow interpreted/JIT-only path for Compose's own
+    // internals, on every single install, not just this app's own code.
+    // No source changes needed for this to take effect (Play/adb install
+    // both trigger ProfileInstaller automatically on first run) and it
+    // only affects release-signed installs — a plain Android Studio "Run"
+    // (debug build) never benefits from this, or from R8/minify below;
+    // always judge real-world smoothness from an installed *release* APK,
+    // never a debug run.
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("androidx.activity:activity-compose:1.9.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
