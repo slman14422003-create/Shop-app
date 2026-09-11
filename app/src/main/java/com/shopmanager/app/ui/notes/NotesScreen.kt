@@ -3,6 +3,7 @@ package com.shopmanager.app.ui.notes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -36,9 +37,11 @@ import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.notes.ImportantNote
 import com.shopmanager.app.data.notes.NoteLinkType
 import com.shopmanager.app.ui.common.ActionIconButton
+import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.liquidGlassSurface
@@ -132,7 +135,7 @@ fun NotesScreen(
         // here to avoid double-padding a gap above the floating nav bar.
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         containerColor = Color.Transparent,
-        snackbarHost = { SnackbarHost(snackbarHost) },
+        snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
                 title = { Text("ملاحظات هامة", fontWeight = FontWeight.Bold) },
@@ -153,6 +156,22 @@ fun NotesScreen(
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
+            // BUG FIXED ("الملاحظات ما لها نفس انسجام باقي التطبيق"): every
+            // other tab with a live count (Dashboard's totals, Debts'
+            // StatsRow below) opens with the same bordered flat-card "quick
+            // stats" row right under the glass header before anything else
+            // — Notes used to skip straight from the header into the
+            // filter chips with nothing there, which is exactly what read
+            // as visually thinner/less finished next to Debts. Same recipe
+            // as DebtsScreen.StatsRow (flat Surface + hairline border +
+            // AnimatedCounterText), just with numbers that make sense for
+            // a note list.
+            NotesStatsRow(
+                total = state.notes.size,
+                active = state.notes.count { !it.isDone },
+                pinned = state.notes.count { it.isPinned }
+            )
+
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -245,6 +264,63 @@ fun NotesScreen(
             dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
     }
+}
+
+// Same exact recipe as DebtsScreen's private StatsRow: flat bordered
+// Surface (no drop shadow), three counts separated by hairline dividers,
+// each counting up/down via AnimatedCounterText instead of snapping to the
+// new number — the same "quick stats" card every other tab with live
+// totals already opens with, so Notes now reads as one continuous design
+// language with Debts instead of a plainer, unfinished-looking exception.
+@Composable
+private fun NotesStatsRow(total: Int, active: Int, pinned: Int) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            StatItem("الملاحظات", total)
+            NotesVerticalDivider()
+            StatItem("نشطة", active)
+            NotesVerticalDivider()
+            StatItem("مثبتة", pinned)
+        }
+    }
+}
+
+@Composable
+private fun StatItem(label: String, value: Int) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.primary
+        ) {
+            AnimatedCounterText(
+                targetValue = value.toDouble(),
+                format = { "%.0f".format(it) },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun NotesVerticalDivider() {
+    Box(
+        Modifier
+            .height(36.dp)
+            .width(1.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant)
+    )
 }
 
 // Same look as DebtsScreen's private EmptyState: 56dp outline-tinted icon,

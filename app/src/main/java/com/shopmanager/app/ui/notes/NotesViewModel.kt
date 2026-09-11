@@ -7,8 +7,10 @@ import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.data.notes.ImportantNote
 import com.shopmanager.app.data.notes.NoteLinkType
 import com.shopmanager.app.data.notes.NotesRepository
+import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.NoteReminderWorker
 import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.settings.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,7 @@ data class NotesUiState(
 class NotesViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = NotesRepository()
+    private val settings = SettingsRepository(application)
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
@@ -40,6 +43,51 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotesUiState())
 
     fun clearMessage() { _message.value = null }
+
+    // null = haven't loaded once yet, so the whole existing list doesn't
+    // fire a notification the very first time it loads — same pattern as
+    // DebtsViewModel.knownDebtIds / MaterialsViewModel.lastNotifiedMaterials.
+    private var knownNoteIds: Set<String>? = null
+
+    /**
+     * BUG FIXED ("ما ترسل إشعار لبقية الأجهزة إني ضفت ملاحظة"): Notes never
+     * had ANY cross-device notification — the only notification a note
+     * ever produced was its own optional reminder
+     * ([com.shopmanager.app.data.notifications.NoteReminderWorker]),
+     * scheduled purely locally on whichever device created it. Every other
+     * device signed into the same shop had no way to learn a note was
+     * added at all, unlike debts/materials which both already diff their
+     * live listener the same way this now does. Same self-suppression
+     * pattern as [selfCreatedNoteIds] below: an id this device just wrote
+     * itself is consumed here instead of notifying its own creator.
+     */
+    private val selfCreatedNoteIds = mutableSetOf<String>()
+
+    init {
+        viewModelScope.launch {
+            NotificationHelper.ensureChannels(getApplication())
+            uiState.collect { state ->
+                if (state.isLoading) return@collect
+                val currentIds = state.notes.map { it.id }.toSet()
+                val previous = knownNoteIds
+                if (previous != null) {
+                    val newIds = (currentIds - previous)
+                        .filterNot { selfCreatedNoteIds.remove(it) }
+                        .toSet()
+                    if (newIds.isNotEmpty() && settings.notificationsEnabled) {
+                        state.notes.filter { it.id in newIds }.forEach { note ->
+                            NotificationHelper.showNewNoteNotification(getApplication(), note.title, note.content, note.id)
+                        }
+                    }
+                }
+                knownNoteIds = currentIds
+                // Keep the background worker's own baseline in sync too —
+                // see BackgroundSyncWorker.syncKnownDebtIds for why this is
+                // needed on every emission, not just self-created ones.
+                BackgroundSyncWorker.syncKnownNoteIds(getApplication(), currentIds)
+            }
+        }
+    }
 
     fun addNote(
         title: String,
@@ -58,6 +106,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                         linkedId = linkedId, linkedName = linkedName, reminderAt = reminderAt
                     )
                 )
+                selfCreatedNoteIds += id
                 if (reminderAt > 0) {
                     NoteReminderWorker.schedule(getApplication(), id, title, content, reminderAt)
                 }
