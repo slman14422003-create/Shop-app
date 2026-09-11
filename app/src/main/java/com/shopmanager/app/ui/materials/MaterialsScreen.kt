@@ -674,14 +674,11 @@ private fun PricesList(
     // otherwise the already-saved price — this is what both the summary
     // card and the save button below count against, so "احفظ" always
     // reflects exactly what's on screen right now, unsaved edits included.
+    // NOTE: this closure is still used per-row below (`hasPrice`), where
+    // the `edited[item.name]` read is already scoped to that one row's own
+    // slot in the LazyColumn — cheap, and unrelated to the perf fix below.
     val effectiveOf: (MaterialCatalogItem) -> Double? = { item ->
         edited[item.name]?.toDoubleOrNull() ?: prices[item.name]
-    }
-    val pricedCount = remember(catalogItems, prices, edited.toMap()) {
-        catalogItems.count { effectiveOf(it) != null }
-    }
-    val totalValue = remember(catalogItems, prices, edited.toMap()) {
-        catalogItems.sumOf { effectiveOf(it) ?: 0.0 }
     }
 
     // "بدل هذا الارتفاع": used to also add the full-width save button's own
@@ -691,10 +688,30 @@ private fun PricesList(
     // above), so the list only needs to clear the pill itself now.
     val bottomClearance = LocalFloatingBottomNavHeight.current + 16.dp
     Column(Modifier.fillMaxSize()) {
-        PricesSummaryCard(
-            pricedCount = pricedCount,
-            totalCount = catalogItems.size,
-            totalValue = totalValue,
+        // PERF FIX ("تقطيع" while typing a price): pricedCount/totalValue
+        // used to be computed directly in *this* function with
+        // `remember(catalogItems, prices, edited.toMap())` — `edited` is a
+        // SnapshotStateMap, so `.toMap()` (a) allocates a brand-new full
+        // copy of the whole map on every single recomposition just to use
+        // as a remember key, and worse, (b) makes reading it right here,
+        // inside PricesList's own body, the thing that subscribes
+        // PricesList itself to every change in that map. Since every
+        // keystroke in *any* row's price field is a write into `edited`,
+        // every keystroke was recomposing the whole PricesList function —
+        // including re-running the entire `items(filtered) { ... }` block
+        // below and re-walking every visible row — just to update two
+        // numbers in the summary card. That's the actual cause of the
+        // stutter while entering prices: it scales with catalog size and
+        // showed up on every device, weak or strong, since it's a
+        // per-keystroke cost, not a one-time layout cost.
+        // PricesSummarySection (below) reads `edited` itself, through a
+        // `derivedStateOf`, so the recomposition that a price edit
+        // triggers is scoped to that small summary composable alone —
+        // the LazyColumn and its rows are never touched by it.
+        PricesSummarySection(
+            catalogItems = catalogItems,
+            prices = prices,
+            edited = edited,
             currency = currency,
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
         )
@@ -749,11 +766,48 @@ private fun PricesList(
 }
 
 /**
+ * PERF FIX wrapper (see the long comment at its call site in [PricesList]):
+ * isolates the `edited` SnapshotStateMap read behind a `derivedStateOf` so
+ * that typing into a price field only ever recomposes this small
+ * composable, never [PricesList] itself (and therefore never its
+ * LazyColumn). `derivedStateOf` re-runs its block on every `edited` write,
+ * but only actually invalidates *readers* of [pricedCount]/[totalValue]
+ * (i.e. just this function) when the computed count/sum genuinely changes
+ * — cheap either way, and never touches the row list.
+ */
+@Composable
+private fun PricesSummarySection(
+    catalogItems: List<MaterialCatalogItem>,
+    prices: Map<String, Double>,
+    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
+    currency: String,
+    modifier: Modifier = Modifier
+) {
+    val pricedCount by remember(catalogItems, prices) {
+        derivedStateOf {
+            catalogItems.count { (edited[it.name]?.toDoubleOrNull() ?: prices[it.name]) != null }
+        }
+    }
+    val totalValue by remember(catalogItems, prices) {
+        derivedStateOf {
+            catalogItems.sumOf { (edited[it.name]?.toDoubleOrNull() ?: prices[it.name]) ?: 0.0 }
+        }
+    }
+    PricesSummaryCard(
+        pricedCount = pricedCount,
+        totalCount = catalogItems.size,
+        totalValue = totalValue,
+        currency = currency,
+        modifier = modifier
+    )
+}
+
+/**
  * Compact totals strip for the الأسعار tab: how many catalog items already
- * have a price set (edits in progress count too — see `pricedCount` in
- * [PricesList]) and the running total value of the whole catalog at
- * current prices. Uses the same solid card language as the rest of the
- * app (no glass dependency) so it reads correctly in every color mode.
+ * have a price set (edits in progress count too — see [PricesSummarySection])
+ * and the running total value of the whole catalog at current prices. Uses
+ * the same solid card language as the rest of the app (no glass dependency)
+ * so it reads correctly in every color mode.
  */
 @Composable
 private fun PricesSummaryCard(
