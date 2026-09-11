@@ -289,8 +289,13 @@ fun GlassAlertDialog(
         // (1f/1f) to match — no transparency effect left in normal mode.
         // GLASS mode's own resting alpha is now 0.40/0.30 (see the
         // IPHONE 17 GLASS PASS note just above).
-        val fillAlphaTop = if (glassModeActive) 0.40f else 1f
-        val fillAlphaBottom = if (glassModeActive) 0.30f else 1f
+        // CLARITY PASS: raised from 0.40/0.30 — the repeated "push more
+        // transparent" passes above left the blurred backdrop competing
+        // with this dialog's own title/body text. Still visibly
+        // translucent glass, just no longer letting the backdrop fight
+        // for the reader's attention.
+        val fillAlphaTop = if (glassModeActive) 0.64f else 1f
+        val fillAlphaBottom = if (glassModeActive) 0.54f else 1f
         val gradientTop = androidx.compose.ui.graphics.lerp(
             resolvedContainer, MaterialTheme.colorScheme.primary, 0.48f
         ).copy(alpha = fillAlphaTop)
