@@ -239,15 +239,18 @@ fun Modifier.liquidGlassSurface(
     // own lower container alphas in Palette.kt so the extra transparency
     // isn't just the header/nav — it runs through every ordinary card,
     // dialog, and sheet in GLASS mode too.
-    // iPhone 17 / iOS 26 LIQUID GLASS PASS ("مراية نظيفة ووراها تمويه"):
-    // pushed once more (0.60 → 0.52) so the panel reads as a genuinely
-    // clean, clear pane — like a polished mirror — with the frosted blur
-    // doing the work of suggesting depth behind it, instead of the panel
-    // itself looking milky/opaque. Paired with the deeper blur radius and
-    // the gradient rim below, which is what actually sells "glass" once
-    // the fill alone gets this transparent — without them, this alone
-    // would just look washed out.
-    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.52f).coerceIn(0f, 1f) else 1f
+    // CLARITY PASS ("خلية اكتر وضوح بدل ما كلشي خلفة مبين بكل التطبيق"):
+    // the previous several passes ("RADICAL UPGRADE", "iPhone 17 GLASS
+    // PASS") kept pushing this multiplier down (0.78 → 0.60 → 0.52) in
+    // pursuit of an ever-clearer "pane of glass" look, but stacked across
+    // every header/nav/dialog in the app that actually made the content
+    // *behind* each glass panel legible through it — exactly the "كل شي
+    // خلفة مبين" (everything behind it shows through) complaint. Raised
+    // back up to 0.80 so every glass surface reads as clearly translucent
+    // glass (still not opaque — the droplet highlights/blur/rim below
+    // still sell the material) without whatever's scrolling behind it
+    // fighting for attention with this panel's own text/icons.
+    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.80f).coerceIn(0f, 1f) else 1f
     val effectiveHighlight = glassModeActive && highlight
 
     // PERF (low-end tier): Modifier.shadow forces its own offscreen
@@ -594,16 +597,15 @@ fun GlassIconButton(
     // plain, solidly-tinted circular icon button, the normal stock-Android
     // read for an icon sitting on a colored surface. GLASS mode keeps the
     // existing see-through fill + bright rim.
-    // RADICAL UPGRADE: GLASS mode's resting fill pushed even further
-    // toward see-through (0.10 → 0.07), matching the same across-the-board
-    // transparency bump as [liquidGlassSurface]'s `effectiveBaseAlpha`.
     val glassModeActive = LocalGlassMode.current
-    // IPHONE 17 GLASS PASS: fill pushed a touch more see-through
-    // (0.07 → 0.05) and the rim a touch crisper (0.40 → 0.46) to match
-    // [liquidGlassSurface]'s own "clean mirror, blur behind it" pass —
-    // the small circular buttons sit on the same panels, so they read as
-    // cut from the same glass rather than a slightly muddier version of it.
-    val restingFillAlpha = if (glassModeActive) 0.05f else 0.22f
+    // CLARITY PASS: earlier passes pushed this fill down to 0.05 in
+    // pursuit of a "clean mirror" look, which left the icon glyph inside
+    // sitting almost directly on whatever was behind the button — hard to
+    // pick out against a busy background. Raised to 0.20 to match
+    // [liquidGlassSurface]'s own clarity pass so the button reads as a
+    // clearly visible glass chip, not a near-invisible outline. Rim kept
+    // crisp so the button's edge still reads as glass.
+    val restingFillAlpha = if (glassModeActive) 0.20f else 0.22f
     val restingRimAlpha = if (glassModeActive) 0.46f else 0f
     // "رقّي التفاعل عند الضغط": a brief brighten on press — both the fill
     // and rim animate a touch lighter, on the same spring as the scale —
