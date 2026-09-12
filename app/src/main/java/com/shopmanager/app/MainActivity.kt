@@ -69,6 +69,7 @@ import kotlinx.coroutines.withContext
 import com.shopmanager.app.data.FirebaseModule
 import com.shopmanager.app.data.backup.DailyBackupWorker
 import com.shopmanager.app.data.notifications.BackgroundSyncWorker
+import com.shopmanager.app.data.notifications.BatteryOptimizationHelper
 import com.shopmanager.app.data.notifications.NotificationAction
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.performance.DevicePerformance
@@ -199,6 +200,14 @@ class MainActivity : ComponentActivity() {
         splashScreen.setKeepOnScreenCondition { !composeSplashAttached }
 
         requestSmoothestRefreshRate()
+
+        // "حسن عمل التطبيق في الخلفية بشكل مخفي": one silent, at-most-once
+        // system prompt so BackgroundSyncWorker/NoteReminderWorker keep
+        // firing even on OEMs (Xiaomi/Huawei/Samsung, ...) that otherwise
+        // freeze background work the moment the app isn't open - see
+        // BatteryOptimizationHelper. Never shown more than once per
+        // install and never blocks anything else in onCreate.
+        BatteryOptimizationHelper.maybeRequest(this)
 
         // PERF FIX (startup jitter): all of Firebase init, notification
         // channel setup, device-tier detection (disk read), and scheduling
