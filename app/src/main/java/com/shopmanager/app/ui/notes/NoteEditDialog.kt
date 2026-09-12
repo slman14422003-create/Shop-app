@@ -3,30 +3,42 @@ package com.shopmanager.app.ui.notes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.notes.ImportantNote
 import com.shopmanager.app.data.notes.NoteLinkType
 import com.shopmanager.app.ui.common.AppTextField
-import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.liquidGlassSurface
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -35,7 +47,7 @@ private val dateFormat get() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 private val timeFormat get() = SimpleDateFormat("HH:mm", Locale.US)
 
 /**
- * Add/edit dialog for a "ملاحظة هامة". Beyond the plain title+content of a
+ * Add/edit screen for a "ملاحظة هامة". Beyond the plain title+content of a
  * simple note, this is also where the two useful ties to the rest of the
  * app live:
  *  - an optional reminder date+time (plain text fields, matching the same
@@ -46,9 +58,25 @@ private val timeFormat get() = SimpleDateFormat("HH:mm", Locale.US)
  *    (materials), so a note like "لازم أذكّر أحمد يسدد" or "اتصل بالمورد
  *    لطلب السكر" can point at the actual record it's about instead of
  *    floating disconnected from it.
+ *
+ * BUG FIXED ("لازم تكون واجهة مستقلة متل المذكرة وليس مربع متل الصورة"):
+ * this used to be [com.shopmanager.app.ui.common.GlassAlertDialog] - a
+ * small floating card centered over the still-visible notes list behind
+ * it, exactly like every other confirm/cancel popup in the app. That reads
+ * fine for a two-line confirmation, but for a real writing task (a title,
+ * a multi-line body, a link picker, a reminder date/time) it felt cramped
+ * and, per the request, didn't read as its own place the way a real Notes
+ * app's compose screen does. This keeps every field/behavior identical but
+ * renders them as a genuine full-screen page instead - edge-to-edge, its
+ * own top bar with a back arrow (= cancel) and a save action, no centered
+ * box, no dimmed backdrop peeking through. Still hosted in a Compose
+ * [Dialog] (usePlatformDefaultWidth = false, own window) purely so it
+ * still floats above the bottom nav / status bar exactly like the old
+ * modal did and back-press still closes it for free - the *content*
+ * inside that window is a plain full-size Scaffold now, not a card.
  */
 @Composable
-fun NoteEditDialog(
+fun NoteEditScreen(
     initial: ImportantNote?,
     persons: List<Person>,
     materials: List<Material>,
@@ -90,125 +118,192 @@ fun NoteEditDialog(
         return cal.timeInMillis
     }
 
-    GlassAlertDialog(
-        onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(if (initial == null) "ملاحظة جديدة" else "تعديل الملاحظة") },
-        text = {
-            Column {
-                AppTextField(
-                    value = title, onValueChange = { title = it }, enabled = !isSaving,
-                    label = "العنوان", modifier = Modifier.fillMaxWidth()
-                )
-                AppTextField(
-                    value = content, onValueChange = { content = it }, enabled = !isSaving,
-                    label = "التفاصيل (اختياري)", singleLine = false, minLines = 2, maxLines = 5,
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                )
+    fun trySave() {
+        val reminderMillis = computeReminderMillis()
+        when {
+            title.isBlank() -> error = "الرجاء إدخال عنوان للملاحظة"
+            reminderEnabled && reminderMillis == null -> error = "الرجاء إدخال تاريخ ووقت صحيحين"
+            else -> {
+                error = null
+                onSave(title.trim(), content.trim(), linkType, linkedId, linkedName, reminderMillis ?: 0L)
+            }
+        }
+    }
 
-                // --- الربط بعميل/مادة ---
-                Text(
-                    "ربط الملاحظة (اختياري)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
-                )
-                Box {
-                    LinkTypeRow(
-                        linkType = linkType,
-                        linkedName = linkedName,
-                        enabled = !isSaving,
-                        onClick = { linkMenuExpanded = true }
+    // BUG-RISK AVOIDED: deliberately NOT re-wrapping this Dialog's content
+    // in its own ShopManagerTheme - Dialog only opens a new Android Window,
+    // it does not leave the surrounding Composition, so MaterialTheme's
+    // colors/typography (already provided once, up in MainActivity, from
+    // the person's actual saved theme/color-mode/palette settings) are
+    // still inherited here for free. Re-wrapping with a fresh
+    // `ShopManagerTheme { ... }` would silently reset every color back to
+    // that composable's own defaults (SYSTEM/MANUAL/INDIGO) regardless of
+    // what the person actually picked in Settings - this screen would be
+    // the one place in the whole app that ignored their theme choice.
+    Dialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+            NoteEditScreenContent(
+                isNew = initial == null,
+                isSaving = isSaving,
+                onBack = { if (!isSaving) onDismiss() },
+                onSave = ::trySave
+            ) { innerPadding ->
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(innerPadding)
+                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                ) {
+                    AppTextField(
+                        value = title, onValueChange = { title = it }, enabled = !isSaving,
+                        label = "العنوان", modifier = Modifier.fillMaxWidth()
                     )
-                    DropdownMenu(expanded = linkMenuExpanded, onDismissRequest = { linkMenuExpanded = false }) {
-                        DropdownMenuItem(text = { Text("بدون ربط") }, onClick = {
-                            linkType = NoteLinkType.NONE; linkedId = ""; linkedName = ""
-                            linkMenuExpanded = false
-                        })
-                        DropdownMenuItem(text = { Text("عميل (من الديون)") }, onClick = {
-                            linkType = NoteLinkType.PERSON; linkedId = ""; linkedName = ""
-                            linkMenuExpanded = false; pickerMenuExpanded = true
-                        })
-                        DropdownMenuItem(text = { Text("مادة (من النواقص)") }, onClick = {
-                            linkType = NoteLinkType.MATERIAL; linkedId = ""; linkedName = ""
-                            linkMenuExpanded = false; pickerMenuExpanded = true
-                        })
-                    }
-                    // Picking "عميل"/"مادة" above immediately opens this
-                    // second menu so choosing the *specific* one is a single
-                    // continuous flow instead of a separate follow-up tap.
-                    DropdownMenu(expanded = pickerMenuExpanded, onDismissRequest = { pickerMenuExpanded = false }) {
-                        val options: List<Pair<String, String>> = when (linkType) {
-                            NoteLinkType.PERSON -> persons.map { it.id to it.name }
-                            NoteLinkType.MATERIAL -> materials.map { it.id to it.name }
-                            NoteLinkType.NONE -> emptyList()
-                        }
-                        if (options.isEmpty()) {
-                            DropdownMenuItem(text = { Text("لا يوجد عناصر بعد") }, onClick = { pickerMenuExpanded = false }, enabled = false)
-                        }
-                        options.forEach { (id, name) ->
-                            DropdownMenuItem(text = { Text(name) }, onClick = {
-                                linkedId = id; linkedName = name; pickerMenuExpanded = false
+                    AppTextField(
+                        value = content, onValueChange = { content = it }, enabled = !isSaving,
+                        label = "التفاصيل (اختياري)", singleLine = false, minLines = 4, maxLines = 10,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                    )
+
+                    // --- الربط بعميل/مادة ---
+                    Text(
+                        "ربط الملاحظة (اختياري)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 20.dp, bottom = 6.dp)
+                    )
+                    Box {
+                        LinkTypeRow(
+                            linkType = linkType,
+                            linkedName = linkedName,
+                            enabled = !isSaving,
+                            onClick = { linkMenuExpanded = true }
+                        )
+                        DropdownMenu(expanded = linkMenuExpanded, onDismissRequest = { linkMenuExpanded = false }) {
+                            DropdownMenuItem(text = { Text("بدون ربط") }, onClick = {
+                                linkType = NoteLinkType.NONE; linkedId = ""; linkedName = ""
+                                linkMenuExpanded = false
+                            })
+                            DropdownMenuItem(text = { Text("عميل (من الديون)") }, onClick = {
+                                linkType = NoteLinkType.PERSON; linkedId = ""; linkedName = ""
+                                linkMenuExpanded = false; pickerMenuExpanded = true
+                            })
+                            DropdownMenuItem(text = { Text("مادة (من النواقص)") }, onClick = {
+                                linkType = NoteLinkType.MATERIAL; linkedId = ""; linkedName = ""
+                                linkMenuExpanded = false; pickerMenuExpanded = true
                             })
                         }
-                    }
-                }
-
-                // --- التذكير ---
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("تذكير بموعد محدد", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    androidx.compose.material3.Switch(
-                        checked = reminderEnabled,
-                        enabled = !isSaving,
-                        onCheckedChange = { reminderEnabled = it }
-                    )
-                }
-                if (reminderEnabled) {
-                    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AppTextField(
-                            value = reminderDate, onValueChange = { reminderDate = it }, enabled = !isSaving,
-                            label = "التاريخ (yyyy-MM-dd)", modifier = Modifier.weight(1f)
-                        )
-                        AppTextField(
-                            value = reminderTime, onValueChange = { reminderTime = it }, enabled = !isSaving,
-                            label = "الوقت (HH:mm)", modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = !isSaving,
-                onClick = {
-                    val reminderMillis = computeReminderMillis()
-                    when {
-                        title.isBlank() -> error = "الرجاء إدخال عنوان للملاحظة"
-                        reminderEnabled && reminderMillis == null -> error = "الرجاء إدخال تاريخ ووقت صحيحين"
-                        else -> {
-                            error = null
-                            onSave(title.trim(), content.trim(), linkType, linkedId, linkedName, reminderMillis ?: 0L)
+                        // Picking "عميل"/"مادة" above immediately opens this
+                        // second menu so choosing the *specific* one is a single
+                        // continuous flow instead of a separate follow-up tap.
+                        DropdownMenu(expanded = pickerMenuExpanded, onDismissRequest = { pickerMenuExpanded = false }) {
+                            val options: List<Pair<String, String>> = when (linkType) {
+                                NoteLinkType.PERSON -> persons.map { it.id to it.name }
+                                NoteLinkType.MATERIAL -> materials.map { it.id to it.name }
+                                NoteLinkType.NONE -> emptyList()
+                            }
+                            if (options.isEmpty()) {
+                                DropdownMenuItem(text = { Text("لا يوجد عناصر بعد") }, onClick = { pickerMenuExpanded = false }, enabled = false)
+                            }
+                            options.forEach { (id, name) ->
+                                DropdownMenuItem(text = { Text(name) }, onClick = {
+                                    linkedId = id; linkedName = name; pickerMenuExpanded = false
+                                })
+                            }
                         }
                     }
-                }
-            ) {
-                if (isSaving) {
-                    Row {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
-                        Text("  جارِ الحفظ...")
+
+                    // --- التذكير ---
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("تذكير بموعد محدد", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        androidx.compose.material3.Switch(
+                            checked = reminderEnabled,
+                            enabled = !isSaving,
+                            onCheckedChange = { reminderEnabled = it }
+                        )
                     }
-                } else {
-                    Text("حفظ")
+                    if (reminderEnabled) {
+                        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AppTextField(
+                                value = reminderDate, onValueChange = { reminderDate = it }, enabled = !isSaving,
+                                label = "التاريخ (yyyy-MM-dd)", modifier = Modifier.weight(1f)
+                            )
+                            AppTextField(
+                                value = reminderTime, onValueChange = { reminderTime = it }, enabled = !isSaving,
+                                label = "الوقت (HH:mm)", modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
+
+                    Spacer(Modifier.height(24.dp))
                 }
             }
-        },
-        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("إلغاء") } }
-    )
+        }
+    }
+
+/**
+ * The full-screen chrome shared by the "ملاحظة جديدة"/"تعديل الملاحظة"
+ * page: same liquid-glass TopAppBar recipe as every other screen in the
+ * app (NotesScreen/DashboardScreen/...), with a back arrow standing in for
+ * "إلغاء" and a check-mark save action standing in for the old dialog's
+ * "حفظ" button - a real page's header, not a dialog's button row.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NoteEditScreenContent(
+    isNew: Boolean,
+    isSaving: Boolean,
+    onBack: () -> Unit,
+    onSave: () -> Unit,
+    content: @Composable (PaddingValues) -> Unit
+) {
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            TopAppBar(
+                title = { Text(if (isNew) "ملاحظة جديدة" else "تعديل الملاحظة", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack, enabled = !isSaving) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "إلغاء")
+                    }
+                },
+                actions = {
+                    if (isSaving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(end = 16.dp).size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        IconButton(onClick = onSave, enabled = !isSaving) {
+                            Icon(Icons.Default.Check, contentDescription = "حفظ")
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = BrandOnGradient,
+                    navigationIconContentColor = BrandOnGradient,
+                    actionIconContentColor = BrandOnGradient
+                ),
+                modifier = Modifier.liquidGlassSurface(
+                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
+                    highlight = false,
+                    baseAlpha = 0.72f
+                )
+            )
+        }
+    ) { padding -> content(padding) }
 }
 
 @Composable

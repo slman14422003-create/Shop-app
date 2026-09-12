@@ -229,7 +229,7 @@ fun NotesScreen(
     }
 
     if (showEditDialog) {
-        NoteEditDialog(
+        NoteEditScreen(
             initial = editingNote,
             persons = persons,
             materials = materials,
