@@ -13,12 +13,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.WavingHand
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
@@ -71,14 +76,29 @@ private data class ActivityRow(
  * password ever needs to rotate — it's the single place it's defined. */
 private const val ADMIN_PANEL_PASSWORD = "1442"
 
-private fun timeBasedGreeting(): String {
+/**
+ * REDESIGN ("تصميم صباح الخير أكثر تناسق مع الواجهة"): this used to embed a
+ * raw Unicode emoji (☀️🌙👋🌇) straight inside the greeting string. Every
+ * other glyph in this exact header — the settings gear, the admin shield —
+ * is a monochrome Material icon tinted to match the glass panel; an emoji
+ * next to them renders as a small colorful, OS-drawn picture that doesn't
+ * belong to that same visual language at all (and looks different
+ * device-to-device/OS-to-OS, unlike a vector icon). [TimeGreeting] now
+ * pairs the text with a matching outline icon instead, drawn the same
+ * tinted-white way as the rest of the header (see its usage in
+ * [DashboardHeader]) — so it reads as one cohesive design instead of an
+ * app icon font colliding with an emoji font.
+ */
+private data class TimeGreeting(val text: String, val icon: ImageVector)
+
+private fun timeBasedGreeting(): TimeGreeting {
     val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     return when {
-        hour < 5 -> "سهرانين لهلق؟ 🌙"
-        hour < 12 -> "صباح الخير ☀️"
-        hour < 17 -> "أهلاً بك 👋"
-        hour < 21 -> "مساء الخير 🌇"
-        else -> "مساء النور 🌙"
+        hour < 5 -> TimeGreeting("سهرانين لهلق؟", Icons.Filled.NightsStay)
+        hour < 12 -> TimeGreeting("صباح الخير", Icons.Filled.WbSunny)
+        hour < 17 -> TimeGreeting("أهلاً بك", Icons.Filled.WavingHand)
+        hour < 21 -> TimeGreeting("مساء الخير", Icons.Filled.WbTwilight)
+        else -> TimeGreeting("مساء النور", Icons.Filled.Bedtime)
     }
 }
 
@@ -381,7 +401,22 @@ fun DashboardScreen(
  */
 @Composable
 private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit = {}) {
-    val greeting = remember { timeBasedGreeting() }
+    // BUG FIXED ("صباح الخير" عالقة طول اليوم): `remember { timeBasedGreeting() }`
+    // كان يُحسب مرة واحدة بس، أول ما هالهيدر يدخل التركيب — وبما إن تبويب
+    // الرئيسية (صفحة بالـ HorizontalPager) يضل حي طول عمر التطبيق (ما
+    // يُعاد إنشاؤه لما تبدّل تبويب)، فتح التطبيق الصبح وتركه شغّال للعصر/
+    // المسا كان يخلي الترحيب عالق عالنص "صباح الخير" دايمًا، بدون ما
+    // يتحدّث أبدًا. هلق بيتحقق من الوقت كل دقيقة عبر LaunchedEffect، فينتقل
+    // فعليًا بين "صباح الخير"/"مساء الخير"/إلخ مع مرور اليوم، وبيرجع
+    // يعكس الوقت الصحيح فورًا كل ما الهيدر يدخل التركيب من جديد (فتح
+    // التطبيق من الصفر بعد إغلاقه بالكامل).
+    var greeting by remember { mutableStateOf(timeBasedGreeting()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000L)
+            greeting = timeBasedGreeting()
+        }
+    }
     Box(
         Modifier
             .fillMaxWidth()
@@ -411,12 +446,21 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
-                Text(
-                    greeting,
-                    color = BrandOnGradient.copy(alpha = 0.78f),
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        greeting.icon,
+                        contentDescription = null,
+                        tint = BrandOnGradient.copy(alpha = 0.78f),
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        greeting.text,
+                        color = BrandOnGradient.copy(alpha = 0.78f),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "إدارة المحل",
