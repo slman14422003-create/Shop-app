@@ -171,7 +171,9 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** Marking a note done also cancels any pending reminder for it - a
-     * finished task shouldn't still ring later. */
+     * finished task shouldn't still ring later, and (see
+     * [NotificationHelper.showNoteDoneNotification]) posts the matching
+     * "إنجاز" confirmation the same way settling a debt already does. */
     fun setDone(note: ImportantNote, done: Boolean) {
         viewModelScope.launch {
             try {
@@ -179,6 +181,9 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
                 if (done) {
                     NoteReminderWorker.cancel(getApplication(), note.id)
                     NotificationHelper.cancelNoteReminderNotification(getApplication(), note.id)
+                    if (settings.notificationsEnabled) {
+                        NotificationHelper.showNoteDoneNotification(getApplication(), note.title, note.id)
+                    }
                 } else if (note.reminderAt > System.currentTimeMillis()) {
                     NoteReminderWorker.schedule(getApplication(), note.id, note.title, note.content, note.reminderAt)
                 }
