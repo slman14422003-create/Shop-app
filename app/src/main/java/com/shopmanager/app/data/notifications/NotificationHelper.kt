@@ -39,6 +39,7 @@ object NotificationHelper {
     private const val NOTIF_ID_NEW_DEBT_BASE = 3000
     private const val NOTIF_ID_NOTE_BASE = 4000
     private const val NOTIF_ID_NEW_NOTE_BASE = 5000
+    private const val NOTIF_ID_NOTE_DONE_BASE = 6000
 
     // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
     // *group*, with a silent summary notification posted alongside the
@@ -227,6 +228,41 @@ object NotificationHelper {
     fun cancelNoteReminderNotification(context: Context, noteId: String) {
         val id = NOTIF_ID_NOTE_BASE + (noteId.hashCode() and 0xFFF)
         NotificationManagerCompat.from(context).cancel(id)
+    }
+
+    /**
+     * "إنجاز الملاحظة لازم يكون له إشعار": marking a note done previously
+     * produced no notification at all — the note's *lifecycle* had an
+     * "added" notification ([showNewNoteNotification]) but nothing for the
+     * matching "finished" event, unlike debts, which post one for both
+     * "new" ([showNewDebtNotification]) and "paid" ([showDebtPaidNotification]).
+     * Fired the same way [showDebtPaidNotification] is: directly, on the
+     * device that ticked it off, right after the write succeeds (see
+     * NotesViewModel.setDone) — a local confirmation, not a cross-device
+     * diff, exactly like every other "I just did X" notification in this
+     * app. Uses its own id range ([NOTIF_ID_NOTE_DONE_BASE]) so completing
+     * a note can never collide with/overwrite that same note's still-open
+     * "new note" or reminder notification if either happens to still be
+     * showing.
+     */
+    fun showNoteDoneNotification(context: Context, title: String, noteId: String) {
+        if (!hasPermission(context)) return
+        val id = NOTIF_ID_NOTE_DONE_BASE + (noteId.hashCode() and 0xFFF)
+        val displayTitle = title.ifBlank { "ملاحظة" }
+        val notification = NotificationCompat.Builder(context, CHANNEL_NOTES)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle("✅ تم إنجاز ملاحظة")
+            .setContentText(displayTitle)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(displayTitle))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(true)
+            .setAutoCancel(true)
+            .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
+            .build()
+
+        NotificationManagerCompat.from(context).notify(id, notification)
     }
 
     /**
