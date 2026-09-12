@@ -19,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -125,8 +126,16 @@ fun MaterialEditDialog(
             }
         },
         confirmButton = {
+            // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): TextButton's
+            // default shape is a fully-rounded pill, so even though
+            // GlassAlertDialog's DialogButtonCell already forces this button
+            // to fill its whole half of the row, the ripple/press highlight
+            // itself stayed clipped to that rounded outline instead of the
+            // actual rectangular cell. RectangleShape makes the press
+            // highlight fill the entire square cell, corner to corner.
             TextButton(
                 enabled = !isSaving,
+                shape = RectangleShape,
                 onClick = {
                     when {
                         name.isBlank() -> error = "يرجى إدخال اسم المادة"
@@ -145,7 +154,7 @@ fun MaterialEditDialog(
                 }
             }
         },
-        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(enabled = !isSaving, shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
