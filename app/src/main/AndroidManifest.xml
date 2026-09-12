@@ -5,6 +5,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- FEATURE ADDED ("حسن عمل التطبيق في الخلفية بشكل مخفي"): lets the app
+         ask the OS, once, to stop freezing its WorkManager jobs
+         (BackgroundSyncWorker / NoteReminderWorker) when it decides the app
+         is "idle" - see BatteryOptimizationHelper for the one-time,
+         no-nagging prompt this enables. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- In-app self-update (Settings → التحديثات): lets the system
          installer be launched directly from this app for the APK it just
          downloaded itself, instead of sending the person to an external
