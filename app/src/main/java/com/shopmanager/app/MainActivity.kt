@@ -490,10 +490,28 @@ private fun ShopManagerApp(
     var savePricesRequested by remember { mutableStateOf(false) }
     val pagerScope = rememberCoroutineScope()
 
+    // BUG FIXED ("ترابط بين جميع الانميشن"): tapping a bottom-nav tab (or a
+    // notification landing on a specific tab) drove the SAME pager as
+    // swiping between Home/Debts/Materials/Notes, but through
+    // `animateScrollToPage()`'s own default spec — a generic Compose
+    // spring, completely unrelated to the deliberately-tuned iOS-style
+    // curve (`iosEasing`/`iosSlideSpec` below) every *pushed* screen
+    // (Settings, Person Detail, ...) already animates with. The two kinds
+    // of navigation in this same app were animating on two unrelated
+    // curves/timings, which is exactly what reads as inconsistent even
+    // though each one individually looked fine. This uses the identical
+    // cubic-bezier shape (and the same LOW-tier "skip it" convention) so a
+    // tab switch and a screen push now feel like the same design language
+    // instead of two different ones stitched together.
+    val isLowTierForPager = LocalPerformanceTier.current == PerformanceTier.LOW
+    val pagerTabAnimationSpec: FiniteAnimationSpec<Float> =
+        if (isLowTierForPager) tween(0)
+        else tween(340, easing = CubicBezierEasing(0.32f, 0f, 0.24f, 1f))
+
     @OptIn(ExperimentalFoundationApi::class)
     fun openPager(page: Int) {
         navigateTopLevel(navController, ROUTE_MAIN_PAGER)
-        pagerScope.launch { pagerState.animateScrollToPage(page) }
+        pagerScope.launch { pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec) }
     }
 
     // Tapping a notification should land on the screen it's about, not just
