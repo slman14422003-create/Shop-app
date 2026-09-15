@@ -39,6 +39,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
@@ -358,6 +360,12 @@ private fun FloatingNavItem(item: BottomNavItem, selected: Boolean, width: Dp, o
         animationSpec = MotionSpecs.contentTween(),
         label = "floatingNavItemTint"
     )
+    // FEATURE ADDED ("تحسينات للتنقل"): a short haptic tick on every tab
+    // tap - same [ActionIconButton] convention (see its own doc comment for
+    // why [HapticFeedbackType.LongPress] is the one used), so switching
+    // tabs gets the same small tactile confirmation every other tap
+    // affordance in the app now has.
+    val haptics = LocalHapticFeedback.current
 
     Box(
         modifier = Modifier
@@ -368,7 +376,10 @@ private fun FloatingNavItem(item: BottomNavItem, selected: Boolean, width: Dp, o
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onClick()
+                }
             ),
         contentAlignment = Alignment.Center
     ) {

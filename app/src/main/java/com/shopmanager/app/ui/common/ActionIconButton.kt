@@ -16,6 +16,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 
 /**
@@ -32,6 +34,19 @@ import androidx.compose.ui.unit.dp
  * use. Every circular action button (check, edit, delete) now shares this
  * single 36dp implementation, so they're pixel-identical in size, icon
  * padding, tint intensity, and press animation everywhere they appear.
+ *
+ * FEATURE ADDED ("تحسينات للتنقل واللمس"): every tap now fires a short
+ * haptic tick right before [onClick] runs — a small tactile confirmation
+ * that something actually happened (settling a debt, finishing a note,
+ * deleting a row), the same way iOS gives a light tap-tic on most of its
+ * own buttons. Compose only exposes [HapticFeedbackType.LongPress] and
+ * [HapticFeedbackType.TextHandleMove] at this Compose UI version — despite
+ * the name, [HapticFeedbackType.LongPress] fires immediately on call (it
+ * maps to the platform's own HapticFeedbackConstants.LONG_PRESS, not an
+ * actual long-press gesture), so it's reused here as the generic "tick"
+ * instead of reaching for a raw platform HapticFeedbackConstants call.
+ * Since [DeleteIconButton] is a thin wrapper around this composable, every
+ * delete button in the app picks this up for free too.
  */
 @Composable
 fun ActionIconButton(
@@ -48,9 +63,13 @@ fun ActionIconButton(
         animationSpec = MotionSpecs.pressSpring(),
         label = "actionButtonScale"
     )
+    val haptics = LocalHapticFeedback.current
 
     IconButton(
-        onClick = onClick,
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         interactionSource = interactionSource,
         modifier = modifier
             .size(36.dp)
