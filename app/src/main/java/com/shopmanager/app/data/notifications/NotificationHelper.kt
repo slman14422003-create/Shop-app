@@ -355,7 +355,7 @@ object NotificationHelper {
     fun showNewDebtNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س", debtId: String = "") {
         if (!hasPermission(context)) return
         val id = if (debtId.isEmpty()) NOTIF_ID_DEBT else NOTIF_ID_NEW_DEBT_BASE + (debtId.hashCode() and 0xFFF)
-        val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
+        val builder = NotificationCompat.Builder(context, CHANNEL_DEBTS)
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             // "صورة رمزية": نفس لون ولون الحرف الأول اللذين يستخدمهما تطبيق
@@ -371,9 +371,26 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NewDebt(personName, amount, currencySymbol)))
-            .build()
 
-        NotificationManagerCompat.from(context).notify(id, notification)
+        // FEATURE ADDED ("تحسينات بالإشعارات"): زر "تسديد" مباشر من شريط
+        // الإشعار — نفس فكرة "تم الشراء" على قائمة النواقص و"تأجيل ساعة"
+        // على تذكيرات الملاحظات: إنجاز الإجراء بلمسة وحدة بدون فتح
+        // التطبيق. يحتاج debtId حقيقي (متوفر بكل نداءات هالدالة الفعلية —
+        // راجع DebtsViewModel/BackgroundSyncWorker) عشان نقدر نحدد ونسدد
+        // نفس الدين تحديدًا من NotificationActionReceiver.
+        if (debtId.isNotEmpty()) {
+            val payIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+                action = NotificationActionReceiver.ACTION_MARK_DEBT_PAID
+                putExtra(NotificationActionReceiver.EXTRA_DEBT_ID, debtId)
+                putExtra(NotificationActionReceiver.EXTRA_PERSON_NAME, personName)
+                putExtra(NotificationActionReceiver.EXTRA_AMOUNT, amount)
+                putExtra(NotificationActionReceiver.EXTRA_CURRENCY, currencySymbol)
+                putExtra(NotificationActionReceiver.EXTRA_NOTIF_ID, id)
+            }
+            builder.addAction(0, "تسديد", buildActionIntent(context, id, payIntent))
+        }
+
+        NotificationManagerCompat.from(context).notify(id, builder.build())
         postDebtsGroupSummary(context)
     }
 
