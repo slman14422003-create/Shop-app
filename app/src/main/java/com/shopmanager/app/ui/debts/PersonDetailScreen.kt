@@ -7,13 +7,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.PriceCheck
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,10 +26,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.data.notes.ImportantNote
+import com.shopmanager.app.data.notes.NoteLinkType
 import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
@@ -36,6 +43,8 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.notes.NoteEditScreen
+import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.theme.InfoBlue
 import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
@@ -50,7 +59,12 @@ private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(D
 fun PersonDetailScreen(
     person: Person,
     onBack: () -> Unit,
-    viewModel: DebtsViewModel = viewModel()
+    viewModel: DebtsViewModel = viewModel(),
+    // "ترابط بين الديون والملاحظات": نفس نسخة NotesViewModel المشتركة اللي
+    // يستخدمها تبويب "ملاحظات هامة" - راجع MainActivity، اللي يمررها هون
+    // بدل ما يترك القيمة الافتراضية تنشئ نسخة جديدة منفصلة (تصير عندها
+    // مستمع Firestore خاص فيها وتخرج عن مزامنة مع باقي الشاشة).
+    notesViewModel: NotesViewModel = viewModel()
 ) {
     val debts by viewModel.debtsForPerson(person.id).collectAsState(initial = emptyList())
     val message by viewModel.message.collectAsState()
@@ -62,6 +76,17 @@ fun PersonDetailScreen(
     var showDeletePersonConfirm by remember { mutableStateOf(false) }
     var deleteDebtTarget by remember { mutableStateOf<String?>(null) }
     var payDebtTarget by remember { mutableStateOf<Debt?>(null) }
+    // "ملاحظات مرتبطة": كل الملاحظات اللي نوعها PERSON ومربوطة بهذا العميل
+    // بالذات - نفس منطق الفلترة اللي NotesScreen يعرضه بتبويب "الديون".
+    val allPersons = viewModel.uiState.collectAsState().value.persons
+    val notesState = notesViewModel.uiState.collectAsState().value
+    val linkedNotes = remember(notesState.notes, person.id) {
+        notesState.notes.filter { it.linkType == NoteLinkType.PERSON && it.linkedId == person.id }
+    }
+    var editingLinkedNote by remember { mutableStateOf<ImportantNote?>(null) }
+    var showAddLinkedNote by remember { mutableStateOf(false) }
+    var isSavingLinkedNote by remember { mutableStateOf(false) }
+    var deleteNoteTarget by remember { mutableStateOf<ImportantNote?>(null) }
     // FEATURE ADDED ("تعديل اسم الشخص من واجهة تفاصيل الديون"): the
     // update-person write path (DebtsViewModel.savePerson with a non-null
     // existingId -> DebtsRepository.updatePerson) already existed, but
@@ -253,6 +278,52 @@ fun PersonDetailScreen(
                     )
                 }
             }
+
+            // "ترابط بين الديون والملاحظات": قسم منفصل يعرض أي ملاحظة هامة
+            // مربوطة بهذا العميل تحديدًا - قبل هالإضافة كانت هالعلاقة اتجاه
+            // وحيد بس (من الملاحظة تقدر تفتح صفحة العميل)، هلق تقدر كمان
+            // تشوف/تضيف/تعدل ملاحظات هذا العميل من صفحته مباشرة.
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Notes, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "ملاحظات مرتبطة",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    ActionIconButton(
+                        icon = Icons.Default.Add,
+                        tint = MaterialTheme.colorScheme.primary,
+                        contentDescription = "إضافة ملاحظة لهذا العميل",
+                        onClick = { showAddLinkedNote = true }
+                    )
+                }
+            }
+
+            if (linkedNotes.isEmpty()) {
+                item {
+                    Text(
+                        "لا توجد ملاحظات مرتبطة بهذا العميل بعد",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            } else {
+                items(linkedNotes, key = { "linkedNote_${it.id}" }) { linkedNote ->
+                    LinkedNoteRow(
+                        note = linkedNote,
+                        onToggleDone = { notesViewModel.setDone(linkedNote, !linkedNote.isDone) },
+                        onEdit = { editingLinkedNote = linkedNote },
+                        onDelete = { deleteNoteTarget = linkedNote }
+                    )
+                }
+            }
         }
     }
 
@@ -345,6 +416,59 @@ fun PersonDetailScreen(
             dismissButton = {
                 TextButton(enabled = !isSavingName, onClick = { showEditNameDialog = false }) { Text("إلغاء") }
             }
+        )
+    }
+
+    // "ترابط بين الديون والملاحظات": إضافة ملاحظة جديدة مربوطة تلقائيًا
+    // بهذا العميل - initial = null (فالعنوان يضل "ملاحظة جديدة" فعليًا،
+    // مو "تعديل") مع defaultLinkType/defaultLinkedId/defaultLinkedName
+    // لتعبئة الربط مسبقًا - راجع NoteEditDialog.kt للتفصيل.
+    if (showAddLinkedNote) {
+        NoteEditScreen(
+            initial = null,
+            persons = allPersons,
+            materials = emptyList(),
+            isSaving = isSavingLinkedNote,
+            defaultLinkType = NoteLinkType.PERSON,
+            defaultLinkedId = person.id,
+            defaultLinkedName = person.name,
+            onDismiss = { if (!isSavingLinkedNote) showAddLinkedNote = false },
+            onSave = { title, content, linkType, linkedId, linkedName, reminderAt ->
+                isSavingLinkedNote = true
+                notesViewModel.addNote(title, content, linkType, linkedId, linkedName, reminderAt) { success ->
+                    isSavingLinkedNote = false
+                    if (success) showAddLinkedNote = false
+                }
+            }
+        )
+    }
+
+    editingLinkedNote?.let { current ->
+        NoteEditScreen(
+            initial = current,
+            persons = allPersons,
+            materials = emptyList(),
+            isSaving = isSavingLinkedNote,
+            onDismiss = { if (!isSavingLinkedNote) editingLinkedNote = null },
+            onSave = { title, content, linkType, linkedId, linkedName, reminderAt ->
+                isSavingLinkedNote = true
+                notesViewModel.updateNote(current, title, content, linkType, linkedId, linkedName, reminderAt) { success ->
+                    isSavingLinkedNote = false
+                    if (success) editingLinkedNote = null
+                }
+            }
+        )
+    }
+
+    deleteNoteTarget?.let { targetNote ->
+        GlassAlertDialog(
+            onDismissRequest = { deleteNoteTarget = null },
+            title = { Text("تأكيد الحذف") },
+            text = { Text("هل أنت متأكد من حذف الملاحظة \"${targetNote.title}\"؟") },
+            confirmButton = {
+                TextButton(onClick = { notesViewModel.deleteNote(targetNote); deleteNoteTarget = null }) { Text("حذف") }
+            },
+            dismissButton = { TextButton(onClick = { deleteNoteTarget = null }) { Text("إلغاء") } }
         )
     }
 }
@@ -535,6 +659,87 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
             )
             Spacer(Modifier.width(16.dp))
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف الدين")
+        }
+    }
+}
+
+/**
+ * "ترابط بين الديون والملاحظات": صف مختصر لملاحظة مربوطة بهذا العميل -
+ * نفس تخطيط [DebtRow] فوق (Surface بحدّ رفيع بدل ظل، وزرّي تعديل/حذف
+ * دائريين بنفس الحجم) عشان يبين كإكمال طبيعي لنفس القائمة، بدل قسم بستايل
+ * مختلف. التبديل/التعديل/الحذف الفعلي بيصير عبر NotesViewModel مباشرة -
+ * نفس الكائن المشترك اللي تبويب "ملاحظات هامة" يستخدمه.
+ */
+@Composable
+private fun LinkedNoteRow(
+    note: ImportantNote,
+    onToggleDone: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ActionIconButton(
+                icon = if (note.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                tint = if (note.isDone) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = "تم",
+                onClick = onToggleDone
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    note.title,
+                    fontWeight = FontWeight.Medium,
+                    textDecoration = if (note.isDone) TextDecoration.LineThrough else null,
+                    color = if (note.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+                if (note.content.isNotBlank()) {
+                    Text(
+                        note.content,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+                if (note.reminderAt > 0) {
+                    Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Schedule, contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            remember(note.reminderAt) {
+                                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(note.reminderAt))
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            ActionIconButton(
+                icon = Icons.Default.Edit,
+                tint = InfoBlue,
+                contentDescription = "تعديل الملاحظة",
+                onClick = onEdit
+            )
+            Spacer(Modifier.width(16.dp))
+            DeleteIconButton(onClick = onDelete, contentDescription = "حذف الملاحظة")
         }
     }
 }

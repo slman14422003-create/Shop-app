@@ -9,6 +9,7 @@ import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.data.notes.NotesRepository
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.sync.SyncStatusStore
@@ -37,6 +38,10 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = DebtsRepository()
     private val settings = SettingsRepository(application)
+    // "ترابط بين الديون والملاحظات": يُستخدم فقط لفك ربط أي ملاحظة كانت
+    // مرتبطة بعميل تم حذفه بالكامل - راجع deletePerson تحت وNotesRepository.
+    // unlinkNotesForPerson للتفصيل الكامل.
+    private val notesRepo = NotesRepository()
 
     // PERF: Firestore's snapshot listener can re-fire with metadata-only
     // changes (e.g. local write acknowledged by the server) that produce an
@@ -269,6 +274,15 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 repo.deletePersonWithDebts(id)
                 _message.value = "تم حذف العميل وديونه"
                 InstantBackupWorker.requestNow(getApplication())
+                // "ترابط بين الديون والملاحظات": أي ملاحظة كانت مرتبطة بهذا
+                // العميل ما عاد إلها عميل ترجع له - نفكّ ربطها (تصير ملاحظة
+                // عامة) بدل ما تضل مؤشرة على id محذوف. بمحاولة منفصلة: حذف
+                // العميل وديونه فوق نجح فعلاً بغض النظر عن نتيجة هالتنظيف
+                // الإضافي، فما لازم نظهر رسالة خطأ للشخص إذا صار خطأ هون
+                // (مثلاً انقطاع الشبكة بلحظة الحذف بالضبط).
+                try {
+                    notesRepo.unlinkNotesForPerson(id)
+                } catch (_: Exception) { }
             } catch (e: Exception) {
                 _message.value = "خطأ في الحذف: ${e.message}"
             }
