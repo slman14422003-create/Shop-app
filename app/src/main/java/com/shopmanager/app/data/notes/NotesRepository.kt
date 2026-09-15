@@ -80,6 +80,56 @@ class NotesRepository {
         Unit
     }
 
+    /**
+     * BUG FIXED ("تأجيل ساعة" ما كان يحدّث وقت التذكير المخزّن بالملاحظة):
+     * تأجيل تذكير من زر الإشعار (راجع NotificationActionReceiver.handleSnoozeNote)
+     * كان يعيد جدولة WorkManager محليًا بس، من دون ما يلمس حقل reminderAt
+     * بمستند الملاحظة نفسها. فتح تلك الملاحظة للتعديل بعدها كان يعرض وقت
+     * التذكير الأصلي (اللي فات فعلاً بما إنو الشخص أجّله)، وأي حفظ لاحق -
+     * حتى لو غير متعلق بالتذكير إطلاقًا - كان يرسل هالوقت الفائت لـ
+     * updateNote، وهاي بدورها كانت تلغي التأجيل بصمت لأن
+     * NoteReminderWorker.schedule() يتجاهل أي وقت بالماضي. تحديث الحقل
+     * مباشرة هون (بدل استدعاء updateNote الكامل، اللي بده كل حقول الملاحظة
+     * وما نملكها بسياق الإشعار) يخلي المستند يعكس وقت التأجيل الحقيقي.
+     */
+    suspend fun updateReminderAt(id: String, reminderAtMillis: Long) = withTimeout(WRITE_TIMEOUT_MS) {
+        db.collection(notesCollection).document(id).update("reminderAt", reminderAtMillis).await()
+        Unit
+    }
+
+    /**
+     * "ترابط بين الديون والملاحظات": يُستدعى لما يُحذف عميل بالكامل (راجع
+     * DebtsViewModel.deletePerson) عشان أي ملاحظة كانت مرتبطة فيه ما تضل
+     * مؤشّرة على id عميل ما عاد موجود. النص/العنوان اللي كتبه الشخص محتوى
+     * حقيقي وبيضل - بس الربط الميت نفسه ينمسح (نفس اختيار "بدون ربط" يدويًا
+     * بمحرر الملاحظة)، فالملاحظة تصير عامة بدل ما تشاور على عميل محذوف.
+     * فلترة بحقلين equality بس (بدون orderBy) هيك ما بتحتاج composite index
+     * بـ Firestore - نفس أسلوب DebtsRepository.listenDebtsForPerson.
+     */
+    suspend fun unlinkNotesForPerson(personId: String) = withTimeout(WRITE_TIMEOUT_MS) {
+        if (personId.isNotBlank()) {
+            val orphaned = db.collection(notesCollection)
+                .whereEqualTo("linkType", NoteLinkType.PERSON.toStorage())
+                .whereEqualTo("linkedId", personId)
+                .get().await()
+            if (!orphaned.isEmpty) {
+                val batch = db.batch()
+                orphaned.documents.forEach { doc ->
+                    batch.update(
+                        doc.reference,
+                        mapOf(
+                            "linkType" to NoteLinkType.NONE.toStorage(),
+                            "linkedId" to "",
+                            "linkedName" to ""
+                        )
+                    )
+                }
+                batch.commit().await()
+            }
+        }
+        Unit
+    }
+
     suspend fun deleteNote(id: String) = withTimeout(WRITE_TIMEOUT_MS) {
         db.collection(notesCollection).document(id).delete().await()
         Unit
