@@ -707,6 +707,16 @@ private fun ShopManagerApp(
                 // it just no longer pays that compositing cost.
                 HorizontalPager(
                     state = pagerState,
+                    // PERF (تنقّل أنعم): compose الصفحة المجاورة (يمين/يسار)
+                    // مسبقًا على الأجهزة العادية/القوية بدل انتظار أول سحبة
+                    // إليها فعليًا - أول سحبة للصفحة التالية هيك ما عندها
+                    // كلفة "compose لأول مرة" وبتبين أنعم فورًا، بنفس روح
+                    // إزالة الـ graphicsLayer لكل صفحة فوق (توفير كلفة
+                    // مكانها بمكان تاني). على أجهزة الأداء الضعيف نضل
+                    // عالافتراضي (0) لتفادي أي عبء compose/ذاكرة إضافي مو
+                    // ضروري - نفس منطق "دعم الوضعين" اللي يحدد isLowTierForPager
+                    // نفسها فوق.
+                    beyondViewportPageCount = if (isLowTierForPager) 0 else 1,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     when (page) {
@@ -796,6 +806,12 @@ private fun ShopManagerApp(
                     PersonDetailScreen(
                         person = person,
                         viewModel = debtsViewModel,
+                        // "ترابط بين الديون والملاحظات": نفس نسخة NotesViewModel
+                        // المشتركة اللي يستخدمها تبويب "ملاحظات هامة" (مو نسخة
+                        // جديدة بـ viewModel() الافتراضي) - عشان الملاحظات
+                        // المعروضة هون تضل نفس البيانات الحية، وإضافة/تعديل
+                        // ملاحظة من هالشاشة ينعكس فورًا بتبويب الملاحظات وبالعكس.
+                        notesViewModel = notesViewModel,
                         onBack = { navController.popBackStack() }
                     )
                 }
