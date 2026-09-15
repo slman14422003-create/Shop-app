@@ -36,8 +36,23 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      # CI FIX (٢٠٢٦-٠٩-١٤/١٥ - عطل عام مو متعلق بكود التطبيق): جوجل شالت
+      # الحزمة القديمة "tools" نهائيًا من مستودع Android SDK (كانت متروكة/
+      # deprecated من ٢٠١٩، بس ضلت موجودة بالمستودع لهلق). android-actions/
+      # setup-android@v3 بدون أي `with:` كان بيطلب "tools platform-tools"
+      # كقيمة افتراضية ضمنية، فصار سطر sdkmanager الداخلي فيه يفشل بـ
+      # "Failed to find package 'tools'" قبل ما توصل حتى لخطوة gradle -
+      # نفس الخطأ بالضبط صار بنفس الوقت بمشاريع أندرويد كتيرة غير مرتبطة.
+      # الـ build هون أصلاً ما بيحتاج platform-tools (adb/fastboot) ولا
+      # أي أداة من هالحزم - بس gradle assembleDebug/assembleRelease، و
+      # AGP نفسه بينزّل أي platform/build-tools محدد بـ build.gradle.kts
+      # عند الحاجة. packages: '' يوقف التنزيل الافتراضي المكسور بس يضل
+      # يجهز ANDROID_HOME ويوافق على تراخيص الـ SDK (المطلوبين الوحيدين
+      # فعليًا هون).
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
