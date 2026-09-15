@@ -74,6 +74,17 @@ private val timeFormat get() = SimpleDateFormat("HH:mm", Locale.US)
  * still floats above the bottom nav / status bar exactly like the old
  * modal did and back-press still closes it for free - the *content*
  * inside that window is a plain full-size Scaffold now, not a card.
+ *
+ * FEATURE ADDED ("ترابط بين الديون والملاحظات"): [defaultLinkType]/
+ * [defaultLinkedId]/[defaultLinkedName] let a caller open this screen for
+ * a brand-new note (initial = null, so the header still correctly reads
+ * "ملاحظة جديدة") that is already pre-linked to a specific customer or
+ * material - e.g. the "+" inside Person Detail's own "ملاحظات مرتبطة"
+ * section pre-links straight to whichever customer's page it was opened
+ * from, without this looking like an *edit* of an existing note. Only
+ * used as the initial value when there's no [initial] note to read the
+ * link from instead, so every existing caller (NotesScreen, which never
+ * passes these) keeps behaving exactly as before.
  */
 @Composable
 fun NoteEditScreen(
@@ -81,14 +92,17 @@ fun NoteEditScreen(
     persons: List<Person>,
     materials: List<Material>,
     isSaving: Boolean = false,
+    defaultLinkType: NoteLinkType = NoteLinkType.NONE,
+    defaultLinkedId: String = "",
+    defaultLinkedName: String = "",
     onDismiss: () -> Unit,
     onSave: (title: String, content: String, linkType: NoteLinkType, linkedId: String, linkedName: String, reminderAt: Long) -> Unit
 ) {
     var title by remember { mutableStateOf(initial?.title ?: "") }
     var content by remember { mutableStateOf(initial?.content ?: "") }
-    var linkType by remember { mutableStateOf(initial?.linkType ?: NoteLinkType.NONE) }
-    var linkedId by remember { mutableStateOf(initial?.linkedId ?: "") }
-    var linkedName by remember { mutableStateOf(initial?.linkedName ?: "") }
+    var linkType by remember { mutableStateOf(initial?.linkType ?: defaultLinkType) }
+    var linkedId by remember { mutableStateOf(initial?.linkedId ?: defaultLinkedId) }
+    var linkedName by remember { mutableStateOf(initial?.linkedName ?: defaultLinkedName) }
 
     var reminderEnabled by remember { mutableStateOf((initial?.reminderAt ?: 0L) > 0L) }
     val initialCal = remember {

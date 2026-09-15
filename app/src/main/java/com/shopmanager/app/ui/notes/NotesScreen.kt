@@ -19,9 +19,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,6 +94,10 @@ fun NotesScreen(
     var isSaving by remember { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<ImportantNote?>(null) }
     var filter by remember { mutableStateOf(NoteFilter.ALL) }
+    // FEATURE ADDED ("تحسينات بواجهة الملاحظات"): بحث بالعنوان/المحتوى/اسم
+    // الجهة المرتبطة - نفس شريط البحث الموجود أصلاً بشاشة الديون
+    // (DebtsScreen)، ما كان بشاشة الملاحظات إشي مشابه غير رقاقات الفلترة.
+    val search = remember { mutableStateOf("") }
 
     // Same formula as DebtsScreen/MaterialsScreen: pill height + the
     // floating "+" button's own fixed height + a small breathing gap, so
@@ -118,13 +124,19 @@ fun NotesScreen(
         }
     }
 
-    val filtered = remember(state.notes, filter) {
-        when (filter) {
+    val filtered = remember(state.notes, filter, search.value) {
+        val byFilter = when (filter) {
             NoteFilter.ALL -> state.notes.filter { !it.isDone }
             NoteFilter.DEBTS -> state.notes.filter { !it.isDone && it.linkType == NoteLinkType.PERSON }
             NoteFilter.MATERIALS -> state.notes.filter { !it.isDone && it.linkType == NoteLinkType.MATERIAL }
             NoteFilter.GENERAL -> state.notes.filter { !it.isDone && it.linkType == NoteLinkType.NONE }
             NoteFilter.DONE -> state.notes.filter { it.isDone }
+        }
+        if (search.value.isBlank()) byFilter
+        else byFilter.filter {
+            it.title.contains(search.value, ignoreCase = true) ||
+                it.content.contains(search.value, ignoreCase = true) ||
+                it.linkedName.contains(search.value, ignoreCase = true)
         }
     }
 
@@ -172,6 +184,33 @@ fun NotesScreen(
                 pinned = state.notes.count { it.isPinned }
             )
 
+            // FEATURE ADDED ("تحسينات بواجهة الملاحظات"): نفس شريط البحث
+            // الكبسولي المستخدم بشاشة الديون (DebtsScreen) - بحث بالعنوان
+            // أو المحتوى أو اسم الجهة المرتبطة، مع رقاقات الفلترة تحته
+            // بالضبط متل قبل.
+            OutlinedTextField(
+                value = search.value,
+                onValueChange = { search.value = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = { Text("بحث في الملاحظات...") },
+                leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                trailingIcon = {
+                    if (search.value.isNotEmpty()) {
+                        IconButton(onClick = { search.value = "" }) {
+                            Icon(Icons.Default.Clear, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(50),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                )
+            )
+
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -194,8 +233,12 @@ fun NotesScreen(
                 }
             } else if (filtered.isEmpty()) {
                 EmptyState(
-                    icon = Icons.Default.Notes,
-                    text = if (filter == NoteFilter.ALL) "لا توجد ملاحظات بعد\nاضغط \"+\" لإضافة ملاحظة" else "لا توجد ملاحظات هنا"
+                    icon = if (search.value.isNotBlank()) Icons.Default.Search else Icons.Default.Notes,
+                    text = when {
+                        search.value.isNotBlank() -> "لا توجد نتائج"
+                        filter == NoteFilter.ALL -> "لا توجد ملاحظات بعد\nاضغط \"+\" لإضافة ملاحظة"
+                        else -> "لا توجد ملاحظات هنا"
+                    }
                 )
             } else {
                 LazyColumn(
