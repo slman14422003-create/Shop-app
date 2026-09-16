@@ -80,6 +80,7 @@ import com.shopmanager.app.ui.common.ShareFormatDialog
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.data.materials.quantityLabel
+import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppColorMode
@@ -136,7 +137,15 @@ fun SettingsScreen(
     // on every Android version) and shows a clear warning + a direct link
     // to the system notification settings for this app whenever the two
     // disagree, instead of the switch quietly lying.
-    fun checkSystemNotificationsAllowed(): Boolean = NotificationManagerCompat.from(context).areNotificationsEnabled()
+    // "اصلح ميزات الاشعارات": beyond the single app-level flag, also check
+    // each notification channel's own importance — see
+    // NotificationHelper.blockedChannelLabels for why the app-level check
+    // alone used to miss a channel the person disabled individually.
+    var blockedChannelLabels by remember { mutableStateOf(emptyList<String>()) }
+    fun checkSystemNotificationsAllowed(): Boolean {
+        blockedChannelLabels = NotificationHelper.blockedChannelLabels(context)
+        return NotificationManagerCompat.from(context).areNotificationsEnabled() && blockedChannelLabels.isEmpty()
+    }
     var systemNotificationsAllowed by remember { mutableStateOf(checkSystemNotificationsAllowed()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -480,7 +489,14 @@ fun SettingsScreen(
                                 }
                                 Spacer(Modifier.height(6.dp))
                                 Text(
-                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع هذا التطبيق تحديداً من إظهار أي إشعار على هذا الجهاز — لن تصلك تنبيهات النواقص أو الديون الجديدة مهما حدث بالتطبيق حتى تُفعّلها من إعدادات الجهاز.",
+                                    // "اصلح ميزات الاشعارات": distinguishes the
+                                    // all-or-nothing case (app-level toggle off)
+                                    // from a specific channel being disabled —
+                                    // see blockedChannelLabels above.
+                                    if (blockedChannelLabels.isNotEmpty())
+                                        "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع تحديداً هذه الإشعارات: ${blockedChannelLabels.joinToString("، ")} — لن تصلك حتى تُفعّلها من إعدادات إشعارات التطبيق."
+                                    else
+                                        "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع هذا التطبيق تحديداً من إظهار أي إشعار على هذا الجهاز — لن تصلك تنبيهات النواقص أو الديون الجديدة مهما حدث بالتطبيق حتى تُفعّلها من إعدادات الجهاز.",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
@@ -1121,19 +1137,50 @@ private fun ColorModeSection(
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
+            // REDESIGN ("الوضع التلقائي مو منسق نهائيًا"): the old preview
+            // was three flush rectangles glued edge-to-edge with zero
+            // spacing, no border, and no per-segment rounding — on a lot of
+            // real wallpapers (especially when the extracted primary lands
+            // close in lightness to this very card's own secondaryContainer
+            // backdrop) that read as a shapeless, boundary-less smear
+            // instead of a deliberate swatch, nothing like the crisp
+            // bordered circles every other mode in this picker
+            // ([ColorPaletteSwatch]) uses. Each dynamic tone now gets its
+            // own rounded, individually bordered + shadowed chip with real
+            // breathing room and a small role label underneath (Material
+            // You's own primary/secondary/tertiary naming), so "there's
+            // nothing to pick, here's what's active" finally reads as a
+            // designed part of this screen instead of a leftover strip.
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(28.dp)
-                    .clip(RoundedCornerShape(10.dp)),
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 listOf(
-                    MaterialTheme.colorScheme.primary,
-                    MaterialTheme.colorScheme.secondary,
-                    MaterialTheme.colorScheme.tertiary
-                ).forEach { swatch ->
-                    Box(Modifier.weight(1f).fillMaxHeight().background(swatch))
+                    "أساسي" to MaterialTheme.colorScheme.primary,
+                    "ثانوي" to MaterialTheme.colorScheme.secondary,
+                    "إضافي" to MaterialTheme.colorScheme.tertiary
+                ).forEach { (label, swatch) ->
+                    Column(
+                        Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .shadow(2.dp, RoundedCornerShape(12.dp), clip = false)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(swatch)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
                 }
             }
         }
