@@ -86,6 +86,7 @@ import com.shopmanager.app.ui.theme.AppColorMode
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.SuccessGreen
+import com.shopmanager.app.ui.theme.isDynamicColorAvailable
 import com.shopmanager.app.ui.theme.paletteColorsFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -949,7 +950,19 @@ private fun ColorModeSection(
     onModeSelected: (AppColorMode) -> Unit,
     onPaletteSelected: (AppColorPalette) -> Unit
 ) {
-    val modes = listOf(AppColorMode.GLASS, AppColorMode.MANUAL, AppColorMode.CLASSIC)
+    // "تلقائي من الخلفية" only makes sense where Android actually exposes
+    // a wallpaper-driven color API (12+) — omitted from the picker
+    // entirely below that, rather than shown and silently falling back,
+    // so nobody sees an option that can't do what its label says on their
+    // device.
+    val modes = remember {
+        buildList {
+            add(AppColorMode.GLASS)
+            add(AppColorMode.MANUAL)
+            if (isDynamicColorAvailable()) add(AppColorMode.DYNAMIC)
+            add(AppColorMode.CLASSIC)
+        }
+    }
     val effectiveMode = colorMode
 
     Text(
@@ -994,6 +1007,7 @@ private fun ColorModeSection(
                     when (mode) {
                         AppColorMode.GLASS -> "زجاج"
                         AppColorMode.MANUAL -> "مخصص"
+                        AppColorMode.DYNAMIC -> "تلقائي"
                         AppColorMode.CLASSIC -> "كلاسيكي"
                     },
                     style = MaterialTheme.typography.labelMedium,
@@ -1083,6 +1097,45 @@ private fun ColorModeSection(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        // "تلقائي من الخلفية": no swatch grid at all here — the whole
+        // point of this mode is that there's nothing to pick, the colors
+        // are read straight from the phone's own wallpaper (Android 12+
+        // Material You). A live preview strip built from the *current*
+        // resolved MaterialTheme colors (which, while this mode is
+        // active, already are the dynamic ones) stands in for a picker.
+        AppColorMode.DYNAMIC -> Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.secondaryContainer)
+                .padding(14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "الألوان تُستخرج تلقائيًا من خلفية جهازك — بدون اختيار يدوي، وتتغيّر مع تغيير الخلفية.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .clip(RoundedCornerShape(10.dp)),
+            ) {
+                listOf(
+                    MaterialTheme.colorScheme.primary,
+                    MaterialTheme.colorScheme.secondary,
+                    MaterialTheme.colorScheme.tertiary
+                ).forEach { swatch ->
+                    Box(Modifier.weight(1f).fillMaxHeight().background(swatch))
+                }
+            }
         }
     }
 }
