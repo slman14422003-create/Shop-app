@@ -1,7 +1,11 @@
 package com.shopmanager.app.ui.theme
 
+import android.content.Context
+import android.os.Build
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -60,12 +64,36 @@ enum class AppColorPalette(val label: String) {
  * - [CLASSIC]: the "إيقاف لوحة الألوان" escape hatch — no accent hue at
  *   all, just true neutral grays on white (light) / near-black (dark), for
  *   anyone who wants the plain two-tone look and nothing more.
+ * - [DYNAMIC]: "تلقائي من الخلفية" — Android 12+'s real Material You
+ *   wallpaper-driven color engine ([dynamicLightColorScheme]/
+ *   [dynamicDarkColorScheme]), reinstated as an explicit, opt-in mode
+ *   (nobody is switched to it silently) rather than the old behavior this
+ *   file's [MANUAL] doc used to describe fixing, where a hand-picked
+ *   palette was silently overridden by the wallpaper on API 31+. Falls
+ *   back to the currently-selected [AppColorPalette] on API < 31, where
+ *   Android has no dynamic-color API at all — see [resolvedColorMode].
  */
 enum class AppColorMode(val label: String) {
     GLASS("زجاج شفاف كامل"),
     MANUAL("لوحة ألوان مخصصة"),
     CLASSIC("أبيض وأسود كلاسيكي"),
+    DYNAMIC("تلقائي من الخلفية"),
 }
+
+/** Whether [AppColorMode.DYNAMIC] can actually run on this device — Android's
+ * dynamic-color APIs ([dynamicLightColorScheme]/[dynamicDarkColorScheme])
+ * only exist from API 31 (Android 12) on. Checked once by both the theme
+ * (to decide what to render) and Settings (to decide what to show/save). */
+fun isDynamicColorAvailable(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+/** [AppColorMode.DYNAMIC] with no OS support to back it falls back to
+ * [AppColorMode.MANUAL] — the same hand-tuned palette behavior every
+ * Android version before 12 always had — instead of silently rendering
+ * nothing or crashing. Every reader of [AppColorMode] (the theme, the
+ * glass-mode switch, Settings' own selection UI) goes through this so
+ * they can never disagree about which mode is actually in effect. */
+fun AppColorMode.resolved(): AppColorMode =
+    if (this == AppColorMode.DYNAMIC && !isDynamicColorAvailable()) AppColorMode.MANUAL else this
 
 /** The resolved colors for one palette: the two brand-gradient colors (same
  * in every theme) plus the primary/secondary tones fed into the light and
@@ -563,6 +591,26 @@ internal fun glassDarkScheme(p: PaletteColors): ColorScheme {
     error = Color(0xFFFF6B6B),
     )
 }
+
+/**
+ * [AppColorMode.DYNAMIC]'s color scheme: Android's own wallpaper-derived
+ * Material You palette, completely untouched — no hue/tone overrides on
+ * top of it like every other mode above, since the entire point of this
+ * mode is that the colors come from the person's actual wallpaper rather
+ * than any hand-tuned table in this file. Callers must guard with
+ * [isDynamicColorAvailable] first; this throws on API < 31 exactly like
+ * the underlying platform call does.
+ */
+internal fun dynamicSchemeFor(context: Context, useDark: Boolean): ColorScheme =
+    if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+
+/** The header/gradient colors for [AppColorMode.DYNAMIC] — derived from
+ * the resolved dynamic [ColorScheme] itself (primary → tertiary) instead
+ * of a fixed [PaletteColors] pair, since there's no selected palette to
+ * read a gradient from in this mode: the wallpaper picks the hue, so the
+ * header gradient has to follow whatever that scheme actually contains. */
+internal fun dynamicGradientColors(scheme: ColorScheme): List<Color> =
+    listOf(scheme.primary, scheme.tertiary)
 
 /** The header/gradient colors for [AppColorMode.GLASS] — the selected
  * palette's own gradient pair, softened toward translucent so the header

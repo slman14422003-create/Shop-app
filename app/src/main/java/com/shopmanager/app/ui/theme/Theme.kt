@@ -6,6 +6,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -84,27 +85,37 @@ fun ShopManagerTheme(
     content: @Composable () -> Unit
 ) {
     val useDark = rememberIsDarkTheme(themeMode)
+    val context = LocalContext.current
+    // DYNAMIC falls back to MANUAL's own palette behavior on API < 31,
+    // where there is no wallpaper-driven color API to read from at all —
+    // see [resolved]'s doc. Every branch below reads this, never the raw
+    // [colorMode] parameter, so the two can never disagree.
+    val effectiveColorMode = remember(colorMode) { colorMode.resolved() }
 
     val paletteColors = remember(colorPalette) { paletteColorsFor(colorPalette) }
-    val colors = remember(colorMode, paletteColors, useDark) {
-        when (colorMode) {
+    val colors = remember(effectiveColorMode, paletteColors, useDark, context) {
+        when (effectiveColorMode) {
             AppColorMode.GLASS ->
                 if (useDark) glassDarkScheme(paletteColors) else glassLightScheme(paletteColors)
             AppColorMode.CLASSIC ->
                 if (useDark) neutralDarkScheme() else neutralLightScheme()
             AppColorMode.MANUAL ->
                 if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
+            AppColorMode.DYNAMIC -> dynamicSchemeFor(context, useDark)
         }
     }
 
-    // The header/status-bar gradient always comes from the selected
-    // palette's own gradient pair now — there's no wallpaper-driven scheme
-    // left to derive it from instead.
-    val gradientColors = remember(colorMode, paletteColors) {
-        when (colorMode) {
+    // The header/status-bar gradient comes from the selected palette's own
+    // gradient pair for every fixed-palette mode, or straight from the
+    // resolved dynamic scheme itself for DYNAMIC (see
+    // [dynamicGradientColors] — there's no palette to read a pair from in
+    // that mode, the wallpaper picks the hue).
+    val gradientColors = remember(effectiveColorMode, paletteColors, colors) {
+        when (effectiveColorMode) {
             AppColorMode.GLASS -> glassGradientColors(paletteColors)
             AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
             AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
+            AppColorMode.DYNAMIC -> dynamicGradientColors(colors)
         }
     }
 
@@ -118,7 +129,7 @@ fun ShopManagerTheme(
         // liquidGlassSurface's own `glassModeActive` branch) and never pick
         // up any glass translucency, matching stock Android's own solid
         // Material surfaces.
-        LocalGlassMode provides (colorMode == AppColorMode.GLASS)
+        LocalGlassMode provides (effectiveColorMode == AppColorMode.GLASS)
     ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
     }
