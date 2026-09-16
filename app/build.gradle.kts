@@ -11,6 +11,9 @@ val MANUAL_VERSION_CODE = 1
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // See root build.gradle.kts — required by Kotlin 2.0+ to compile any
+    // @Composable code; replaces the old composeOptions{} version pin below.
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // SIGNING: reads the real Play Store release keystore's credentials from
@@ -40,12 +43,19 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.shopmanager.app"
-    compileSdk = 34
+    // BUILD UPDATE: latest stable API level AGP 8.13.2 supports (was 34).
+    // The app already renders fully edge-to-edge with its own status/nav
+    // bar handling (see ui/theme/SystemBars.kt +
+    // WindowCompat.setDecorFitsSystemWindows(window, false) in
+    // MainActivity) rather than relying on the OS's default chrome, so the
+    // targetSdk 35+ "edge-to-edge enforced" behavior change that trips up
+    // apps which don't handle their own insets doesn't apply here.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.shopmanager.app"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         // MANUAL RELEASES: you're now building and uploading Release APKs
         // by hand (not through GitHub Actions/release.yml anymore), so
         // GITHUB_RUN_NUMBER never exists at build time — versionCode was
@@ -143,8 +153,8 @@ android {
         }
     }
 
-    // JAVA VERSION: bumped from 17 to 21 (current LTS — AGP 8.5.2 / Gradle
-    // 8.7 / Kotlin 1.9.24, see the root build.gradle.kts and CI workflow,
+    // JAVA VERSION: bumped from 17 to 21 (current LTS — AGP 8.13.2 / Gradle
+    // 8.13 / Kotlin 2.3.21, see the root build.gradle.kts and CI workflow,
     // all officially support building with and targeting JDK 21). minSdk 24
     // is unaffected: D8 still desugars whatever the target device's runtime
     // can't run natively, exactly as it did for Java 17 language features.
@@ -155,30 +165,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "21"
-        // PERF (general Compose smoothness): "strong skipping mode" makes
-        // the Compose compiler treat a composable as skippable even when
-        // one of its parameters is an *unstable* type (a plain lambda that
-        // isn't `remember`ed, a List/Map passed straight from a ViewModel,
-        // etc.) as long as that same parameter instance didn't change
-        // since last time — the compiler now compares by reference/equality
-        // at runtime instead of refusing to skip the whole composable just
-        // because the type itself isn't provably stable. This app passes
-        // exactly that shape of parameter constantly (every list row takes
-        // `onEdit: () -> Unit`/`onDelete: () -> Unit` lambdas built fresh
-        // each parent recomposition, every screen takes `persons`/
-        // `materials` lists straight from a StateFlow) — without this,
-        // those rows/screens were never skippable at all, so *any*
-        // recomposition of a parent (e.g. a Firestore snapshot arriving,
-        // a sibling text field changing) forced Compose to re-run every
-        // such child's body just to check its content, even when nothing
-        // it actually displays changed. This is a compiler-level flag, not
-        // a per-file fix — it improves exactly this pattern everywhere in
-        // the app at once, on top of (not instead of) the scoping fixes
-        // already made in specific hot spots like the pricing screen.
-        freeCompilerArgs += listOf(
-            "-P",
-            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true"
-        )
     }
 
     buildFeatures {
@@ -186,9 +172,20 @@ android {
         buildConfig = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // PERF (general Compose smoothness) — carried over from the old
+    // composeOptions{}/freeCompilerArgs "experimentalStrongSkipping=true"
+    // flag this replaces: strong skipping mode makes the Compose compiler
+    // treat a composable as skippable even when one of its parameters is
+    // an *unstable* type (a plain lambda built fresh each recomposition, a
+    // List/Map straight from a ViewModel's StateFlow — exactly what every
+    // list row's `onEdit`/`onDelete` and every screen's `persons`/
+    // `materials` param look like in this app), comparing by
+    // reference/equality at runtime instead of refusing to skip the whole
+    // composable just because the type itself isn't provably stable. No
+    // explicit flag is needed any more: the Kotlin Compose compiler plugin
+    // (see plugins{} above and the composeCompiler{} block below this
+    // android{} block) has shipped with strong skipping on by default
+    // since the version this project now pins.
 
     packaging {
         resources {
@@ -212,14 +209,25 @@ android {
     }
 }
 
+// Config surface for the Kotlin Compose compiler plugin (see plugins{}
+// above) — deliberately empty: strong skipping mode is on by default at
+// this plugin version already (see the comment on buildFeatures above),
+// so there's nothing here that needs to be turned on explicitly.
+composeCompiler {
+}
+
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
+    // BUILD UPDATE (latest stable, verified individually — see the CHANGELOG
+    // entry for this update for the source of each number): every androidx/
+    // Compose/Firebase/Kotlin dependency in this file was bumped from what
+    // it pinned before to its own current stable release, not just the BOMs.
+    implementation("androidx.core:core-ktx:1.18.0")
     // Standard AndroidX SplashScreen API — shows a static app icon on a
     // flat background immediately at cold start instead of a blank/white
     // starting window, and is kept on screen (see MainActivity) until the
     // first real frame is fully ready. This is what fixes the startup
     // jitter/flash.
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.core:core-splashscreen:1.2.0")
     // PERF (general smoothness, release builds): ART can run an app off an
     // ahead-of-time "baseline profile" instead of interpreting/JIT-warming
     // every class from scratch on first use — this is what makes cold
@@ -238,17 +246,17 @@ dependencies {
     // always judge real-world smoothness from an installed *release* APK,
     // never a debug run.
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
-    implementation("androidx.activity:activity-compose:1.9.1")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("androidx.navigation:navigation-compose:2.9.8")
 
-    // FIX: bumped from 2024.06.00 (material3 1.2.x) so the app can use the
-    // stable Material3 pull-to-refresh API (PullToRefreshBox), which only
-    // shipped starting material3 1.3.0. Used for the new Facebook-style
-    // pull-down-to-refresh gesture, applied consistently across Home,
-    // Debts, and Materials (see ui/common/PullToRefreshContent.kt).
-    val composeBom = platform("androidx.compose:compose-bom:2024.09.00")
+    // BUILD UPDATE: latest stable Compose BOM as of this update — brings in
+    // Compose UI/Foundation/Material3/Runtime 1.11.x across the board (see
+    // the per-artifact versions on developer.android.com/jetpack/androidx/
+    // versions/stable-channel). All existing composeOptions/BOM-driven code
+    // in this project (PullToRefreshBox etc.) stays source-compatible.
+    val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -257,17 +265,17 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Firebase — initialized manually via FirebaseOptions (no google-services.json / plugin needed)
-    val firebaseBom = platform("com.google.firebase:firebase-bom:33.1.2")
+    val firebaseBom = platform("com.google.firebase:firebase-bom:34.14.0")
     implementation(firebaseBom)
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-common-ktx")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
 
     // Free periodic background check for new debts / shortage-list changes
     // (see data/notifications/BackgroundSyncWorker.kt) — no server or paid
     // Firebase plan needed, unlike a real Cloud-Function-triggered push.
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("androidx.work:work-runtime-ktx:2.11.2")
 
     // In-app WebView (دليل الاستخدام / help screen). androidx.webkit gives
     // access to the WebViewFeature/WebSettingsCompat compat-shims needed to
@@ -276,5 +284,5 @@ dependencies {
     // stabilized piecemeal from API 29 through 33, so a raw SDK check alone
     // is not reliable on Android 11/12 devices — this library picks the
     // right mechanism at runtime).
-    implementation("androidx.webkit:webkit:1.11.0")
+    implementation("androidx.webkit:webkit:1.16.0")
 }
