@@ -54,10 +54,14 @@ jobs:
         with:
           packages: ''
 
+      # BUILD UPDATE: bumped to match AGP 8.13.2's own minimum-required
+      # Gradle version (see build.gradle.kts / app/build.gradle.kts) — AGP
+      # 8.13.x needs Gradle 8.13+ to run at all, so this has to move in
+      # lockstep with the AGP bump, not independently.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.7'
+          gradle-version: '8.13'
 
       # FIX: this used to only ever run `assembleDebug`, so every GitHub
       # Release only ever shipped the debug build — larger, unshrunk,
