@@ -542,7 +542,11 @@ private fun MaterialsList(
                 material = m,
                 onEdit = { onEdit(m) },
                 onDelete = { onDelete(m) },
-                modifier = Modifier.animateItemPlacement(MotionSpecs.reorderSpring())
+                modifier = Modifier.animateItem(
+                    fadeInSpec = null,
+                    placementSpec = MotionSpecs.reorderSpring(),
+                    fadeOutSpec = null
+                )
             )
         }
     }
