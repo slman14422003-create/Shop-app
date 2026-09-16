@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -42,6 +43,7 @@ import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.liquidGlassSurface
+import com.shopmanager.app.ui.common.listItemEntrance
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.ShareFormatDialog
@@ -228,9 +230,12 @@ fun DebtsScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filtered, key = { it.id }) { person ->
+                    itemsIndexed(filtered, key = { _, person -> person.id }) { index, person ->
                         PersonRow(
-                            person, Modifier.animateItemPlacement(MotionSpecs.reorderSpring()),
+                            person,
+                            Modifier
+                                .animateItemPlacement(MotionSpecs.reorderSpring())
+                                .listItemEntrance(index),
                             onClick = { onOpenPerson(person.id) },
                             onDelete = { deleteTarget.value = person },
                             onMarkPaid = { payTarget.value = person }

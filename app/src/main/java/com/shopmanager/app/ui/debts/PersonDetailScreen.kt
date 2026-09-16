@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -39,6 +40,7 @@ import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.liquidGlassSurface
+import com.shopmanager.app.ui.common.listItemEntrance
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -263,7 +265,7 @@ fun PersonDetailScreen(
                     }
                 }
             } else {
-                items(debts, key = { it.id }) { debt ->
+                itemsIndexed(debts, key = { _, debt -> debt.id }) { index, debt ->
                     DebtRow(
                         debt = debt,
                         nf = nf,
@@ -274,7 +276,8 @@ fun PersonDetailScreen(
                             note = debt.note
                         },
                         onDelete = { deleteDebtTarget = debt.id },
-                        onMarkPaid = { payDebtTarget = debt }
+                        onMarkPaid = { payDebtTarget = debt },
+                        modifier = Modifier.listItemEntrance(index)
                     )
                 }
             }
@@ -587,9 +590,9 @@ private fun AddDebtCard(
 }
 
 @Composable
-private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: () -> Unit, onMarkPaid: () -> Unit) {
+private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: () -> Unit, onMarkPaid: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
