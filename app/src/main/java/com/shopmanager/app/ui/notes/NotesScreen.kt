@@ -11,6 +11,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,6 +48,7 @@ import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.liquidGlassSurface
+import com.shopmanager.app.ui.common.listItemEntrance
 import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -249,10 +251,12 @@ fun NotesScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(filtered, key = { it.id }) { note ->
+                    itemsIndexed(filtered, key = { _, note -> note.id }) { index, note ->
                         NoteRow(
                             note = note,
-                            modifier = Modifier.animateItemPlacement(MotionSpecs.reorderSpring()),
+                            modifier = Modifier
+                                .animateItemPlacement(MotionSpecs.reorderSpring())
+                                .listItemEntrance(index),
                             onToggleDone = { viewModel.setDone(note, !note.isDone) },
                             onTogglePinned = { viewModel.setPinned(note, !note.isPinned) },
                             onEdit = { editingNote = note; showEditDialog = true },
