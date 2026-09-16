@@ -255,7 +255,11 @@ fun NotesScreen(
                         NoteRow(
                             note = note,
                             modifier = Modifier
-                                .animateItemPlacement(MotionSpecs.reorderSpring())
+                                .animateItem(
+                                    fadeInSpec = null,
+                                    placementSpec = MotionSpecs.reorderSpring(),
+                                    fadeOutSpec = null
+                                )
                                 .listItemEntrance(index),
                             onToggleDone = { viewModel.setDone(note, !note.isDone) },
                             onTogglePinned = { viewModel.setPinned(note, !note.isPinned) },
