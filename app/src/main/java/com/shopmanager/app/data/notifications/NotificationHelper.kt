@@ -112,6 +112,32 @@ object NotificationHelper {
     }
 
     /**
+     * BUG FIXED ("اصلح ميزات الاشعارات" — a single channel switched off
+     * from system Settings looked identical to "everything's fine"):
+     * Settings' own "systemNotificationsAllowed" check only ever called
+     * `NotificationManagerCompat.areNotificationsEnabled()`, which is the
+     * *app-level* toggle alone. Android also lets a person disable one
+     * specific channel (e.g. just "تنبيهات الديون" from the notification
+     * long-press menu) while leaving the app-level toggle and every other
+     * channel untouched — every `notify()` call under that one channel then
+     * silently no-ops forever, with nothing in the UI ever hinting at it,
+     * since the app-level check alone still reported "allowed". Exposes
+     * which channels (by their human label) are actually blocked so
+     * Settings can warn about exactly that, instead of only ever detecting
+     * the all-or-nothing case.
+     */
+    fun blockedChannelLabels(context: Context): List<String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return emptyList()
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return emptyList()
+        return listOf(
+            CHANNEL_SHOPPING_LIST to "قائمة النواقص والمشتريات",
+            CHANNEL_DEBTS to "تنبيهات الديون",
+            CHANNEL_NOTES to "تذكيرات الملاحظات الهامة"
+        ).filter { (id, _) -> manager.getNotificationChannel(id)?.importance == NotificationManager.IMPORTANCE_NONE }
+            .map { it.second }
+    }
+
+    /**
      * BUG FIXED (tapping a notification did nothing): none of the three
      * notifications below ever set a `contentIntent`, so tapping them had
      * no effect at all - not an OEM (Xiaomi/Samsung) quirk, just a missing
