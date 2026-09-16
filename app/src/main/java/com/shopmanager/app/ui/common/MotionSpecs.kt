@@ -55,7 +55,7 @@ object MotionSpecs {
     @Composable
     fun pressSpring(): FiniteAnimationSpec<Float> = quickSpring()
 
-    /** List-item reorder/insert/remove placement (LazyColumn animateItemPlacement). */
+    /** List-item reorder/insert/remove placement (LazyColumn animateItem's placementSpec). */
     @Composable
     fun reorderSpring(): FiniteAnimationSpec<IntOffset> = if (isLowTier()) {
         spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
