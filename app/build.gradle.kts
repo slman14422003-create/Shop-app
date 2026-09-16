@@ -283,8 +283,18 @@ dependencies {
     // Firebase — initialized manually via FirebaseOptions (no google-services.json / plugin needed)
     val firebaseBom = platform("com.google.firebase:firebase-bom:34.14.0")
     implementation(firebaseBom)
-    implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-common-ktx")
+    // BUILD FIX: "Could not find com.google.firebase:firebase-firestore-ktx:"
+    // (empty version, same for firebase-common-ktx) — Firebase stopped
+    // releasing the standalone -ktx modules and dropped them from the BoM
+    // entirely as of BoM v34.0.0 (this project pins 34.14.0), so there's no
+    // version left here for Gradle to resolve against. The KTX extension
+    // APIs were merged into these same main modules back in BoM 32.5.0+
+    // under the same package names, so no source change is needed — every
+    // Firebase import in this project (FirebaseModule.kt etc.) already
+    // uses the plain com.google.firebase(.firestore) package, never a
+    // .ktx sub-package.
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-common")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
 
