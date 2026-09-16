@@ -234,7 +234,11 @@ fun DebtsScreen(
                         PersonRow(
                             person,
                             Modifier
-                                .animateItemPlacement(MotionSpecs.reorderSpring())
+                                .animateItem(
+                                    fadeInSpec = null,
+                                    placementSpec = MotionSpecs.reorderSpring(),
+                                    fadeOutSpec = null
+                                )
                                 .listItemEntrance(index),
                             onClick = { onOpenPerson(person.id) },
                             onDelete = { deleteTarget.value = person },
