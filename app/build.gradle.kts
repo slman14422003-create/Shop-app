@@ -263,8 +263,20 @@ dependencies {
     // never a debug run.
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("androidx.activity:activity-compose:1.13.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    // BUILD FIX: "Dependency 'androidx.lifecycle:lifecycle-runtime-compose-
+    // android:2.11.0' ... requires libraries and applications that depend
+    // on it to compile against version 37 or later of the Android APIs"
+    // (same error for lifecycle-viewmodel-compose-android:2.11.0) — as of
+    // this release, androidx.lifecycle's AAR metadata requires compileSdk
+    // 37 + AGP 9.1.0+, and AGP 8.13.2's own max recommended compileSdk is
+    // 36 (see the root build.gradle.kts comment on deliberately not
+    // jumping to AGP 9 yet). lifecycle-runtime-compose isn't declared
+    // directly — it comes in transitively through lifecycle-viewmodel-
+    // compose below — so pinning both explicit lifecycle lines back to
+    // 2.10.0 (the stable release right before this compileSdk-37 bump)
+    // pulls that transitive dependency down to a compatible version too.
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.navigation:navigation-compose:2.9.8")
 
     // BUILD UPDATE: latest stable Compose BOM as of this update — brings in
