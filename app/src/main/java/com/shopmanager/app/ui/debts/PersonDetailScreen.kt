@@ -1,7 +1,6 @@
 package com.shopmanager.app.ui.debts
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,6 +44,7 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.GlassCard
 import com.shopmanager.app.ui.notes.NoteEditScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.theme.InfoBlue
@@ -500,7 +500,14 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(52.dp).clip(MaterialTheme.shapes.medium).background(Color.White.copy(alpha = 0.25f)),
+                // BUG FIXED (الأفاتار طالعة صندوق رمادي باهت): `avatarColor`
+                // كان بيوصل كباراميتر لهاد الـ Composable بس ما حدا يستخدمه -
+                // الصندوق كان دايماً أبيض شفاف بغض النظر عن اسم العميل، عكس
+                // نفس الأفاتار الملوّن اللي العميل ياخده بقائمة الديون
+                // (PersonRow بـ DebtsScreen.kt). هيك صار شكلها هون مختلف عن
+                // باقي التطبيق - بالضبط الصندوق الرمادي الباهت المحاط
+                // بالدائرة الحمرا بالسكرين شوت.
+                Modifier.size(52.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
                 contentAlignment = Alignment.Center
             ) {
                 Text(name.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
@@ -533,14 +540,9 @@ private fun AddDebtCard(
     onCancelEdit: () -> Unit,
     onSubmit: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
+    // طلب "دمج نمط الـ Glassmorphism": نفس البطاقة، بستايل الزجاج الموحّد
+    // (GlassCard) بدل الـ Surface المسطحة - راجع الشرح الكامل بـ GlassCard.kt.
+    GlassCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Column(Modifier.padding(16.dp)) {
             Text(
                 if (isEditing) "تعديل الدين" else "إضافة دين جديد",
@@ -591,14 +593,7 @@ private fun AddDebtCard(
 
 @Composable
 private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: () -> Unit, onMarkPaid: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
+    GlassCard(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -680,14 +675,7 @@ private fun LinkedNoteRow(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
+    GlassCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
