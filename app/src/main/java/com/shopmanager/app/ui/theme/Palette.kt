@@ -605,12 +605,33 @@ internal fun dynamicSchemeFor(context: Context, useDark: Boolean): ColorScheme =
     if (useDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
 
 /** The header/gradient colors for [AppColorMode.DYNAMIC] — derived from
- * the resolved dynamic [ColorScheme] itself (primary → tertiary) instead
- * of a fixed [PaletteColors] pair, since there's no selected palette to
- * read a gradient from in this mode: the wallpaper picks the hue, so the
- * header gradient has to follow whatever that scheme actually contains. */
-internal fun dynamicGradientColors(scheme: ColorScheme): List<Color> =
-    listOf(scheme.primary, scheme.tertiary)
+ * the resolved dynamic [ColorScheme] itself instead of a fixed
+ * [PaletteColors] pair, since there's no selected palette to read a
+ * gradient from in this mode: the wallpaper picks the hue, so the header
+ * gradient has to follow whatever that scheme actually contains.
+ *
+ * BUG FIXED ("فاتح لدرجة تزعج" — the header/nav reading as a bright,
+ * washed-out pastel flash sitting on top of an otherwise near-black app):
+ * this used to read `scheme.primary`/`scheme.tertiary` unconditionally.
+ * Per Material 3's own tonal-palette spec, a *dark* scheme's `primary`/
+ * `tertiary` are deliberately tone-80 — pale, high-chroma — because
+ * that's the right tone for *text/icon* color sitting on a dark surface,
+ * not for a large filled banner. That's exactly the "pale flash" problem
+ * [BrandGradientStart]/[BrandGradientEnd]'s own doc comment already
+ * describes and avoids for every hand-tuned palette (their gradient uses
+ * the medium tone-40 pair in *both* themes, never the pale dark-mode
+ * `primaryDark`) — DYNAMIC mode was simply never given the same
+ * treatment. In dark mode this now reads `primaryContainer`/
+ * `tertiaryContainer` instead: Material 3 places those at tone-30 for a
+ * dynamic dark scheme, the same "rich, medium-dark, still reads the
+ * wallpaper's hue" register the hand-tuned gradients already sit in, so
+ * whatever accent the wallpaper picks, the header/nav settle in next to
+ * the near-black cards instead of glowing on top of them. Light mode is
+ * untouched — `primary`/`tertiary` are already the correctly-rich tone-40
+ * there, exactly like every other mode. */
+internal fun dynamicGradientColors(scheme: ColorScheme, useDark: Boolean): List<Color> =
+    if (useDark) listOf(scheme.primaryContainer, scheme.tertiaryContainer)
+    else listOf(scheme.primary, scheme.tertiary)
 
 /** The header/gradient colors for [AppColorMode.GLASS] — the selected
  * palette's own gradient pair, softened toward translucent so the header
