@@ -129,7 +129,11 @@ fun ShopManagerTheme(
         // liquidGlassSurface's own `glassModeActive` branch) and never pick
         // up any glass translucency, matching stock Android's own solid
         // Material surfaces.
-        LocalGlassMode provides (effectiveColorMode == AppColorMode.GLASS)
+        LocalGlassMode provides (effectiveColorMode == AppColorMode.GLASS),
+        // Read by GlassAlertDialog (see that local's own doc) so its brand-
+        // tint blend can avoid the same pale tone-80 primary/tertiary roles
+        // dynamicGradientColors already avoids for the header/nav.
+        LocalDynamicDarkMode provides (effectiveColorMode == AppColorMode.DYNAMIC && useDark)
     ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
     }
