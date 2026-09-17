@@ -51,22 +51,6 @@ enum class AppColorPalette(val label: String) {
  * - [MANUAL]: one of the 20 hand-tuned [AppColorPalette] hues below,
  *   picked from the swatch grid — the app's original behavior, and the
  *   default so nobody's look changes on update.
- * - [GLASS]: "الجلاس الشفاف الكامل" — every surface a Card/Dialog/Sheet/Menu
- *   paints from is genuinely translucent (see [glassLightScheme]/
- *   [glassDarkScheme]) instead of a solid fill, and [LocalGlassMode]
- *   switches on [com.shopmanager.app.ui.common.liquidGlassSurface]'s
- *   animated drift/sheen motion for the header, floating bottom nav, and
- *   every dialog — so the whole app, not just the header, reads as one
- *   continuous sheet of moving liquid glass. That extra motion is scoped to
- *   this mode only; [MANUAL]/[CLASSIC] keep their existing calm, static
- *   glass panels. Its HUE now comes straight from the phone's own
- *   wallpaper — [dynamicPaletteColors], the same [dynamicLightColorScheme]/
- *   [dynamicDarkColorScheme] engine [DYNAMIC] itself reads from — on any
- *   device that exposes one (API 31+), so the glass genuinely reveals
- *   *whatever's behind it* instead of a color picked ahead of time. Only
- *   on API < 31, where there is no wallpaper-color API to read at all, does
- *   it fall back to the selected [AppColorPalette] hue pair like [MANUAL] —
- *   see [ShopManagerTheme].
  * - [CLASSIC]: the "إيقاف لوحة الألوان" escape hatch — no accent hue at
  *   all, just true neutral grays on white (light) / near-black (dark), for
  *   anyone who wants the plain two-tone look and nothing more.
@@ -80,7 +64,6 @@ enum class AppColorPalette(val label: String) {
  *   Android has no dynamic-color API at all — see [resolvedColorMode].
  */
 enum class AppColorMode(val label: String) {
-    GLASS("زجاج شفاف كامل"),
     MANUAL("لوحة ألوان مخصصة"),
     CLASSIC("أبيض وأسود كلاسيكي"),
     DYNAMIC("تلقائي من الخلفية"),
@@ -495,113 +478,6 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme {
 }
 
 /**
- * [AppColorMode.GLASS]'s color scheme: takes a [PaletteColors] — one of the
- * 20 hand-tuned palette hues below (the same input [lightSchemeFor]/
- * [darkSchemeFor] take), or the phone's own wallpaper via
- * [dynamicPaletteColors] where that's available — and treats it exactly the
- * same way either way, except every token a Card/Dialog/Sheet/Menu/Button
- * reads its background from carries real alpha < 1 instead of a solid fill.
- * Because Compose's `Modifier.background(Color)` respects a Color's own
- * alpha channel, this alone is what turns every *ordinary* Material3
- * surface in the app — not just the hand-built
- * [com.shopmanager.app.ui.common.liquidGlassSurface] panels — into frosted
- * glass that lets whatever's behind it show through, without every screen
- * needing its own bespoke glass code. `primary`/`onPrimary` are kept
- * opaque so button/header text stays legible; only the *container* tones
- * (what a translucent panel's fill actually is) go see-through.
- *
- * CLARITY PASS ("خلية اكتر وضوح بدل ما كلشي خلفة مبين بكل التطبيق"): the
- * previous "RADICAL UPGRADE" pass dropped every alpha here by roughly a
- * third in pursuit of a more "liquid" look, but spread across every
- * ordinary card/list row/dialog body in the app that meant whatever sat
- * behind each surface (the row above it, text scrolling past) stayed
- * clearly readable through it — exactly the "everything shows what's
- * behind it" complaint. Every alpha below is raised back into a range
- * where the surface still reads as translucent glass but its own
- * content is never fighting the background for legibility.
- */
-internal fun glassLightScheme(p: PaletteColors): ColorScheme {
-    val hue = hueOf(p.primaryLight)
-    return lightColorScheme(
-    primary = p.primaryLight,
-    onPrimary = Color.White,
-    primaryContainer = p.primaryContainerLight.copy(alpha = 0.64f),
-    onPrimaryContainer = p.primaryLight,
-    secondary = p.secondaryLight,
-    onSecondary = Color.White,
-    secondaryContainer = p.secondaryContainerLight.copy(alpha = 0.64f),
-    onSecondaryContainer = p.secondaryLight,
-    tertiary = p.secondaryLight,
-    onTertiary = Color.White,
-    tertiaryContainer = p.secondaryContainerLight.copy(alpha = 0.64f),
-    // Same "فراغ أسود" fix as lightSchemeFor — kept opaque (no alpha) even
-    // in GLASS mode since `background` is the true opaque backdrop behind
-    // every translucent panel; only the panels themselves should be
-    // see-through, or there'd be nothing solid left for them to float
-    // over.
-    background = tone(hue, 0.05f, 0.985f),
-    onBackground = Color(0xFF1C1B1F),
-    surface = tone(hue, 0.02f, 0.995f, alpha = 0.66f),
-    onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = tone(hue, 0.10f, 0.955f, alpha = 0.60f),
-    onSurfaceVariant = LightOnSurfaceVariant,
-    surfaceTint = p.primaryLight,
-    outline = tone(hue, 0.22f, 0.55f, alpha = 0.62f),
-    outlineVariant = tone(hue, 0.14f, 0.82f, alpha = 0.50f),
-    inverseSurface = Color(0xFF2F2D33),
-    inverseOnSurface = Color(0xFFF4EFF4),
-    inversePrimary = p.primaryContainerLight,
-    // Same rising-saturation elevation ladder as lightSchemeFor, with the
-    // glass mode's own alpha ramp layered on top — each step up is
-    // brighter, more saturated, AND less see-through than the last, so a
-    // raised glass card reads as thicker/denser glass catching more light,
-    // not just a bigger flat wash of the same translucency.
-    surfaceContainerLowest = tone(hue, 0.01f, 1f, alpha = 0.50f),
-    surfaceContainerLow = tone(hue, 0.07f, 0.98f, alpha = 0.58f),
-    surfaceContainer = tone(hue, 0.11f, 0.965f, alpha = 0.66f),
-    surfaceContainerHigh = tone(hue, 0.16f, 0.95f, alpha = 0.74f),
-    surfaceContainerHighest = tone(hue, 0.20f, 0.935f, alpha = 0.82f),
-    error = DangerRed,
-    )
-}
-
-internal fun glassDarkScheme(p: PaletteColors): ColorScheme {
-    val hue = hueOf(p.primaryDark)
-    return darkColorScheme(
-    primary = p.primaryDark,
-    onPrimary = p.onPrimaryDark,
-    primaryContainer = p.primaryContainerDark.copy(alpha = 0.60f),
-    onPrimaryContainer = Color.White,
-    secondary = p.secondaryDark,
-    onSecondary = p.onSecondaryDark,
-    secondaryContainer = p.secondaryContainerDark.copy(alpha = 0.60f),
-    onSecondaryContainer = Color.White,
-    tertiary = p.secondaryDark,
-    onTertiary = p.onSecondaryDark,
-    tertiaryContainer = p.secondaryContainerDark.copy(alpha = 0.60f),
-    // Same fix, dark GLASS side — see lightSchemeFor's comment.
-    background = tone(hue, 0.16f, 0.10f),
-    onBackground = Color(0xFFE7E2EA),
-    surface = tone(hue, 0.14f, 0.135f, alpha = 0.62f),
-    onSurface = Color(0xFFE7E2EA),
-    surfaceVariant = tone(hue, 0.16f, 0.19f, alpha = 0.58f),
-    onSurfaceVariant = DarkOnSurfaceVariant,
-    surfaceTint = p.primaryDark,
-    outline = tone(hue, 0.24f, 0.62f, alpha = 0.62f),
-    outlineVariant = tone(hue, 0.18f, 0.32f, alpha = 0.50f),
-    inverseSurface = Color(0xFFE7E2EA),
-    inverseOnSurface = Color(0xFF2F2D33),
-    inversePrimary = p.primaryContainerDark,
-    surfaceContainerLowest = tone(hue, 0.20f, 0.065f, alpha = 0.50f),
-    surfaceContainerLow = tone(hue, 0.16f, 0.145f, alpha = 0.58f),
-    surfaceContainer = tone(hue, 0.18f, 0.165f, alpha = 0.64f),
-    surfaceContainerHigh = tone(hue, 0.22f, 0.20f, alpha = 0.72f),
-    surfaceContainerHighest = tone(hue, 0.26f, 0.235f, alpha = 0.80f),
-    error = Color(0xFFFF6B6B),
-    )
-}
-
-/**
  * [AppColorMode.DYNAMIC]'s color scheme: Android's own wallpaper-derived
  * Material You palette, completely untouched — no hue/tone overrides on
  * top of it like every other mode above, since the entire point of this
@@ -626,8 +502,8 @@ internal fun dynamicSchemeFor(context: Context, useDark: Boolean): ColorScheme =
  * `Brush.verticalGradient`/`horizontalGradient` from this list either way,
  * but two identical stops paint as one flat color with no light/dark
  * blend — exactly the plain "one color, that's it" look asked for here,
- * left as a real two-hue gradient only for MANUAL/GLASS/CLASSIC's own
- * hand-tuned pairs, which is what they're deliberately designed to be.
+ * left as a real two-hue gradient only for MANUAL/CLASSIC's own hand-tuned
+ * pairs, which is what they're deliberately designed to be.
  *
  * TONE ("فاتح لدرجة تزعج" — a bright, washed-out pastel flash on an
  * otherwise near-black app): per Material 3's tonal-palette spec, a
@@ -644,87 +520,6 @@ internal fun dynamicGradientColors(scheme: ColorScheme, useDark: Boolean): List<
     return listOf(color, color)
 }
 
-/**
- * طلب "الوضع الزجاجي ياخد اللون من الخلفية تلقائيا متل الوضع التلقائي":
- * [AppColorMode.GLASS]'s color SOURCE on a device that can actually read
- * one from the wallpaper (API 31+) — builds a full [PaletteColors] pair
- * straight from Android's own [dynamicLightColorScheme]/
- * [dynamicDarkColorScheme], the exact same wallpaper-driven engine
- * [AppColorMode.DYNAMIC] already reads from, instead of any of the 20
- * hand-tuned [AppColorPalette] swatches. Before this, "زجاج" always meant
- * "translucent glass tinted with whichever swatch you tapped" — now it
- * means "translucent glass tinted with whatever's actually behind the
- * phone", which is what real liquid glass does: it doesn't carry its own
- * color, it reveals the color of what's behind it. [ShopManagerTheme] is
- * the only caller — it swaps to this instead of [paletteColorsFor] for
- * GLASS specifically, falling back to the selected [AppColorPalette] on
- * older Android exactly like [AppColorMode.DYNAMIC] itself already does
- * (see [resolved]), so glass mode never breaks on a device with no
- * wallpaper-color API — it just goes back to being hand-picked there.
- *
- * No [tone]/[hueOf] recompute needed here: [glassLightScheme]/
- * [glassDarkScheme] already build their entire tonal ladder from just
- * `primaryLight`/`primaryDark` once handed a [PaletteColors], exactly the
- * same as for any hand-tuned palette — this only has to supply the raw
- * tonal roles, not re-derive anything.
- *
- * `gradientStart`/`gradientEnd` need one fixed pair that reads correctly in
- * *either* theme (see [PaletteColors]'s own doc — every hand-tuned palette
- * above does the same), so this borrows the *dark* scheme's
- * primaryContainer/tertiaryContainer rather than its plain primary/tertiary,
- * for the identical reason [dynamicGradientColors]'s "TONE" note gives: a
- * dynamic dark scheme's plain `primary` is a pale tone-80 meant for
- * text/icon contrast on a dark surface, not a filled banner, while its
- * tone-30 container roles sit at the same "rich, medium-dark, still reads
- * the wallpaper's hue" register this app's own hand-tuned gradients are
- * built at.
- *
- * Callers must guard with [isDynamicColorAvailable] first, exactly like
- * [dynamicSchemeFor] — this throws on API < 31 the same way the underlying
- * platform call does.
- */
-internal fun dynamicPaletteColors(context: Context): PaletteColors {
-    val light = dynamicLightColorScheme(context)
-    val dark = dynamicDarkColorScheme(context)
-    return PaletteColors(
-        gradientStart = dark.primaryContainer,
-        gradientEnd = dark.tertiaryContainer,
-        primaryLight = light.primary,
-        primaryContainerLight = light.primaryContainer,
-        secondaryLight = light.secondary,
-        secondaryContainerLight = light.secondaryContainer,
-        primaryDark = dark.primary,
-        onPrimaryDark = dark.onPrimary,
-        primaryContainerDark = dark.primaryContainer,
-        secondaryDark = dark.secondary,
-        onSecondaryDark = dark.onSecondary,
-        secondaryContainerDark = dark.secondaryContainer,
-    )
-}
-
-/** The header/gradient colors for [AppColorMode.GLASS] — the resolved
- * [PaletteColors]' own gradient pair (a selected palette's, or the
- * wallpaper's via [dynamicPaletteColors] — see [ShopManagerTheme]),
- * softened toward translucent so the header itself reads as a pane of
- * glass rather than a solid banner. Never fully invisible:
- * [com.shopmanager.app.ui.common.liquidGlassSurface]'s own layered
- * highlight/rim (switched on for this mode via [LocalGlassMode]) keeps the
- * panel readable on top of whatever scrolls near it. */
-internal fun glassGradientColors(p: PaletteColors): List<Color> = listOf(
-    p.gradientStart.copy(alpha = 0.78f),
-    p.gradientEnd.copy(alpha = 0.78f)
-)
-
-/** True only when [AppColorMode.GLASS] is the active color mode. Read by
- * [com.shopmanager.app.ui.common.liquidGlassSurface],
- * [com.shopmanager.app.ui.common.GlassAlertDialog], and the glass buttons
- * in [com.shopmanager.app.ui.common.GlassButton]/
- * [com.shopmanager.app.ui.common.LiquidGlass] to switch on their animated
- * drift/sheen motion and push their translucency further — scoped to this
- * mode alone so [AppColorMode.MANUAL]/[AppColorMode.CLASSIC]'s existing
- * calm, static glass panels never change. */
-val LocalGlassMode = staticCompositionLocalOf { false }
-
 /** Carries the selected palette's brand-gradient colors down to
  * [com.shopmanager.app.ui.common.BrandGradient] without threading a
  * parameter through every screen that already calls
@@ -735,19 +530,14 @@ val LocalBrandGradientColors = staticCompositionLocalOf { listOf(BrandGradientSt
 
 /** True only when the palette actually in effect right now is coming
  * straight from the phone's wallpaper *and* the theme is currently dark —
- * [AppColorMode.DYNAMIC] always, and [AppColorMode.GLASS] too once
- * [dynamicPaletteColors] is what fed it (see [ShopManagerTheme]'s
+ * [AppColorMode.DYNAMIC] only (see [ShopManagerTheme]'s
  * `usingWallpaperColor`). Read by
  * [com.shopmanager.app.ui.common.GlassAlertDialog] to decide which color
  * role to blend its fill toward — see the "TONE" note on
  * [dynamicGradientColors] for why a dynamic *dark* scheme's
  * `primary`/`tertiary` (pale tone-80, meant for text/icons on dark, not a
- * large tinted panel) are the wrong pick there too: the dialog's own
- * brand-tint blend read as a washed-out beige/tan panel in dynamic-sourced
- * dark schemes for exactly the same reason the header/nav once did.
- * GlassAlertDialog swaps to `primaryContainer`/`tertiaryContainer`
- * (tone-30, rich) only when this is true; a hand-tuned palette (MANUAL/
- * CLASSIC, or GLASS on a pre-API-31 device with no wallpaper color to read)
- * keeps blending toward its own already-tuned `primary`/`tertiary` exactly
- * as before, so their separately-tuned dialog look never changes. */
+ * large tinted panel) are the wrong pick there too. GlassAlertDialog swaps
+ * to `primaryContainer`/`tertiaryContainer` (tone-30, rich) only when this
+ * is true; a hand-tuned palette (MANUAL/CLASSIC) keeps blending toward its
+ * own already-tuned `primary`/`tertiary` exactly as before. */
 val LocalDynamicDarkMode = staticCompositionLocalOf { false }
