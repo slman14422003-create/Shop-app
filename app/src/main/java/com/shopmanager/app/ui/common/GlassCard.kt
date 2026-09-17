@@ -26,10 +26,26 @@ import com.shopmanager.app.ui.theme.LocalGlassMode
  *   - translucent fill        -> `baseAlpha`, tinted by the current
  *                                 surface tone rather than the loud brand
  *                                 gradient a header/top-bar paints with
- *   - `backdrop-filter: blur` -> [liquidGlassSurface]'s own real
- *                                 Gaussian-blurred highlight/droplet layer
- *   - 1px translucent border  -> the same soft top-bright/bottom-fade
- *                                 gradient rim [liquidGlassSurface] draws
+ *   - `backdrop-filter: blur` -> Compose has no real backdrop-sampling API
+ *                                 (no way to read what's actually behind
+ *                                 this exact spot on screen), so this is a
+ *                                 translucency-only stand-in, not a literal
+ *                                 blur of whatever scrolls underneath. The
+ *                                 one genuinely blurred surface in the app
+ *                                 is [GlassAlertDialog], which can afford a
+ *                                 real screenshot-and-blur trick because a
+ *                                 dialog briefly owns the whole screen -
+ *                                 not something a normal scrolling list row
+ *                                 can do. [liquidGlassSurface]'s own
+ *                                 highlight/droplet layer is deliberately
+ *                                 left OFF here (`highlight = false`,
+ *                                 matching every other glass surface in the
+ *                                 app) - it draws as scattered, independently
+ *                                 blurred light patches rather than one even
+ *                                 tint, which is exactly the "طبقة وحدة"
+ *                                 (one uniform layer) complaint this fixed.
+ *   - 1px translucent border  -> the same gradient rim [liquidGlassSurface]
+ *                                 draws for every other panel in the app
  *   - soft floating shadow    -> `elevation`
  *   - 16-28px corner radius   -> `shape` (defaults to a 20dp "pebble",
  *                                 same family as [GlassAlertDialog]'s
@@ -62,12 +78,18 @@ fun GlassCard(
                 // the brand hue every header paints with - a whole list of
                 // rows glowing in the app's accent color would read as
                 // loud/rainbow rather than as frosted glass. GLASS mode's
-                // own translucency + blurred highlight/droplets are what
-                // carry the "glass" read; the fill underneath just needs
-                // to be a neutral surface tone.
+                // own translucency is what carries the "glass" read; the
+                // fill underneath just needs to be a neutral surface tone.
                 baseBrush = Brush.linearGradient(listOf(toneColor, toneColor)),
                 baseAlpha = 0.55f,
-                elevation = if (glassModeActive) elevation else 0.dp
+                elevation = if (glassModeActive) elevation else 0.dp,
+                // BUG FIXED (screenshot: uneven "fog" patches instead of
+                // one uniform tinted layer): every other glass surface in
+                // the app already renders with `highlight = false` — this
+                // card is what's left as one flat, evenly-lit sheet of
+                // glass instead of the blotchy blurred light patches
+                // [liquidGlassSurface]'s `highlight = true` path draws.
+                highlight = false
             )
             .let {
                 // liquidGlassSurface already skips its own rim border
