@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -48,6 +49,7 @@ import com.shopmanager.app.ui.common.GlassCard
 import com.shopmanager.app.ui.notes.NoteEditScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.theme.InfoBlue
+import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -108,6 +110,28 @@ fun PersonDetailScreen(
     }
 
     val total = debts.sumOf { it.amount }
+    // BUG FIXED ("اللونان بالشريط العلوي منفصلان بخط، لازم يكونوا نفس اللون
+    // متصل"): the TopAppBar and PersonHeader right below it are two
+    // *independent* liquidGlassSurface panels (see `topFlush`'s own doc on
+    // that function — merging them into one panel isn't possible here since
+    // one lives in Scaffold's `topBar` slot and the other is the first
+    // LazyColumn item). `topFlush` already killed the shadow/topEdge-glare/
+    // rim-border that used to draw an extra line at their seam, but each
+    // panel's default `baseBrush` (`BrandGradient.brush()`) still built its
+    // OWN full gradientStart→gradientEnd sweep across *its own* local
+    // height — a `Brush.verticalGradient` with no explicit end resolves
+    // against whatever height it's actually drawn into. TopAppBar (~64dp +
+    // status bar) finished its sweep all the way at gradientEnd right at its
+    // own bottom edge, while PersonHeader started its *own* sweep fresh at
+    // gradientStart one pixel below — two different colors meeting head-on,
+    // which is exactly the visible line in the screenshot. Giving the
+    // TopAppBar a flat `gradientStart` fill instead (no sweep of its own)
+    // means its bottom edge is now the *same* color PersonHeader's gradient
+    // begins at, so the seam disappears and all the fading into
+    // `gradientEnd` happens across PersonHeader's own, taller panel instead.
+    val topBarBrush = remember(LocalBrandGradientColors.current) {
+        SolidColor(LocalBrandGradientColors.current.first())
+    }
 
     Scaffold(
         // Off-pager screen (no bottom nav bar of its own) — the outer app
@@ -153,9 +177,12 @@ fun PersonDetailScreen(
                     actionIconContentColor = BrandOnGradient
                 ),
                 // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
-                // — راجع الشرح بـ DashboardScreen.kt.
+                // — راجع الشرح بـ DashboardScreen.kt. baseBrush = topBarBrush
+                // (flat gradientStart, not the usual sweep) — راجع تعليق
+                // "اللونان بالشريط العلوي منفصلان بخط" فوق.
                 modifier = Modifier.liquidGlassSurface(
                     androidx.compose.ui.graphics.RectangleShape,
+                    baseBrush = topBarBrush,
                     highlight = false,
                     baseAlpha = 0.72f
                 ),
