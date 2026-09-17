@@ -299,14 +299,17 @@ fun GlassAlertDialog(
         val fillAlphaBottom = if (glassModeActive) 0.54f else 1f
         // BUG FIXED ("خلي هاد اللون يتناسق مع الواجهة" — this dialog
         // reading as a light beige/tan panel while the rest of the app is
-        // dark): in AppColorMode.DYNAMIC's dark scheme, primary/tertiary
-        // are the same pale tone-80 roles dynamicGradientColors already
-        // works around for the header/nav (see that function's own "TONE"
-        // note) — blending 48%/34% of a *pale* color into this dark panel
-        // is exactly what pulled it toward beige/tan. primaryContainer/
+        // dark): in a dynamic/wallpaper-sourced dark scheme —
+        // AppColorMode.DYNAMIC always, and GLASS too once it reads from the
+        // wallpaper the same way (see LocalDynamicDarkMode's own doc) —
+        // primary/tertiary are the same pale tone-80 roles dynamicGradientColors
+        // already works around for the header/nav (see that function's own
+        // "TONE" note) — blending 48%/34% of a *pale* color into this dark
+        // panel is exactly what pulled it toward beige/tan. primaryContainer/
         // tertiaryContainer (tone-30, rich) blend toward a color that's
         // still clearly "this wallpaper's hue" without washing the panel
-        // out. Scoped to LocalDynamicDarkMode alone — MANUAL/GLASS/CLASSIC
+        // out. Scoped to LocalDynamicDarkMode alone — MANUAL/CLASSIC, and
+        // GLASS on a pre-API-31 device with no wallpaper color to read,
         // keep blending toward their own already-tuned primary/tertiary
         // exactly as before.
         val dynamicDarkMode = LocalDynamicDarkMode.current
