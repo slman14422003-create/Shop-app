@@ -610,28 +610,30 @@ internal fun dynamicSchemeFor(context: Context, useDark: Boolean): ColorScheme =
  * gradient from in this mode: the wallpaper picks the hue, so the header
  * gradient has to follow whatever that scheme actually contains.
  *
- * BUG FIXED ("فاتح لدرجة تزعج" — the header/nav reading as a bright,
- * washed-out pastel flash sitting on top of an otherwise near-black app):
- * this used to read `scheme.primary`/`scheme.tertiary` unconditionally.
- * Per Material 3's own tonal-palette spec, a *dark* scheme's `primary`/
- * `tertiary` are deliberately tone-80 — pale, high-chroma — because
- * that's the right tone for *text/icon* color sitting on a dark surface,
- * not for a large filled banner. That's exactly the "pale flash" problem
- * [BrandGradientStart]/[BrandGradientEnd]'s own doc comment already
- * describes and avoids for every hand-tuned palette (their gradient uses
- * the medium tone-40 pair in *both* themes, never the pale dark-mode
- * `primaryDark`) — DYNAMIC mode was simply never given the same
- * treatment. In dark mode this now reads `primaryContainer`/
- * `tertiaryContainer` instead: Material 3 places those at tone-30 for a
- * dynamic dark scheme, the same "rich, medium-dark, still reads the
- * wallpaper's hue" register the hand-tuned gradients already sit in, so
- * whatever accent the wallpaper picks, the header/nav settle in next to
- * the near-black cards instead of glowing on top of them. Light mode is
- * untouched — `primary`/`tertiary` are already the correctly-rich tone-40
- * there, exactly like every other mode. */
-internal fun dynamicGradientColors(scheme: ColorScheme, useDark: Boolean): List<Color> =
-    if (useDark) listOf(scheme.primaryContainer, scheme.tertiaryContainer)
-    else listOf(scheme.primary, scheme.tertiary)
+ * FLAT, NOT A GRADIENT ("مو تدرج فاتح وغامق بالوضع التلقائي، بدي لون واحد
+ * خلص — لون الخلفية بس"): returns the *same* single color twice instead
+ * of a `primaryContainer`→`tertiaryContainer`/`primary`→`tertiary` pair.
+ * [BrandGradient.brush]/[BrandGradient.horizontalBrush] still build a
+ * `Brush.verticalGradient`/`horizontalGradient` from this list either way,
+ * but two identical stops paint as one flat color with no light/dark
+ * blend — exactly the plain "one color, that's it" look asked for here,
+ * left as a real two-hue gradient only for MANUAL/GLASS/CLASSIC's own
+ * hand-tuned pairs, which is what they're deliberately designed to be.
+ *
+ * TONE ("فاتح لدرجة تزعج" — a bright, washed-out pastel flash on an
+ * otherwise near-black app): per Material 3's tonal-palette spec, a
+ * *dark* scheme's `primary` is deliberately tone-80 — pale, high-chroma —
+ * the right tone for *text/icon* color on a dark surface, not a filled
+ * banner. `primaryContainer` sits at tone-30 for a dynamic dark scheme
+ * instead: the same "rich, medium-dark, still reads the wallpaper's hue"
+ * register [BrandGradientStart]/[BrandGradientEnd]'s own pair already
+ * uses for every hand-tuned palette. Light mode keeps plain `primary` —
+ * already the correctly-rich tone-40 there, exactly like every other
+ * mode. */
+internal fun dynamicGradientColors(scheme: ColorScheme, useDark: Boolean): List<Color> {
+    val color = if (useDark) scheme.primaryContainer else scheme.primary
+    return listOf(color, color)
+}
 
 /** The header/gradient colors for [AppColorMode.GLASS] — the selected
  * palette's own gradient pair, softened toward translucent so the header
