@@ -23,7 +23,6 @@ import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandGradient
 import com.shopmanager.app.ui.common.LiquidGlassGlow
 import com.shopmanager.app.ui.common.liquidGlassSurface
-import com.shopmanager.app.ui.theme.LocalGlassMode
 import kotlinx.coroutines.delay
 
 /**
@@ -52,14 +51,7 @@ import kotlinx.coroutines.delay
  * primary/tertiary the same way [GlassAlertDialog] blends its panel — so
  * the field and error text keep reading from the ordinary
  * onSurface/onSurfaceVariant roles that already look correct in every
- * color mode, no one-off color logic of their own needed. This screen now
- * genuinely changes look with whichever
- * [com.shopmanager.app.ui.theme.AppColorMode] is active — GLASS gets a
- * moving, translucent card in whatever hue is currently resolved (a
- * selected palette, or the phone's own wallpaper — see
- * [com.shopmanager.app.ui.theme.dynamicPaletteColors]); MANUAL/CLASSIC/
- * DYNAMIC get the same panel calm and opaque — instead of ignoring the
- * setting entirely like before.
+ * color mode, no one-off color logic of their own needed.
  *
  * Status bar/nav bar icon color for this screen is handled in
  * MainActivity, not here — see its own note on why this full-bleed
@@ -84,7 +76,6 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
         }
     }
 
-    val glassModeActive = LocalGlassMode.current
     // Same "tonal surface blended toward the app's own brand color" recipe
     // [GlassAlertDialog] uses for its panel fill (see its
     // gradientTop/gradientBottom + dialogRimColor) — kept at full opacity
@@ -167,12 +158,7 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                         shape = MaterialTheme.shapes.large,
                         baseBrush = Brush.verticalGradient(listOf(cardTop, cardBottom)),
                         elevation = 20.dp,
-                        // A gentle diagonal glide only in glass mode, same
-                        // as GlassAlertDialog's own panel — no corner glow
-                        // (highlight stays off), just a faint, slow streak.
-                        sheen = glassModeActive,
                         highlight = false,
-                        animated = glassModeActive,
                         rimColor = cardRimColor
                     )
                     .padding(24.dp)
