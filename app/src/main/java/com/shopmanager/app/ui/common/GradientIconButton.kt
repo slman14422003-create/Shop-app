@@ -10,12 +10,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * brand gradient header (settings on the dashboard, share on the materials
  * screen, etc).
  *
- * REDESIGNED (زجاج سائل / liquid glass): this used to be a fully opaque
- * solid-white circle. It's now a thin translucent glass chip — see
- * [GlassIconButton] for the actual implementation and for why it never
- * applies a blur to its own content. The function name/signature here is
- * unchanged on purpose so every existing call site (DashboardHeader,
- * MaterialsHeader) picks up the new look automatically with no call-site
+ * See [GlassIconButton] for the actual implementation. The function
+ * name/signature here is unchanged on purpose so every existing call site
+ * (DashboardHeader, MaterialsHeader) keeps working with no call-site
  * changes needed.
  */
 @Composable

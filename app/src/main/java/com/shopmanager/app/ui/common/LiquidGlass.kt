@@ -1,13 +1,6 @@
 package com.shopmanager.app.ui.common
 
-import android.os.Build
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -21,580 +14,71 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.TileMode
-import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.shopmanager.app.data.performance.LocalPerformanceTier
-import com.shopmanager.app.data.performance.PerformanceTier
-import com.shopmanager.app.ui.theme.LocalGlassMode
-import androidx.compose.ui.geometry.Size
-import kotlin.math.roundToInt
 
 /**
- * "قطرات الماء" (water droplets) — AppColorMode.GLASS's own visual
- * signature. One diffuse corner glow used to be the whole "glass" read;
- * this is a small, fixed field of bead-like highlights of different sizes
- * scattered near the top of the panel, each trailing a thin soft streak
- * beneath it, the way individual drops of water collect unevenly on a
- * pane of glass and trickle down under their own weight. Fixed positions
- * (not random per composition) so the same panel always reads the same
- * way and this stays a `remember`/`drawWithCache`-friendly constant rather
- * than something reallocated every frame.
- */
-private data class DropletSpec(
-    val cx: Float,
-    val cy: Float,
-    val radius: Float,
-    val coreAlpha: Float,
-    val midAlpha: Float,
-    val trailLength: Float,
-    val trailAlpha: Float
-)
-
-private val LiquidGlassDroplets = listOf(
-    // The large "primary" bead — the same top-left position the old single
-    // dropletGlint used, kept as the anchor of the field.
-    DropletSpec(cx = 0.16f, cy = 0.15f, radius = 0.32f, coreAlpha = 0.62f, midAlpha = 0.22f, trailLength = 0.60f, trailAlpha = 0.16f),
-    // Two smaller secondary beads scattered further along the panel so the
-    // glass reads as genuinely wet/uneven rather than one lit corner.
-    DropletSpec(cx = 0.60f, cy = 0.06f, radius = 0.15f, coreAlpha = 0.46f, midAlpha = 0.16f, trailLength = 0.42f, trailAlpha = 0.11f),
-    DropletSpec(cx = 0.88f, cy = 0.22f, radius = 0.10f, coreAlpha = 0.38f, midAlpha = 0.12f, trailLength = 0.28f, trailAlpha = 0.08f)
-)
-
-/**
- * "زجاج سائل" (liquid glass): the frosted, glossy surface behind every
- * header/top bar and its circular buttons.
- *
- * iOS 26 LIQUID GLASS UPGRADE ("البلور... تحسين وعمق ووضوح"): the panel's
- * soft light patches (the drifting highlight + the corner "droplet"
- * glint) used to be flat, un-blurred radial gradients — cheap and safe,
- * but a hard-edged color patch reads as a sticker painted on top of the
- * glass, not as light actually diffusing *through* a translucent,
- * refractive material. On API 31+ (RenderEffect-backed blur) and
- * STANDARD/HIGH performance tier, those same shapes are now recorded into
- * an offscreen [androidx.compose.ui.graphics.layer.GraphicsLayer] and put
- * through a genuine Gaussian blur ([BlurEffect] — the exact same real
- * blur [LiquidGlassGlow] already used for its standalone decorative orb,
- * now folded into every glass panel's own resting look) before being
- * composited. Paired with a new soft inner shadow hugging the panel's
- * *bottom* inside edge (opposite the existing bright top edge), this is
- * what actually reads as a panel with real thickness — light gathering
- * unevenly through a solid slab of glass — instead of a flat gradient
- * rectangle with a color patch drawn on it.
- *
- * That blur is applied to abstract decorative shapes ONLY, composited in
- * its own separate draw pass — [drawContent] (this surface's real
- * text/icons) always runs first, in its own always-sharp pass, so there
- * is zero risk of the blur ever touching anything the person needs to
- * read. Below API 31 / on LOW tier, the exact same flat, un-blurred
- * gradients from before are drawn instead (see `canRealBlur` below) — no
- * regression there, same graceful degradation as every other effect in
- * this file.
- *
- * STILL AN HONEST LIMITATION: this is a real blur of this panel's own
- * decorative light, not a true "backdrop filter" that samples whatever
- * scrolls *underneath* a translucent bar (the way iOS's frosted nav bars
- * work) — Compose has no first-party API for sampling sibling content
- * that way. Most headers in this app don't actually sit on top of moving
- * content anyway (each is the first LazyColumn item, or a non-overlapping
- * Scaffold topBar), so there's nothing behind them to sample regardless.
- * [FloatingBottomNav] is the one surface that genuinely does float over
- * live scrolling content — it gets the same richer blurred-core treatment
- * as everything else here, just without a literal blurred view of the
- * list rows immediately behind it.
+ * Flat, opaque panel surface used for every header/top-bar/dialog/card in
+ * the app. This used to be a translucent "liquid glass" effect that only
+ * rendered that way when Settings -> المظهر had "زجاج" selected; that mode
+ * has been removed entirely, so this is now just a plain solid panel with
+ * a drop shadow and an optional hairline border — the same look every
+ * caller already fell back to outside glass mode, kept as the one and
+ * only look now so nothing needed to change at any call site.
  */
 @Composable
 fun Modifier.liquidGlassSurface(
     shape: Shape,
     baseBrush: Brush = BrandGradient.brush(),
-    // "عائم" (floating, One UI 8.5-style): a soft drop shadow under the
-    // panel so it reads as a distinct floating glass layer above the
-    // content behind it, instead of a flat bar glued to the screen edge.
-    // 0.dp keeps the previous flush look for callers that still want it
-    // (e.g. a bar that's meant to sit flat against another surface).
+    // "عائم" (floating): a soft drop shadow under the panel so it reads as
+    // a distinct floating layer above the content behind it. 0.dp keeps a
+    // flush look for callers that want the panel to sit flat against
+    // whatever's behind it.
     elevation: Dp = 10.dp,
-    // "زجاج سائل مذهل": an extra diagonal specular streak that sweeps
-    // across the panel on a slow loop, like light catching a curved sheet
-    // of glass — on top of the existing drift highlight, not replacing
-    // it. Off by default so every existing header keeps today's exact
-    // look; the main Dashboard header (the app's single most-seen surface)
-    // opts in explicitly below. Degrades the same way as `drift` on LOW
-    // tier: a single fixed streak position, no per-frame animation.
+    // Kept for source compatibility with existing call sites; the
+    // animated sheen/highlight/droplet effects these used to enable have
+    // been removed, so these parameters no longer change anything.
     sheen: Boolean = false,
-    // BUG FIXED ("في خط مو حلو فوق بالديون" — an ugly seam line across the
-    // top of the person-detail screen): PersonDetailScreen used to stack
-    // *two independent* liquidGlassSurface panels directly on top of one
-    // another — the TopAppBar, then PersonHeader (the "إجمالي الديون"
-    // summary) as the very next element. Every screen *other* than that
-    // one only ever has a single glass panel for its whole header (see
-    // DebtsScreen/MaterialsScreen/DashboardScreen — the header rounds off
-    // with `bottomStart`/`bottomEnd` and whatever's below it is a plain,
-    // non-glass surface), so this never showed up anywhere else. Two
-    // independent panels touching is what actually drew the line — not
-    // one effect but three stacking at the exact same seam: (1) this
-    // function's own drop shadow (`elevation`, 14.dp by default) reads as
-    // a dark line cast by the second panel onto the first, (2) the second
-    // panel's own `topEdge` bright highlight — meant to read as "light
-    // hitting the top of a pane of glass" — draws a *second*, brighter
-    // line at that exact seam since, as far as that panel knows, its top
-    // edge IS the top of the glass, and (3) the glass-rim border draws a
-    // full-perimeter line, including straight across that same seam.
-    // `topFlush = true` is for exactly this "continuation panel sitting
-    // directly beneath another glass panel" case: it drops the shadow
-    // entirely (nothing should be floating above what's already there),
-    // skips the topEdge highlight (this panel's top is not a real top,
-    // don't draw one), and skips the rim border (no perimeter line
-    // between two panels meant to read as one surface) — so the two
-    // panels blend into what looks like a single continuous sheet of
-    // glass instead of two stacked slabs with a hard line between them.
+    // `topFlush = true` drops the shadow for a panel meant to sit directly
+    // beneath another panel of the same kind, so the two read as one
+    // continuous surface instead of two stacked slabs with a shadow line
+    // between them.
     topFlush: Boolean = false,
-    // BUG FIXED ("اللمعه ما بدي ياها" — don't want the shine/glare):
-    // `topHighlight`, `topEdge`, and `dropletGlint` below were all drawn
-    // unconditionally — no caller could turn the glare off, only tune
-    // `sheen`/`animated` (the *moving* streak). [GlassAlertDialog] needs
-    // exactly that: a flat, true-transparent glass panel with none of
-    // this surface's usual gloss. `false` here skips all three static
-    // highlight layers; the base gradient + rim border still render, so
-    // it still reads as a distinct glass panel — just without any glare.
-    //
-    // BUG FIXED ("الالوان لازم تكون طبقة وحدة... للمعة كتير مزعجة" — the
-    // color must read as one consistent layer, the shine is way too
-    // distracting): the default here was still `true`, even though
-    // *every single existing call site in the app* — every header,
-    // dialog, bottom nav, lock screen — already passed `highlight =
-    // false` explicitly. That was never a coincidence: the droplet field
-    // is exactly what reads as uneven, blotchy fog rather than one
-    // uniform glass tint (see [LiquidGlassDroplets]'s three
-    // independently-blurred light patches, real Gaussian-blurred and
-    // composited at up to 58px on top of an already-translucent fill).
-    // Nobody was actually using `true` on purpose - it was just a
-    // landmine waiting for the next caller that didn't know to opt out,
-    // which is exactly what happened the moment [GlassCard] was added
-    // without repeating that same `highlight = false`. The default now
-    // matches what every real surface in the app already does: a flat,
-    // single-tone translucent panel (fill + rim border + shadow only,
-    // no light patches). Passing `true` explicitly still exists for a
-    // caller that genuinely wants the droplet look, but nothing in the
-    // app opts into it anymore.
     highlight: Boolean = false,
     animated: Boolean = false,
-    // طلب "تعميم ستايل الزجاج": every header/bottom-nav call used to paint
-    // `baseBrush` fully opaque (`.background(baseBrush)`, alpha always 1f) —
-    // fine for [GlassAlertDialog] since it bakes its own translucency into
-    // the Color stops it hands in as `baseBrush`, but every *other* caller
-    // (headers, FloatingBottomNav, GlassIconButton's panel siblings) never
-    // had a way to be genuinely see-through at all, only "glare on/off".
-    // `baseAlpha` (1f = old behavior, unchanged for every existing caller
-    // that doesn't pass it) multiplies on top of `baseBrush`'s own colors —
-    // applied to the background fill only (see the `drawBehind` below,
-    // which runs *before* `drawContent()`), never to the text/icon
-    // children this surface hosts, so turning it down can't wash out
-    // readability the way a whole-node `Modifier.alpha` would.
     baseAlpha: Float = 1f,
-    // "رقّي شكل الحواف... تبين أوضح بالوضعين": the rim border used to be
-    // hardcoded pure white — fine for every header/bottom-nav panel (they
-    // always sit on the app's own colored gradient, where a white rim
-    // always reads as a bright edge), but wrong for [GlassAlertDialog],
-    // which sits on a *tonal* surface that goes light in day mode. A pure
-    // white rim at low alpha is nearly invisible against a light
-    // background — exactly what made the dialog look edge-less/flat in
-    // light mode. Kept `Color.White` as the default so every existing
-    // caller's look is byte-for-byte unchanged; only the dialog opts into
-    // a theme-derived color instead.
+    // A hairline border color. `Color.White` (the default) means "no
+    // border" for panels that sit on the app's own colored gradient; any
+    // other color draws a subtle border, e.g. for a panel sitting on a
+    // plain surface.
     rimColor: Color = Color.White
 ): Modifier {
-    val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
-
-    // "وضع الجلاس الشفاف الكامل" (AppColorMode.GLASS): the mode where this
-    // surface's fill pushes further toward see-through and its drift
-    // highlight is free to animate, regardless of the caller's `animated`
-    // value — every other color mode (MANUAL/CLASSIC) keeps exactly the
-    // calm, static look it already had, since `glassModeActive` is false
-    // there. `sheen` is deliberately left to the caller alone (never
-    // force-enabled by glass mode): the diagonal streak is a strong,
-    // deliberate glare/glint effect, not a general "glass mode" trait —
-    // forcing it on every header/bottom-nav panel by default is exactly
-    // what read as "لمعة" (unwanted shine) once the bright orbs from
-    // `highlight` combined with it. Only surfaces that explicitly opt in
-    // (`sheen = true`) get the streak; the rest just get plain, animation-
-    // free transparency.
-    // "فصل الوضع الزجاجي عن الوضع العام للتطبيق" (separate glass mode from
-    // the app's general mode): every glass-only trait — the drift/sheen
-    // motion, the translucent fill, the blurred light patches, the bright
-    // rim/edge glare — used to render unconditionally on top of whichever
-    // color mode was active, so MANUAL/CLASSIC ended up wearing the same
-    // "liquid glass" look as AppColorMode.GLASS itself, just calmer. This
-    // is the one function every header/bottom-nav/dialog panel in the app
-    // already funnels through, so gating the whole glass *identity* here
-    // — not just the motion — is what makes every one of those surfaces
-    // fall back to a plain, solid, stock-Android-style panel the instant
-    // GLASS isn't the active mode, without editing each screen separately.
-    val glassModeActive = LocalGlassMode.current
-    val effectiveAnimated = glassModeActive && animated && !isLowTier
-    val effectiveSheen = sheen && effectiveAnimated
-    // Outside GLASS mode this surface is fully opaque — no see-through fill
-    // at all — regardless of whatever `baseAlpha` a caller passes in (most
-    // callers only ever tuned that value *for* the glass look in the first
-    // place; a general-mode panel should just read as a normal solid brand
-    // surface).
-    // RADICAL UPGRADE ("تحسينات جذرية... الشفافية على الوضع كامل"): GLASS
-    // mode's own multiplier pushed further toward see-through (0.78 → 0.60)
-    // — a noticeably more liquid, less solid fill across every panel this
-    // function draws, paired with [glassLightScheme]/[glassDarkScheme]'s
-    // own lower container alphas in Palette.kt so the extra transparency
-    // isn't just the header/nav — it runs through every ordinary card,
-    // dialog, and sheet in GLASS mode too.
-    // CLARITY PASS ("خلية اكتر وضوح بدل ما كلشي خلفة مبين بكل التطبيق"):
-    // the previous several passes ("RADICAL UPGRADE", "iPhone 17 GLASS
-    // PASS") kept pushing this multiplier down (0.78 → 0.60 → 0.52) in
-    // pursuit of an ever-clearer "pane of glass" look, but stacked across
-    // every header/nav/dialog in the app that actually made the content
-    // *behind* each glass panel legible through it — exactly the "كل شي
-    // خلفة مبين" (everything behind it shows through) complaint. Raised
-    // back up to 0.80 so every glass surface reads as clearly translucent
-    // glass (still not opaque — the droplet highlights/blur/rim below
-    // still sell the material) without whatever's scrolling behind it
-    // fighting for attention with this panel's own text/icons.
-    val effectiveBaseAlpha = if (glassModeActive) (baseAlpha * 0.80f).coerceIn(0f, 1f) else 1f
-    val effectiveHighlight = glassModeActive && highlight
-
-    // PERF (low-end tier): Modifier.shadow forces its own offscreen
-    // graphicsLayer + a blur pass every frame it's on screen — on a weak
-    // GPU/driver stack that's real, measurable frame time on every single
-    // glass surface (header, floating nav, admin/person-detail panels),
-    // stacking on top of everything else already competing for that
-    // budget. Every other effect in this function already degrades for
-    // LOW tier (drift, sheen); the shadow was the one still paid in full
-    // regardless of tier. LOW tier now skips it entirely — the glass
-    // panel itself (gradient + border) still reads clearly as its own
-    // surface without the drop shadow.
-    //
-    // iOS 26: also trimmed from 14.dp to a lighter, native-looking float —
-    // real iOS bars sit close to the content with a soft, shallow shadow,
-    // never a heavy floating-card drop shadow.
-    val effectiveElevation = if (isLowTier || topFlush) 0.dp else elevation
-
-    // iOS 26 LIQUID GLASS UPGRADE: real Gaussian blur is only worth paying
-    // for where it's actually visible (`highlight == false` panels, like
-    // GlassAlertDialog's flat mode, draw no light patches at all) and only
-    // where the hardware/tier can afford it — RenderEffect-backed blur
-    // needs API 31 and is skipped on LOW tier exactly like every other
-    // per-frame compositing cost in this file (see [LiquidGlassGlow]'s own
-    // identical gate). `rememberGraphicsLayer()` is cheap to hold even when
-    // unused, but only actually requested when it'll be drawn into below.
-    val canRealBlur = effectiveHighlight && !isLowTier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-    val frostedCoreLayer = if (canRealBlur) rememberGraphicsLayer() else null
-
-    // Fixed, calm highlight position when `animated` is false (the new
-    // default for every top bar/bottom nav) — still gives the surface a
-    // single soft light source like glass catching light from one angle,
-    // just without anything looping.
-    val drift: Float = if (!effectiveAnimated) {
-        0.28f
-    } else {
-        val transition = rememberInfiniteTransition(label = "liquidGlassDrift")
-        val value by transition.animateFloat(
-            initialValue = 0.08f,
-            targetValue = 0.92f,
-            animationSpec = infiniteRepeatable(tween(7000, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-            label = "liquidGlassDriftValue"
-        )
-        value
-    }
-
-    // BUG FIXED ("الانميشن مو سلسة" — jerky sheen): the streak used to
-    // pause dead-still at each end for a beat (`-0.35f at 1800`/`1.35f at
-    // 5200`) before suddenly rushing across in the middle of the cycle —
-    // a stop-start motion that read as jerky rather than a smooth glide.
-    // A single continuous ease across the whole duration (no plateaus)
-    // reads as one smooth glide instead — slower and gentler too (5200ms
-    // → 6400ms), matching a calmer "liquid glass" feel over an obvious
-    // sweep.
-    val sheenProgress: Float? = if (effectiveSheen) {
-        val transition = rememberInfiniteTransition(label = "liquidGlassSheen")
-        val value by transition.animateFloat(
-            initialValue = -0.35f,
-            targetValue = 1.35f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(6400, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Restart
-            ),
-            label = "liquidGlassSheenValue"
-        )
-        value
-    } else null
-
     return this
         .let {
-            if (effectiveElevation > 0.dp) it.shadow(effectiveElevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
-            else it
+            if (elevation > 0.dp && !topFlush) {
+                it.shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
+            } else it
         }
         .clip(shape)
-        // BUG FIXED/طلب: was `.background(baseBrush)`, which always painted
-        // at full alpha no matter what `baseAlpha` says — a plain
-        // `Modifier.background` has no alpha parameter of its own, and
-        // wrapping the *whole* node in `Modifier.alpha(baseAlpha)` would
-        // have faded the header's text/icons along with it. `drawBehind`
-        // draws only this rect, strictly before this node's own children
-        // are drawn (never after, never wrapping them), so `alpha` here
-        // dims just the glass fill — content on top stays fully legible.
-        .drawBehind { drawRect(brush = baseBrush, alpha = effectiveBaseAlpha) }
-        // PERF: drawWithCache (not drawWithContent) so the Brush objects
-        // below are only rebuilt when `drift`/`sheenProgress` or the
-        // surface's `size` actually change — not on every recomposition. On
-        // STANDARD/HIGH tier drift changes every animation frame anyway, so
-        // this is a wash there; on LOW tier drift is a fixed constant (see
-        // above), so this is where it actually pays off: a header sitting
-        // behind a live Firestore-backed list (which can recompose often on
-        // any data change, unrelated to the header itself) reallocates
-        // these gradient Brushes on every one of those passes without this,
-        // and zero extra times with it.
-        .drawWithCache {
-            val w = size.width
-            val h = size.height
-            val frostedCoreSize = IntSize(w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1))
-            // Only built when the real-blur path (below, in onDrawWithContent)
-            // is unavailable — the flat, un-blurred fallback exactly as
-            // before, so API<31/LOW-tier devices see no change at all.
-            val topHighlight = if (effectiveHighlight && frostedCoreLayer == null) Brush.radialGradient(
-                colors = listOf(Color.White.copy(alpha = 0.24f), Color.White.copy(alpha = 0f)),
-                center = Offset(w * drift, -h * 0.25f),
-                radius = w * 0.75f
-            ) else null
-            // BUG FIXED ("غير مرتب"): a second radial highlight ("glint")
-            // used to drift here too, moving opposite `topHighlight`. Two
-            // independently-moving translucent-white patches overlapping on
-            // the same small panel is what read as messy/blotchy rather than
-            // a single coherent sheet of glass — removed rather than tuned,
-            // since `topHighlight` alone already carries the "light drifting
-            // across glass" read that this was meant to reinforce.
-            // Bumped slightly (0.28 → 0.32) to keep the panel's top edge
-            // readable now that the fill itself sits at a much lower resting
-            // alpha (see `effectiveBaseAlpha`'s 0.60 multiplier above).
-            val topEdge = if (topFlush || !effectiveHighlight) null else Brush.verticalGradient(
-                colors = listOf(Color.White.copy(alpha = 0.32f), Color.White.copy(alpha = 0f)),
-                startY = 0f,
-                endY = h * 0.12f
-            )
-            // A narrow, angled band of light — three stops (transparent →
-            // bright → transparent) offset diagonally by `progress` so it
-            // reads as a single streak of light gliding across the panel,
-            // the same way a phone screen's reflection moves across a
-            // curved glass surface when it tilts. `null` (LOW tier / sheen
-            // not requested) skips building this brush entirely.
-            // BUG FIXED ("بدون لمعة" — no glare): lowered from 0.16 to
-            // 0.09 alpha at its brightest point — a faint glide instead of
-            // a visible bright streak, since this now also has to coexist
-            // with `highlight`'s absence on every surface that uses it.
-            val sheenBrush = sheenProgress?.let { progress ->
-                val center = w * progress
-                val bandWidth = w * 0.22f
-                Brush.linearGradient(
-                    colorStops = arrayOf(
-                        0f to Color.White.copy(alpha = 0f),
-                        0.5f to Color.White.copy(alpha = 0.09f),
-                        1f to Color.White.copy(alpha = 0f)
-                    ),
-                    start = Offset(center - bandWidth, 0f),
-                    end = Offset(center + bandWidth, h)
-                )
-            }
-            // RADICAL UPGRADE ("تحسينات جذرية... قطرات ماء... الشفافية على
-            // الوضع كامل"): the single corner glint is replaced by the full
-            // [LiquidGlassDroplets] bead field — every droplet gets its own
-            // bright core + soft mid ring (the "bead of water" read) AND a
-            // thin vertical trail fading away beneath it (water beginning
-            // to run down the glass), scaled to this panel's own size. Only
-            // built in the flat fallback path — the real-blur path below
-            // records the same field into its offscreen layer instead.
-            val dropletBrushes: List<Pair<Brush, Offset>> = if (effectiveHighlight && frostedCoreLayer == null) {
-                LiquidGlassDroplets.map { d ->
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = d.coreAlpha),
-                            Color.White.copy(alpha = d.midAlpha),
-                            Color.White.copy(alpha = 0f)
-                        ),
-                        center = Offset(w * d.cx, h * d.cy),
-                        radius = w * d.radius
-                    ) to Offset(w * d.cx, h * d.cy)
-                }
-            } else emptyList()
-            // NEW (thickness/depth): a soft, dark gradient hugging just the
-            // *inside* bottom edge — the mirror of `topEdge`'s bright rim
-            // above. Real glass/acrylic isn't lit evenly all over: the top
-            // catches ambient light, the underside falls into its own soft
-            // shadow. Pairing a dark bottom edge with the existing bright
-            // top edge is what reads as a panel with real thickness rather
-            // than a flat, evenly-lit rectangle.
-            val innerBaseShadow = if (effectiveHighlight && !topFlush) Brush.verticalGradient(
-                colors = listOf(Color.Black.copy(alpha = 0f), Color.Black.copy(alpha = 0.10f)),
-                startY = h * 0.80f,
-                endY = h
-            ) else null
-            onDrawWithContent {
-                // Content (text/icons) drawn first so every highlight below
-                // is layered strictly on top of the surface itself — never
-                // a blur pass over the content, so nothing ever turns
-                // illegible.
-                drawContent()
-                val layer = frostedCoreLayer
-                if (layer != null) {
-                    // Record the drift highlight plus the *entire* droplet
-                    // field (core, mid ring, and trail — never real content,
-                    // that already finished drawing above) into an offscreen
-                    // layer, blur that layer for real, then composite it —
-                    // see the function doc for why this is safe.
-                    layer.record(this, layoutDirection, frostedCoreSize) {
-                        drawRect(
-                            brush = Brush.radialGradient(
-                                colors = listOf(Color.White.copy(alpha = 0.34f), Color.White.copy(alpha = 0f)),
-                                center = Offset(w * drift, -h * 0.20f),
-                                radius = w * 0.65f
-                            )
-                        )
-                        if (effectiveHighlight) {
-                            LiquidGlassDroplets.forEach { d ->
-                                val center = Offset(w * d.cx, h * d.cy)
-                                drawRect(
-                                    brush = Brush.radialGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = d.coreAlpha),
-                                            Color.White.copy(alpha = d.midAlpha),
-                                            Color.White.copy(alpha = 0f)
-                                        ),
-                                        center = center,
-                                        radius = w * d.radius
-                                    )
-                                )
-                                // The trickle: a narrow soft streak dropping
-                                // straight down from the bead's own center,
-                                // fading out over `trailLength` of the
-                                // panel's height — like a drop of water
-                                // starting to run under its own weight.
-                                val trailWidth = (w * d.radius * 0.55f).coerceAtLeast(1f)
-                                drawRect(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.White.copy(alpha = d.trailAlpha),
-                                            Color.White.copy(alpha = 0f)
-                                        ),
-                                        startY = center.y,
-                                        endY = center.y + h * d.trailLength
-                                    ),
-                                    topLeft = Offset(center.x - trailWidth / 2f, center.y),
-                                    size = Size(trailWidth, h * d.trailLength)
-                                )
-                            }
-                        }
-                    }
-                    // "رقّي شكل الزجاج لأحدث مظهر": a heavier real Gaussian
-                    // blur (34f → 44f) on the frosted core so the drift
-                    // highlight and the whole droplet field read as light
-                    // genuinely diffusing through a thicker slab of wet
-                    // glass, not a tighter, more contained soft patch. Still
-                    // the same safe two-pass approach (content drawn sharp
-                    // first, this blur only ever touches the decorative
-                    // shapes).
-                    // IPHONE 17 GLASS PASS (44f → 58f): pushed deeper again
-                    // so the diffused light spreads soft and wide the way
-                    // real frosted/etched glass scatters light behind a
-                    // clean front pane, rather than sitting as a smaller,
-                    // more contained glow. Combined with the lower
-                    // `effectiveBaseAlpha` above, the panel now reads as
-                    // "clear glass, blur happening behind it" instead of
-                    // "a foggy panel" — the distinction the person asked for.
-                    layer.renderEffect = BlurEffect(58f, 58f, TileMode.Decal)
-                    drawLayer(layer)
-                } else {
-                    if (topHighlight != null) drawRect(brush = topHighlight)
-                    dropletBrushes.forEach { (brush, _) -> drawRect(brush = brush) }
-                    if (effectiveHighlight) {
-                        LiquidGlassDroplets.forEach { d ->
-                            val center = Offset(w * d.cx, h * d.cy)
-                            val trailWidth = (w * d.radius * 0.55f).coerceAtLeast(1f)
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.White.copy(alpha = d.trailAlpha),
-                                        Color.White.copy(alpha = 0f)
-                                    ),
-                                    startY = center.y,
-                                    endY = center.y + h * d.trailLength
-                                ),
-                                topLeft = Offset(center.x - trailWidth / 2f, center.y),
-                                size = Size(trailWidth, h * d.trailLength)
-                            )
-                        }
-                    }
-                }
-                if (topEdge != null) drawRect(brush = topEdge)
-                if (innerBaseShadow != null) drawRect(brush = innerBaseShadow)
-                if (sheenBrush != null) drawRect(brush = sheenBrush)
-            }
-        }
+        .background(baseBrush)
         .let {
-            // Brighter glass rim (0.22 → 0.36) so the edge reads as
-            // a distinct rim of light catching the border of the glass/
-            // droplet, matching the stronger `dropletGlint` highlight above.
-            // The bright glass "rim" (a hairline meant to read as light
-            // catching the edge of a pane of glass) only makes sense while
-            // this surface is actually glass — outside AppColorMode.GLASS
-            // it's replaced with a much quieter, near-invisible edge (or
-            // none at all for `rimColor = Color.White` callers, since a
-            // faint white line on a solid brand-colored panel reads as a
-            // stray seam rather than an intentional border).
-            when {
-                topFlush -> it
-                // IPHONE 17 GLASS PASS: the rim used to be one flat alpha
-                // all the way around — real light catching the edge of a
-                // pane of glass is never even, it's brightest where the
-                // "top" light source hits and fades toward the bottom, the
-                // same top/bottom asymmetry `topEdge`/`innerBaseShadow`
-                // already give the fill. A vertical-gradient rim (0.55 at
-                // the top edge fading to 0.16 at the bottom) reads as a
-                // single continuous band of light wrapping a curved,
-                // reflective surface instead of a uniform outline traced
-                // around a flat shape.
-                glassModeActive -> it.border(
-                    1.dp,
-                    Brush.verticalGradient(
-                        listOf(rimColor.copy(alpha = 0.55f), rimColor.copy(alpha = 0.16f))
-                    ),
-                    shape
-                )
-                rimColor == Color.White -> it
-                else -> it.border(1.dp, rimColor.copy(alpha = 0.12f), shape)
-            }
+            if (rimColor == Color.White) it
+            else it.border(1.dp, rimColor.copy(alpha = 0.12f), shape)
         }
 }
 
 /**
- * Circular frosted-glass button — the "liquid glass" replacement for the
- * flat opaque-white circular buttons previously used on top of the header
- * gradient. Same size class and press-scale feedback as before so tap
- * targets don't shift, just translucent instead of solid white.
- *
- * No blur here either, and deliberately so: a blur modifier on this
- * button's own chain would blur everything the IconButton draws —
- * including the glyph inside it — which would make the icon unreadable.
- * The glass look comes entirely from translucency + a bright rim, the same
- * safe approach as [liquidGlassSurface] above.
+ * Circular icon button used on top of the header gradient and other
+ * colored panels. Previously switched to a translucent "glass" look in
+ * glass mode; that mode is gone, so this is now always the plain,
+ * solidly-tinted circular icon button every other color mode already used.
  */
 @Composable
 fun GlassIconButton(
@@ -612,26 +96,8 @@ fun GlassIconButton(
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonScale"
     )
-    // "فصل الوضع الزجاجي عن الوضع العام": outside AppColorMode.GLASS this
-    // is no longer a translucent glass chip at all — it settles to a
-    // plain, solidly-tinted circular icon button, the normal stock-Android
-    // read for an icon sitting on a colored surface. GLASS mode keeps the
-    // existing see-through fill + bright rim.
-    val glassModeActive = LocalGlassMode.current
-    // CLARITY PASS: earlier passes pushed this fill down to 0.05 in
-    // pursuit of a "clean mirror" look, which left the icon glyph inside
-    // sitting almost directly on whatever was behind the button — hard to
-    // pick out against a busy background. Raised to 0.20 to match
-    // [liquidGlassSurface]'s own clarity pass so the button reads as a
-    // clearly visible glass chip, not a near-invisible outline. Rim kept
-    // crisp so the button's edge still reads as glass.
-    val restingFillAlpha = if (glassModeActive) 0.20f else 0.22f
-    val restingRimAlpha = if (glassModeActive) 0.46f else 0f
-    // "رقّي التفاعل عند الضغط": a brief brighten on press — both the fill
-    // and rim animate a touch lighter, on the same spring as the scale —
-    // so tapping the button reads as light momentarily catching the glass,
-    // not just a bare size change. Settles back to the resting values the
-    // instant the press ends.
+    val restingFillAlpha = 0.22f
+    val restingRimAlpha = 0f
     val fillAlpha by animateFloatAsState(
         targetValue = if (pressed) restingFillAlpha + 0.10f else restingFillAlpha,
         animationSpec = MotionSpecs.pressSpring(),
@@ -643,9 +109,6 @@ fun GlassIconButton(
         label = "glassIconButtonRim"
     )
 
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val dropletRadiusPx = with(density) { (size * 3.2f).toPx() }
-
     IconButton(
         onClick = onClick,
         interactionSource = interactionSource,
@@ -653,35 +116,10 @@ fun GlassIconButton(
             .size(size)
             .scale(scale)
             .clip(CircleShape)
-            // "قطرات الماء" carried down to the small circular buttons too:
-            // in GLASS mode the fill is a tiny off-center radial bead (a
-            // bright droplet-core near the top-left, fading to the same
-            // resting alpha everywhere else) instead of one flat wash — the
-            // same bead-of-water read as the big panels, at button scale.
-            // Every other mode keeps a perfectly flat, opaque-tinted fill.
-            .background(
-                if (glassModeActive) {
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = (fillAlpha + 0.30f).coerceAtMost(1f)),
-                            Color.White.copy(alpha = fillAlpha)
-                        ),
-                        center = Offset.Zero,
-                        radius = dropletRadiusPx
-                    )
-                } else Brush.linearGradient(listOf(Color.White.copy(alpha = fillAlpha), Color.White.copy(alpha = fillAlpha)))
-            )
-            // Same top-bright/bottom-fade rim treatment as the big glass
-            // panels, at button scale, instead of one flat ring — a small
-            // consistency detail that keeps every glass surface reading as
-            // the same physical material.
+            .background(Brush.linearGradient(listOf(Color.White.copy(alpha = fillAlpha), Color.White.copy(alpha = fillAlpha))))
             .border(
                 1.dp,
-                if (glassModeActive) {
-                    Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = (rimAlpha + 0.08f).coerceAtMost(1f)), Color.White.copy(alpha = rimAlpha * 0.4f))
-                    )
-                } else Brush.linearGradient(listOf(Color.White.copy(alpha = rimAlpha), Color.White.copy(alpha = rimAlpha))),
+                Brush.linearGradient(listOf(Color.White.copy(alpha = rimAlpha), Color.White.copy(alpha = rimAlpha))),
                 CircleShape
             )
     ) {
@@ -690,34 +128,25 @@ fun GlassIconButton(
 }
 
 /**
- * A soft, blurred glowing circle used as a purely decorative background
- * accent (behind the splash screen's logo orb, for example). Unlike
- * [liquidGlassSurface]/[GlassIconButton] above, this composable draws
- * *nothing but the glow* — no text, no icon — so it's the one place in
- * this file where applying a real Modifier.blur to the whole node is
- * completely safe: there is no content it could blur into illegibility.
- *
- * Skipped below API 31 (Modifier.blur is a no-op there) and on LOW
- * performance tier, matching how every other effect in this file degrades
- * — a plain soft circle (no blur pass) is drawn instead so the glow still
- * exists, just without the extra compositing cost.
+ * A soft glowing circle used as a purely decorative background accent
+ * (behind the splash screen's logo orb, for example). Previously used a
+ * real Gaussian blur to soften its edge; replaced here with a plain radial
+ * gradient that fades to transparent, which reads as the same soft glow
+ * with no blur pass and no OS-version/performance-tier branching needed.
  */
 @Composable
 fun LiquidGlassGlow(
     modifier: Modifier = Modifier,
     color: Color = Color.White,
-    // IPHONE 17 GLASS PASS: softened a touch further (24.dp → 30.dp) to
-    // match the deeper frosted-core blur above so the decorative glow and
-    // every glass panel's own diffused light read as the same softness of
-    // material.
     blurRadius: Dp = 30.dp
 ) {
-    val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
-    val canBlur = !isLowTier && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
     Box(
         modifier
             .clip(CircleShape)
-            .let { if (canBlur) it.blur(blurRadius) else it }
-            .background(color.copy(alpha = if (canBlur) 0.55f else 0.20f))
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(color.copy(alpha = 0.55f), color.copy(alpha = 0f))
+                )
+            )
     )
 }
