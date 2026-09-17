@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.drawToBitmap
+import com.shopmanager.app.ui.theme.LocalDynamicDarkMode
 import com.shopmanager.app.ui.theme.LocalGlassMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -296,11 +297,26 @@ fun GlassAlertDialog(
         // for the reader's attention.
         val fillAlphaTop = if (glassModeActive) 0.64f else 1f
         val fillAlphaBottom = if (glassModeActive) 0.54f else 1f
+        // BUG FIXED ("خلي هاد اللون يتناسق مع الواجهة" — this dialog
+        // reading as a light beige/tan panel while the rest of the app is
+        // dark): in AppColorMode.DYNAMIC's dark scheme, primary/tertiary
+        // are the same pale tone-80 roles dynamicGradientColors already
+        // works around for the header/nav (see that function's own "TONE"
+        // note) — blending 48%/34% of a *pale* color into this dark panel
+        // is exactly what pulled it toward beige/tan. primaryContainer/
+        // tertiaryContainer (tone-30, rich) blend toward a color that's
+        // still clearly "this wallpaper's hue" without washing the panel
+        // out. Scoped to LocalDynamicDarkMode alone — MANUAL/GLASS/CLASSIC
+        // keep blending toward their own already-tuned primary/tertiary
+        // exactly as before.
+        val dynamicDarkMode = LocalDynamicDarkMode.current
+        val blendPrimary = if (dynamicDarkMode) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primary
+        val blendTertiary = if (dynamicDarkMode) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.tertiary
         val gradientTop = androidx.compose.ui.graphics.lerp(
-            resolvedContainer, MaterialTheme.colorScheme.primary, 0.48f
+            resolvedContainer, blendPrimary, 0.48f
         ).copy(alpha = fillAlphaTop)
         val gradientBottom = androidx.compose.ui.graphics.lerp(
-            resolvedContainer, MaterialTheme.colorScheme.tertiary, 0.34f
+            resolvedContainer, blendTertiary, 0.34f
         ).copy(alpha = fillAlphaBottom)
         // "رقّي الحواف لتبين بالوضعين": see `rimColor`'s own doc in
         // LiquidGlass.kt — a flat white rim washes out against this
