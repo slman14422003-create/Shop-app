@@ -77,6 +77,22 @@ fun rememberIsDarkTheme(themeMode: AppThemeMode): Boolean {
  * this mode's own swatch grid ever implied it would have) — regardless of
  * OS version or wallpaper.
  */
+/**
+ * FEATURE ("الوضع الزجاجي ياخد اللون من الخلفية تلقائيا متل الوضع
+ * التلقائي"): [AppColorMode.GLASS] used to always read its hue from
+ * whichever [AppColorPalette] swatch was selected — the exact same source
+ * [AppColorMode.MANUAL] uses. Real liquid glass has no color of its own,
+ * though; it just reveals whatever is behind it. So on any device that can
+ * actually read a color out of the wallpaper (API 31+, exactly
+ * [AppColorMode.DYNAMIC]'s own requirement), GLASS's palette now comes from
+ * [dynamicPaletteColors] instead of [paletteColorsFor] — the header,
+ * buttons, dialogs, and every translucent surface [glassLightScheme]/
+ * [glassDarkScheme] touch all shift to match the phone's actual wallpaper,
+ * live, with zero manual picking. `colorPalette` stops mattering for GLASS
+ * at that point (nothing is deleted — MANUAL still reads it normally, and
+ * it's exactly what GLASS itself falls back to below API 31, where no
+ * wallpaper-color API exists at all — see [isDynamicColorAvailable]).
+ */
 @Composable
 fun ShopManagerTheme(
     themeMode: AppThemeMode = AppThemeMode.SYSTEM,
@@ -91,8 +107,24 @@ fun ShopManagerTheme(
     // see [resolved]'s doc. Every branch below reads this, never the raw
     // [colorMode] parameter, so the two can never disagree.
     val effectiveColorMode = remember(colorMode) { colorMode.resolved() }
+    // Whether *this* composition's palette is actually coming from the
+    // wallpaper right now — true for DYNAMIC always, and for GLASS on any
+    // device new enough to read one (see [dynamicPaletteColors]). Shared by
+    // the palette pick below AND [LocalDynamicDarkMode] just below that, so
+    // the two can never disagree about whether GLASS is currently wearing
+    // wallpaper colors or hand-picked ones.
+    val usingWallpaperColor = remember(effectiveColorMode) {
+        effectiveColorMode == AppColorMode.DYNAMIC ||
+            (effectiveColorMode == AppColorMode.GLASS && isDynamicColorAvailable())
+    }
 
-    val paletteColors = remember(colorPalette) { paletteColorsFor(colorPalette) }
+    val paletteColors = remember(colorPalette, effectiveColorMode, usingWallpaperColor, context) {
+        if (effectiveColorMode == AppColorMode.GLASS && usingWallpaperColor) {
+            dynamicPaletteColors(context)
+        } else {
+            paletteColorsFor(colorPalette)
+        }
+    }
     val colors = remember(effectiveColorMode, paletteColors, useDark, context) {
         when (effectiveColorMode) {
             AppColorMode.GLASS ->
@@ -132,8 +164,11 @@ fun ShopManagerTheme(
         LocalGlassMode provides (effectiveColorMode == AppColorMode.GLASS),
         // Read by GlassAlertDialog (see that local's own doc) so its brand-
         // tint blend can avoid the same pale tone-80 primary/tertiary roles
-        // dynamicGradientColors already avoids for the header/nav.
-        LocalDynamicDarkMode provides (effectiveColorMode == AppColorMode.DYNAMIC && useDark)
+        // dynamicGradientColors already avoids for the header/nav. Keyed off
+        // `usingWallpaperColor` (not a raw AppColorMode.DYNAMIC check) so
+        // GLASS gets the identical fix the moment it's ALSO wearing
+        // wallpaper-sourced colors — see that val's own doc just above.
+        LocalDynamicDarkMode provides (usingWallpaperColor && useDark)
     ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
     }
