@@ -53,6 +53,7 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
+import com.shopmanager.app.ui.theme.LocalGlassMode
 import com.shopmanager.app.ui.theme.WarningAmber as WarningAmberColor
 import java.text.SimpleDateFormat
 import java.text.NumberFormat
@@ -131,6 +132,26 @@ fun DashboardScreen(
     // Every material in the list is, by definition, a shortage the shop
     // needs to buy - it's a live shopping list, not a stock count.
     val shortages = remember(materialsState.materials) { materialsState.materials }
+    // BUG FIXED ("اللون لا يتخذ من الخلفية في وضع الجلاس... لون برتقال حقيقي
+    // وكذلك بقية الالوان حسب الجهاز"): every shortage/shopping-list accent
+    // on this screen — the "قائمة النواقص" stat card, the "🛒 قائمة مشتريات
+    // السوق" section title, and each item's quantity text — was hardcoded to
+    // [WarningAmberColor], a fixed hex value from Color.kt that never reacts
+    // to anything: not the selected palette, not dark/light, and not the
+    // phone's wallpaper. That made it the one hold-out ("لون برتقال حقيقي")
+    // still showing a fixed brand orange in [AppColorMode.GLASS] even after
+    // that mode was wired to read every *other* accent straight from
+    // [dynamicPaletteColors]/the phone's wallpaper (see [ShopManagerTheme]'s
+    // own "الوضع الزجاجي ياخد اللون من الخلفية" doc) — everywhere else on
+    // this screen already re-tints itself per device (StatCard's own
+    // `MaterialTheme.colorScheme.primary`/`secondary`, QuickActionButton's
+    // `primary`), just not this one color. In GLASS mode this now reads
+    // `colorScheme.tertiary` instead — the same wallpaper-derived role
+    // [glassDarkScheme]/[glassLightScheme] already feed from the palette (or
+    // the live dynamic scheme) — so shortages now tint with everything else.
+    // Scoped to GLASS only, since that's the mode reported here — MANUAL/
+    // CLASSIC/DYNAMIC all keep today's exact fixed-amber look untouched.
+    val marketAccent = if (LocalGlassMode.current) MaterialTheme.colorScheme.tertiary else WarningAmberColor
     val topDebtors = remember(debtsState.persons) {
         debtsState.persons.sortedByDescending { it.amount }.take(5)
     }
@@ -220,7 +241,7 @@ fun DashboardScreen(
                     StatCard(
                         modifier = Modifier.weight(1f),
                         icon = Icons.Default.Inventory2,
-                        accentColor = if (shortages.isNotEmpty()) WarningAmberColor else MaterialTheme.colorScheme.secondary,
+                        accentColor = if (shortages.isNotEmpty()) marketAccent else MaterialTheme.colorScheme.secondary,
                         title = "قائمة النواقص",
                         valueContent = {
                             AnimatedCounterText(
@@ -244,14 +265,14 @@ fun DashboardScreen(
 
             if (shortages.isNotEmpty()) {
                 item {
-                    SectionCard(title = "🛒 قائمة مشتريات السوق", color = WarningAmberColor) {
+                    SectionCard(title = "🛒 قائمة مشتريات السوق", color = marketAccent) {
                         shortages.forEach { m ->
                             Row(
                                 Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(m.name)
-                                Text(m.quantityLabel(), color = WarningAmberColor, fontWeight = FontWeight.Medium)
+                                Text(m.quantityLabel(), color = marketAccent, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
