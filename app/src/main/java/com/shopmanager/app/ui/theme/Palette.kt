@@ -663,3 +663,17 @@ val LocalGlassMode = staticCompositionLocalOf { false }
  * defaults to the Indigo gradient so previews and anything outside the
  * provider still render correctly. */
 val LocalBrandGradientColors = staticCompositionLocalOf { listOf(BrandGradientStart, BrandGradientEnd) }
+
+/** True only when [AppColorMode.DYNAMIC] is active *and* the theme is
+ * currently dark. Read by [com.shopmanager.app.ui.common.GlassAlertDialog]
+ * to decide which color role to blend its fill toward — see the "TONE"
+ * note on [dynamicGradientColors] for why a dynamic *dark* scheme's
+ * `primary`/`tertiary` (pale tone-80, meant for text/icons on dark, not a
+ * large tinted panel) are the wrong pick there too: the dialog's own
+ * brand-tint blend read as a washed-out beige/tan panel in DYNAMIC dark
+ * mode for exactly the same reason the header/nav once did. GlassAlertDialog
+ * swaps to `primaryContainer`/`tertiaryContainer` (tone-30, rich) only when
+ * this is true; every hand-tuned palette (MANUAL/GLASS/CLASSIC) keeps
+ * blending toward its own already-tuned `primary`/`tertiary` exactly as
+ * before, so their separately-tuned dialog look never changes. */
+val LocalDynamicDarkMode = staticCompositionLocalOf { false }
