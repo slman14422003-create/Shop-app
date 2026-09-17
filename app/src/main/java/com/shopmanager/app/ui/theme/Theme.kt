@@ -115,7 +115,7 @@ fun ShopManagerTheme(
             AppColorMode.GLASS -> glassGradientColors(paletteColors)
             AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
             AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
-            AppColorMode.DYNAMIC -> dynamicGradientColors(colors)
+            AppColorMode.DYNAMIC -> dynamicGradientColors(colors, useDark)
         }
     }
 
