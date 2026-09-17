@@ -171,7 +171,27 @@ fun Modifier.liquidGlassSurface(
     // this surface's usual gloss. `false` here skips all three static
     // highlight layers; the base gradient + rim border still render, so
     // it still reads as a distinct glass panel — just without any glare.
-    highlight: Boolean = true,
+    //
+    // BUG FIXED ("الالوان لازم تكون طبقة وحدة... للمعة كتير مزعجة" — the
+    // color must read as one consistent layer, the shine is way too
+    // distracting): the default here was still `true`, even though
+    // *every single existing call site in the app* — every header,
+    // dialog, bottom nav, lock screen — already passed `highlight =
+    // false` explicitly. That was never a coincidence: the droplet field
+    // is exactly what reads as uneven, blotchy fog rather than one
+    // uniform glass tint (see [LiquidGlassDroplets]'s three
+    // independently-blurred light patches, real Gaussian-blurred and
+    // composited at up to 58px on top of an already-translucent fill).
+    // Nobody was actually using `true` on purpose - it was just a
+    // landmine waiting for the next caller that didn't know to opt out,
+    // which is exactly what happened the moment [GlassCard] was added
+    // without repeating that same `highlight = false`. The default now
+    // matches what every real surface in the app already does: a flat,
+    // single-tone translucent panel (fill + rim border + shadow only,
+    // no light patches). Passing `true` explicitly still exists for a
+    // caller that genuinely wants the droplet look, but nothing in the
+    // app opts into it anymore.
+    highlight: Boolean = false,
     animated: Boolean = false,
     // طلب "تعميم ستايل الزجاج": every header/bottom-nav call used to paint
     // `baseBrush` fully opaque (`.background(baseBrush)`, alpha always 1f) —
