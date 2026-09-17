@@ -941,20 +941,14 @@ fun SettingsScreen(
 }
 
 /**
- * "لوحة الألوان" redesign — three ways to color the app, each a segment
- * in the pill selector at the top instead of the mode being buried among
- * unrelated switches:
- *   • زجاج: "الجلاس الشفاف الكامل" — replaces the old wallpaper-driven
- *     "ديناميكي" mode. Uses the same 20-swatch hue picker as مخصص below,
- *     but renders the header, dialogs, buttons and the floating bottom bar
- *     as animated, fully see-through liquid glass (see
- *     [com.shopmanager.app.ui.theme.LocalGlassMode]) instead of solid
- *     panels — available on every Android version, unlike the dynamic mode
- *     it replaces.
- *   • مخصص (manual): the original 20-swatch grid, now sitting in its own
+ * "لوحة الألوان" — ways to color the app, each a segment in the pill
+ * selector at the top instead of the mode being buried among unrelated
+ * switches:
+ *   • مخصص (manual): the original 20-swatch grid, sitting in its own
  *     tonal surfaceContainer card instead of floating directly on the
- *     section background — more separation, more Material 3 "container"
- *     feel, without changing what any of the swatches themselves do.
+ *     section background.
+ *   • تلقائي (dynamic, where available): color derived from the phone's
+ *     own wallpaper.
  *   • كلاسيكي: "إيقاف لوحة الألوان" — a small monochrome preview strip
  *     instead of a picker, since there's nothing left to pick.
  */
@@ -973,7 +967,6 @@ private fun ColorModeSection(
     // device.
     val modes = remember {
         buildList {
-            add(AppColorMode.GLASS)
             add(AppColorMode.MANUAL)
             if (isDynamicColorAvailable()) add(AppColorMode.DYNAMIC)
             add(AppColorMode.CLASSIC)
@@ -1021,7 +1014,6 @@ private fun ColorModeSection(
             ) {
                 Text(
                     when (mode) {
-                        AppColorMode.GLASS -> "زجاج"
                         AppColorMode.MANUAL -> "مخصص"
                         AppColorMode.DYNAMIC -> "تلقائي"
                         AppColorMode.CLASSIC -> "كلاسيكي"
@@ -1038,56 +1030,6 @@ private fun ColorModeSection(
     Spacer(Modifier.height(12.dp))
 
     when (effectiveMode) {
-        // FEATURE ("الوضع الزجاجي ياخد اللون من الخلفية تلقائيا متل الوضع
-        // التلقائي"): on any device that can actually read a color out of
-        // the wallpaper (see [dynamicPaletteColors] in Palette.kt), GLASS no
-        // longer has a swatch grid to pick from at all — same reasoning as
-        // DYNAMIC just below: there's nothing left to tap, the wallpaper
-        // already picked it. [GlassWallpaperColorPreview] stands in for the
-        // picker instead, exactly like DYNAMIC's own live preview strip does.
-        // Only on API < 31, where there's no wallpaper-color API to read,
-        // does GLASS fall back to the same hand-tuned swatch grid it always
-        // used — the same fallback [AppColorMode.DYNAMIC] itself gets.
-        AppColorMode.GLASS -> Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-                .padding(14.dp)
-        ) {
-            val glassFollowsWallpaper = isDynamicColorAvailable()
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    if (glassFollowsWallpaper)
-                        "زجاج شفاف بالكامل — الرأس والأزرار والحوارات والشريط السفلي كلها ألواح زجاجية شفافة ومتحركة، بألوان تُستخرج تلقائيًا من خلفية جهازك، تمامًا مثل الوضع التلقائي."
-                    else
-                        "زجاج شفاف بالكامل — الرأس والأزرار والحوارات والشريط السفلي كلها تتحول لألواح زجاجية شفافة ومتحركة بنفس لون اللوحة المختارة.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-            Spacer(Modifier.height(14.dp))
-            if (glassFollowsWallpaper) {
-                GlassWallpaperColorPreview()
-            } else {
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AppColorPalette.entries.forEach { palette ->
-                        ColorPaletteSwatch(
-                            palette = palette,
-                            selected = colorPalette == palette,
-                            onClick = { onPaletteSelected(palette) }
-                        )
-                    }
-                }
-            }
-        }
-
         AppColorMode.MANUAL -> Column(
             Modifier
                 .fillMaxWidth()
@@ -1201,49 +1143,6 @@ private fun ColorModeSection(
                     }
                 }
             }
-        }
-    }
-}
-
-/**
- * FEATURE ("الوضع الزجاجي ياخد اللون من الخلفية تلقائيا"): the live,
- * non-interactive counterpart to [ColorPaletteSwatch] for
- * [AppColorMode.GLASS] once its hue is coming straight from the wallpaper —
- * same gradient-circle visual so it reads as "the same kind of swatch" the
- * person already knows from every other mode, just nothing to tap, since
- * the wallpaper (not a choice on this screen) picked the pair. Reads
- * [LocalBrandGradientColors] directly rather than taking a param: by the
- * time this renders, [ShopManagerTheme] has already resolved that local to
- * exactly this live wallpaper-derived pair (see `usingWallpaperColor` +
- * [com.shopmanager.app.ui.theme.dynamicPaletteColors] there) — the same
- * source [com.shopmanager.app.ui.common.BrandGradient] itself paints the
- * header from, so this preview can never drift out of sync with what the
- * rest of the app is actually showing.
- */
-@Composable
-private fun GlassWallpaperColorPreview() {
-    val colors = LocalBrandGradientColors.current
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier
-                .size(40.dp)
-                .shadow(2.dp, CircleShape, clip = false)
-                .background(Brush.linearGradient(colors), CircleShape)
-                .border(1.dp, MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.30f), CircleShape)
-        )
-        Spacer(Modifier.width(14.dp))
-        Column {
-            Text(
-                "الألوان الحالية",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-            Text(
-                "مستخرجة من خلفية جهازك، وتتغيّر تلقائيًا مع تغييرها",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.80f)
-            )
         }
     }
 }
