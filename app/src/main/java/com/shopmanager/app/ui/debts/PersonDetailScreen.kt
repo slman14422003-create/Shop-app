@@ -129,8 +129,9 @@ fun PersonDetailScreen(
     // means its bottom edge is now the *same* color PersonHeader's gradient
     // begins at, so the seam disappears and all the fading into
     // `gradientEnd` happens across PersonHeader's own, taller panel instead.
-    val topBarBrush = remember(LocalBrandGradientColors.current) {
-        SolidColor(LocalBrandGradientColors.current.first())
+    val brandGradientColors = LocalBrandGradientColors.current
+    val topBarBrush = remember(brandGradientColors) {
+        SolidColor(brandGradientColors.first())
     }
 
     Scaffold(
