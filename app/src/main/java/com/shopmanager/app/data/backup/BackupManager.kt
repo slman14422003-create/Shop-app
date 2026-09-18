@@ -95,13 +95,37 @@ object BackupManager {
         materialsRepo: MaterialsRepository,
         kind: BackupKind = BackupKind.DAILY
     ) {
+        val json = buildSnapshotJson(debtsRepo, materialsRepo)
+
+        // Millisecond-resolution timestamp in the filename (not just
+        // seconds) so two backups triggered a moment apart — e.g. an
+        // instant backup plus a WorkManager retry — can never collide on
+        // the exact same filename and silently overwrite one another.
+        val file = File(backupDir(context), "${kind.filePrefix}${stampFormat().format(System.currentTimeMillis())}$SUFFIX")
+        file.writeText(json.toString())
+
+        pruneOldBackups(context, keep = file)
+    }
+
+    /**
+     * FEATURE ADDED ("استعادة نسخة تم تصديرها"): the on-device snapshot
+     * above (performBackup/restore) never leaves the app's own private
+     * storage, so it protects against Firestore being unreachable but not
+     * against losing the phone itself, or moving to a new one. This builds
+     * the exact same JSON shape as [performBackup] but just returns the
+     * text — used by Settings' "تصدير نسخة كملف" to hand the person a real
+     * file (via the system's own "Save to..." picker) they can keep in
+     * Drive/WhatsApp/a USB drive/another phone, and load back later through
+     * [restoreFromJsonText].
+     */
+    suspend fun buildSnapshotJson(debtsRepo: DebtsRepository, materialsRepo: MaterialsRepository): JSONObject {
         val (persons, debts) = debtsRepo.fetchAllForBackup()
         val (materials, prices, catalog) = materialsRepo.fetchAllForBackup()
 
         val pricesJson = JSONObject()
         prices.forEach { (name, price) -> pricesJson.put(name, price) }
 
-        val root = JSONObject().apply {
+        return JSONObject().apply {
             put("version", 1)
             put("createdAt", System.currentTimeMillis())
             put("persons", JSONArray(persons.map { it.toJson() }))
@@ -110,15 +134,6 @@ object BackupManager {
             put("prices", pricesJson)
             put("catalog", JSONArray(catalog.map { it.toJson() }))
         }
-
-        // Millisecond-resolution timestamp in the filename (not just
-        // seconds) so two backups triggered a moment apart — e.g. an
-        // instant backup plus a WorkManager retry — can never collide on
-        // the exact same filename and silently overwrite one another.
-        val file = File(backupDir(context), "${kind.filePrefix}${stampFormat().format(System.currentTimeMillis())}$SUFFIX")
-        file.writeText(root.toString())
-
-        pruneOldBackups(context, keep = file)
     }
 
     fun listBackups(context: Context): List<BackupInfo> =
@@ -158,8 +173,22 @@ object BackupManager {
         backup: BackupInfo,
         debtsRepo: DebtsRepository,
         materialsRepo: MaterialsRepository
+    ) = restoreFromJsonText(backup.file.readText(), debtsRepo, materialsRepo)
+
+    /**
+     * FEATURE ADDED ("استعادة نسخة تم تصديرها"): shared by [restore] (the
+     * on-device snapshot) and Settings' "استعادة من ملف" (a file the person
+     * picks via the system file browser — could be an export from THIS
+     * phone or one copied over from another). Same tolerant parsing as the
+     * on-device path below: a missing/renamed/corrupt section never takes
+     * down the sections that did parse.
+     */
+    suspend fun restoreFromJsonText(
+        jsonText: String,
+        debtsRepo: DebtsRepository,
+        materialsRepo: MaterialsRepository
     ) {
-        val json = JSONObject(backup.file.readText())
+        val json = JSONObject(jsonText)
 
         // BUG FIXED (استعادة تفشل بالكامل): only ONE snapshot is ever kept
         // on disk (see the class doc above) - there is no older backup to
