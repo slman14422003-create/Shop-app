@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
 
 /**
  * Flat, opaque panel surface used for every header/top-bar/dialog/card in
@@ -32,6 +34,19 @@ import androidx.compose.ui.unit.dp
  * a drop shadow and an optional hairline border — the same look every
  * caller already fell back to outside glass mode, kept as the one and
  * only look now so nothing needed to change at any call site.
+ *
+ * PERF (low-end tier, "اصلاحات للاجهزة اللي فيها معالج رسوميات ضعيف"): a
+ * drop shadow isn't free — `Modifier.shadow` asks the GPU to rasterize a
+ * soft penumbra behind the shape on every frame it's on screen, and this
+ * one modifier sits behind essentially every header/card/dialog/nav-bar in
+ * the app (see FloatingBottomNav, GlassCard, every GlassAlertDialog...),
+ * so on a weak/old GPU those shadows add up to real, measurable frame
+ * time. Same trade-off BrandGradient already makes for its per-pixel
+ * gradient shader: LOW-tier devices skip the shadow outright instead of
+ * drawing it at a reduced elevation, since a flat panel with no shadow
+ * reads as an intentional, cohesive "flatter" look rather than a
+ * half-broken one — never a jarring mix of some panels shadowed and
+ * others not.
  */
 @Composable
 fun Modifier.liquidGlassSurface(
@@ -60,9 +75,10 @@ fun Modifier.liquidGlassSurface(
     // plain surface.
     rimColor: Color = Color.White
 ): Modifier {
+    val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     return this
         .let {
-            if (elevation > 0.dp && !topFlush) {
+            if (elevation > 0.dp && !topFlush && !isLowTier) {
                 it.shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
             } else it
         }

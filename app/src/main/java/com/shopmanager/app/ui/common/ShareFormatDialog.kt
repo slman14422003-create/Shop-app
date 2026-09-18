@@ -10,6 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.unit.dp
 
 /**
@@ -30,7 +31,9 @@ fun ShareFormatDialog(
         title = { Text("مشاركة") },
         text = { Text("اختر طريقة المشاركة") },
         confirmButton = {
-            TextButton(onClick = {
+            // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): see
+            // PersonEditDialog.kt's doc comment.
+            TextButton(shape = RectangleShape, onClick = {
                 onDismiss()
                 onPickImage()
             }) {
@@ -40,7 +43,7 @@ fun ShareFormatDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = {
+            TextButton(shape = RectangleShape, onClick = {
                 onDismiss()
                 onPickText()
             }) {
