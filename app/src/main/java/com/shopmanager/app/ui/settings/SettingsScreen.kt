@@ -1,7 +1,10 @@
 package com.shopmanager.app.ui.settings
 
 import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.NotificationManagerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -176,6 +179,44 @@ fun SettingsScreen(
     var isRestoring by remember { mutableStateOf(false) }
     var restoreStatus by remember { mutableStateOf<String?>(null) }
 
+    // FEATURE ADDED ("استعادة نسخة تم تصديرها"): export/import a REAL JSON
+    // file (as opposed to the plain-text share above, which can't be read
+    // back) via the system's own "Save as.../Open..." pickers — no storage
+    // permission needed since the person themselves chooses the location
+    // through Android's Storage Access Framework.
+    var isExportingFile by remember { mutableStateOf(false) }
+    var exportFileStatus by remember { mutableStateOf<String?>(null) }
+    var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+    val exportFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null && debtsViewModel != null && materialsViewModel != null) {
+            isExportingFile = true
+            exportFileStatus = null
+            scope.launch {
+                try {
+                    val json = BackupManager.buildSnapshotJson(debtsRepoForBackup, materialsRepoForBackup)
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            out.write(json.toString(2).toByteArray(Charsets.UTF_8))
+                        } ?: throw java.io.IOException("تعذر فتح الملف للكتابة")
+                    }
+                    exportFileStatus = "تم حفظ الملف بنجاح ✅ يمكنك نقله لجهاز آخر أو حفظه بمكان آمن."
+                } catch (e: Exception) {
+                    exportFileStatus = "تعذر التصدير: ${e.message ?: "حاول مرة أخرى"}"
+                } finally {
+                    isExportingFile = false
+                }
+            }
+        }
+    }
+    // OpenDocument (not GetContent): keeps read access to the exact file
+    // the person picked long enough for the confirmation dialog below to
+    // actually read it, and doesn't require any broad storage permission.
+    val importFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) pendingImportUri = uri }
+
     // التحديثات (Settings → check for update, in-app download+install):
     // see data/updates/ for the actual networking. The manifest URL itself
     // is only ever set from the hidden developer panel; a normal user just
@@ -282,6 +323,29 @@ fun SettingsScreen(
                 dismissedServerErrorBanner = true
             } catch (e: Exception) {
                 restoreStatus = "تعذرت الاستعادة: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+            } finally {
+                isRestoring = false
+            }
+        }
+    }
+
+    /** Same as [runRestore], reading the JSON from a person-picked file
+     * (SAF Uri) instead of the on-device snapshot — see
+     * [BackupManager.restoreFromJsonText]. */
+    fun runRestoreFromUri(uri: Uri) {
+        isRestoring = true
+        restoreStatus = null
+        scope.launch {
+            try {
+                val text = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                        ?: throw java.io.IOException("تعذر فتح الملف")
+                }
+                BackupManager.restoreFromJsonText(text, debtsRepoForBackup, materialsRepoForBackup)
+                restoreStatus = "تمت الاستعادة من الملف بنجاح ✅"
+                dismissedServerErrorBanner = true
+            } catch (e: Exception) {
+                restoreStatus = "تعذرت الاستعادة: ${e.message ?: "تأكد أن الملف نسخة احتياطية صالحة"}"
             } finally {
                 isRestoring = false
             }
@@ -673,6 +737,46 @@ fun SettingsScreen(
                         Spacer(Modifier.width(8.dp))
                         Text("تصدير نسخة احتياطية الآن")
                     }
+
+                    // FEATURE ADDED ("استعادة نسخة تم تصديرها"): the button
+                    // above only ever produces a human-readable text share —
+                    // fine to read, impossible to load back into the app.
+                    // This exports the actual structured JSON snapshot (same
+                    // shape as the automatic on-device one below) to a real
+                    // file the person chooses the location for, which the
+                    // "استعادة من ملف" button further down can then read
+                    // back in — on this phone or a new one.
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "أو صدّر نسخة كاملة كملف (JSON) يمكن استعادتها لاحقًا على هذا الجهاز أو جهاز آخر.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = {
+                            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(java.util.Date())
+                            exportFileLauncher.launch("shop_manager_backup_$stamp.json")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isExportingFile
+                    ) {
+                        if (isExportingFile) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("جارٍ الحفظ...")
+                        } else {
+                            Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("تصدير نسخة كملف (JSON)")
+                        }
+                    }
+                    exportFileStatus?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
 
@@ -726,6 +830,32 @@ fun SettingsScreen(
                         Spacer(Modifier.height(8.dp))
                         LinearProgressIndicator(Modifier.fillMaxWidth())
                     }
+                }
+
+                // FEATURE ADDED ("استعادة نسخة تم تصديرها"): restores from a
+                // JSON file the person picks (one exported earlier from
+                // "تصدير نسخة كملف" above — on this phone or another one
+                // signed into the same shop), not just the automatic
+                // on-device snapshot above. Shares isRestoring/restoreStatus
+                // with the on-device restore since only one restore ever
+                // runs at a time either way.
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "أو استعد نسخة من ملف JSON تم تصديره سابقًا (من هذا الجهاز أو جهاز آخر).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = { importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isRestoring
+                ) {
+                    Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("استعادة من ملف")
                 }
             }
 
@@ -823,6 +953,27 @@ fun SettingsScreen(
                 }) { Text("استعادة") }
             },
             dismissButton = { TextButton(onClick = { pendingRestore = null }) { Text("إلغاء") } }
+        )
+    }
+
+    pendingImportUri?.let { uri ->
+        GlassAlertDialog(
+            onDismissRequest = { pendingImportUri = null },
+            title = { Text("استعادة من ملف؟") },
+            text = {
+                Text(
+                    "سيتم استبدال كل الديون والعملاء والمواد والأسعار الحالية بمحتوى الملف المختار. " +
+                        "تأكد أنه ملف نسخة احتياطية صحيح تم تصديره من هذا التطبيق. لا يمكن التراجع عن هذا بعد التنفيذ."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val target = uri
+                    pendingImportUri = null
+                    runRestoreFromUri(target)
+                }) { Text("استعادة") }
+            },
+            dismissButton = { TextButton(onClick = { pendingImportUri = null }) { Text("إلغاء") } }
         )
     }
 
