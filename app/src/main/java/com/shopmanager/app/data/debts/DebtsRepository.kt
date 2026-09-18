@@ -158,7 +158,13 @@ class DebtsRepository {
      * created) lets the caller mark it as a local/self change so the diff
      * can skip notifying for it — see DebtsViewModel.selfCreatedDebtIds.
      */
-    suspend fun addPerson(name: String, amount: Double, date: String, note: String = ""): String? = withTimeout(WRITE_TIMEOUT_MS) {
+    suspend fun addPerson(
+        name: String,
+        amount: Double,
+        date: String,
+        note: String = "",
+        onIdAssigned: (String) -> Unit = {}
+    ): String? = withTimeout(WRITE_TIMEOUT_MS) {
         val personRef = db.collection("persons").document()
         val batch = db.batch()
         batch.set(
@@ -174,6 +180,11 @@ class DebtsRepository {
         if (amount > 0) {
             val debtRef = db.collection("debts").document()
             debtId = debtRef.id
+            // Same race fix as [addDebt]: the id is known client-side the
+            // moment document() is called, so it's handed to the caller
+            // right away (still before batch.commit().await() below) instead
+            // of only after the whole batch is durably committed.
+            onIdAssigned(debtRef.id)
             batch.set(
                 debtRef,
                 mapOf(
@@ -226,8 +237,34 @@ class DebtsRepository {
         Unit
     }
 
-    /** Returns the new debt's id — see [addPerson] for why the caller needs it. */
-    suspend fun addDebt(personId: String, amount: Double, date: String, note: String = ""): String = withTimeout(WRITE_TIMEOUT_MS) {
+    /**
+     * BUG FIXED (إشعار "عميل جديد بالديون" لسا يوصل أحياناً لنفس الجهاز
+     * رغم selfCreatedDebtIds): `.add(data).await().id` only reveals the new
+     * document's id once the write is fully durable — but Firestore's local
+     * cache applies the write (and re-fires every listener on it, with
+     * `hasPendingWrites`) the instant it's queued, well before that network
+     * round trip finishes. Since the ViewModel only added the id to
+     * `selfCreatedDebtIds` AFTER this whole suspend function returned, the
+     * live listener's diff (running on the same dispatcher) could — and
+     * sometimes did, depending on how the coroutine happened to interleave
+     * with the snapshot callback — see the new debt and fire the "عميل
+     * جديد" notification before the id was ever registered as self-made.
+     * `db.collection("debts").document()` generates the id purely
+     * client-side (no network call), so calling [onIdAssigned] with it
+     * BEFORE the actual `.set(data).await()` guarantees the id lands in
+     * `selfCreatedDebtIds` synchronously, on this same thread, before this
+     * coroutine ever suspends — there is no longer a window for the
+     * listener to see the new id first.
+     */
+    suspend fun addDebt(
+        personId: String,
+        amount: Double,
+        date: String,
+        note: String = "",
+        onIdAssigned: (String) -> Unit = {}
+    ): String = withTimeout(WRITE_TIMEOUT_MS) {
+        val ref = db.collection("debts").document()
+        onIdAssigned(ref.id)
         val data = mapOf(
             "personId" to personId,
             "amount" to amount,
@@ -235,7 +272,8 @@ class DebtsRepository {
             "note" to note,
             "createdAt" to System.currentTimeMillis()
         )
-        db.collection("debts").add(data).await().id
+        ref.set(data).await()
+        ref.id
     }
 
     suspend fun updateDebt(id: String, amount: Double, date: String, note: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
