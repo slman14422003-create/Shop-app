@@ -117,10 +117,23 @@ fun ShopManagerTheme(
     // resolved dynamic scheme itself for DYNAMIC (see
     // [dynamicGradientColors] — there's no palette to read a pair from in
     // that mode, the wallpaper picks the hue).
+    //
+    // FLAT, NOT A GRADIENT ("للون المخصص والكلاسيكي لازم يكون لون واحد فقط
+    // متل الوضع التلقائي"): CLASSIC and MANUAL used to keep their real
+    // two-hue gradient pair (light→dark start/end stops) even after
+    // DYNAMIC's own header was flattened to one repeated color — see
+    // [dynamicGradientColors]'s doc for why that one was flattened. Same
+    // treatment here now: both stops are the same single tone
+    // (`ClassicGradientStart` / `paletteColors.gradientStart`), so
+    // `BrandGradient.brush()`'s `Brush.verticalGradient(...)` paints as one
+    // flat color for all three modes alike, not just DYNAMIC. The `*End`
+    // colors are kept around (still referenced by anything reading them
+    // directly) rather than deleted, in case a solid two-tone gradient is
+    // ever wanted again.
     val gradientColors = remember(effectiveColorMode, paletteColors, colors) {
         when (effectiveColorMode) {
-            AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientEnd)
-            AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientEnd)
+            AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientStart)
+            AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientStart)
             AppColorMode.DYNAMIC -> dynamicGradientColors(colors, useDark)
         }
     }

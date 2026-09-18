@@ -501,9 +501,11 @@ internal fun dynamicSchemeFor(context: Context, useDark: Boolean): ColorScheme =
  * [BrandGradient.brush]/[BrandGradient.horizontalBrush] still build a
  * `Brush.verticalGradient`/`horizontalGradient` from this list either way,
  * but two identical stops paint as one flat color with no light/dark
- * blend — exactly the plain "one color, that's it" look asked for here,
- * left as a real two-hue gradient only for MANUAL/CLASSIC's own hand-tuned
- * pairs, which is what they're deliberately designed to be.
+ * blend — exactly the plain "one color, that's it" look asked for here.
+ * MANUAL/CLASSIC's own [ShopManagerTheme] `gradientColors` now do the same
+ * (repeat their single `gradientStart`/`ClassicGradientStart` tone) instead
+ * of keeping their real two-hue pair, so all three modes read as one flat
+ * header color, not just this one.
  *
  * TONE ("فاتح لدرجة تزعج" — a bright, washed-out pastel flash on an
  * otherwise near-black app): per Material 3's tonal-palette spec, a
