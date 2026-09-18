@@ -213,7 +213,13 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
-                selfTouchedMaterialIds += repo.addMaterial(name, quantity, unit, section.value, notes)
+                // BUG FIXED (see MaterialsRepository.addMaterial): register
+                // the id via onIdAssigned the instant it's generated
+                // (client-side, before the write is even sent) instead of
+                // after the whole suspend call returns — closes the race
+                // where the live listener could fire first and notify this
+                // same device about the material it just added.
+                repo.addMaterial(name, quantity, unit, section.value, notes) { id -> selfTouchedMaterialIds += id }
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)

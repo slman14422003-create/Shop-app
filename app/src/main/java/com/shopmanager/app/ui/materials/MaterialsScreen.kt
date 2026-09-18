@@ -82,7 +82,15 @@ fun MaterialsScreen(
     onPricesTabActiveChanged: (Boolean) -> Unit = {},
     onPricesChangedCountChanged: (Int) -> Unit = {},
     savePricesRequested: Boolean = false,
-    onSavePricesRequestHandled: () -> Unit = {}
+    onSavePricesRequestHandled: () -> Unit = {},
+    // BUG FIXED ("ترابط بين الديون والملاحظات" كان يغطي الأشخاص فقط): see
+    // MainActivity's pendingMaterialHighlight and NotesScreen's onOpenLink —
+    // a material-linked note now hands its linked material's name through
+    // here instead of just opening this screen with an empty search, so
+    // tapping the note lands directly on that one item instead of the full
+    // list.
+    initialSearchQuery: String? = null,
+    onInitialSearchConsumed: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val catalog by viewModel.catalog.collectAsState()
@@ -98,6 +106,21 @@ fun MaterialsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val brandColor = LocalBrandGradientColors.current.first().toArgb()
+
+    // Consumed once (onInitialSearchConsumed clears it back to null in
+    // MainActivity) so navigating away and back to this tab later, or a
+    // recomposition for an unrelated reason, doesn't keep re-forcing the
+    // search box back to this value if the person has since cleared it
+    // themselves. Also lands on the main list tab (0), not الأسعار — a
+    // material-linked note is always about the shortage-list entry, never
+    // its price.
+    LaunchedEffect(initialSearchQuery) {
+        if (!initialSearchQuery.isNullOrBlank()) {
+            search = initialSearchQuery
+            tab = 0
+            onInitialSearchConsumed()
+        }
+    }
 
     // REDESIGN: the "مادة جديدة" quick-add action moved out to
     // FloatingBottomNav's shared `quickAction` slot beside the nav pill
