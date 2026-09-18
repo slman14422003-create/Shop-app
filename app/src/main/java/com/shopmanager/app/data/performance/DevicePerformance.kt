@@ -23,6 +23,20 @@ import androidx.compose.runtime.staticCompositionLocalOf
  *   commonly quad-core, mid-range and up are usually 8-core.
  * - ActivityManager.isLowRamDevice() — Android's own "go edition / low
  *   RAM" flag, set by the OEM/OS itself for exactly this purpose.
+ * - FEATURE ADDED ("اصلاحات للاجهزة اللي فيها معالج رسوميات ضعيف"): the
+ *   three signals above are all about RAM/CPU — none of them actually
+ *   look at the GPU, so a phone with decent RAM and core count but a
+ *   genuinely weak/old GPU (common on budget MediaTek Helio-series chips,
+ *   which often pair 4GB+ RAM with a low-end Mali GPU) still landed on
+ *   STANDARD and got the full gradients/glow/blur-adjacent effects it
+ *   can't actually push at 60fps. ActivityManager's own
+ *   `getDeviceConfigurationInfo().reqGlEsVersion` — the OpenGL ES version
+ *   the device's GPU driver reports supporting — is a standard, free
+ *   (no GL context needed) proxy for GPU generation: anything below ES
+ *   3.0 is old/entry-level hardware by now. Reported the same way as the
+ *   others below (as `glEsVersion`, and folded into `tier` alongside RAM/
+ *   cores), so a weak GPU alone is now enough to land a device on LOW even
+ *   when its RAM and core count look fine.
  *
  * Any one of these tripping is enough to land a device on LOW — false
  * positives (an OK phone getting the lighter UI) just mean slightly fewer
@@ -63,6 +77,11 @@ object DevicePerformance {
 
     private const val LOW_RAM_THRESHOLD_MB = 3072L
     private const val LOW_CORE_THRESHOLD = 4
+    // OpenGL ES 3.0 = 0x30000 (major version in the upper 16 bits). Any
+    // device reporting less than that is old/entry-level GPU hardware —
+    // ES 3.0 shipped in 2012/Android 4.3, so by now a sub-3.0 report means
+    // a genuinely weak GPU, not just an unusual one.
+    private const val MIN_GL_ES_VERSION = 0x30000
 
     /** FEATURE ADDED (Settings → الأداء diagnostics): the raw signals
      * [detectTier] measures, exposed on their own so the person can see
@@ -75,6 +94,8 @@ object DevicePerformance {
         val totalRamMb: Long,
         val cores: Int,
         val osFlaggedLowRam: Boolean,
+        val glEsVersion: Int,
+        val weakGpu: Boolean,
         val tier: PerformanceTier
     )
 
@@ -85,10 +106,16 @@ object DevicePerformance {
         val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
         val cores = Runtime.getRuntime().availableProcessors()
         val osFlaggedLowRam = activityManager?.isLowRamDevice == true
+        // reqGlEsVersion is free to read (no GL context/surface needed) —
+        // it's just the driver-reported capability from the package
+        // manager's configuration info, same source `<uses-feature
+        // android:glEsVersion>` checks against at install time.
+        val glEsVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: MIN_GL_ES_VERSION
+        val weakGpu = glEsVersion in 1 until MIN_GL_ES_VERSION
         val lowRam = totalRamMb in 1..LOW_RAM_THRESHOLD_MB
         val lowCores = cores in 1..LOW_CORE_THRESHOLD
-        val tier = if (osFlaggedLowRam || (lowRam && lowCores)) PerformanceTier.LOW else PerformanceTier.STANDARD
-        return DeviceInfo(totalRamMb, cores, osFlaggedLowRam, tier)
+        val tier = if (osFlaggedLowRam || weakGpu || (lowRam && lowCores)) PerformanceTier.LOW else PerformanceTier.STANDARD
+        return DeviceInfo(totalRamMb, cores, osFlaggedLowRam, glEsVersion, weakGpu, tier)
     }
 
     /**
@@ -106,9 +133,11 @@ object DevicePerformance {
         // Reuses the exact same signals/thresholds as [currentDeviceInfo]
         // (see the BUG FIXED note that used to live here: LOW only when
         // isLowRamDevice OR both RAM *and* core count point that way, never
-        // from a single weak signal alone) — one shared implementation, so
-        // the diagnostics shown in Settings can never silently drift from
-        // what actually decided the cached tier.
+        // from a single weak signal alone — except a weak GPU, which is
+        // its own independent trigger since a phone can easily have fine
+        // RAM/cores paired with an old/entry-level GPU) — one shared
+        // implementation, so the diagnostics shown in Settings can never
+        // silently drift from what actually decided the cached tier.
         val tier = currentDeviceInfo(context).tier
         prefs.edit().putString(KEY_TIER, tier.name).apply()
         return tier
