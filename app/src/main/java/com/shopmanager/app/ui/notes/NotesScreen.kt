@@ -82,7 +82,7 @@ fun NotesScreen(
     persons: List<Person>,
     materials: List<Material>,
     onOpenPerson: (String) -> Unit,
-    onOpenMaterials: () -> Unit,
+    onOpenMaterials: (String) -> Unit,
     viewModel: NotesViewModel = viewModel(),
     addNoteRequested: Boolean = false,
     onAddNoteRequestHandled: () -> Unit = {}
@@ -268,7 +268,18 @@ fun NotesScreen(
                             onOpenLink = {
                                 when (note.linkType) {
                                     NoteLinkType.PERSON -> if (note.linkedId.isNotBlank()) onOpenPerson(note.linkedId)
-                                    NoteLinkType.MATERIAL -> onOpenMaterials()
+                                    // BUG FIXED ("ترابط بين الديون والملاحظات"
+                                    // كان يغطي الأشخاص فقط): tapping a
+                                    // material-linked note used to just
+                                    // switch to the Materials tab in general
+                                    // — the person still had to search for
+                                    // the exact item themselves, unlike a
+                                    // person-linked note which jumps straight
+                                    // to that customer's own page. Passing
+                                    // the linked material's name through lets
+                                    // MaterialsScreen pre-fill its own search
+                                    // with it, landing right on that item.
+                                    NoteLinkType.MATERIAL -> onOpenMaterials(note.linkedName)
                                     NoteLinkType.NONE -> {}
                                 }
                             }

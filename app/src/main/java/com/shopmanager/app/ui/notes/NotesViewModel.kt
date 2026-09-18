@@ -100,13 +100,18 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         viewModelScope.launch {
             try {
+                // BUG FIXED (see NotesRepository.addNote): register the id
+                // via onIdAssigned the instant it's generated, before the
+                // write is sent — closes the race where the live listener
+                // could fire first (from the local cache) and notify this
+                // same device about the note it just added, instead of only
+                // registering it after the whole suspend call returned.
                 val id = repo.addNote(
                     ImportantNote(
                         title = title, content = content, linkType = linkType,
                         linkedId = linkedId, linkedName = linkedName, reminderAt = reminderAt
                     )
-                )
-                selfCreatedNoteIds += id
+                ) { newId -> selfCreatedNoteIds += newId }
                 if (reminderAt > 0) {
                     NoteReminderWorker.schedule(getApplication(), id, title, content, reminderAt)
                 }
