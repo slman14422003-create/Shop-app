@@ -82,20 +82,19 @@ jobs:
           cp "$DEBUG_APK" shop-manager-debug.apk
           cp "$RELEASE_APK" shop-manager-release.apk
 
-      # DYNAMIC RELEASE NOTES: the release body used to be one fixed block
-      # of text on every single build ("بناء تلقائي..."), so
-      # UpdateManifest.notes — which is literally this release's "body"
-      # field, see parseGitHubRelease() in UpdateChecker.kt — showed the
-      # exact same generic sentence in the in-app update dialog no matter
-      # what had actually changed. This step instead reads the real commit
-      # messages that landed since the last successful push (via
-      # `github.event.before`, the SHA main pointed to right before this
-      # push) and turns them into a bullet-point changelog, so every
-      # release — and therefore every "تحديث متوفر" dialog on someone's
-      # phone — describes what's actually new in THAT build.
-      # `workflow_dispatch` runs (no "before" SHA) and first-ever pushes
-      # (before = all-zeros) fall back to the last 15 commits so the step
-      # never produces an empty changelog.
+      # AUTOMATIC RELEASE NOTES ("بدي ملاحظات الإصدار تلقائيًا تتغير، ما
+      # اضطر اغيّر باللوج كل مرة"): this used to read CHANGELOG.md's own
+      # "## غير منشور" section as the *preferred* source, only falling back
+      # to scanning commit messages when that section was empty — which
+      # meant a release with real, note-worthy commits but a
+      # forgotten/un-updated CHANGELOG.md still needed someone to go edit
+      # that file by hand before every push for the notes to actually
+      # reflect what changed. That manual step is gone now: this always
+      # builds the notes straight from the commit messages since the last
+      # successful push (via `github.event.before`), no file to remember to
+      # touch. `workflow_dispatch` runs (no "before" SHA) and first-ever
+      # pushes (before = all-zeros) fall back to the last 15 commits so the
+      # step never produces an empty changelog.
       #
       # BUG FIXED (notes were full of build/CI/debug noise, not features):
       # this used to dump EVERY commit subject verbatim, including ones
@@ -118,37 +117,43 @@ jobs:
       # If everything in the range happens to be internal/build commits,
       # the filtered log is legitimately empty — falls back to the same
       # honest generic line as before rather than showing nothing.
-      # ACCURATE RELEASE NOTES: this used to build "ما الجديد" purely by
-      # scanning raw commit subjects and filtering out CI/build noise —
-      # but a vague commit message (or one that happens to match the
-      # noise blocklist) produced no real information, so most releases
-      # fell back to the generic "تحسينات وإصلاحات عامة" line no matter
-      # what had actually changed in the app.
       #
-      # Source of truth is now CHANGELOG.md's own "## غير منشور" section
-      # at the repo root — real, human-written Arabic bullet points
-      # describing what actually changed, added over time as fixes land
-      # (not auto-generated). This step just extracts that section
-      # verbatim. If it's ever empty (e.g. a build-only push with no
-      # real changelog entry written), the old commit-log scan is kept
-      # as a fallback so the step never produces an empty changelog.
+      # BUG FIXED ("Add files via upload" showed up verbatim as the entire
+      # changelog): the blocklist above only ever matched *technical*
+      # jargon (gradle, keystore, ...) — it had nothing for GitHub's own
+      # auto-generated commit messages, the exact text it writes on your
+      # behalf whenever a file is added/edited/deleted/renamed through the
+      # website's "Add file" button with no custom message typed in
+      # ("Add files via upload", "Update Palette.kt", "Delete old.png",
+      # "Rename a.kt to b.kt", "Initial commit"). None of those describe
+      # what changed for someone using the app, so a release whose only
+      # real commit happened to be a web-UI upload published that exact
+      # placeholder as if it were the changelog. New second grep pass
+      # drops them specifically:
+      #   - the two fixed phrases GitHub always uses verbatim
+      #     ("add files via upload", "initial commit")
+      #   - `Update|Create|Delete <bare-filename.ext>` and `Rename X to Y`
+      #     — but ONLY when the subject is just the verb plus a filename
+      #     (anchored end of line via bash's regex '$'), never a real
+      #     sentence that merely starts the same way, so a genuine commit
+      #     like "Update pricing screen to show totals" still survives —
+      #     that has words after the filename-shaped first token, this
+      #     pattern doesn't match past a single bare filename.
       - name: Generate changelog
         id: changelog
         run: |
-          UNRELEASED=$(awk '/^## غير منشور/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md \
-            | sed '/^[[:space:]]*$/d')
-          if [ -z "$UNRELEASED" ]; then
-            NOISE_PATTERN='^(ci|chore|docs|build|test|merge)(\(.*\))?:|\b(ci|workflow|github action|gradle|jdk|keystore|signing|proguard|r8|assemble(debug|release)?|debug apk|release apk|changelog|readme|gitignore)\b'
-            BEFORE_SHA="${{ github.event.before }}"
-            if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
-              RANGE="${BEFORE_SHA}..${{ github.sha }}"
-            else
-              RANGE="-15"
-            fi
-            UNRELEASED=$(git log $RANGE --no-merges --pretty=format:'%s' \
-              | grep -viE "$NOISE_PATTERN" \
-              | sed 's/^/- /')
+          NOISE_PATTERN='^(ci|chore|docs|build|test|merge)(\(.*\))?:|\b(ci|workflow|github action|gradle|jdk|keystore|signing|proguard|r8|assemble(debug|release)?|debug apk|release apk|changelog|readme|gitignore)\b'
+          GITHUB_AUTOMSG_PATTERN='^(add files via upload|initial commit)$|^(update|create|delete) [^ ]+\.[A-Za-z0-9]+$|^rename .+ to .+$'
+          BEFORE_SHA="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+            RANGE="${BEFORE_SHA}..${{ github.sha }}"
+          else
+            RANGE="-15"
           fi
+          UNRELEASED=$(git log $RANGE --no-merges --pretty=format:'%s' \
+            | grep -viE "$NOISE_PATTERN" \
+            | grep -viE "$GITHUB_AUTOMSG_PATTERN" \
+            | sed 's/^/- /')
           if [ -z "$UNRELEASED" ]; then
             UNRELEASED="- تحسينات وإصلاحات عامة"
           fi
@@ -221,28 +226,25 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           files: shop-manager-release.apk
 
-      # RESET CHANGELOG.md: whatever was under "## غير منشور" just got
-      # published as this release's real notes above — archive it under
-      # a dated heading (so the history stays browsable in the file
-      # itself) and empty "غير منشور" back out, so the NEXT release
-      # doesn't re-publish the same bullets again. Committed with
-      # [skip ci] so this doesn't re-trigger the workflow on itself.
-      - name: Archive changelog entry
+      # AUTOMATIC CHANGELOG.md ("ما اضطر اغيّر باللوج كل مرة"): CHANGELOG.md
+      # is still kept as a plain browsable history of every release, but
+      # nothing about it is manually maintained anymore — this just appends
+      # the SAME auto-generated notes from the "Generate changelog" step
+      # above under a new dated heading, right after every release.
+      # Committed with [skip ci] so this doesn't re-trigger the workflow on
+      # itself.
+      - name: Record changelog entry
         run: |
-          UNRELEASED=$(awk '/^## غير منشور/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md | sed '/^[[:space:]]*$/d')
-          if [ -n "$UNRELEASED" ]; then
-            DATE_HEADING="## v1.0.${{ github.run_number }} — $(date +%Y-%m-%d)"
-            awk -v heading="$DATE_HEADING" -v entry="$UNRELEASED" '
-              /^## غير منشور/ { print; print ""; found=1; next }
-              found && /^## / { print heading; print entry; print ""; found=0; print; next }
-              found { next }
-              { print }
-              END { if (found) { print heading; print entry; print "" } }
-            ' CHANGELOG.md > CHANGELOG.md.tmp
-            mv CHANGELOG.md.tmp CHANGELOG.md
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add CHANGELOG.md
-            git commit -m "chore: archive changelog for v1.0.${{ github.run_number }} [skip ci]"
-            git push
-          fi
+          DATE_HEADING="## v1.0.${{ github.run_number }} — $(date +%Y-%m-%d)"
+          {
+            echo "$DATE_HEADING"
+            echo "${{ steps.changelog.outputs.notes }}"
+            echo ""
+            cat CHANGELOG.md 2>/dev/null
+          } > CHANGELOG.md.tmp
+          mv CHANGELOG.md.tmp CHANGELOG.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: record changelog for v1.0.${{ github.run_number }} [skip ci]"
+          git push
