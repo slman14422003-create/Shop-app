@@ -40,7 +40,18 @@ class NotesRepository {
         awaitClose { registration.remove() }
     }
 
-    suspend fun addNote(note: ImportantNote): String = withTimeout(WRITE_TIMEOUT_MS) {
+    /**
+     * BUG FIXED (إشعار ملاحظة جديدة لسا يوصل أحياناً لنفس الجهاز رغم
+     * selfCreatedNoteIds): same race as DebtsRepository.addDebt /
+     * MaterialsRepository.addMaterial. The id is generated client-side via
+     * `document()` and handed to [onIdAssigned] before the write is sent,
+     * so NotesViewModel can register it as self-created synchronously —
+     * before this coroutine ever suspends on the network write — instead
+     * of only after the write was fully durable.
+     */
+    suspend fun addNote(note: ImportantNote, onIdAssigned: (String) -> Unit = {}): String = withTimeout(WRITE_TIMEOUT_MS) {
+        val ref = db.collection(notesCollection).document()
+        onIdAssigned(ref.id)
         val data = mapOf(
             "title" to note.title,
             "content" to note.content,
@@ -52,7 +63,8 @@ class NotesRepository {
             "isDone" to note.isDone,
             "createdAt" to System.currentTimeMillis()
         )
-        db.collection(notesCollection).add(data).await().id
+        ref.set(data).await()
+        ref.id
     }
 
     suspend fun updateNote(note: ImportantNote) = withTimeout(WRITE_TIMEOUT_MS) {
