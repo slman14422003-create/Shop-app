@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -321,9 +322,9 @@ fun NotesScreen(
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${note.title}\"؟") },
             confirmButton = {
-                TextButton(onClick = { viewModel.deleteNote(note); deleteTarget = null }) { Text("حذف") }
+                TextButton(shape = RectangleShape, onClick = { viewModel.deleteNote(note); deleteTarget = null }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
     }
 }
