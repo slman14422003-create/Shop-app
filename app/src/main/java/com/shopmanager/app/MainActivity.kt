@@ -47,6 +47,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
@@ -930,13 +931,15 @@ private fun ShopManagerApp(
                 onDismissRequest = onConsumeNotificationAction,
                 title = { Text("✅ تم سداد دين") },
                 text = { Text("${action.personName} وفى ${action.amount} ${action.currency}") },
-                confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
+                // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): see
+                // PersonEditDialog.kt's doc comment.
+                confirmButton = { TextButton(shape = RectangleShape, onClick = onConsumeNotificationAction) { Text("موافق") } }
             )
             is NotificationAction.NewDebt -> GlassAlertDialog(
                 onDismissRequest = onConsumeNotificationAction,
                 title = { Text("💰 عميل جديد بالديون") },
                 text = { Text("${action.personName} — ${action.amount} ${action.currency}") },
-                confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
+                confirmButton = { TextButton(shape = RectangleShape, onClick = onConsumeNotificationAction) { Text("موافق") } }
             )
             is NotificationAction.ShoppingList -> GlassAlertDialog(
                 onDismissRequest = onConsumeNotificationAction,
@@ -947,7 +950,7 @@ private fun ShopManagerApp(
                         else action.materialNames.joinToString("، ")
                     )
                 },
-                confirmButton = { TextButton(onClick = onConsumeNotificationAction) { Text("موافق") } }
+                confirmButton = { TextButton(shape = RectangleShape, onClick = onConsumeNotificationAction) { Text("موافق") } }
             )
             // Tapping a note's reminder just needs to land on the ملاحظات
             // هامة tab (already handled by the LaunchedEffect above) - the
