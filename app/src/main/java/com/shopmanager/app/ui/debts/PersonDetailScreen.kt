@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -364,13 +365,15 @@ fun PersonDetailScreen(
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${person.name}\" وكل ديونه؟") },
             confirmButton = {
-                TextButton(onClick = {
+                // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): see
+                // PersonEditDialog.kt's doc comment.
+                TextButton(shape = RectangleShape, onClick = {
                     viewModel.deletePerson(person.id)
                     showDeletePersonConfirm = false
                     onBack()
                 }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { showDeletePersonConfirm = false }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { showDeletePersonConfirm = false }) { Text("إلغاء") } }
         )
     }
 
@@ -380,12 +383,12 @@ fun PersonDetailScreen(
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف هذا الدين؟") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(shape = RectangleShape, onClick = {
                     viewModel.deleteDebt(id)
                     deleteDebtTarget = null
                 }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteDebtTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteDebtTarget = null }) { Text("إلغاء") } }
         )
     }
 
@@ -396,12 +399,12 @@ fun PersonDetailScreen(
             title = { Text("تأكيد السداد") },
             text = { Text("هل \"${person.name}\" وفى ${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف هذا الدين من السجل وإرسال إشعار.") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(shape = RectangleShape, onClick = {
                     viewModel.markDebtAsPaid(debt, person.name)
                     payDebtTarget = null
                 }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { payDebtTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { payDebtTarget = null }) { Text("إلغاء") } }
         )
     }
     if (showEditNameDialog) {
@@ -420,6 +423,7 @@ fun PersonDetailScreen(
             confirmButton = {
                 TextButton(
                     enabled = editNameText.isNotBlank() && !isSavingName,
+                    shape = RectangleShape,
                     onClick = {
                         val newName = editNameText.trim()
                         if (newName.isNotEmpty() && newName != person.name) {
@@ -445,7 +449,7 @@ fun PersonDetailScreen(
                 }
             },
             dismissButton = {
-                TextButton(enabled = !isSavingName, onClick = { showEditNameDialog = false }) { Text("إلغاء") }
+                TextButton(enabled = !isSavingName, shape = RectangleShape, onClick = { showEditNameDialog = false }) { Text("إلغاء") }
             }
         )
     }
@@ -497,9 +501,9 @@ fun PersonDetailScreen(
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف الملاحظة \"${targetNote.title}\"؟") },
             confirmButton = {
-                TextButton(onClick = { notesViewModel.deleteNote(targetNote); deleteNoteTarget = null }) { Text("حذف") }
+                TextButton(shape = RectangleShape, onClick = { notesViewModel.deleteNote(targetNote); deleteNoteTarget = null }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteNoteTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteNoteTarget = null }) { Text("إلغاء") } }
         )
     }
 }

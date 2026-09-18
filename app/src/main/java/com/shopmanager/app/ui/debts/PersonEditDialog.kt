@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.debts.Person
@@ -39,6 +40,20 @@ private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(D
  * عميل جديد من هالنافذة كان دايماً بملاحظة فارغة "" لأنه ما كان في خانة
  * أصلاً هون. أضفنا نفس خانة الملاحظة هون كمان، فأول دين لعميل جديد صار فيه
  * نفس ميزة الملاحظة متل أي دين ثاني.
+ *
+ * BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري" على "عميل جديد"):
+ * this exact fix already existed on MaterialEditDialog's own confirm/dismiss
+ * buttons — TextButton's default shape is a fully-rounded pill, so even
+ * though GlassAlertDialog's DialogButtonCell already stretches the button to
+ * fill its whole half of the row, the ripple/press highlight itself stayed
+ * clipped to that rounded pill instead of the actual rectangular cell — it
+ * had just never been applied to this dialog (or any of the many others
+ * built the same way; see GlassAlertDialog.kt's class doc for the rest).
+ * RectangleShape here makes the highlight fill the entire cell corner to
+ * corner; GlassAlertDialog's own outer liquidGlassSurface already clips
+ * everything to the dialog's rounded outline, so the bottom two cells still
+ * end up visually matching that outline despite being RectangleShape
+ * themselves underneath.
  */
 @Composable
 fun PersonEditDialog(
@@ -84,6 +99,7 @@ fun PersonEditDialog(
         confirmButton = {
             TextButton(
                 enabled = !isSaving,
+                shape = RectangleShape,
                 onClick = {
                     val amountValue = amount.trim().toDoubleOrNull()
                     when {
@@ -104,6 +120,6 @@ fun PersonEditDialog(
                 }
             }
         },
-        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(enabled = !isSaving, shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
 }

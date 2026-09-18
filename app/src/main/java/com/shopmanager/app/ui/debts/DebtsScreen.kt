@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -272,9 +273,13 @@ fun DebtsScreen(
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${person.name}\" وكل ديونه؟") },
             confirmButton = {
-                TextButton(onClick = { viewModel.deletePerson(person.id); deleteTarget.value = null }) { Text("حذف") }
+                // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): see
+                // PersonEditDialog.kt's doc comment — RectangleShape makes
+                // the press highlight fill the whole cell instead of
+                // TextButton's default rounded-pill outline.
+                TextButton(shape = RectangleShape, onClick = { viewModel.deletePerson(person.id); deleteTarget.value = null }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget.value = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteTarget.value = null }) { Text("إلغاء") } }
         )
     }
 
@@ -285,12 +290,12 @@ fun DebtsScreen(
             title = { Text("تأكيد السداد") },
             text = { Text("هل \"${person.name}\" وفى ${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف كل ديونه من السجل وإرسال إشعار.") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(shape = RectangleShape, onClick = {
                     viewModel.markPersonAsPaid(person)
                     payTarget.value = null
                 }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { payTarget.value = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { payTarget.value = null }) { Text("إلغاء") } }
         )
     }
 
