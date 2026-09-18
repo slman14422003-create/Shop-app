@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -545,14 +546,14 @@ private fun AdminPinDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = !isLocked, onClick = {
+            TextButton(enabled = !isLocked, shape = RectangleShape, onClick = {
                 if (!onSubmit(pin)) {
                     error = true
                     lockRemaining = throttle.lockRemainingSeconds()
                 }
             }) { Text("دخول") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
