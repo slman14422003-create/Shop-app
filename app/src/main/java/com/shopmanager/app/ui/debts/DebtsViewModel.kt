@@ -243,7 +243,13 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         // name with no amount would be told a debt was
                         // added when nothing was written at all.
                         if (amount > 0) {
-                            selfCreatedDebtIds += repo.addDebt(existingPersonId, amount, date, note)
+                            // BUG FIXED (see DebtsRepository.addDebt): register
+                            // the id the instant it's assigned (via the
+                            // callback), not after the whole suspend call
+                            // returns — closes the race where the live
+                            // listener could fire first and notify this same
+                            // device about its own new debt.
+                            repo.addDebt(existingPersonId, amount, date, note) { id -> selfCreatedDebtIds += id }
                             _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
                             InstantBackupWorker.requestNow(getApplication())
                         } else {
@@ -252,7 +258,11 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         onDone(true)
                         return@launch
                     }
-                    repo.addPerson(name, amount, date, note)?.let { selfCreatedDebtIds += it }
+                    // BUG FIXED (see DebtsRepository.addPerson): same
+                    // synchronous-registration fix as above, via onIdAssigned
+                    // instead of the returned value (which only settles once
+                    // the whole batch is durably committed).
+                    repo.addPerson(name, amount, date, note) { id -> selfCreatedDebtIds += id }
                     _message.value = "تم إضافة \"$name\""
                     InstantBackupWorker.requestNow(getApplication())
                 } else {
@@ -295,7 +305,9 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 if (existingId == null) {
-                    selfCreatedDebtIds += repo.addDebt(personId, amount, date, note)
+                    // BUG FIXED (see DebtsRepository.addDebt): register via
+                    // onIdAssigned, synchronously, before the write is sent.
+                    repo.addDebt(personId, amount, date, note) { id -> selfCreatedDebtIds += id }
                     _message.value = "تم إضافة الدين"
                 } else {
                     repo.updateDebt(existingId, amount, date, note)
