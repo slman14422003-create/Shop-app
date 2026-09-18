@@ -97,8 +97,27 @@ class MaterialsRepository {
      * document id lets the caller mark it as a local/self change and skip
      * notifying for it (see MaterialsViewModel.selfTouchedMaterialIds).
      */
-    suspend fun addMaterial(name: String, quantity: Double, unit: String, section: String, notes: String = ""): String =
+    /**
+     * BUG FIXED (إشعار قائمة المشتريات لسا يوصل أحياناً لنفس الجهاز رغم
+     * selfTouchedMaterialIds): same race as DebtsRepository.addDebt —
+     * `.add(data).await().id` only returns the id once the write is fully
+     * durable, but Firestore's local cache (and this collection's live
+     * listener) reacts to the write the instant it's queued, which can beat
+     * the id ever reaching `selfTouchedMaterialIds`. Generating the
+     * document reference client-side first and handing its id to
+     * [onIdAssigned] before the actual write closes that window entirely.
+     */
+    suspend fun addMaterial(
+        name: String,
+        quantity: Double,
+        unit: String,
+        section: String,
+        notes: String = "",
+        onIdAssigned: (String) -> Unit = {}
+    ): String =
         withTimeout(WRITE_TIMEOUT_MS) {
+            val ref = db.collection(materialsCollection).document()
+            onIdAssigned(ref.id)
             val data = mapOf(
                 "name" to name,
                 "quantity" to quantity,
@@ -107,7 +126,8 @@ class MaterialsRepository {
                 "notes" to notes,
                 "timestamp" to System.currentTimeMillis()
             )
-            db.collection(materialsCollection).add(data).await().id
+            ref.set(data).await()
+            ref.id
         }
 
     suspend fun updateMaterial(id: String, name: String, quantity: Double, unit: String, section: String, notes: String = "") =
