@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.Icon
@@ -30,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -158,16 +161,47 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
 
         // FEATURE: نص الاعتماد بالأسفل صار "تطوير المعالج الفيزيائي سلمان"
         // بدل "@slman" السابق.
-        Text(
-            "تطوير المعالج الفيزيائي سلمان",
-            color = Color.White.copy(alpha = 0.55f),
-            style = MaterialTheme.typography.labelMedium,
-            textAlign = TextAlign.Center,
+        //
+        // REDESIGN ("بدي ياه منسق بشكل اجمل واعلى قليلا"): this used to be
+        // one plain, fairly dim line sitting right at the very bottom edge
+        // (28.dp padding). Two changes: it now sits noticeably higher
+        // (56.dp) so it isn't crowded against the bottom edge/gesture bar
+        // on phones with a smaller nav-gesture inset, and it's dressed up
+        // as a small pill — a thin hairline rule above it plus a subtle
+        // translucent chip background — instead of bare floating text, so
+        // it reads as a deliberate little credit badge rather than an
+        // afterthought caption. Still fully static (no animation beyond
+        // the one shared entrance fade this whole screen already does —
+        // see the class doc above), so this costs nothing extra to draw.
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 28.dp)
+                .padding(bottom = 56.dp)
                 .alpha(entrance)
-        )
+        ) {
+            Box(
+                Modifier
+                    .width(28.dp)
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.35f))
+            )
+            Spacer(Modifier.height(10.dp))
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.10f))
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    "تطوير المعالج الفيزيائي سلمان",
+                    color = Color.White.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.3.sp),
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
     }
 }
 
