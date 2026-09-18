@@ -1346,7 +1346,15 @@ private fun ColorPaletteSwatch(palette: AppColorPalette, selected: Boolean, onCl
                 .size(38.dp)
                 .shadow(if (selected) 4.dp else 0.dp, CircleShape, clip = false)
                 .background(
-                    Brush.linearGradient(listOf(colors.gradientStart, colors.gradientEnd)),
+                    // FEATURE ("للون المخصص والكلاسيكي لازم يكون لون واحد
+                    // فقط متل الوضع التلقائي"): the app itself now paints
+                    // "مخصص"'s header as a flat `gradientStart` fill (see
+                    // ShopManagerTheme's `gradientColors`), so this swatch
+                    // showing the old two-hue `gradientStart→gradientEnd`
+                    // sweep would misrepresent what picking it actually
+                    // looks like in the app. Flat fill here too, same
+                    // single color.
+                    Brush.linearGradient(listOf(colors.gradientStart, colors.gradientStart)),
                     CircleShape
                 )
                 .border(
