@@ -218,9 +218,9 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             title = { Text("حذف من القائمة الثابتة") },
             text = { Text("هل تريد حذف \"${item.name}\" من القائمة الثابتة؟ (هذا لا يحذف أي كمية مخزنة سابقًا)") },
             confirmButton = {
-                TextButton(onClick = { viewModel.deleteCatalogItem(item.id); deleteTarget = null }) { Text("حذف") }
+                TextButton(shape = RectangleShape, onClick = { viewModel.deleteCatalogItem(item.id); deleteTarget = null }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
     }
 }
@@ -301,6 +301,7 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
         confirmButton = {
             TextButton(
                 enabled = name.isNotBlank() && !isSaving,
+                shape = RectangleShape,
                 onClick = { onSave(name.trim()) }
             ) {
                 if (isSaving) {
@@ -310,7 +311,7 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
                 }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving) { Text("إلغاء") } }
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving, shape = RectangleShape) { Text("إلغاء") } }
     )
 }
 
@@ -365,6 +366,7 @@ private fun QuantityEntryDialog(
         confirmButton = {
             TextButton(
                 enabled = !isSaving,
+                shape = RectangleShape,
                 onClick = {
                     if (quantity <= 0) {
                         error = "أدخل كمية صحيحة"
@@ -381,6 +383,6 @@ private fun QuantityEntryDialog(
                 }
             }
         },
-        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(enabled = !isSaving, shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
 }

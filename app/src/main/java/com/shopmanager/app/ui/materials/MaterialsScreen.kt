@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -289,9 +290,11 @@ fun MaterialsScreen(
             title = { Text("تأكيد الحذف") },
             text = { Text("هل أنت متأكد من حذف \"${m.name}\"؟") },
             confirmButton = {
-                TextButton(onClick = { viewModel.deleteMaterial(m.id); deleteTarget = null }) { Text("حذف") }
+                // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): see
+                // PersonEditDialog.kt's doc comment.
+                TextButton(shape = RectangleShape, onClick = { viewModel.deleteMaterial(m.id); deleteTarget = null }) { Text("حذف") }
             },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
     }
 
@@ -334,12 +337,12 @@ fun MaterialsScreen(
             title = { Text("مسح كل المواد") },
             text = { Text("هل أنت متأكد من حذف كل المواد المضافة (${state.materials.size})؟ لا يمكن التراجع عن هذا الإجراء.") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(shape = RectangleShape, onClick = {
                     viewModel.deleteAllMaterials()
                     showClearAllConfirm = false
                 }) { Text("حذف الكل") }
             },
-            dismissButton = { TextButton(onClick = { showClearAllConfirm = false }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { showClearAllConfirm = false }) { Text("إلغاء") } }
         )
     }
 }
