@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -692,7 +693,12 @@ fun SettingsScreen(
                     }
                     Text(
                         "الجهاز الحالي: ${deviceInfo.totalRamMb} MB رام، ${deviceInfo.cores} أنوية" +
-                            if (deviceInfo.osFlaggedLowRam) " — مصنّف من النظام كجهاز منخفض الموارد" else "",
+                            (if (deviceInfo.osFlaggedLowRam) " — مصنّف من النظام كجهاز منخفض الموارد" else "") +
+                            // FEATURE ADDED ("اصلاحات للاجهزة اللي فيها معالج
+                            // رسوميات ضعيف"): surfaces the new GPU signal
+                            // alongside RAM/cores so "kind of an OK phone but
+                            // still landed on LOW" isn't a mystery anymore.
+                            (if (deviceInfo.weakGpu) " — معالج رسوميات ضعيف/قديم" else ""),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -946,13 +952,15 @@ fun SettingsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): see
+                // PersonEditDialog.kt's doc comment.
+                TextButton(shape = RectangleShape, onClick = {
                     val target = backup
                     pendingRestore = null
                     runRestore(target)
                 }) { Text("استعادة") }
             },
-            dismissButton = { TextButton(onClick = { pendingRestore = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { pendingRestore = null }) { Text("إلغاء") } }
         )
     }
 
@@ -967,13 +975,13 @@ fun SettingsScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(shape = RectangleShape, onClick = {
                     val target = uri
                     pendingImportUri = null
                     runRestoreFromUri(target)
                 }) { Text("استعادة") }
             },
-            dismissButton = { TextButton(onClick = { pendingImportUri = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { pendingImportUri = null }) { Text("إلغاء") } }
         )
     }
 
@@ -1061,11 +1069,12 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(
                     enabled = !isDownloadingUpdate,
+                    shape = RectangleShape,
                     onClick = { startDownload(manifest) }
                 ) { Text("تحميل وتثبيت") }
             },
             dismissButton = {
-                TextButton(enabled = !isDownloadingUpdate, onClick = { pendingUpdate = null }) { Text("لاحقاً") }
+                TextButton(enabled = !isDownloadingUpdate, shape = RectangleShape, onClick = { pendingUpdate = null }) { Text("لاحقاً") }
             }
         )
     }
@@ -1076,13 +1085,13 @@ fun SettingsScreen(
             title = { Text("يلزم إذن التثبيت") },
             text = { Text("لتثبيت التحديث من داخل التطبيق، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد وحاول مجدداً.") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(shape = RectangleShape, onClick = {
                     needsInstallPermission = false
                     context.startActivity(ApkDownloader.unknownSourcesSettingsIntent(context))
                 }) { Text("فتح الإعدادات") }
             },
             dismissButton = {
-                TextButton(onClick = {
+                TextButton(shape = RectangleShape, onClick = {
                     needsInstallPermission = false
                     downloadedApk?.let { ApkDownloader.install(context, it) }
                 }) { Text("حاول التثبيت الآن") }
@@ -1488,10 +1497,11 @@ private fun CurrencyPickerDialog(current: String, onDismiss: () -> Unit, onSelec
         confirmButton = {
             TextButton(
                 enabled = custom.isNotBlank(),
+                shape = RectangleShape,
                 onClick = { onSelect(custom.trim()) }
             ) { Text("استخدام") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
@@ -1524,7 +1534,7 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            TextButton(shape = RectangleShape, onClick = {
                 when {
                     pin.length < 4 -> error = "الرمز لازم يكون 4 أرقام على الأقل"
                     pin != confirm -> error = "الرمزان غير متطابقين"
@@ -1532,7 +1542,7 @@ private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
                 }
             }) { Text("حفظ") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
 }
 
