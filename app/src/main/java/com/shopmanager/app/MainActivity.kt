@@ -514,6 +514,14 @@ private fun ShopManagerApp(
     var materialsPricesTabActive by remember { mutableStateOf(false) }
     var pricesChangedCount by remember { mutableStateOf(0) }
     var savePricesRequested by remember { mutableStateOf(false) }
+    // BUG FIXED ("ترابط بين الديون والملاحظات" كان يغطي الأشخاص فقط):
+    // tapping a material-linked note used to only switch to the Materials
+    // tab in general (see the old onOpenMaterials below) — nothing pointed
+    // at the specific item, unlike a person-linked note which opens that
+    // exact customer's page. Same request/handled pattern as
+    // addPersonRequested above: NotesScreen raises this with the linked
+    // material's name, MaterialsScreen consumes it as its initial search.
+    var pendingMaterialHighlight by remember { mutableStateOf<String?>(null) }
     val pagerScope = rememberCoroutineScope()
 
     // BUG FIXED ("ترابط بين جميع الانميشن"): tapping a bottom-nav tab (or a
@@ -757,14 +765,16 @@ private fun ShopManagerApp(
                             onPricesTabActiveChanged = { materialsPricesTabActive = it },
                             onPricesChangedCountChanged = { pricesChangedCount = it },
                             savePricesRequested = savePricesRequested,
-                            onSavePricesRequestHandled = { savePricesRequested = false }
+                            onSavePricesRequestHandled = { savePricesRequested = false },
+                            initialSearchQuery = pendingMaterialHighlight,
+                            onInitialSearchConsumed = { pendingMaterialHighlight = null }
                         )
                         else -> NotesScreen(
                             viewModel = notesViewModel,
                             persons = debtsViewModel.uiState.collectAsState().value.persons,
                             materials = materialsViewModel.uiState.collectAsState().value.materials,
                             onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.navigate("personDetail/$personId") },
-                            onOpenMaterials = { openPager(PAGE_MATERIALS) },
+                            onOpenMaterials = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
                             addNoteRequested = addNoteRequested,
                             onAddNoteRequestHandled = { addNoteRequested = false }
                         )
