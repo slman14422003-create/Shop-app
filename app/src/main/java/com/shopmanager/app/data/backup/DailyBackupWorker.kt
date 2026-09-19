@@ -1,6 +1,7 @@
 package com.shopmanager.app.data.backup
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -97,6 +98,8 @@ class InstantBackupWorker(appContext: Context, params: WorkerParameters) :
         FirebaseModule.init(applicationContext)
         return try {
             BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository(), BackupKind.INSTANT)
+            applicationContext.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
+                .edit().putLong(KEY_LAST_INSTANT, System.currentTimeMillis()).apply()
             Result.success()
         } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
             // BUG FIXED (instant backup silently never happening): every
@@ -133,6 +136,50 @@ class InstantBackupWorker(appContext: Context, params: WorkerParameters) :
 
     companion object {
         private const val UNIQUE_WORK_NAME = "shop_manager_instant_backup"
+        private const val META_PREFS = "shop_manager_backup_meta"
+        private const val KEY_LAST_INSTANT = "last_instant_backup_at"
+        private const val AUTO_MIN_INTERVAL_MS = 15L * 60_000L
+        private const val AUTO_MIN_DELAY_MS = 2L * 60_000L
+        private const val AUTO_ENQUEUE_GUARD_MS = 60_000L
+
+        @Volatile
+        private var lastDeferredEnqueueAt = -AUTO_ENQUEUE_GUARD_MS
+
+        /**
+         * PERF: للتحديثات التي **نراها** من المستمعات (أي جهاز كان مصدرها، بما فيها
+         * التحميل الأولي عند كل فتح للتطبيق). كان كل لقطة تُنشئ طلب نسخ احتياطي
+         * جديداً (REPLACE) — أي كتابة/إلغاء في قاعدة WorkManager عدة مرات في الثانية
+         * الأولى، ثم نسخة كاملة تقرأ كل المجموعات من Firestore عند كل فتح.
+         *
+         * الآن: طلب واحد مؤجَّل يُحفظ بـ KEEP (الطلبات المتتالية لا تفعل شيئاً)، ولا
+         * تُنشأ نسخة جديدة قبل مرور 15 دقيقة على آخر نسخة ناجحة. لا يضيع أي تغيير:
+         * النسخة المؤجَّلة تقرأ الحالة الحالية وقت تشغيلها. أما الحفظ المحلي من هذا
+         * الجهاز فيبقى عبر [requestNow] فوراً كما كان.
+         */
+        fun requestDeferred(context: Context) {
+            val nowElapsed = SystemClock.elapsedRealtime()
+            if (nowElapsed - lastDeferredEnqueueAt < AUTO_ENQUEUE_GUARD_MS) return
+            lastDeferredEnqueueAt = nowElapsed
+
+            val last = context.getSharedPreferences(META_PREFS, Context.MODE_PRIVATE)
+                .getLong(KEY_LAST_INSTANT, 0L)
+            val sinceLast = System.currentTimeMillis() - last
+            val delayMs = (AUTO_MIN_INTERVAL_MS - sinceLast)
+                .coerceAtLeast(AUTO_MIN_DELAY_MS)
+                .coerceAtMost(AUTO_MIN_INTERVAL_MS)
+
+            val request = OneTimeWorkRequestBuilder<InstantBackupWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                UNIQUE_WORK_NAME,
+                ExistingWorkPolicy.KEEP,
+                request
+            )
+        }
 
         /**
          * Call after any successful add/edit/delete of a person, debt,
