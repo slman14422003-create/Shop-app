@@ -32,6 +32,11 @@ object FirebaseModule {
 
     private var initialized = false
 
+    // @Synchronized: MainActivity (خيط خلفي) وWorker والخدمة الأمامية وRemoteChangeWatcher
+    // كلها قد تستدعيها معاً. قبل ذلك كان الثاني يرى initialized=true فيعود فوراً
+    // قبل أن ينتهي الأول من إنشاء FirebaseApp، ثم يرمي IllegalStateException
+    // عند أول استخدام لقاعدة البيانات. الآن ينتظر حتى تكتمل التهيئة.
+    @Synchronized
     fun init(context: Context) {
         if (initialized) return
         initialized = true
