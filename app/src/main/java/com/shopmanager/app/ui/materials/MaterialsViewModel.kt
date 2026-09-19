@@ -7,8 +7,8 @@ import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsRepository
-import com.shopmanager.app.data.notifications.BackgroundSyncWorker
-import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.notifications.RemoteChangeProcessor
+import com.shopmanager.app.data.notifications.SelfChangeLedger
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.sync.SyncStatusStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,7 +71,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
-            InstantBackupWorker.requestNow(getApplication())
+            // PERF: طلب مؤجَّل ومُخفَّف (لا كتابة في قاعدة WorkManager مع كل لقطة).
+            InstantBackupWorker.requestDeferred(getApplication())
             // "طبقة مساعدة للمزامنة" — see SyncStatus.kt.
             SyncStatusStore.recordSuccess(getApplication())
         }
@@ -81,7 +82,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
-            InstantBackupWorker.requestNow(getApplication())
+            // PERF: طلب مؤجَّل ومُخفَّف (لا كتابة في قاعدة WorkManager مع كل لقطة).
+            InstantBackupWorker.requestDeferred(getApplication())
             SyncStatusStore.recordSuccess(getApplication())
         }
 
@@ -122,88 +124,27 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // Every material on this list is, by definition, something the shop is
-    // short on (a live shopping list) - so we notify about the *whole* list,
-    // not a filtered "low stock" subset.
-    //
-    // BUG FIXED (notification fired on every app open): this used to start
-    // at emptySet() instead of null. That meant the very first emission
-    // after opening the app - which is just the *existing* shortage list
-    // loading from Firestore, not a new addition - always looked
-    // "different from empty" and fired a shopping-list notification. Open
-    // the app once with 3 items already on the list and you'd immediately
-    // get a "3 مواد ناقصة" notification, every single time, even though
-    // nothing had actually changed since last time. null now means "haven't
-    // seen a real list yet" (same pattern as knownDebtIds in
-    // DebtsViewModel): the first load only seeds the baseline silently, and
-    // a notification only fires on every load *after* that one, when
-    // something genuinely changed - in this session or from another device.
-    //
-    // BUG FIXED (edit/delete notifications unreliable): this used to key
-    // off just the *set of names* (`materials.map { it.name }.toSet()`).
-    // That missed real changes entirely whenever the name set stayed the
-    // same - which is most edits and a lot of deletes:
-    //  - Editing an existing shortage's quantity or unit (e.g. "2 كيلو"
-    //    -> "3 كيلو" for the same "فلفل اسود") never changed the set of
-    //    *names*, so it silently never notified at all.
-    //  - Deleting one item while another device simultaneously (or an
-    //    instant before) added a *different* item with the same name never
-    //    changed the set either - same name, different id - so that
-    //    delete could go unnotified too.
-    // Now every material's full state (name + quantity + unit) is tracked
-    // per id, so an add, an edit (even quantity/unit-only), or a delete are
-    // each detected as a real change and notified, while a totally
-    // unrelated Firestore re-emission with identical data (e.g. a
-    // metadata-only ack) still correctly notifies nothing.
-    private var lastNotifiedMaterials: Map<String, String>? = null
-
     /**
-     * BUG FIXED (إشعار قائمة المشتريات يوصل لنفس الجهاز اللي عدّل القائمة):
-     * the notify condition below used to be just "signature changed at
-     * all" — so adding, editing, or deleting a material on THIS device
-     * notified the very person who just did it, on top of the in-app
-     * "تمت إضافة/تعديل/حذف..." message already shown for the same action.
-     * Every local write that touches a material's id now records it here
-     * first; the diff below only counts an id as a real (notify-worthy)
-     * change when it ISN'T one of these self-touched ids, and consumes
-     * (removes) it either way so the set never grows unbounded. A change
-     * that came from another device — the actual point of this
-     * notification — still notifies exactly as before.
+     * "التفريق بين هاتف وهاتف آخر" (المواد): اكتشاف تغيّر قائمة النواقص القادم
+     * من الأجهزة الأخرى صار في مكان واحد (RemoteChangeWatcher +
+     * RemoteChangeProcessor) يراقب **كل الأقسام** ويعمل حتى والتطبيق مغلق.
+     *
+     * الخطأ القديم هنا وأُصلح: كان هذا الـ ViewModel يحتفظ بمجموعة ids
+     * "لمستُها أنا" في الذاكرة، ولا يحذف الـ id منها إلا إذا حدث تغيير فعلي.
+     * فلو ضغطتَ "حفظ" على تعديل دون تغيير حقيقي بقي الـ id مُعلَّماً، ثم إذا
+     * عدّل هاتف آخر نفس المادة لاحقاً اعتُبر تعديله "منّي" ولم يصلك إشعار.
+     * الآن نسجّل في [SelfChangeLedger] **بصمة الحالة التي كتبها هذا الجهاز**
+     * (اسم|كمية|وحدة)، ويُعتبر التغيير منّي فقط إذا طابقت الحالة الحالية هذه
+     * البصمة؛ أي تعديل من هاتف آخر يعطي بصمة مختلفة فيُعامَل كتغيير خارجي.
      */
-    private val selfTouchedMaterialIds = mutableSetOf<String>()
+    private fun markWrittenHere(id: String, name: String, quantity: Double, unit: String) {
+        SelfChangeLedger.markMaterialWritten(
+            getApplication(), id, RemoteChangeProcessor.materialSignature(name, quantity, unit)
+        )
+    }
 
-    init {
-        viewModelScope.launch {
-            NotificationHelper.ensureChannels(getApplication())
-            uiState.collect { state ->
-                if (state.isLoading) return@collect
-                val signature = state.materials.associate { it.id to "${it.name}|${it.quantity}|${it.unit}" }
-                val previous = lastNotifiedMaterials
-                if (previous != null && signature != previous) {
-                    val shortageNames = state.materials.map { it.name }.distinct()
-                    if (shortageNames.isEmpty()) {
-                        NotificationHelper.cancelShoppingListNotification(getApplication())
-                    } else {
-                        val changedIds = (signature.keys + previous.keys)
-                            .filter { signature[it] != previous[it] }
-                            .toSet()
-                        // Consume every changed id from the self-touched set
-                        // (order matters: `remove` must run for every id, not
-                        // just until the first non-self-touched one is found).
-                        val hasExternalChange = changedIds.count { !selfTouchedMaterialIds.remove(it) } > 0
-                        if (hasExternalChange && settings.notificationsEnabled) {
-                            NotificationHelper.showShoppingListNotification(getApplication(), shortageNames)
-                        }
-                    }
-                }
-                lastNotifiedMaterials = signature
-                // Keep the background worker's own baseline in sync too -
-                // see BackgroundSyncWorker.syncKnownMaterialsSignature for
-                // why this runs on every emission, not just self-touched
-                // ones.
-                BackgroundSyncWorker.syncKnownMaterialsSignature(getApplication(), state.materials)
-            }
-        }
+    private fun markDeletedHere(ids: Collection<String>) {
+        SelfChangeLedger.markMaterialsDeleted(getApplication(), ids)
     }
 
     // BUG FIXED (لا يوجد مؤشر تحميل بواجهة إضافة/تعديل مادة): مثل نفس
@@ -219,7 +160,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 // after the whole suspend call returns — closes the race
                 // where the live listener could fire first and notify this
                 // same device about the material it just added.
-                repo.addMaterial(name, quantity, unit, section.value, notes) { id -> selfTouchedMaterialIds += id }
+                repo.addMaterial(name, quantity, unit, section.value, notes) { id -> markWrittenHere(id, name, quantity, unit) }
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)
@@ -233,7 +174,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateMaterial(id: String, name: String, quantity: Double, unit: String, notes: String = "", onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
-                selfTouchedMaterialIds += id
+                markWrittenHere(id, name, quantity, unit)
                 repo.updateMaterial(id, name, quantity, unit, section.value, notes)
                 _message.value = "تم تعديل النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
@@ -248,7 +189,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun deleteMaterial(id: String) {
         viewModelScope.launch {
             try {
-                selfTouchedMaterialIds += id
+                markDeletedHere(listOf(id))
                 repo.deleteMaterial(id)
                 _message.value = "تم حذف المادة بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
@@ -269,7 +210,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         if (ids.isEmpty()) return
         viewModelScope.launch {
             try {
-                selfTouchedMaterialIds += ids
+                markDeletedHere(ids)
                 repo.deleteMaterials(ids)
                 _message.value = "تم حذف كل المواد (${ids.size})"
                 InstantBackupWorker.requestNow(getApplication())

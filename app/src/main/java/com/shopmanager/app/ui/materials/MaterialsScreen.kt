@@ -571,7 +571,7 @@ private fun MaterialsList(
                 modifier = Modifier.animateItem(
                     fadeInSpec = null,
                     placementSpec = MotionSpecs.reorderSpring(),
-                    fadeOutSpec = null
+                    fadeOutSpec = MotionSpecs.listItemFadeOut()
                 )
             )
         }
