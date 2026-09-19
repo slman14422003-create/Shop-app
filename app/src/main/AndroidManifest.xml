@@ -19,6 +19,12 @@
          (see ApkDownloader.canInstallPackages) — this permission alone
          doesn't silently install anything. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- المزامنة الفورية بالخلفية (RealtimeSyncService): خدمة أمامية من نوع
+         specialUse تُبقي مستمعات Firestore حيّة والتطبيق مغلق، وBootReceiver
+         يعيد تشغيلها بعد إعادة تشغيل الجهاز أو تحديث التطبيق. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
       FEATURE ADDED (package visibility, Android 11+/API 30+): declares the
@@ -125,6 +131,31 @@
         <receiver
             android:name=".data.notifications.NotificationActionReceiver"
             android:exported="false" />
+
+        <!--
+          المزامنة الفورية: خدمة أمامية تُبقي اتصال Firestore حيّاً فيصل إشعار
+          الديون/المواد/الملاحظات لحظة حدوثه حتى والتطبيق مغلق (WorkManager وحده
+          يتأجّل ساعات بسبب Doze وحماية البطارية). specialUse بلا مهلة 6 ساعات
+          الخاصة بـ dataSync على أندرويد 15+. للمستخدم مفتاح لإيقافها من الإعدادات.
+        -->
+        <service
+            android:name=".data.notifications.RealtimeSyncService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps a Firestore listener alive to deliver shop debt, stock and note notifications from other devices in real time" />
+        </service>
+
+        <!-- يعيد تشغيل الخدمة بعد الإقلاع/تحديث التطبيق. بثّان محميان من النظام. -->
+        <receiver
+            android:name=".data.notifications.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".MainActivity"
