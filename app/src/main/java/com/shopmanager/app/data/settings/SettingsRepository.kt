@@ -81,6 +81,15 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFICATIONS, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS, value).apply()
 
+    /**
+     * "المزامنة الفورية بالخلفية": خدمة أمامية تبقي مستمعات Firestore حيّة والتطبيق
+     * مغلق ليصل الإشعار لحظياً (انظر RealtimeSyncService). لكل جهاز اختياره —
+     * يمكن إيقافها على الهاتف الضعيف ليعود للفحص الدوري فقط.
+     */
+    var realtimeSyncEnabled: Boolean
+        get() = prefs.getBoolean(KEY_REALTIME_SYNC, true)
+        set(value) = prefs.edit().putBoolean(KEY_REALTIME_SYNC, value).apply()
+
     /** "تفضيل الأداء" — manual override of the auto-detected device tier
      * (see [PerformanceMode]). Defaults to AUTO so nobody's experience
      * changes unless they open Settings and pick something else. */
@@ -190,6 +199,7 @@ class SettingsRepository(context: Context) {
         private const val PIN_HASH_ITERATIONS = 12_000
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
+        private const val KEY_REALTIME_SYNC = "realtime_sync_enabled"
         private const val KEY_PERFORMANCE_MODE = "performance_mode"
         private const val KEY_UPDATE_MANIFEST_URL = "update_manifest_url"
         private const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
