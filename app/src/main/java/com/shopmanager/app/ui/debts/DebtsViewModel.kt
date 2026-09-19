@@ -4,13 +4,13 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.backup.InstantBackupWorker
-import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.data.notes.NotesRepository
 import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.notifications.SelfChangeLedger
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.sync.SyncStatusStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,7 +78,8 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
-            InstantBackupWorker.requestNow(getApplication())
+            // PERF: طلب مؤجَّل ومُخفَّف (لا كتابة في قاعدة WorkManager مع كل لقطة).
+            InstantBackupWorker.requestDeferred(getApplication())
             // "طبقة مساعدة للمزامنة": record that this device just proved it
             // has current data, so Settings → المزامنة can show a real
             // "آخر مزامنة" time instead of nothing. See SyncStatus.kt.
@@ -89,7 +90,8 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
-            InstantBackupWorker.requestNow(getApplication())
+            // PERF: طلب مؤجَّل ومُخفَّف (لا كتابة في قاعدة WorkManager مع كل لقطة).
+            InstantBackupWorker.requestDeferred(getApplication())
             SyncStatusStore.recordSuccess(getApplication())
         }
 
@@ -155,70 +157,19 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // null = haven't loaded once yet; used to avoid notifying for the whole
-    // existing list the very first time data loads (same pattern as
-    // MaterialsViewModel.lastNotifiedShortages).
-    //
-    // BUG FIXED (missing notification): this used to track *person* ids,
-    // so it only ever fired for a brand-new customer. Adding a new debt to
-    // an *existing* customer from Person Detail — "إضافة دين" on someone
-    // already in the list, which is the far more common case day to day —
-    // never notified anything, in-app or otherwise. Tracking debt ids
-    // instead of person ids catches both: a new customer's first debt (one
-    // new debt id) and a new debt on an existing customer (also one new
-    // debt id), with one consistent code path instead of two different,
-    // incompletely-covered ones. Also now handles more than one new debt
-    // appearing between two updates (e.g. from another device) instead of
-    // only ever notifying about the first.
-    private var knownDebtIds: Set<String>? = null
-
     /**
-     * BUG FIXED (إشعار "عميل جديد بالديون" يوصل لنفس الجهاز اللي أضاف الدين):
-     * the diff below fires for ANY debt id that's new since the last
-     * emission — including one this exact device just wrote a moment ago
-     * through [savePerson]/[addOrUpdateDebt]. Firestore's listener re-fires
-     * from its own local write almost immediately, so the person adding a
-     * debt would immediately get notified about their own action, on top of
-     * the in-app "تم إضافة الدين" message already shown. Every local write
-     * that creates a new debt id now records it here first; the diff below
-     * consumes (removes) an id from this set instead of notifying for it,
-     * so genuinely new debts from OTHER devices still notify exactly as
-     * before.
+     * "التفريق بين هاتف وهاتف آخر": إشعارات الديون الجديدة القادمة من الأجهزة
+     * الأخرى صارت تُكتشف في مكان واحد فقط — RemoteChangeWatcher (خدمة أمامية +
+     * مستمع داخل التطبيق) عبر RemoteChangeProcessor. كان هنا مقارنة خاصة بهذا
+     * الـ ViewModel بمجموعة ids في الذاكرة فقط، تضيع عند إغلاق التطبيق ولا تراها
+     * الخدمة ولا الـ Worker، فكان الجهاز الذي أضاف الدين يصله أحياناً إشعار عن
+     * فعلته هو.
+     *
+     * الدور الوحيد المتبقي هنا: تسجيل ما يكتبه **هذا الجهاز** في
+     * [SelfChangeLedger] قبل إرسال الكتابة، ليعرف المراقب أن هذا الـ id منّي.
      */
-    private val selfCreatedDebtIds = mutableSetOf<String>()
-
-    init {
-        viewModelScope.launch {
-            NotificationHelper.ensureChannels(getApplication())
-            uiState.collect { state ->
-                if (state.isLoading) return@collect
-                val currentDebtIds = state.debts.map { it.id }.toSet()
-                val previous = knownDebtIds
-                if (previous != null) {
-                    val newDebtIds = (currentDebtIds - previous)
-                        .filterNot { selfCreatedDebtIds.remove(it) }
-                        .toSet()
-                    if (newDebtIds.isNotEmpty() && settings.notificationsEnabled) {
-                        val personsById = state.persons.associateBy { it.id }
-                        state.debts.filter { it.id in newDebtIds }.forEach { debt ->
-                            val personName = personsById[debt.personId]?.name ?: "عميل"
-                            // BUG FIXED: pass debt.id so several new debts
-                            // detected in the same update each get their own
-                            // notification id instead of overwriting one
-                            // another - see NotificationHelper.showNewDebtNotification.
-                            NotificationHelper.showNewDebtNotification(
-                                getApplication(), personName, Formatters.number(debt.amount), settings.currencySymbol, debt.id
-                            )
-                        }
-                    }
-                }
-                knownDebtIds = currentDebtIds
-                // Keep the background worker's own baseline in sync too -
-                // see BackgroundSyncWorker.syncKnownDebtIds for why this is
-                // needed on every emission, not just self-created ones.
-                BackgroundSyncWorker.syncKnownDebtIds(getApplication(), currentDebtIds)
-            }
-        }
+    private fun markCreatedHere(id: String) {
+        SelfChangeLedger.markCreated(getApplication(), SelfChangeLedger.KIND_DEBT, id)
     }
 
     fun clearMessage() { _message.value = null }
@@ -249,7 +200,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                             // returns — closes the race where the live
                             // listener could fire first and notify this same
                             // device about its own new debt.
-                            repo.addDebt(existingPersonId, amount, date, note) { id -> selfCreatedDebtIds += id }
+                            repo.addDebt(existingPersonId, amount, date, note) { id -> markCreatedHere(id) }
                             _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
                             InstantBackupWorker.requestNow(getApplication())
                         } else {
@@ -262,7 +213,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     // synchronous-registration fix as above, via onIdAssigned
                     // instead of the returned value (which only settles once
                     // the whole batch is durably committed).
-                    repo.addPerson(name, amount, date, note) { id -> selfCreatedDebtIds += id }
+                    repo.addPerson(name, amount, date, note) { id -> markCreatedHere(id) }
                     _message.value = "تم إضافة \"$name\""
                     InstantBackupWorker.requestNow(getApplication())
                 } else {
@@ -307,7 +258,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 if (existingId == null) {
                     // BUG FIXED (see DebtsRepository.addDebt): register via
                     // onIdAssigned, synchronously, before the write is sent.
-                    repo.addDebt(personId, amount, date, note) { id -> selfCreatedDebtIds += id }
+                    repo.addDebt(personId, amount, date, note) { id -> markCreatedHere(id) }
                     _message.value = "تم إضافة الدين"
                 } else {
                     repo.updateDebt(existingId, amount, date, note)

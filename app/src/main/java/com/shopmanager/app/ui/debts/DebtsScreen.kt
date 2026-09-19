@@ -238,7 +238,7 @@ fun DebtsScreen(
                                 .animateItem(
                                     fadeInSpec = null,
                                     placementSpec = MotionSpecs.reorderSpring(),
-                                    fadeOutSpec = null
+                                    fadeOutSpec = MotionSpecs.listItemFadeOut()
                                 )
                                 .listItemEntrance(index),
                             onClick = { onOpenPerson(person.id) },
