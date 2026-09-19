@@ -73,6 +73,7 @@ import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.BatteryOptimizationHelper
 import com.shopmanager.app.data.notifications.NotificationAction
 import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.notifications.NotificationSync
 import com.shopmanager.app.data.performance.DevicePerformance
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceMode
@@ -140,7 +141,8 @@ private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 // in well under 200ms, too quick to register as anything but a flicker.
 // This is the one artificial delay in the whole startup path, just long
 // enough for the splash to actually be seen before it crossfades away.
-private const val SPLASH_MIN_DISPLAY_MS = 1500L
+private const val SPLASH_MIN_DISPLAY_MS = 1000L
+private const val SPLASH_MIN_DISPLAY_LOW_MS = 650L
 
 // Apple's own standard screen-transition curve (UIView's system easing for
 // view controller push/pop and modal presentation) — reused here for the
@@ -239,8 +241,17 @@ class MainActivity : ComponentActivity() {
             // the main thread, same as BackgroundSyncWorker above.
             DailyBackupWorker.schedule(applicationContext)
 
+            // "الإشعارات لا تأتي في الخلفية": يشغّل مراقب تغييرات الأجهزة الأخرى
+            // (والخدمة الأمامية إذا كانت "المزامنة الفورية" مفعّلة) — مكان واحد
+            // للكشف بدل منطق منفصل لكل شاشة. خارج الخيط الرئيسي، والسبلاش يغطي.
+            NotificationSync.apply(applicationContext)
+
+            // PERF: كان الحد الأدنى للسبلاش ثابتاً 1500ms على كل الأجهزة حتى لو
+            // اكتملت التهيئة قبله بكثير. الآن أقصر (والهاتف الضعيف أقصر أيضاً) —
+            // أنيميشن السبلاش نفسه ~420ms فلا يُقطع.
+            val minSplashMs = if (tier == PerformanceTier.LOW) SPLASH_MIN_DISPLAY_LOW_MS else SPLASH_MIN_DISPLAY_MS
             val elapsed = System.currentTimeMillis() - splashStartTime
-            if (elapsed < SPLASH_MIN_DISPLAY_MS) delay(SPLASH_MIN_DISPLAY_MS - elapsed)
+            if (elapsed < minSplashMs) delay(minSplashMs - elapsed)
 
             withContext(Dispatchers.Main) {
                 detectedTier = tier
@@ -430,6 +441,13 @@ class MainActivity : ComponentActivity() {
             }
             } // CompositionLocalProvider(LocalDensity) — clamped fontScale
         }
+    }
+
+    override fun onDestroy() {
+        // الخدمة الأمامية (إن وُجدت) تحتفظ بمالكها الخاص فتبقى المستمعات حيّة؛
+        // وإلا نغلقها بعد أن يغادر المستخدم التطبيق فعلاً (لا عند تدوير الشاشة).
+        if (isFinishing) NotificationSync.onAppClosed()
+        super.onDestroy()
     }
 
     /**
