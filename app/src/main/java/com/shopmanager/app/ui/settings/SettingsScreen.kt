@@ -85,6 +85,7 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.notifications.NotificationHelper
+import com.shopmanager.app.data.notifications.NotificationSync
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppColorMode
@@ -125,6 +126,8 @@ fun SettingsScreen(
     var showSetPinDialog by remember { mutableStateOf(false) }
     var currency by remember { mutableStateOf(settings.currencySymbol) }
     var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
+    // "المزامنة الفورية بالخلفية": مفتاح مستقل لكل جهاز (انظر RealtimeSyncService).
+    var realtimeSyncEnabled by remember { mutableStateOf(settings.realtimeSyncEnabled) }
     // BUG FIXED ("notifications sometimes never arrive at all", root
     // cause): the switch above only ever reflected this app's OWN saved
     // preference — it had no idea whether Android itself was actually
@@ -527,8 +530,41 @@ fun SettingsScreen(
                         onCheckedChange = {
                             notificationsEnabled = it
                             settings.notificationsEnabled = it
+                            // يطابق المستمعات والخدمة الأمامية مع الإعداد فوراً.
+                            NotificationSync.apply(context)
                         }
                     )
+                }
+                AnimatedVisibility(
+                    visible = notificationsEnabled,
+                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(),
+                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically()
+                ) {
+                    Column {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("المزامنة الفورية بالخلفية")
+                                Text(
+                                    "تصلك إشعارات الأجهزة الأخرى لحظة حدوثها حتى والتطبيق مغلق (يظهر إشعار صامت صغير دائم). أوقفها على الهاتف الضعيف ليكتفي بفحص دوري كل 15–30 دقيقة أو أكثر",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = realtimeSyncEnabled,
+                                onCheckedChange = {
+                                    realtimeSyncEnabled = it
+                                    settings.realtimeSyncEnabled = it
+                                    NotificationSync.apply(context)
+                                }
+                            )
+                        }
+                    }
                 }
                 AnimatedVisibility(
                     visible = notificationsEnabled && !systemNotificationsAllowed,
