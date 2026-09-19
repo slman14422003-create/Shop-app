@@ -86,7 +86,18 @@ object SyncStatusStore {
     /** Called from a listener's `onEach` the moment it receives a real
      * (non-error) update — i.e. proof this device actually has current
      * data, not just that it tried to fetch some. */
+    // PERF: recordSuccess يُستدعى مع كل لقطة من كل مستمع (قد تصل عدة لقطات في
+    // الثانية عند فتح التطبيق)، وكل استدعاء كان يكتب SharedPreferences على القرص.
+    // الشاشة تعرض "آخر مزامنة" بدقة الدقيقة فقط، فكتابة واحدة كل 30 ثانية تكفي.
+    private const val MIN_WRITE_INTERVAL_MS = 30_000L
+
+    @Volatile
+    private var lastWriteElapsed = -MIN_WRITE_INTERVAL_MS
+
     fun recordSuccess(context: Context) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastWriteElapsed < MIN_WRITE_INTERVAL_MS) return
+        lastWriteElapsed = now
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit()
             .putLong(KEY_LAST_SYNCED_AT, System.currentTimeMillis())
