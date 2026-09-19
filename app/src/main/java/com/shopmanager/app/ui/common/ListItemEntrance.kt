@@ -7,6 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
@@ -43,19 +45,41 @@ import kotlinx.coroutines.delay
  * Skipping it outright is what keeps a long list's first render exactly
  * as cheap on LOW tier as it was before this existed.
  */
+/** الصفوف التي فهرسها أكبر من هذا لا تُحرَّك أبداً: هي تدخل بالتمرير لا بتحميل القائمة. */
+private const val MAX_ANIMATED_INDEX = 12
+
+/**
+ * PERF + FEEL (تحسين): كان الصف يعيد تشغيل حركة الدخول (Animatable + coroutine)
+ * **في كل مرة** يدخل فيها التركيب — أي كلما مرّرتَ القائمة لأعلى ثم لأسفل كانت
+ * الصفوف تعود شفافة وتصعد من جديد، وهذا عمل زائد على المعالج أثناء التمرير
+ * تحديداً (أسوأ لحظة) ويبدو كوميضاً مزعجاً. الآن تُعرض الحركة **مرة واحدة فقط
+ * لكل صف** (تُحفظ بـ rememberSaveable مربوطة بمفتاح الصف في LazyColumn، فتبقى
+ * حتى لو خرج الصف من الشاشة وعاد أو دُوِّرت الشاشة)، ولا تُحرَّك الصفوف البعيدة
+ * أصلاً. الصف الذي لا يتحرك لا يُنشئ أي coroutine.
+ */
 @Composable
 fun Modifier.listItemEntrance(index: Int): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     if (isLowTier) return this
 
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        val staggerMs = (index.coerceAtMost(8)) * 28L
-        if (staggerMs > 0) delay(staggerMs)
-        progress.animateTo(1f, animationSpec = tween(360, easing = FastOutSlowInEasing))
+    val played = rememberSaveable { mutableStateOf(false) }
+    // تُحسب مرة واحدة عند دخول هذا الصف التركيب (لا تتغير بعدها) — وهذا ما
+    // يجعل الشرط أدناه ثابتاً ولا يقطع الحركة حين نكتب played = true.
+    val shouldAnimate = remember { !played.value && index <= MAX_ANIMATED_INDEX }
+    val progress = remember { Animatable(if (shouldAnimate) 0f else 1f) }
+
+    if (shouldAnimate) {
+        LaunchedEffect(Unit) {
+            played.value = true
+            val staggerMs = (index.coerceAtMost(8)) * 28L
+            if (staggerMs > 0) delay(staggerMs)
+            progress.animateTo(1f, animationSpec = tween(360, easing = FastOutSlowInEasing))
+        }
     }
     return this.graphicsLayer {
-        alpha = progress.value
-        translationY = (1f - progress.value) * 16.dp.toPx()
+        // القراءة هنا داخل كتلة graphicsLayer (مرحلة الرسم) — لا إعادة تركيب.
+        val p = progress.value
+        alpha = p
+        translationY = (1f - p) * 16.dp.toPx()
     }
 }

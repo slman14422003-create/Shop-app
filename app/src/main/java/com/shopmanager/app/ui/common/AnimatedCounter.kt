@@ -5,9 +5,11 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.MaterialTheme
@@ -60,22 +62,46 @@ fun AnimatedCounterText(
     animate: Boolean = true
 ) {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
-    val animatable = remember { Animatable(targetValue.toFloat()) }
+
+    // BUG FIXED (رقم خاطئ يظهر للمبالغ الكبيرة): كانت الحركة تجري على Float
+    // (`Animatable(targetValue.toFloat())`) — دقة Float نحو 7 أرقام فقط، فمجموع
+    // ديون مثل 1,234,567,891 كان يُعرض بعد انتهاء الحركة كـ 1,234,567,936 (الرقم
+    // الأخير الظاهر ليس ما في قاعدة البيانات!). الآن الحركة على "تقدّم" 0..1
+    // (Float كافٍ له تماماً) والرقم نفسه يُحسب بـ Double، وعند التقدّم 1 يُعرض
+    // الهدف الحقيقي بالضبط بلا أي تقريب.
+    val progress = remember { Animatable(1f) }
+    var startValue by remember { mutableStateOf(targetValue) }
+    var endValue by remember { mutableStateOf(targetValue) }
     var hasRevealedOnce by remember { mutableStateOf(false) }
+    val currentFormat by rememberUpdatedState(format)
 
     LaunchedEffect(targetValue, animate) {
-        if (!animate || !hasRevealedOnce) {
-            animatable.snapTo(targetValue.toFloat())
+        if (!animate || !hasRevealedOnce || isLowTier) {
+            startValue = targetValue
+            endValue = targetValue
+            progress.snapTo(1f)
             if (animate) hasRevealedOnce = true
         } else {
-            animatable.animateTo(
-                targetValue = targetValue.toFloat(),
-                animationSpec = tween(
-                    durationMillis = if (isLowTier) 0 else 500,
-                    easing = FastOutSlowInEasing
-                )
+            // ابدأ مما هو معروض الآن (لو تغيّر الهدف أثناء حركة سابقة لا يقفز الرقم).
+            val shownNow = if (progress.value >= 1f) endValue else startValue + (endValue - startValue) * progress.value
+            startValue = shownNow
+            endValue = targetValue
+            progress.snapTo(0f)
+            progress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing)
             )
         }
     }
-    Text(format(animatable.value.toDouble()), modifier = modifier, style = style, fontWeight = fontWeight)
+
+    // PERF: النص هو الحالة المُراقَبة — الواجهة لا تُعاد تركيبها إلا حين يتغيّر
+    // النص المعروض فعلاً (فرق صغير على مجموع كبير يعني إطارات أقل تُركَّب)، بدل
+    // إعادة تركيب + تنسيق نص في كل إطار من الحركة.
+    val displayText by remember {
+        derivedStateOf {
+            val p = progress.value
+            currentFormat(if (p >= 1f) endValue else startValue + (endValue - startValue) * p)
+        }
+    }
+    Text(displayText, modifier = modifier, style = style, fontWeight = fontWeight)
 }

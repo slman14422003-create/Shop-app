@@ -72,6 +72,16 @@ object MotionSpecs {
     }
 
     /** Expand/collapse duration in ms for AnimatedVisibility-style effects. */
+    /**
+     * تحسين أنيميشن: اختفاء الصف عند حذفه/تسديده (fadeOutSpec في animateItem).
+     * كان الصف يختفي فجأة ثم تقفز الصفوف تحته؛ الآن يخفت لحظة بينما تنزلق
+     * الباقية إلى مكانها بنفس نابض الترتيب [reorderSpring] — أقصر بكثير على
+     * الأجهزة الضعيفة (60ms) كبقية حركات هذا الملف.
+     */
+    @Composable
+    fun listItemFadeOut(): FiniteAnimationSpec<Float> =
+        tween(durationMillis = fadeMillis(), easing = FastOutSlowInEasing)
+
     @Composable
     fun expandMillis(): Int = if (isLowTier()) 90 else 220
 
