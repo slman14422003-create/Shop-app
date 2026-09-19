@@ -33,6 +33,8 @@ object NotificationHelper {
     private const val CHANNEL_SHOPPING_LIST = "low_stock_channel"
     private const val CHANNEL_DEBTS = "debts_channel"
     private const val CHANNEL_NOTES = "notes_channel"
+    private const val CHANNEL_REALTIME = "realtime_sync_channel"
+    const val NOTIF_ID_REALTIME = 1800
     private const val NOTIF_ID_SHOPPING_LIST = 1001
     private const val NOTIF_ID_DEBT = 1002
     private const val NOTIF_ID_PAID_BASE = 2000
@@ -102,6 +104,20 @@ object NotificationHelper {
                 vibrationPattern = longArrayOf(0, 180, 90, 180)
             }
             manager.createNotificationChannel(notesChannel)
+
+            // قناة إشعار الخدمة الأمامية الدائم (المزامنة الفورية): أدنى أهمية —
+            // بلا صوت ولا اهتزاز ولا ظهور على شاشة القفل، فقط سطر صغير مطوي في
+            // الشريط. لازم يوجد إشعار للخدمة الأمامية، وهذا أقل شكل ممكن له.
+            val realtimeChannel = NotificationChannel(
+                CHANNEL_REALTIME, "المزامنة الفورية", NotificationManager.IMPORTANCE_MIN
+            ).apply {
+                description = "إشعار صامت صغير يبقي التطبيق متصلاً ليصلك كل جديد من الأجهزة الأخرى فوراً"
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                enableLights(false)
+            }
+            manager.createNotificationChannel(realtimeChannel)
         }
     }
 
@@ -471,5 +487,32 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
         NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBTS_SUMMARY, summary)
+    }
+
+    /**
+     * الإشعار الدائم المطلوب للخدمة الأمامية [RealtimeSyncService]. صامت وبأدنى
+     * أولوية. الضغط عليه يفتح التطبيق.
+     */
+    fun buildRealtimeServiceNotification(context: Context): android.app.Notification {
+        val openApp = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val contentIntent = PendingIntent.getActivity(
+            context, NOTIF_ID_REALTIME, openApp,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, CHANNEL_REALTIME)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle("المزامنة الفورية مفعّلة")
+            .setContentText("تصلك تنبيهات الديون والمواد والملاحظات لحظة حدوثها")
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setContentIntent(contentIntent)
+            .build()
     }
 }

@@ -17,33 +17,30 @@ import kotlinx.coroutines.tasks.await
 import java.util.concurrent.TimeUnit
 
 /**
- * Free background notifications for new debts / shortage-list changes.
+ * الشبكة الاحتياطية للإشعارات: فحص دوري رخيص (15/30 دقيقة كحد أدنى يفرضه
+ * WorkManager) يعمل حين لا تكون الخدمة الأمامية [RealtimeSyncService] حيّة —
+ * مثلاً عند إيقاف "المزامنة الفورية" من الإعدادات، أو ريثما يعيد النظام تشغيلها
+ * بعد أن يقتلها.
  *
- * A "real" push (a notification arriving instantly the moment another
- * device writes to Firestore, app fully closed) needs either Firebase
- * Cloud Messaging triggered server-side, or a Cloud Function watching the
- * collection — both require the Firebase project to be on the Blaze
- * (pay-as-you-go) plan, even if actual usage stays inside the free quota.
- * That's a real account/billing change, not just app code, so it isn't
- * what's wired up here.
+ * ملاحظة صادقة: إشعار لحظي حقيقي والتطبيق مغلق تماماً بدون خدمة أمامية يحتاج
+ * FCM + Cloud Function (خطة Blaze). الـ Worker وحده لا يضمن ذلك: أندرويد يؤجّله
+ * أو يجمّده حسب Doze وحماية البطارية.
  *
- * What WorkManager gives us for free: the OS itself wakes the app
- * periodically (Android decides the exact moment, batched with other apps
- * for battery reasons — this is not instant, typically within a window of
- * the requested interval), this worker does ONE cheap server read per
- * collection (not a live listener — nothing stays connected or drains
- * battery between runs), diffs it against what was seen last time, and
- * notifies only about what's actually new. No server component, no
- * billing change, works fully offline-tolerant (skips silently on
- * failure and retries next cycle).
+ * ما تغيّر:
+ * - كل منطق "هل هذا جديد وجاء من جهاز آخر؟" انتقل إلى [RemoteChangeProcessor]
+ *   (خط أساس واحد + سجل ما كتبه هذا الجهاز [SelfChangeLedger]) — فلا يتعارض مع
+ *   الخدمة/التطبيق، ولا يُشعِر الجهاز الذي أضاف العنصر بنفسه.
+ * - قراءة أقل: نقرأ مجموعة الديون فقط، ولا نجلب اسم العميل إلا للديون الجديدة
+ *   فعلاً (كنا نقرأ مجموعة العملاء كاملة في كل دورة حتى لو لم يتغيّر شيء).
+ * - لا عمل إطلاقاً إذا كانت الخدمة الأمامية تعمل (تلتقط كل شيء أصلاً).
  */
 class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
     CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        // The worker can run in a fresh process (app fully killed since the
-        // last launch), where MainActivity never ran and Firebase was never
-        // initialized — so it's initialized defensively here too.
+        if (RealtimeSyncService.isRunning) return Result.success()
+
+        // قد نعمل في عملية جديدة (التطبيق مقتول) لم تمرّ بـ MainActivity.
         FirebaseModule.init(applicationContext)
         NotificationHelper.ensureChannels(applicationContext)
 
@@ -52,203 +49,82 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
 
         return try {
             checkNewDebts(settings)
-            checkShortageList()
-            checkNewNotes()
+            checkShortageList(settings)
+            checkNewNotes(settings)
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            // Network blip / offline — try again on the next scheduled run
-            // rather than spamming retries.
+            // انقطاع/شبكة — نعيد المحاولة في الدورة التالية بدل تكرار سريع.
             Result.retry()
         }
     }
 
-    /**
-     * BUG FIXED (missing background notification): this used to diff the
-     * "persons" collection, so it only ever caught a brand-new customer —
-     * same gap as the old in-app DebtsViewModel logic (see its comment).
-     * A new debt added to an *existing* customer while the app is fully
-     * closed never surfaced here either. Diffing the "debts" collection
-     * itself instead catches both cases the same way the in-app check now
-     * does, so a phone that's been closed for a while and gets woken up by
-     * this worker reports the same things the live in-app listener would
-     * have.
-     */
     private suspend fun checkNewDebts(settings: SettingsRepository) {
-        val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val db = FirebaseModule.debtsDb
-        val personsSnapshot = db.collection("persons").get(Source.SERVER).await()
-        val debtsSnapshot = db.collection("debts").get(Source.SERVER).await()
-        val personNamesById = personsSnapshot.documents.associate { it.id to (it.getString("name") ?: "عميل") }
+        val snapshot = db.collection("debts").get(Source.SERVER).await()
+        val records = snapshot.documents.map { doc ->
+            DebtRecord(doc.id, doc.getString("personId") ?: "", doc.getDouble("amount") ?: 0.0)
+        }
+        val fresh = RemoteChangeProcessor.newDebts(applicationContext, records, true)
+        if (fresh.isEmpty()) return
 
-        val knownIds = prefs.getStringSet(KEY_KNOWN_DEBTS, null)
-        // First run ever: just seed the known set silently, nothing to
-        // compare against yet (otherwise every existing debt would fire a
-        // "new debt" notification the first time this runs).
-        if (knownIds != null) {
-            for (doc in debtsSnapshot.documents) {
-                if (doc.id !in knownIds) {
-                    val personId = doc.getString("personId") ?: continue
-                    val amount = doc.getDouble("amount") ?: 0.0
-                    if (amount > 0) {
-                        val name = personNamesById[personId] ?: "عميل"
-                        // BUG FIXED: pass doc.id (the debt id) so several new
-                        // debts caught in the same background sync cycle
-                        // (e.g. after being offline a while) each get their
-                        // own notification instead of overwriting one
-                        // another - see NotificationHelper.showNewDebtNotification.
-                        NotificationHelper.showNewDebtNotification(
-                            applicationContext, name, formatAmount(amount), settings.currencySymbol, doc.id
-                        )
-                    }
-                }
+        val names = HashMap<String, String>()
+        for (personId in fresh.map { it.personId }.distinct()) {
+            if (personId.isBlank()) continue
+            names[personId] = try {
+                db.collection("persons").document(personId).get().await().getString("name") ?: "عميل"
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "عميل"
             }
         }
-        prefs.edit()
-            .putStringSet(KEY_KNOWN_DEBTS, debtsSnapshot.documents.map { it.id }.toSet())
-            .remove(KEY_KNOWN_PERSONS) // no longer used — replaced by KEY_KNOWN_DEBTS above
-            .apply()
+        for (debt in fresh) {
+            NotificationHelper.showNewDebtNotification(
+                applicationContext,
+                names[debt.personId] ?: "عميل",
+                RemoteChangeProcessor.formatAmount(debt.amount),
+                settings.currencySymbol,
+                debt.id
+            )
+        }
     }
 
-    /**
-     * BUG FIXED (edit/delete notifications unreliable): this used to diff
-     * only the *set of names* on the shortage list, the same gap as the old
-     * in-app MaterialsViewModel logic (see its comment) - editing an
-     * existing item's quantity/unit while its name stayed the same never
-     * looked like a change here either, so a phone woken up by this worker
-     * could report nothing even though the list had genuinely changed.
-     * Diffing each item's full signature (id + name + quantity + unit)
-     * instead catches edits the same way the in-app check now does.
-     */
-    private suspend fun checkShortageList() {
-        val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val db = FirebaseModule.materialsDb
-        val snapshot = db.collection("spices_final_v12").get(Source.SERVER).await()
-        val signature = snapshot.documents.associate { doc ->
-            doc.id to "${doc.getString("name") ?: ""}|${doc.getDouble("quantity") ?: 0.0}|${doc.getString("unit") ?: ""}"
+    private suspend fun checkShortageList(settings: SettingsRepository) {
+        val snapshot = FirebaseModule.materialsDb.collection("spices_final_v12").get(Source.SERVER).await()
+        val records = snapshot.documents.map { doc ->
+            MaterialRecord(
+                doc.id,
+                doc.getString("name") ?: "",
+                doc.getDouble("quantity") ?: 0.0,
+                doc.getString("unit") ?: ""
+            )
         }
-        val names = snapshot.documents.mapNotNull { it.getString("name") }.distinct()
-
-        val lastSignature = prefs.getString(KEY_KNOWN_MATERIALS, null)
-        val encoded = signature.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
-        if (lastSignature != null && encoded != lastSignature && names.isNotEmpty()) {
-            NotificationHelper.showShoppingListNotification(applicationContext, names)
-        }
-        prefs.edit().putString(KEY_KNOWN_MATERIALS, encoded).apply()
+        val diff = RemoteChangeProcessor.materialsChanged(applicationContext, records, true)
+        RemoteChangeProcessor.deliverShoppingDiff(applicationContext, diff, settings.notificationsEnabled)
     }
 
-    private fun formatAmount(amount: Double): String =
-        if (amount == amount.toLong().toDouble()) amount.toLong().toString() else amount.toString()
-
-    /**
-     * BUG FIXED ("ما ترسل إشعار لبقية الأجهزة إني ضفت ملاحظة"): notes had
-     * no equivalent of [checkNewDebts]/[checkShortageList] at all, so a
-     * note added while every other device had the app fully closed was
-     * never reported to them even once they woke up — the live in-app
-     * listener in NotesViewModel only covers devices that currently have
-     * the app open. Same diff-by-id pattern as debts.
-     */
-    private suspend fun checkNewNotes() {
-        val prefs = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val db = FirebaseModule.notesDb
-        val snapshot = db.collection("important_notes").get(Source.SERVER).await()
-
-        val knownIds = prefs.getStringSet(KEY_KNOWN_NOTES, null)
-        if (knownIds != null) {
-            for (doc in snapshot.documents) {
-                if (doc.id !in knownIds) {
-                    val title = doc.getString("title") ?: ""
-                    val content = doc.getString("content") ?: ""
-                    NotificationHelper.showNewNoteNotification(applicationContext, title, content, doc.id)
-                }
-            }
+    private suspend fun checkNewNotes(settings: SettingsRepository) {
+        val snapshot = FirebaseModule.notesDb.collection("important_notes").get(Source.SERVER).await()
+        val records = snapshot.documents.map { doc ->
+            NoteRecord(doc.id, doc.getString("title") ?: "", doc.getString("content") ?: "")
         }
-        prefs.edit()
-            .putStringSet(KEY_KNOWN_NOTES, snapshot.documents.map { it.id }.toSet())
-            .apply()
+        val fresh = RemoteChangeProcessor.newNotes(applicationContext, records, true)
+        if (!settings.notificationsEnabled) return
+        for (note in fresh) {
+            NotificationHelper.showNewNoteNotification(applicationContext, note.title, note.content, note.id)
+        }
     }
 
     companion object {
-        private const val PREFS = "shop_manager_sync"
-        private const val KEY_KNOWN_PERSONS = "known_person_ids"
-        private const val KEY_KNOWN_DEBTS = "known_debt_ids"
-        // Renamed from "known_material_names": that old key held a
-        // StringSet (just names). Reusing it here with getString() would
-        // throw ClassCastException on any device upgrading from the old
-        // version with a value already stored under it - a new key name
-        // sidesteps that entirely (worst case: one silent reseed on the
-        // first run after updating, same as a fresh install).
-        private const val KEY_KNOWN_MATERIALS = "known_material_signature"
-        private const val KEY_KNOWN_NOTES = "known_note_ids"
         private const val UNIQUE_WORK_NAME = "shop_manager_background_sync"
 
         /**
-         * BUG FIXED (إشعار يوصل لنفس الجهاز اللي أضاف العنصر، بعد تأخير):
-         * the in-app live listeners (DebtsViewModel.selfCreatedDebtIds /
-         * MaterialsViewModel.selfTouchedMaterialIds) already skip notifying
-         * about a change made on THIS device the moment it happens - but
-         * this worker keeps its own, completely separate "known ids/
-         * signature" baseline in SharedPreferences, only updated once every
-         * 15-30 minutes when it actually runs. So a debt/material added
-         * in-app (already shown via the in-app message, no notification)
-         * could still look brand-new to THIS SAME baseline the next time
-         * the periodic worker wakes up - firing a second, delayed
-         * notification for an action the person already saw confirmed live.
-         * The two view models now call these right after every local
-         * write/every live update they see (whether it originated here or
-         * on another device), keeping this worker's own baseline
-         * continuously in sync with whatever the live listener already
-         * accounted for - so a background wake-up only ever reports
-         * something that genuinely happened while the app was fully
-         * closed, on every device, exactly matching what the in-app
-         * suppression already achieves while it's open.
-         */
-        fun syncKnownDebtIds(context: Context, debtIds: Set<String>) {
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            prefs.edit().putStringSet(KEY_KNOWN_DEBTS, debtIds).apply()
-        }
-
-        fun syncKnownMaterialsSignature(context: Context, materials: List<com.shopmanager.app.data.materials.Material>) {
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            val signature = materials.associate { it.id to "${it.name}|${it.quantity}|${it.unit}" }
-            val encoded = signature.entries.sortedBy { it.key }.joinToString(";") { "${it.key}=${it.value}" }
-            prefs.edit().putString(KEY_KNOWN_MATERIALS, encoded).apply()
-        }
-
-        /** Same purpose as [syncKnownDebtIds], for notes — keeps this
-         * worker's own baseline in sync with whatever NotesViewModel's live
-         * listener already accounted for, on every emission. */
-        fun syncKnownNoteIds(context: Context, noteIds: Set<String>) {
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            prefs.edit().putStringSet(KEY_KNOWN_NOTES, noteIds).apply()
-        }
-
-        /**
-         * Every 15 minutes — WorkManager's absolute minimum periodic
-         * interval; anything shorter than this is silently clamped up to
-         * it by the OS, so 15 is the fastest this check can ever actually
-         * run. Each run is still just the one cheap server read per
-         * collection described above (no live connection kept open
-         * between runs), and Android may still delay/batch the exact
-         * moment for battery reasons regardless of what's requested here.
-         * Call once (MainActivity.onCreate) — KEEP means re-launching the
-         * app never creates duplicate workers, and switching an existing
-         * install from the old 6-hour schedule to this one happens the
-         * next time the worker is (re)scheduled without any extra code,
-         * since KEEP only skips scheduling when a worker under this name
-         * already exists — it doesn't need to match the old interval.
-         *
-         * "أداء الأجهزة الاقتصادية": on a device that auto-detected (or was
-         * manually set) as [PerformanceTier.LOW], this silent background
-         * check is also the kind of thing that quietly drains a weak
-         * phone's battery/data over a day without the person ever seeing
-         * it running — there's no UI to blame. So on LOW tier the interval
-         * is stretched to 30 minutes (still just an occasional cheap read,
-         * simply less often) and an extra `setRequiresBatteryNotLow(true)`
-         * constraint is added, so the OS skips a cycle entirely on a phone
-         * that's already low on battery instead of waking radios/CPU for a
-         * network read at exactly the worst moment. STANDARD/HIGH devices
-         * keep the original 15-minute, battery-unconstrained schedule
-         * unchanged.
+         * كل 15 دقيقة (الحد الأدنى الفعلي في WorkManager) — أو 30 دقيقة مع شرط
+         * "البطارية ليست منخفضة" على الأجهزة الضعيفة (PerformanceTier.LOW) حتى لا
+         * يُوقظ الفحص الراديو/المعالج عند أسوأ لحظة. KEEP-like سلوك التحديث: استدعاؤها
+         * عند كل فتح للتطبيق لا يُنشئ مهام مكررة.
          */
         fun schedule(context: Context, tier: PerformanceTier = DevicePerformance.detectTier(context)) {
             val isLowTier = tier == PerformanceTier.LOW
