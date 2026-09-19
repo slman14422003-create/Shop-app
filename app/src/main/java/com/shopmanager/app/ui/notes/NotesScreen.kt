@@ -259,7 +259,7 @@ fun NotesScreen(
                                 .animateItem(
                                     fadeInSpec = null,
                                     placementSpec = MotionSpecs.reorderSpring(),
-                                    fadeOutSpec = null
+                                    fadeOutSpec = MotionSpecs.listItemFadeOut()
                                 )
                                 .listItemEntrance(index),
                             onToggleDone = { viewModel.setDone(note, !note.isDone) },
