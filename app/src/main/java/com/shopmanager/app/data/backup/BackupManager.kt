@@ -231,6 +231,7 @@ object BackupManager {
     private fun Material.toJson() = JSONObject().apply {
         put("id", id); put("name", name); put("quantity", quantity)
         put("unit", unit); put("section", section); put("notes", notes); put("updatedAt", updatedAt)
+        put("important", important); put("order", order)
     }
 
     private fun MaterialCatalogItem.toJson() = JSONObject().apply { put("id", id); put("name", name) }
@@ -248,7 +249,9 @@ object BackupManager {
     private fun JSONObject.toMaterial() = Material(
         id = optString("id"), name = optString("name"), quantity = optDouble("quantity", 0.0),
         unit = optString("unit"), section = optString("section", "main"),
-        notes = optString("notes"), updatedAt = optLong("updatedAt", 0L)
+        notes = optString("notes"), updatedAt = optLong("updatedAt", 0L),
+        important = optBoolean("important", false),
+        order = optLong("order", optLong("updatedAt", 0L))
     )
 
     private fun JSONObject.toCatalogItem() = MaterialCatalogItem(id = optString("id"), name = optString("name"))
