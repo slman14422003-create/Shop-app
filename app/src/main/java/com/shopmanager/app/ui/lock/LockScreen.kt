@@ -76,29 +76,26 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
         }
     }
 
-    // Same "tonal surface blended toward the app's own brand color" recipe
-    // [GlassAlertDialog] uses for its panel fill (see its
-    // gradientTop/gradientBottom + dialogRimColor) — kept at full opacity
-    // here rather than that dialog's own extra `fillAlphaTop/Bottom` step,
-    // since that step exists specifically to sit on top of a blurred
-    // screenshot of whatever's *behind* a popup dialog; this card isn't a
-    // popup, it sits directly on this screen's own flat gradient, so
-    // [liquidGlassSurface]'s own built-in glass-mode alpha (the same
-    // mechanism the header/PersonHeader panels already rely on) is enough
-    // on its own.
-    val cardTop = lerp(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.primary, 0.48f)
-    val cardBottom = lerp(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.tertiary, 0.34f)
-    val cardRimColor = lerp(MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.primary, 0.35f)
+    // Claude-app style ("والهيكل"): a plain flat background instead of a
+    // full-screen colored gradient wash — Claude's own screens never paint
+    // the whole page in the accent color, only small elements (like the
+    // icon badge below) carry it. The card no longer blends toward
+    // primary/tertiary either; same flat surfaceContainerHigh panel every
+    // other dialog/card in the app now uses.
+    val cardColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val cardRimColor = MaterialTheme.colorScheme.outlineVariant
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(BrandGradient.brush()),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
         // Same fixed, unblurred light pool [AppSplashScreen] uses — one
         // light source instead of a flat wash, drawn once and never
-        // animated.
+        // animated. Tinted toward the accent color now instead of plain
+        // white, since it's sitting on a neutral background instead of an
+        // already-colored one.
         Box(
             Modifier
                 .align(Alignment.TopCenter)
@@ -106,7 +103,7 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                 .size(420.dp)
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.14f), Color.Transparent)
+                        colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), Color.Transparent)
                     )
                 )
         )
@@ -123,11 +120,11 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
             // the same screen the splash just faded from, not a hand-off
             // to a different design.
             Box(contentAlignment = Alignment.Center) {
-                LiquidGlassGlow(modifier = Modifier.size(104.dp))
+                LiquidGlassGlow(modifier = Modifier.size(104.dp), color = MaterialTheme.colorScheme.primary)
                 Box(
                     Modifier
                         .size(92.dp)
-                        .border(1.dp, Color.White.copy(alpha = 0.28f), CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f), CircleShape)
                 )
                 Box(
                     Modifier
@@ -142,7 +139,7 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
             Spacer(Modifier.height(24.dp))
             Text(
                 "إدارة المحل مقفلة",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.titleLarge,
                 textAlign = TextAlign.Center
@@ -156,8 +153,8 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                     .widthIn(max = 360.dp)
                     .liquidGlassSurface(
                         shape = MaterialTheme.shapes.large,
-                        baseBrush = Brush.verticalGradient(listOf(cardTop, cardBottom)),
-                        elevation = 20.dp,
+                        baseBrush = Brush.verticalGradient(listOf(cardColor, cardColor)),
+                        elevation = 6.dp,
                         highlight = false,
                         rimColor = cardRimColor
                     )
