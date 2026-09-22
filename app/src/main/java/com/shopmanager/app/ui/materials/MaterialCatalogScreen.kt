@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Spa
@@ -55,6 +56,10 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
     var pickedItem by remember { mutableStateOf<MaterialCatalogItem?>(null) }
     var deleteTarget by remember { mutableStateOf<MaterialCatalogItem?>(null) }
+    // FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): the catalog item
+    // currently open for renaming, if any — same one-dialog-at-a-time
+    // pattern as `pickedItem`/`deleteTarget` above.
+    var editTarget by remember { mutableStateOf<MaterialCatalogItem?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
 
     LaunchedEffect(message) {
@@ -169,6 +174,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                         CatalogRow(
                             item = item,
                             onClick = { pickedItem = item },
+                            onEdit = { editTarget = item },
                             onDelete = { deleteTarget = item }
                         )
                     }
@@ -187,6 +193,22 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 viewModel.addCatalogItem(name) { success ->
                     isAddingCatalogItem = false
                     if (success) showAddDialog = false
+                }
+            }
+        )
+    }
+
+    editTarget?.let { item ->
+        var isSavingRename by remember { mutableStateOf(false) }
+        EditCatalogItemDialog(
+            initialName = item.name,
+            isSaving = isSavingRename,
+            onDismiss = { if (!isSavingRename) editTarget = null },
+            onSave = { newName ->
+                isSavingRename = true
+                viewModel.updateCatalogItem(item.id, item.name, newName) { success ->
+                    isSavingRename = false
+                    if (success) editTarget = null
                 }
             }
         )
@@ -226,7 +248,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete: () -> Unit) {
+private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     val color = remember(item.name) { avatarColorFor(item.name) }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -260,6 +282,12 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onDelete:
             }
             Spacer(Modifier.width(12.dp))
             Text(item.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
+            // FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): a separate
+            // pencil button opens the rename dialog — kept apart from
+            // `onClick` (which still picks the item to log a shortage
+            // quantity, this row's main action) so renaming isn't hidden
+            // behind the same tap.
+            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل الاسم") }
             IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف من القائمة") }
         }
     }
@@ -308,6 +336,56 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 } else {
                     Text("إضافة")
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !isSaving, shape = RectangleShape) { Text("إلغاء") } }
+    )
+}
+
+/**
+ * FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): renames one existing
+ * catalog entry in place — same shape as [AddCatalogItemDialog], pre-filled
+ * with the current name, but wired to `updateCatalogItem` instead of
+ * `addCatalogItem`.
+ */
+@Composable
+private fun EditCatalogItemDialog(initialName: String, isSaving: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(initialName) }
+    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    GlassAlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = { Text("تعديل اسم المادة") },
+        text = {
+            AppTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = "اسم المادة",
+                placeholder = "اسم المادة...",
+                enabled = !isSaving,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                ),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onDone = { if (name.isNotBlank() && !isSaving) onSave(name.trim()) }
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank() && !isSaving,
+                shape = RectangleShape,
+                onClick = { onSave(name.trim()) }
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("حفظ")
                 }
             }
         },

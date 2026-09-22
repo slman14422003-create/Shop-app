@@ -11,11 +11,13 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +30,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,12 +43,15 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
@@ -258,7 +265,9 @@ fun MaterialsScreen(
                         materials = filtered,
                         searching = search.isNotBlank(),
                         onEdit = { editingMaterial = it },
-                        onDelete = { deleteTarget = it }
+                        onDelete = { deleteTarget = it },
+                        onToggleImportant = { viewModel.setImportant(it, !it.important) },
+                        onReordered = { viewModel.reorderMaterials(it.map(Material::id)) }
                     )
                 }
             } else {
@@ -539,7 +548,9 @@ private fun MaterialsList(
     materials: List<Material>,
     searching: Boolean,
     onEdit: (Material) -> Unit,
-    onDelete: (Material) -> Unit
+    onDelete: (Material) -> Unit,
+    onToggleImportant: (Material) -> Unit,
+    onReordered: (List<Material>) -> Unit
 ) {
     if (materials.isEmpty()) {
         EmptyState(
@@ -558,33 +569,119 @@ private fun MaterialsList(
     // rather than a hardcoded row.
     val fabHeight = 56.dp // MaterialDesign's fixed ExtendedFloatingActionButton height
     val bottomClearance = LocalFloatingBottomNavHeight.current + fabHeight + 24.dp
+
+    // FEATURE ADDED ("ترتيب المواد بالضغط المطول وتحريكها"): a local copy
+    // that the drag gesture below reorders live, in real time, as the
+    // finger moves — synced back to the real `materials` list on every
+    // change from Firestore *except* while a drag is actually in progress,
+    // so an incoming snapshot (e.g. from another device) never yanks the
+    // row out from under the finger mid-drag. Reordering only makes sense
+    // against the full, unfiltered list, so it's disabled entirely while
+    // searching (see `canReorder` below) — dragging a filtered subset
+    // would silently scramble the position of every hidden item too.
+    var orderedItems by remember { mutableStateOf(materials) }
+    var draggingId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(materials) {
+        if (draggingId == null) orderedItems = materials
+    }
+    val canReorder = !searching
+    // Real per-row height in px (row height + the 8.dp spacedBy gap),
+    // measured live via onSizeChanged below — used to decide, as the
+    // finger moves, when it's dragged far enough past a neighbor to swap
+    // places with it.
+    val itemHeightsPx = remember { mutableStateMapOf<String, Int>() }
+    var dragOffset by remember { mutableStateOf(0f) }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomClearance),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        items(materials, key = { it.id }) { m ->
-            MaterialRow(
-                material = m,
-                onEdit = { onEdit(m) },
-                onDelete = { onDelete(m) },
-                modifier = Modifier.animateItem(
-                    fadeInSpec = null,
-                    placementSpec = MotionSpecs.reorderSpring(),
-                    fadeOutSpec = MotionSpecs.listItemFadeOut()
+        itemsIndexed(orderedItems, key = { _, m -> m.id }) { _, m ->
+            val isDragging = m.id == draggingId
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    // Items not currently being dragged still animate into
+                    // their new slot when a drag (or a delete/search
+                    // change) shifts them — skipped for the dragged item
+                    // itself so its own manual `dragOffset` below (which
+                    // already tracks the finger exactly) isn't fought by a
+                    // second, competing placement animation.
+                    .then(if (!isDragging) Modifier.animateItem(
+                        fadeInSpec = null,
+                        placementSpec = MotionSpecs.reorderSpring(),
+                        fadeOutSpec = MotionSpecs.listItemFadeOut()
+                    ) else Modifier)
+                    .onSizeChanged { itemHeightsPx[m.id] = it.height }
+                    .zIndex(if (isDragging) 1f else 0f)
+                    .graphicsLayer { translationY = if (isDragging) dragOffset else 0f }
+                    .then(
+                        if (canReorder) {
+                            Modifier.pointerInput(m.id) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        draggingId = m.id
+                                        dragOffset = 0f
+                                    },
+                                    onDragEnd = {
+                                        if (draggingId != null) onReordered(orderedItems)
+                                        draggingId = null
+                                        dragOffset = 0f
+                                    },
+                                    onDragCancel = {
+                                        draggingId = null
+                                        dragOffset = 0f
+                                    },
+                                    onDrag = { change, delta ->
+                                        change.consume()
+                                        dragOffset += delta.y
+                                        val step = (itemHeightsPx[m.id] ?: 0) + 8.dp.toPx()
+                                        if (step <= 0f) return@onDrag
+                                        val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
+                                        if (dragOffset > step / 2 && currentIndex < orderedItems.lastIndex) {
+                                            orderedItems = orderedItems.toMutableList().apply {
+                                                add(currentIndex + 1, removeAt(currentIndex))
+                                            }
+                                            dragOffset -= step
+                                        } else if (dragOffset < -step / 2 && currentIndex > 0) {
+                                            orderedItems = orderedItems.toMutableList().apply {
+                                                add(currentIndex - 1, removeAt(currentIndex))
+                                            }
+                                            dragOffset += step
+                                        }
+                                    }
+                                )
+                            }
+                        } else Modifier
+                    )
+            ) {
+                MaterialRow(
+                    material = m,
+                    onEdit = { onEdit(m) },
+                    onDelete = { onDelete(m) },
+                    onToggleImportant = { onToggleImportant(m) },
+                    isDragging = isDragging
                 )
-            )
+            }
         }
     }
 }
 
 @Composable
-private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
+private fun MaterialRow(
+    material: Material,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onToggleImportant: () -> Unit,
+    isDragging: Boolean = false,
+    modifier: Modifier = Modifier
+) {
     val avatarColor = remember(material.name) { avatarColorFor(material.name) }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
+        targetValue = if (pressed) 0.98f else if (isDragging) 1.03f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "materialRowScale"
     )
@@ -604,14 +701,32 @@ private fun MaterialRow(material: Material, onEdit: () -> Unit, onDelete: () -> 
             ),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        // FEATURE ADDED ("نجمة الأهمية"): a starred material gets a subtle
+        // amber border so it also reads as important at a glance, not only
+        // through the filled star icon.
+        border = BorderStroke(
+            if (material.important) 1.5.dp else 1.dp,
+            if (material.important) Color(0xFFFFA000).copy(alpha = 0.6f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+        ),
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp
+        shadowElevation = if (isDragging) 6.dp else 0.dp
     ) {
         Row(
             Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // FEATURE ADDED ("نجمة بجانب كل مادة جديدة... تنقل لأول اشي"):
+            // tapping the star marks/unmarks the material as very
+            // important; marking it also pins it to the top of the list
+            // (see MaterialsViewModel.setImportant).
+            IconButton(onClick = onToggleImportant) {
+                Icon(
+                    if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
+                    tint = if (material.important) Color(0xFFFFA000) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Box(
                 Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
                 contentAlignment = Alignment.Center

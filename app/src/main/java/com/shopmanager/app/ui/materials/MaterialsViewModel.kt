@@ -200,6 +200,44 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * FEATURE ADDED ("نجمة الأهمية"): toggling on pins the material to the
+     * top of the list by giving it an `order` one less than the current
+     * minimum among today's materials (so it sorts before literally
+     * everything else); toggling off just flips the flag back and leaves
+     * its position as-is.
+     */
+    fun setImportant(material: Material, important: Boolean) {
+        viewModelScope.launch {
+            try {
+                val topOrder = if (important) {
+                    (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
+                } else null
+                repo.setImportant(material.id, important, topOrder)
+                InstantBackupWorker.requestNow(getApplication())
+            } catch (e: Exception) {
+                _message.value = "تعذر التحديث: ${e.message ?: "تحقق من الاتصال"}"
+            }
+        }
+    }
+
+    /**
+     * FEATURE ADDED ("ترتيب المواد بالضغط المطول"): called once a drag
+     * finishes with the full list in its new order; persists a fresh
+     * sequential `order` per id in one batch (see
+     * MaterialsRepository.updateMaterialsOrder).
+     */
+    fun reorderMaterials(orderedIds: List<String>) {
+        viewModelScope.launch {
+            try {
+                repo.updateMaterialsOrder(orderedIds)
+                InstantBackupWorker.requestNow(getApplication())
+            } catch (e: Exception) {
+                _message.value = "تعذر حفظ الترتيب: ${e.message ?: "تحقق من الاتصال"}"
+            }
+        }
+    }
+
+    /**
      * "مسح الكل" (clear all): deletes every material currently on the list
      * for the active section in one batched call, same effect as
      * select-all-then-delete but without needing a whole multi-select mode
@@ -245,6 +283,30 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 onDone(true)
             } catch (e: Exception) {
                 _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
+                onDone(false)
+            }
+        }
+    }
+
+    /**
+     * FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): renames a fixed
+     * catalog entry. Blocks renaming to a name that already exists
+     * elsewhere in the catalog, same duplicate check as adding a new one -
+     * but allows saving with no change (renaming "X" to "X" again).
+     */
+    fun updateCatalogItem(id: String, currentName: String, newName: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                if (newName != currentName && repo.catalogNameExists(newName)) {
+                    _message.value = "\"$newName\" موجودة بالقائمة مسبقاً"
+                    onDone(false)
+                    return@launch
+                }
+                repo.updateCatalogItem(id, newName)
+                InstantBackupWorker.requestNow(getApplication())
+                onDone(true)
+            } catch (e: Exception) {
+                _message.value = "تعذر التعديل: ${e.message ?: "تحقق من الاتصال"}"
                 onDone(false)
             }
         }
