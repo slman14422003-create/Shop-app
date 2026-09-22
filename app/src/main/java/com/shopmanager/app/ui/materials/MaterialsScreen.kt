@@ -637,18 +637,19 @@ private fun MaterialsList(
                                         change.consume()
                                         dragOffset += delta.y
                                         val step = (itemHeightsPx[m.id] ?: 0) + 8.dp.toPx()
-                                        if (step <= 0f) return@onDrag
-                                        val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
-                                        if (dragOffset > step / 2 && currentIndex < orderedItems.lastIndex) {
-                                            orderedItems = orderedItems.toMutableList().apply {
-                                                add(currentIndex + 1, removeAt(currentIndex))
+                                        if (step > 0f) {
+                                            val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
+                                            if (dragOffset > step / 2 && currentIndex < orderedItems.lastIndex) {
+                                                orderedItems = orderedItems.toMutableList().apply {
+                                                    add(currentIndex + 1, removeAt(currentIndex))
+                                                }
+                                                dragOffset -= step
+                                            } else if (dragOffset < -step / 2 && currentIndex > 0) {
+                                                orderedItems = orderedItems.toMutableList().apply {
+                                                    add(currentIndex - 1, removeAt(currentIndex))
+                                                }
+                                                dragOffset += step
                                             }
-                                            dragOffset -= step
-                                        } else if (dragOffset < -step / 2 && currentIndex > 0) {
-                                            orderedItems = orderedItems.toMutableList().apply {
-                                                add(currentIndex - 1, removeAt(currentIndex))
-                                            }
-                                            dragOffset += step
                                         }
                                     }
                                 )
