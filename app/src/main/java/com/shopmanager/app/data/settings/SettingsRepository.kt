@@ -57,8 +57,8 @@ class SettingsRepository(context: Context) {
      * [colorMode]'s own doc). */
     var colorPalette: AppColorPalette
         get() = runCatching {
-            AppColorPalette.valueOf(prefs.getString(KEY_COLOR_PALETTE, AppColorPalette.INDIGO.name)!!)
-        }.getOrDefault(AppColorPalette.INDIGO)
+            AppColorPalette.valueOf(prefs.getString(KEY_COLOR_PALETTE, AppColorPalette.CLAUDE.name)!!)
+        }.getOrDefault(AppColorPalette.CLAUDE)
         set(value) = prefs.edit().putString(KEY_COLOR_PALETTE, value.name).apply()
 
     /** "وضع لوحة الألوان" — ديناميكي (wallpaper-based Material You), يدوي
