@@ -326,22 +326,14 @@ class MainActivity : ComponentActivity() {
                 // icons.
                 //
                 // BUG FIXED (LockScreen redesign — see LockScreen.kt): the
-                // PIN lock screen used to sit on the plain neutral
-                // light/dark background like an ordinary screen, so its
-                // icon color had to follow `!isDark` the same way a normal
-                // screen's would. It's now full-bleed [BrandGradient] — the
-                // exact same "always dark enough for white text/icons in
-                // either theme" gradient the splash and every header
-                // already rely on (see BrandGradient.kt's own guarantee) —
-                // so it now belongs in the *same* bucket as the splash for
-                // icon-color purposes, not the same bucket as a plain
-                // unlocked screen's background. `unlocked` no longer
-                // matters for the status bar at all: locked-with-gradient
-                // and unlocked-with-glass-header are both always white;
-                // only the nav bar (whose bottom-of-screen strip stays the
-                // plain neutral background once truly unlocked, unlike the
-                // lock screen's own full-bleed gradient) still needs to
-                // tell those two apart.
+                // PIN lock screen no longer sits on the full-bleed
+                // [BrandGradient] wash — Claude-style redesign made it a
+                // plain neutral background like every ordinary screen (see
+                // LockScreen.kt's own note). So it now needs the same
+                // `!isDark`-based icon color a normal unlocked screen gets,
+                // not the forced-white treatment that's still correct for
+                // the splash (which stays full-bleed colored). Only the
+                // splash (`!isReady`) keeps the old forced-white behavior.
                 val isDark = rememberIsDarkTheme(themeMode)
                 SetSystemBarsColor(
                     // "الشريط السفلي العائم بدون الخلفية السوداء": this used
@@ -357,8 +349,8 @@ class MainActivity : ComponentActivity() {
                     // margins show the real page content/background instead
                     // of a separately-painted solid color.
                     navigationBarColor = Color.Transparent,
-                    statusBarDarkIcons = false,
-                    navigationBarDarkIcons = if (isReady && unlocked) !isDark else false
+                    statusBarDarkIcons = if (isReady && !unlocked) !isDark else false,
+                    navigationBarDarkIcons = if (isReady) !isDark else false
                 )
 
                 Surface {
