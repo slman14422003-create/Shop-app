@@ -316,7 +316,7 @@ private fun QuickActionFab(action: QuickAction) {
             // 0.72f — نفس قيمة الكبسولة المجاورة لها بالضبط.
             .liquidGlassSurface(
                 CircleShape,
-                elevation = 10.dp,
+                elevation = 2.dp,
                 highlight = false,
                 baseAlpha = 0.72f
             )

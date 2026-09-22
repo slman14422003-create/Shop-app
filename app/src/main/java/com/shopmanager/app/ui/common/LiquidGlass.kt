@@ -56,7 +56,15 @@ fun Modifier.liquidGlassSurface(
     // a distinct floating layer above the content behind it. 0.dp keeps a
     // flush look for callers that want the panel to sit flat against
     // whatever's behind it.
-    elevation: Dp = 10.dp,
+    //
+    // Claude-app style ("والهيكل"): Claude's own UI barely uses shadow at
+    // all — panels separate from the background mostly through a tonal
+    // shift (a lighter surfaceContainer on a darker background), not a
+    // drawn shadow. Dropped from 10.dp to 2.dp so headers/dialogs/the nav
+    // bar keep just enough lift to read as a separate layer without the
+    // heavier "floating card" look the old 10.dp had — every call site
+    // that doesn't pass its own elevation picks this up automatically.
+    elevation: Dp = 2.dp,
     // Kept for source compatibility with existing call sites; the
     // animated sheen/highlight/droplet effects these used to enable have
     // been removed, so these parameters no longer change anything.
