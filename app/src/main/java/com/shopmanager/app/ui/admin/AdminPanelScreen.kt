@@ -303,28 +303,22 @@ private fun AdminSection(title: String, icon: ImageVector, content: @Composable 
     // a borderless, shadowless rounded surface — so the admin panel reads
     // as the same design language as the rest of the app instead of a
     // separate shadowed-card style.
+    // Claude-app style: same flat, borderless grouped-card treatment as
+    // SettingsSection (see SettingsScreen.kt) — plain outline icon, no
+    // colored badge box, softly-rounded seamless card.
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.padding(start = 4.dp, bottom = 8.dp),
+            Modifier.padding(start = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(22.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.primary),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Surface(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
         ) {
