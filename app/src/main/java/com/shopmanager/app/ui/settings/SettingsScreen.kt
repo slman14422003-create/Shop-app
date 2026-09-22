@@ -1475,38 +1475,35 @@ private fun SettingsSection(title: String, icon: ImageVector, content: @Composab
         visible = visible,
         enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring())
     ) {
+        // Claude-app style: no colored badge box above the group — just a
+        // plain, single-color outline icon in front of a quiet label, the
+        // same weight as the rows inside it, then a softly-rounded flat
+        // card with no border seam (Claude's Settings groups sit directly
+        // on the dark/cream background with only a faint tonal lift, not a
+        // hairline outline).
         Column(Modifier.fillMaxWidth()) {
             Row(
-                Modifier.padding(start = 4.dp, bottom = 8.dp),
+                Modifier.padding(start = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    Modifier
-                        .size(22.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                }
-                Spacer(Modifier.width(8.dp))
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp)
+                )
+                Spacer(Modifier.width(6.dp))
                 Text(
-                    // NOTE: no .uppercase() here — Arabic has no case
-                    // distinction, so English-style "SMALL CAPS SECTION
-                    // HEADER" styling doesn't translate; the colored badge
-                    // + muted semibold label carries the same "this is a
-                    // group header" read instead.
                     title,
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Surface(
                 Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp,
                 shadowElevation = 0.dp
             ) {
