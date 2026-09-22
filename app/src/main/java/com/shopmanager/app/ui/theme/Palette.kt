@@ -22,7 +22,8 @@ import android.graphics.Color as AndroidColor
  * exactly like the original Indigo/Violet pair did.
  */
 enum class AppColorPalette(val label: String) {
-    INDIGO("نيلي (افتراضي)"),
+    CLAUDE("كلود (افتراضي)"),
+    INDIGO("نيلي"),
     EMERALD("زمردي"),
     OCEAN("أزرق محيطي"),
     SUNSET("غروب"),
@@ -103,6 +104,13 @@ internal data class PaletteColors(
 )
 
 internal fun paletteColorsFor(palette: AppColorPalette): PaletteColors = when (palette) {
+    AppColorPalette.CLAUDE -> PaletteColors(
+        gradientStart = Claude40, gradientEnd = Sand40,
+        primaryLight = Claude40, primaryContainerLight = Claude80,
+        secondaryLight = Sand40, secondaryContainerLight = Sand80,
+        primaryDark = Claude80, onPrimaryDark = Color(0xFF3D1E0F), primaryContainerDark = Claude40,
+        secondaryDark = Sand80, onSecondaryDark = Color(0xFF32220F), secondaryContainerDark = Sand40,
+    )
     AppColorPalette.INDIGO -> PaletteColors(
         gradientStart = BrandGradientStart, gradientEnd = BrandGradientEnd,
         primaryLight = Indigo40, primaryContainerLight = Indigo80,

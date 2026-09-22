@@ -2,22 +2,24 @@ package com.shopmanager.app.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * iOS/SF Pro-inspired type scale: large headings get a touch of negative
- * letter-spacing (SF Pro Display tightens tracking as size grows, which is
- * part of what makes iOS headlines feel dense and confident rather than
- * loose), while small labels get slightly *positive* spacing so they stay
- * legible at 11–12sp instead of feeling cramped — the same tracking
- * direction UIKit uses between its Large Title and Caption styles. Sizes
- * bumped very slightly at the top of the scale for a bit more "hero" weight
- * on screen titles, matching the more generous corner radii in Theme.kt.
+ * Claude-app-inspired type scale: big screen titles ("Settings"-style) use a
+ * serif display face — the same touch the Claude Android app uses to give
+ * its headers a calmer, editorial feel instead of the tech-default sans —
+ * while every smaller/body role stays on the platform sans so paragraphs,
+ * labels, and buttons remain fast to read. Large headings keep a touch of
+ * negative letter-spacing so they stay dense rather than loose; small labels
+ * get slightly *positive* spacing so they stay legible at 11–12sp.
  */
+private val ClaudeSerif = FontFamily.Serif
+
 val AppTypography = Typography(
-    headlineSmall = TextStyle(fontWeight = FontWeight.Bold, fontSize = 23.sp, lineHeight = 29.sp, letterSpacing = (-0.4).sp),
-    titleLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 19.sp, lineHeight = 24.sp, letterSpacing = (-0.3).sp),
+    headlineSmall = TextStyle(fontFamily = ClaudeSerif, fontWeight = FontWeight.Normal, fontSize = 25.sp, lineHeight = 31.sp, letterSpacing = (-0.2).sp),
+    titleLarge = TextStyle(fontFamily = ClaudeSerif, fontWeight = FontWeight.Normal, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.1).sp),
     titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp, letterSpacing = (-0.2).sp),
     titleSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp, letterSpacing = (-0.1).sp),
     bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 23.sp, letterSpacing = 0.sp),

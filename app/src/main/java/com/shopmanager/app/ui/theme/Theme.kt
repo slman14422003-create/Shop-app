@@ -81,7 +81,7 @@ fun rememberIsDarkTheme(themeMode: AppThemeMode): Boolean {
 fun ShopManagerTheme(
     themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     colorMode: AppColorMode = AppColorMode.MANUAL,
-    colorPalette: AppColorPalette = AppColorPalette.INDIGO,
+    colorPalette: AppColorPalette = AppColorPalette.CLAUDE,
     content: @Composable () -> Unit
 ) {
     val useDark = rememberIsDarkTheme(themeMode)

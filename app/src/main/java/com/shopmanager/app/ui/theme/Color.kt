@@ -2,7 +2,19 @@ package com.shopmanager.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Brand (Indigo palette — the default)
+// Claude palette — warm terracotta/rust accent + muted sand secondary,
+// matching the Claude AI app's look (the new default palette; see
+// AppColorPalette.CLAUDE in Palette.kt). Because darkSchemeFor/lightSchemeFor
+// derive every background/surface tone from the selected palette's own hue
+// (see [hueOf]/[tone] in Palette.kt), picking this as the default palette is
+// what gives the *whole app* Claude's warm near-black dark mode and warm
+// cream light mode automatically, not just its accent color.
+val Claude80 = Color(0xFFF0C4AA)
+val Claude40 = Color(0xFFCC7A52)
+val Sand80 = Color(0xFFE8D6C3)
+val Sand40 = Color(0xFFA98763)
+
+// Brand (Indigo palette — kept as a secondary option)
 val Indigo80 = Color(0xFFC7D2FE)
 val Indigo40 = Color(0xFF4F46E5)
 val Violet80 = Color(0xFFDDD6FE)
