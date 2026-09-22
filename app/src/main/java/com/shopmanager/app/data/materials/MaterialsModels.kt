@@ -57,7 +57,20 @@ data class Material(
     // concept already used for a debt (see data.debts.Debt.note), now
     // available on a material shortage too.
     val notes: String = "",
-    val updatedAt: Long = 0L
+    val updatedAt: Long = 0L,
+    // FEATURE ADDED: "نجمة الأهمية" - marking a shortage as very important
+    // pins it to the top of the list (see [order] below); this flag only
+    // drives the star's filled/outlined look, the actual position is
+    // [order]'s job.
+    val important: Boolean = false,
+    // FEATURE ADDED: manual drag-to-reorder position (see MaterialsList's
+    // long-press drag). Ascending sort key - lower comes first. New
+    // materials default to `System.currentTimeMillis()` (see
+    // MaterialsRepository.addMaterial) so they land at the bottom of
+    // whatever manual order already exists, exactly like being appended to
+    // a list. Marking a material important reassigns this to one less than
+    // the current minimum, which is what actually moves it to the top.
+    val order: Long = 0L
 )
 
 /** A fixed catalog entry (the shop's own standing list of spice names). */

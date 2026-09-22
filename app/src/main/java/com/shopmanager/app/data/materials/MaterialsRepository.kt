@@ -44,10 +44,23 @@ class MaterialsRepository {
                             unit = doc.getString("unit") ?: MaterialUnit.KG.label,
                             section = doc.getString("section") ?: "main",
                             notes = doc.getString("notes") ?: "",
-                            updatedAt = doc.getLong("timestamp") ?: 0L
+                            updatedAt = doc.getLong("timestamp") ?: 0L,
+                            important = doc.getBoolean("important") ?: false,
+                            // Falls back to the write timestamp for any
+                            // document written before "order" existed, so
+                            // older shortages keep sorting in the
+                            // chronological order they always displayed in
+                            // (this used to be a name sort - see below).
+                            order = doc.getLong("order") ?: (doc.getLong("timestamp") ?: 0L)
                         )
                     }
-                    ?.sortedBy { it.name }
+                    // FEATURE ADDED ("ترتيب المواد بالضغط المطول"): sort is
+                    // now by the manual `order` field instead of
+                    // alphabetically by name - a manual drag reorder (and
+                    // marking something important, which pins it to the
+                    // top) wouldn't mean anything if the list snapped back
+                    // to A-Z on every recomposition.
+                    ?.sortedBy { it.order }
                     ?: emptyList()
                 trySend(items)
             }
@@ -118,13 +131,20 @@ class MaterialsRepository {
         withTimeout(WRITE_TIMEOUT_MS) {
             val ref = db.collection(materialsCollection).document()
             onIdAssigned(ref.id)
+            val now = System.currentTimeMillis()
             val data = mapOf(
                 "name" to name,
                 "quantity" to quantity,
                 "unit" to unit,
                 "section" to section,
                 "notes" to notes,
-                "timestamp" to System.currentTimeMillis()
+                "timestamp" to now,
+                "important" to false,
+                // Starts as "now", same as the old add-time sort, so a
+                // freshly added shortage lands at the bottom of the manual
+                // order rather than jumping in wherever a millisecond
+                // timestamp used for prior reorders happened to be.
+                "order" to now
             )
             ref.set(data).await()
             ref.id
@@ -146,6 +166,40 @@ class MaterialsRepository {
 
     suspend fun deleteMaterial(id: String) = withTimeout(WRITE_TIMEOUT_MS) {
         db.collection(materialsCollection).document(id).delete().await()
+        Unit
+    }
+
+    /**
+     * FEATURE ADDED ("نجمة الأهمية"): toggles the star. Marking a shortage
+     * important also pins it to the top by giving it `topOrder` (one less
+     * than the current minimum `order` in the list - see
+     * MaterialsViewModel.setImportant); un-marking it only flips the flag
+     * back off and leaves its position exactly where it already was.
+     */
+    suspend fun setImportant(id: String, important: Boolean, topOrder: Long? = null) =
+        withTimeout(WRITE_TIMEOUT_MS) {
+            val data = if (topOrder != null) mapOf("important" to important, "order" to topOrder)
+                else mapOf("important" to important)
+            db.collection(materialsCollection).document(id).update(data).await()
+            Unit
+        }
+
+    /**
+     * FEATURE ADDED ("ترتيب المواد بالضغط المطول وتحريكها"): persists a full
+     * drag-reorder in one batch - each id gets a fresh sequential `order`
+     * matching its new position in the list, so re-opening the app (or
+     * another device's listener) shows the exact order just dragged into
+     * place.
+     */
+    suspend fun updateMaterialsOrder(orderedIds: List<String>) = withTimeout(WRITE_TIMEOUT_MS) {
+        orderedIds.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { id ->
+                val position = orderedIds.indexOf(id)
+                batch.update(db.collection(materialsCollection).document(id), "order", position.toLong())
+            }
+            batch.commit().await()
+        }
         Unit
     }
 
@@ -185,6 +239,17 @@ class MaterialsRepository {
         Unit
     }
 
+    /**
+     * FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): renames a fixed
+     * catalog entry in place instead of deleting and re-adding it (which
+     * would also silently drop its saved price in [pricesCollection], since
+     * prices are keyed by name).
+     */
+    suspend fun updateCatalogItem(id: String, name: String) = withTimeout(WRITE_TIMEOUT_MS) {
+        db.collection(catalogCollection).document(id).update("name", name).await()
+        Unit
+    }
+
     /** One-off, server-sourced re-fetch used by pull-to-refresh — see
      * [com.shopmanager.app.data.debts.DebtsRepository.refreshFromServer]. */
     suspend fun refreshFromServer() = withTimeout(WRITE_TIMEOUT_MS) {
@@ -212,7 +277,9 @@ class MaterialsRepository {
                     unit = doc.getString("unit") ?: MaterialUnit.KG.label,
                     section = doc.getString("section") ?: "main",
                     notes = doc.getString("notes") ?: "",
-                    updatedAt = doc.getLong("timestamp") ?: 0L
+                    updatedAt = doc.getLong("timestamp") ?: 0L,
+                    important = doc.getBoolean("important") ?: false,
+                    order = doc.getLong("order") ?: (doc.getLong("timestamp") ?: 0L)
                 )
             }
             val prices = pricesSnap.documents.associate { it.id to (it.getDouble("price") ?: 0.0) }
@@ -249,7 +316,8 @@ class MaterialsRepository {
         val materialWrites = materials.filter { it.id.isNotBlank() }.map {
             db.collection(materialsCollection).document(it.id) to mapOf(
                 "name" to it.name, "quantity" to it.quantity, "unit" to it.unit,
-                "section" to it.section, "notes" to it.notes, "timestamp" to it.updatedAt
+                "section" to it.section, "notes" to it.notes, "timestamp" to it.updatedAt,
+                "important" to it.important, "order" to it.order
             )
         }
         val priceWrites = prices.map { (name, price) ->
