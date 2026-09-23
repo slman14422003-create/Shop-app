@@ -32,16 +32,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.AttachMoney
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,8 +90,8 @@ import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.notes.NotesScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.BottomNavItem
-import com.shopmanager.app.ui.common.FloatingBottomNav
+import com.shopmanager.app.ui.common.AppDrawerContent
+import com.shopmanager.app.ui.common.FloatingQuickActions
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.QuickAction
 import com.shopmanager.app.ui.common.WebViewScreen
@@ -535,6 +533,17 @@ private fun ShopManagerApp(
     var pendingMaterialHighlight by remember { mutableStateOf<String?>(null) }
     val pagerScope = rememberCoroutineScope()
 
+    // REDESIGN ("قائمة جانبية بدل الشريط السفلي"): tab switching no longer
+    // happens through a floating pill glued to the screen's bottom edge —
+    // a single hamburger button opens this Material3 side drawer instead,
+    // laid out like Claude's own app drawer (see AppDrawerContent.kt: a
+    // plain icon+label row per destination, الإعدادات pinned below a
+    // divider at the bottom instead of sitting in that same list). The
+    // pager/openPager() machinery underneath is unchanged — the drawer
+    // just drives the same `pagerState` the old pill used to.
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerScope = rememberCoroutineScope()
+
     // BUG FIXED ("ترابط بين جميع الانميشن"): tapping a bottom-nav tab (or a
     // notification landing on a specific tab) drove the SAME pager as
     // swiping between Home/Debts/Materials/Notes, but through
@@ -595,6 +604,12 @@ private fun ShopManagerApp(
     // double-padding for the exact same reason `adjustResize` was added
     // for in the first place.
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    // Still named `pillVisible` for the smallest possible diff against the
+    // FAB-clearance machinery below ([LocalFloatingBottomNavHeight],
+    // [FloatingQuickActions]) — it now also gates the hamburger menu
+    // button instead of a floating tab pill, same "hide it on screens
+    // that aren't the main pager, or while the keyboard covers it" rule
+    // as before.
     val pillVisible = showBottomBar && !imeVisible
 
     // PERF (low-end tier): a fade still allocates a graphicsLayer and runs
@@ -643,6 +658,27 @@ private fun ShopManagerApp(
     val density = LocalDensity.current
     var floatingNavHeight by remember { mutableStateOf(0.dp) }
 
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        // Only swipe-openable from the main pager tabs — same screens the
+        // old pill only ever showed on (`showBottomBar`) — so a swipe on
+        // Settings/PersonDetail/etc. doesn't fight that screen's own back
+        // gesture.
+        gesturesEnabled = showBottomBar,
+        drawerContent = {
+            AppDrawerContent(
+                selectedPage = pagerState.currentPage,
+                onSelectPage = { page ->
+                    openPager(page)
+                    drawerScope.launch { drawerState.close() }
+                },
+                onOpenSettings = {
+                    navController.navigate(ROUTE_SETTINGS)
+                    drawerScope.launch { drawerState.close() }
+                }
+            )
+        }
+    ) {
     Box(Modifier.fillMaxSize()) {
         // See the BUG FIXED note below (inside NavHost's transition params)
         // for why these are shaped the way they are — declared here, above
@@ -858,17 +894,32 @@ private fun ShopManagerApp(
         } // CompositionLocalProvider
 
         // Drawn AFTER (so visually on top of) NavHost above — a real
-        // overlay, not a layout slot with its own painted background. This
-        // is the piece that actually fixes the white/black rectangle: the
-        // pill now sits directly over whichever tab is currently showing,
-        // so its transparent margins reveal that tab's real content.
+        // overlay, not a layout slot with its own painted background.
         if (pillVisible) {
-            // REDESIGN: which quick-add action (if any) shows beside the
-            // pill follows the same `pagerState.currentPage` the pill's own
-            // `selectedIndex` below already tracks — one page, one source
-            // of truth for "what tab is this". Home has nothing to add, so
-            // it's null there and the button fades out entirely (see
-            // FloatingBottomNav's own AnimatedVisibility around it).
+            // "زر القائمة" (hamburger): opens the drawer declared on
+            // ModalNavigationDrawer above. Its own small glass circle
+            // (same QuickActionFab look every other floating button in
+            // this screen uses) rather than a header icon, since it needs
+            // to be reachable from all three main tabs — Home/Debts/
+            // Materials/Notes — not just whichever screen owns a top bar.
+            QuickActionFab(
+                action = QuickAction(
+                    icon = Icons.Default.Menu,
+                    contentDescription = "القائمة",
+                    onClick = { drawerScope.launch { drawerState.open() } }
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))
+                    .padding(20.dp)
+                    .size(48.dp)
+            )
+
+            // REDESIGN: which quick-add action (if any) shows follows the
+            // same `pagerState.currentPage` the drawer's own selection
+            // tracks — one page, one source of truth for "what tab is
+            // this". Home has nothing to add, so it's null there and the
+            // button fades out entirely.
             val quickAction = when (pagerState.currentPage) {
                 PAGE_DEBTS -> QuickAction(
                     icon = Icons.Default.Add,
@@ -904,24 +955,16 @@ private fun ShopManagerApp(
                     onClick = { savePricesRequested = true }
                 )
             } else null
-            FloatingBottomNav(
-                items = listOf(
-                    BottomNavItem(Icons.Default.Home, "الرئيسية"),
-                    BottomNavItem(Icons.Default.AttachMoney, "الديون"),
-                    BottomNavItem(Icons.Default.Inventory2, "المواد والأسعار"),
-                    BottomNavItem(Icons.Default.Notes, "ملاحظات هامة")
-                ),
-                selectedIndex = pagerState.currentPage,
-                onSelect = { page -> openPager(page) },
+            FloatingQuickActions(
                 quickAction = quickAction,
                 secondaryAction = secondaryAction,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     // Real measured layout height (margins included, since
-                    // this size is taken at FloatingBottomNav's own root —
-                    // see its Box in FloatingBottomNav.kt), converted from
-                    // px to dp with the current screen density. This is
-                    // what LocalFloatingBottomNavHeight above actually
+                    // this size is taken at FloatingQuickActions' own root
+                    // — see its Box in FloatingBottomNav.kt), converted
+                    // from px to dp with the current screen density. This
+                    // is what LocalFloatingBottomNavHeight above actually
                     // reflects.
                     .onSizeChanged { size ->
                         floatingNavHeight = with(density) { size.height.toDp() }
@@ -929,6 +972,7 @@ private fun ShopManagerApp(
             )
         }
     }
+    } // ModalNavigationDrawer
 
     // The confirmation dialog a tapped notification opens the app to show
     // ("تم تسديد الدين", "عميل جديد", "قائمة المشتريات"). Rendered as a
