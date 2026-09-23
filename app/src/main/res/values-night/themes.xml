@@ -2,10 +2,10 @@
 <!--
   Night-mode override: everything else (splash screen, ripple/edge colors,
   window animation style) stays identical to values/themes.xml — only
-  windowBackground changes, from the fixed brand indigo to this app's
+  windowBackground changes, from the fixed brand color to this app's
   actual dark-mode background (Color.kt's DarkBackground, #121218, via the
-  night-qualified background_light in values-night/colors.xml). Brand
-  indigo behind a *dark* first Compose frame was a mismatched flash for
+  night-qualified background_light in values-night/colors.xml). The brand
+  color behind a *dark* first Compose frame was a mismatched flash for
   roughly one frame during the splash → content handoff; matching tones
   removes that regardless of which theme the person is using.
 -->

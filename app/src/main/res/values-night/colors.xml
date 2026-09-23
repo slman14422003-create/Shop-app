@@ -10,10 +10,17 @@
   dark surface instead of staying a fixed color regardless of theme — one
   less possible flash of the wrong tone during the splash → first-frame
   handoff when the app is opened in dark mode.
+
+  FIXED (colors): ripple_brand/edge_glow_brand below used to be the old
+  Indigo80 pale lavender-blue, left over from before CLAUDE became the
+  default palette — mismatched against every actual on-screen accent in
+  dark mode. Now Claude80, the CLAUDE palette's own dark-mode primary (see
+  paletteColorsFor in Palette.kt), so touch feedback matches the real
+  accent here too.
 -->
 <resources>
-    <color name="brand_indigo">#4F46E5</color>
-    <color name="brand_violet">#7C3AED</color>
+    <color name="brand_claude_primary">#CC7A52</color>
+    <color name="brand_claude_secondary">#A98763</color>
 
     <color name="success_green">#16A34A</color>
     <color name="warning_amber">#F59E0B</color>
@@ -24,6 +31,6 @@
     <color name="background_light">#121218</color>
     <color name="surface_variant_light">#2A2A38</color>
 
-    <color name="ripple_brand">#40C7D2FE</color>
-    <color name="edge_glow_brand">#C7D2FE</color>
+    <color name="ripple_brand">#40F0C4AA</color>
+    <color name="edge_glow_brand">#F0C4AA</color>
 </resources>
