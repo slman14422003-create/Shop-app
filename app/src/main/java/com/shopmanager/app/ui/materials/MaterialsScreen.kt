@@ -74,7 +74,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
-import com.shopmanager.app.ui.theme.WarningAmber
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -737,7 +737,7 @@ private fun MaterialRow(
         // it's meant to be.
         border = BorderStroke(
             if (material.important) 1.5.dp else 1.dp,
-            if (material.important) WarningAmber.copy(alpha = 0.7f)
+            if (material.important) LocalSemanticColors.current.warning.copy(alpha = 0.7f)
             else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
         ),
         tonalElevation = 0.dp,
@@ -755,7 +755,7 @@ private fun MaterialRow(
                 Icon(
                     if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
-                    tint = if (material.important) WarningAmber else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = if (material.important) LocalSemanticColors.current.warning else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Box(
