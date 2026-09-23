@@ -99,8 +99,6 @@ import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
-import com.shopmanager.app.ui.theme.AppColorPalette
-import com.shopmanager.app.ui.theme.AppColorMode
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SetSystemBarsColor
 import com.shopmanager.app.ui.theme.ShopManagerTheme
@@ -262,8 +260,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings = remember { SettingsRepository(applicationContext) }
             var themeMode by remember { mutableStateOf(settings.themeMode) }
-            var colorPalette by remember { mutableStateOf(settings.colorPalette) }
-            var colorMode by remember { mutableStateOf(settings.colorMode) }
             var unlocked by remember { mutableStateOf(!settings.hasPin) }
 
             // "تفضيل الأداء": loaded once here (not re-read from disk on
@@ -311,7 +307,7 @@ class MainActivity : ComponentActivity() {
             }
 
             CompositionLocalProvider(LocalDensity provides clampedDensity) {
-            ShopManagerTheme(themeMode = themeMode, colorMode = colorMode, colorPalette = colorPalette) {
+            ShopManagerTheme(themeMode = themeMode) {
                 // "زجاجي بالكامل" (fully glass): the status bar is now
                 // always fully transparent (see the edge-to-edge window
                 // setup in onCreate above and SetSystemBarsColor below) —
@@ -417,8 +413,6 @@ class MainActivity : ComponentActivity() {
                                     ShopManagerApp(
                                         settings = settings,
                                         onThemeChanged = { themeMode = it },
-                                        onColorPaletteChanged = { colorPalette = it },
-                                        onColorModeChanged = { colorMode = it },
                                         onPerformancePreferenceChanged = { performancePreference = it },
                                         onRecheckDevicePerformance = onRecheckDevicePerformance,
                                         pendingNotificationAction = pendingNotificationAction,
@@ -483,8 +477,6 @@ class MainActivity : ComponentActivity() {
 private fun ShopManagerApp(
     settings: SettingsRepository,
     onThemeChanged: (AppThemeMode) -> Unit,
-    onColorPaletteChanged: (AppColorPalette) -> Unit,
-    onColorModeChanged: (AppColorMode) -> Unit,
     onPerformancePreferenceChanged: (PerformanceMode) -> Unit,
     onRecheckDevicePerformance: () -> Unit = {},
     pendingNotificationAction: NotificationAction? = null,
@@ -843,8 +835,6 @@ private fun ShopManagerApp(
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
                     onThemeChanged = onThemeChanged,
-                    onColorPaletteChanged = onColorPaletteChanged,
-                    onColorModeChanged = onColorModeChanged,
                     onPerformancePreferenceChanged = onPerformancePreferenceChanged,
                     onRecheckDevicePerformance = onRecheckDevicePerformance,
                     debtsViewModel = debtsViewModel,
