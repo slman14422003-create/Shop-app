@@ -3,7 +3,7 @@
     "زجاج سائل" launcher icon (API 26+ adaptive icon).
 
     background = the brand diagonal gradient (same colors as BrandGradient
-    in Kotlin, see colors.xml's brand_indigo/brand_violet).
+    in Kotlin, see colors.xml's brand_claude_primary/brand_claude_secondary).
     foreground = the glass orb + storefront glyph, generated with a soft
     drop shadow, a translucent gradient fill, a rim shadow, and a bright
     specular highlight to read as glass rather than a flat circle — see
