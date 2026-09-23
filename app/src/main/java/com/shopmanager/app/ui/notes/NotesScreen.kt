@@ -51,7 +51,7 @@ import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.listItemEntrance
-import com.shopmanager.app.ui.theme.SuccessGreen
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -461,7 +461,7 @@ private fun NoteRow(
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
                 ActionIconButton(
                     icon = if (note.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                    tint = if (note.isDone) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (note.isDone) LocalSemanticColors.current.success else MaterialTheme.colorScheme.onSurfaceVariant,
                     contentDescription = "تم",
                     onClick = onToggleDone
                 )
