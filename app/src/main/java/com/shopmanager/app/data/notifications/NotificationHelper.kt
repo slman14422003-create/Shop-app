@@ -56,13 +56,15 @@ object NotificationHelper {
     private const val GROUP_DEBTS = "com.shopmanager.app.GROUP_DEBTS"
     private const val NOTIF_ID_DEBTS_SUMMARY = 1900
 
-    // Same brand indigo as res/values/colors.xml's brand_indigo / the
-    // in-app theme (see ui/theme/Color.kt) — applied via setColor() below
-    // so the small icon's accent circle (API 21+ notification shade) and
-    // any heads-up banner tint match the rest of the app instead of
-    // falling back to a generic system grey, another piece of "الإشعارات
-    // مش متطورة" (the icon itself is fixed too — see ic_stat_notify.xml).
-    private val BRAND_COLOR = android.graphics.Color.parseColor("#4F46E5")
+    // Same Claude accent as res/values/colors.xml's brand_claude_primary /
+    // the in-app theme (see ui/theme/Color.kt's Claude40) — applied via
+    // setColor() below so the small icon's accent circle (API 21+
+    // notification shade) and any heads-up banner tint match the rest of
+    // the app instead of falling back to a generic system grey, another
+    // piece of "الإشعارات مش متطورة" (the icon itself is fixed too — see
+    // ic_stat_notify.xml). FIXED: this was still the old Indigo brand color
+    // from before CLAUDE became the app's default palette.
+    private val BRAND_COLOR = android.graphics.Color.parseColor("#CC7A52")
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
