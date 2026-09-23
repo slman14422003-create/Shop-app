@@ -120,10 +120,17 @@ fun GlassIconButton(
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonScale"
     )
-    val restingFillAlpha = 0.22f
+    // COLOR PRECISION FIX ("الوان التطبيق مانها بتشبة كلود ابدأ"): real
+    // Claude header icons (hamburger, share, the "i" info icon) sit flat on
+    // the background with no visible circle behind them at rest at all —
+    // just the bare icon — and only pick up a faint highlight on press.
+    // restingFillAlpha used to be 0.22f, a permanent faint white disc
+    // behind every one of these icons even when idle; now 0f so the icon
+    // is the only thing visible until touched.
+    val restingFillAlpha = 0f
     val restingRimAlpha = 0f
     val fillAlpha by animateFloatAsState(
-        targetValue = if (pressed) restingFillAlpha + 0.10f else restingFillAlpha,
+        targetValue = if (pressed) restingFillAlpha + 0.14f else restingFillAlpha,
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonFill"
     )
