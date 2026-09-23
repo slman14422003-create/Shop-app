@@ -1,3 +1,6 @@
+## v1.0.786 — 2026-09-23
+- Add padding import to MainActivity.kt
+
 ## v1.0.782 — 2026-09-23
 - تحسينات وإصلاحات عامة
 
