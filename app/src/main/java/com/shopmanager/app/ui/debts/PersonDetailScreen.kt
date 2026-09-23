@@ -49,9 +49,8 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.GlassCard
 import com.shopmanager.app.ui.notes.NoteEditScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
-import com.shopmanager.app.ui.theme.InfoBlue
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
-import com.shopmanager.app.ui.theme.SuccessGreen
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -395,14 +394,14 @@ fun PersonDetailScreen(
     payDebtTarget?.let { debt ->
         GlassAlertDialog(
             onDismissRequest = { payDebtTarget = null },
-            icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
+            icon = { Icon(Icons.Default.Check, contentDescription = null, tint = LocalSemanticColors.current.success) },
             title = { Text("تأكيد السداد") },
             text = { Text("هل \"${person.name}\" وفى ${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف هذا الدين من السجل وإرسال إشعار.") },
             confirmButton = {
                 TextButton(shape = RectangleShape, onClick = {
                     viewModel.markDebtAsPaid(debt, person.name)
                     payDebtTarget = null
-                }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
+                }) { Text("تم السداد", color = LocalSemanticColors.current.success, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { payDebtTarget = null }) { Text("إلغاء") } }
         )
@@ -410,7 +409,7 @@ fun PersonDetailScreen(
     if (showEditNameDialog) {
         GlassAlertDialog(
             onDismissRequest = { if (!isSavingName) showEditNameDialog = false },
-            icon = { Icon(Icons.Default.Edit, contentDescription = null, tint = InfoBlue) },
+            icon = { Icon(Icons.Default.Edit, contentDescription = null, tint = LocalSemanticColors.current.info) },
             title = { Text("تعديل اسم العميل") },
             text = {
                 AppTextField(
@@ -635,7 +634,7 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
             // removes the debt and fires a "paid" notification.
             ActionIconButton(
                 icon = Icons.Default.Check,
-                tint = SuccessGreen,
+                tint = LocalSemanticColors.current.success,
                 contentDescription = "تسجيل السداد",
                 onClick = onMarkPaid
             )
@@ -683,7 +682,7 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
             // device.
             ActionIconButton(
                 icon = Icons.Default.Edit,
-                tint = InfoBlue,
+                tint = LocalSemanticColors.current.info,
                 contentDescription = "تعديل",
                 onClick = onEdit
             )
@@ -714,7 +713,7 @@ private fun LinkedNoteRow(
         ) {
             ActionIconButton(
                 icon = if (note.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                tint = if (note.isDone) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (note.isDone) LocalSemanticColors.current.success else MaterialTheme.colorScheme.onSurfaceVariant,
                 contentDescription = "تم",
                 onClick = onToggleDone
             )
@@ -757,7 +756,7 @@ private fun LinkedNoteRow(
             }
             ActionIconButton(
                 icon = Icons.Default.Edit,
-                tint = InfoBlue,
+                tint = LocalSemanticColors.current.info,
                 contentDescription = "تعديل الملاحظة",
                 onClick = onEdit
             )
