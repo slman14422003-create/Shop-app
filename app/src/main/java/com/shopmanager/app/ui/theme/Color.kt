@@ -22,6 +22,90 @@ val Claude40 = Color(0xFFCC785C)
 val Sand80 = Color(0xFFE8D6C3)
 val Sand40 = Color(0xFFA98763)
 
+// ============================================================================
+// Claude design-system tokens — pulled 1:1 from the reference res/ design
+// (values/colors.xml + values-night/colors.xml): cream/terracotta light,
+// near-black/coral dark, exactly matching the real Claude.ai app. These are
+// what [claudeLightScheme]/[claudeDarkScheme] in Palette.kt build the CLAUDE
+// palette's actual ColorScheme from — replacing the generic hue-derived
+// tone() approximation with the reference design's literal values, so every
+// card/dialog/button/settings-row (all of which already read off
+// MaterialTheme.colorScheme) matches the reference pixel-for-pixel.
+// ============================================================================
+
+// Backgrounds — light: warm cream ladder; dark: near-black ladder.
+val ClaudeBgLight1 = Color(0xFFF5F4EE)
+val ClaudeBgLight2 = Color(0xFFF0EEE6)
+val ClaudeBgLight3 = Color(0xFFEAE7DD)
+val ClaudeBgDark1 = Color(0xFF131313)
+val ClaudeBgDark2 = Color(0xFF181818)
+val ClaudeBgDark3 = Color(0xFF1E1E1E)
+
+// Brand accent (the flat terracotta used for primary buttons/selection).
+val ClaudeOrangeLight = Color(0xFFC96442)
+val ClaudeOrangeDark = Color(0xFFD97757)
+val ClaudePrimaryDarkVariant = Color(0xFFAD5237) // primary_cyan_dark, light theme
+val ClaudePrimaryDarkVariantOnDark = Color(0xFFEFAA8B) // primary_cyan_dark, dark theme
+
+// Neutral secondary accent (settings icons, secondary chips).
+val ClaudeSecondaryLight = Color(0xFF6A6968)
+val ClaudeSecondaryDark = Color(0xFFB7B4AC)
+
+// Card / dialog / settings-group fill — the literal "glass_fill_strong".
+val ClaudeCardLight = Color(0xFFFFFFFF)
+val ClaudeCardDark = Color(0xFF1F1F1F)
+val ClaudeCardSoftLight = Color(0xFFFAF9F5)
+val ClaudeCardSoftDark = Color(0xFF1A1A1A)
+
+// Borders.
+val ClaudeBorderLight = Color(0xFFE7E4DA)
+val ClaudeBorderSoftLight = Color(0xFFEEEBE2)
+val ClaudeBorderDark = Color(0xFF333333)
+val ClaudeBorderSoftDark = Color(0xFF2A2A2A)
+
+// Text.
+val ClaudeTextPrimaryLight = Color(0xFF3D3929)
+val ClaudeTextSecondaryLight = Color(0xFF78766D)
+val ClaudeTextTertiaryLight = Color(0xFFA6A399)
+val ClaudeTextPrimaryDark = Color(0xFFF2F2F2)
+val ClaudeTextSecondaryDark = Color(0xFFA6A6A6)
+val ClaudeTextTertiaryDark = Color(0xFF7C7C7C)
+
+// Semantic accents (red/green/gold).
+val ClaudeAccentRedLight = Color(0xFFBC4C34)
+val ClaudeAccentRedDarkVariantLight = Color(0xFF96392A)
+val ClaudeAccentGreenLight = Color(0xFF5F8768)
+val ClaudeAccentGoldLight = Color(0xFFB07A2E)
+val ClaudeAccentRedDark = Color(0xFFE0916D)
+val ClaudeAccentRedDarkVariantDark = Color(0xFFEFAA8B)
+val ClaudeAccentGreenDark = Color(0xFF8CB894)
+val ClaudeAccentGoldDark = Color(0xFFD3A461)
+
+// Material3 role fills, straight from the reference m3_* tokens.
+val ClaudeM3PrimaryContainerLight = Color(0xFFF2D9CB)
+val ClaudeM3OnPrimaryContainerLight = Color(0xFF5A2A15)
+val ClaudeM3SecondaryContainerLight = Color(0xFFE7E5DC)
+val ClaudeM3OnSecondaryContainerLight = Color(0xFF302E29)
+val ClaudeM3TertiaryContainerLight = Color(0xFFF2E1C0)
+val ClaudeM3OnTertiaryContainerLight = Color(0xFF452F0E)
+val ClaudeM3SurfaceVariantLight = Color(0xFFF0EDE4)
+val ClaudeM3ErrorContainerLight = Color(0xFFF5D6CC)
+val ClaudeM3OnErrorContainerLight = Color(0xFF571C0E)
+val ClaudeM3SurfaceContainerLight = Color(0xFFF2F0E8)
+val ClaudeM3SurfaceContainerHighLight = Color(0xFFEAE7DD)
+
+val ClaudeM3PrimaryContainerDark = Color(0xFF583020)
+val ClaudeM3OnPrimaryContainerDark = Color(0xFFFADACB)
+val ClaudeM3SecondaryContainerDark = Color(0xFF2E2E2E)
+val ClaudeM3OnSecondaryContainerDark = Color(0xFFE4E4E4)
+val ClaudeM3TertiaryContainerDark = Color(0xFF4A3820)
+val ClaudeM3OnTertiaryContainerDark = Color(0xFFF6D9A9)
+val ClaudeM3SurfaceVariantDark = Color(0xFF2B2B2B)
+val ClaudeM3ErrorContainerDark = Color(0xFF5A2820)
+val ClaudeM3OnErrorContainerDark = Color(0xFFFFDAD2)
+val ClaudeM3SurfaceContainerDark = Color(0xFF1B1B1B)
+val ClaudeM3SurfaceContainerHighDark = Color(0xFF2B2B2B)
+
 // Brand (Indigo palette — kept as a secondary option)
 val Indigo80 = Color(0xFFC7D2FE)
 val Indigo40 = Color(0xFF4F46E5)

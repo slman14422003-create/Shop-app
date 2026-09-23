@@ -104,12 +104,19 @@ internal data class PaletteColors(
 )
 
 internal fun paletteColorsFor(palette: AppColorPalette): PaletteColors = when (palette) {
+    // NOTE: CLAUDE's actual ColorScheme is no longer built from these tones
+    // via [lightSchemeFor]/[darkSchemeFor]'s generic hue-derived tone()
+    // engine — [ShopManagerTheme] routes CLAUDE straight to
+    // [claudeLightScheme]/[claudeDarkScheme] instead, which use the
+    // reference design's literal color values. This entry is kept in sync
+    // with those exact values anyway, since it still feeds the palette
+    // swatch preview circle in Settings (see ColorPaletteSwatch).
     AppColorPalette.CLAUDE -> PaletteColors(
-        gradientStart = Claude40, gradientEnd = Sand40,
-        primaryLight = Claude40, primaryContainerLight = Claude80,
-        secondaryLight = Sand40, secondaryContainerLight = Sand80,
-        primaryDark = Claude80, onPrimaryDark = Color(0xFF3D1E0F), primaryContainerDark = Claude40,
-        secondaryDark = Sand80, onSecondaryDark = Color(0xFF32220F), secondaryContainerDark = Sand40,
+        gradientStart = ClaudeOrangeLight, gradientEnd = ClaudeOrangeLight,
+        primaryLight = ClaudeOrangeLight, primaryContainerLight = ClaudeM3PrimaryContainerLight,
+        secondaryLight = ClaudeSecondaryLight, secondaryContainerLight = ClaudeM3SecondaryContainerLight,
+        primaryDark = ClaudeOrangeDark, onPrimaryDark = Color(0xFF2B140A), primaryContainerDark = ClaudeM3PrimaryContainerDark,
+        secondaryDark = ClaudeSecondaryDark, onSecondaryDark = ClaudeBgDark1, secondaryContainerDark = ClaudeM3SecondaryContainerDark,
     )
     AppColorPalette.INDIGO -> PaletteColors(
         gradientStart = BrandGradientStart, gradientEnd = BrandGradientEnd,
@@ -386,6 +393,97 @@ internal fun neutralDarkScheme(): ColorScheme = darkColorScheme(
     surfaceContainerHigh = tone(0f, 0f, 0.20f),
     surfaceContainerHighest = tone(0f, 0f, 0.235f),
     error = Color(0xFFFF6B6B),
+)
+
+/**
+ * [AppColorPalette.CLAUDE]'s exact ColorScheme, built directly from the
+ * reference Claude.ai design's literal color tokens (see the `Claude*`
+ * constants in Color.kt, copied 1:1 from that design's
+ * values/colors.xml + values-night/colors.xml) instead of
+ * [lightSchemeFor]'s generic hue-derived [tone] approximation that every
+ * other palette still uses. Every shared component that paints itself from
+ * `MaterialTheme.colorScheme` — [com.shopmanager.app.ui.common.GlassCard],
+ * [com.shopmanager.app.ui.common.GlassAlertDialog], settings rows, headers,
+ * pill buttons — therefore matches the reference design exactly wherever
+ * CLAUDE (the app's default palette) is selected, since `surfaceContainerHigh`
+ * here is the reference's literal `glass_fill_strong` (the flat white/near-
+ * black fill its bg_glass_card / bg_settings_group / bg_dialog_card
+ * drawables all use), not a computed tint.
+ */
+internal fun claudeLightScheme(): ColorScheme = lightColorScheme(
+    primary = ClaudeOrangeLight,
+    onPrimary = Color.White,
+    primaryContainer = ClaudeM3PrimaryContainerLight,
+    onPrimaryContainer = ClaudeM3OnPrimaryContainerLight,
+    secondary = ClaudeSecondaryLight,
+    onSecondary = Color.White,
+    secondaryContainer = ClaudeM3SecondaryContainerLight,
+    onSecondaryContainer = ClaudeM3OnSecondaryContainerLight,
+    tertiary = ClaudeAccentGoldLight,
+    onTertiary = Color.White,
+    tertiaryContainer = ClaudeM3TertiaryContainerLight,
+    onTertiaryContainer = ClaudeM3OnTertiaryContainerLight,
+    error = ClaudeAccentRedLight,
+    onError = Color.White,
+    errorContainer = ClaudeM3ErrorContainerLight,
+    onErrorContainer = ClaudeM3OnErrorContainerLight,
+    background = ClaudeBgLight1,
+    onBackground = ClaudeTextPrimaryLight,
+    surface = ClaudeBgLight1,
+    onSurface = ClaudeTextPrimaryLight,
+    surfaceVariant = ClaudeM3SurfaceVariantLight,
+    onSurfaceVariant = ClaudeTextSecondaryLight,
+    surfaceTint = ClaudeOrangeLight,
+    outline = ClaudeTextTertiaryLight,
+    outlineVariant = ClaudeBorderLight,
+    inverseSurface = ClaudeCardDark,
+    inverseOnSurface = ClaudeTextPrimaryDark,
+    inversePrimary = ClaudePrimaryDarkVariantOnDark,
+    // The exact "glass" ladder: cards/dialogs/settings-groups/headers all
+    // read surfaceContainerHigh, which is the reference's literal
+    // glass_fill_strong — pure white, with a hairline glass_border drawn
+    // separately by each component's own .border() call.
+    surfaceContainerLowest = ClaudeCardSoftLight,
+    surfaceContainerLow = ClaudeBgLight2,
+    surfaceContainer = ClaudeM3SurfaceContainerLight,
+    surfaceContainerHigh = ClaudeCardLight,
+    surfaceContainerHighest = ClaudeM3SurfaceContainerHighLight,
+)
+
+internal fun claudeDarkScheme(): ColorScheme = darkColorScheme(
+    primary = ClaudeOrangeDark,
+    onPrimary = Color(0xFF2B140A),
+    primaryContainer = ClaudeM3PrimaryContainerDark,
+    onPrimaryContainer = ClaudeM3OnPrimaryContainerDark,
+    secondary = ClaudeSecondaryDark,
+    onSecondary = ClaudeBgDark1,
+    secondaryContainer = ClaudeM3SecondaryContainerDark,
+    onSecondaryContainer = ClaudeM3OnSecondaryContainerDark,
+    tertiary = ClaudeAccentGoldDark,
+    onTertiary = Color(0xFF241A0D),
+    tertiaryContainer = ClaudeM3TertiaryContainerDark,
+    onTertiaryContainer = ClaudeM3OnTertiaryContainerDark,
+    error = ClaudeAccentRedDark,
+    onError = Color(0xFF35110A),
+    errorContainer = ClaudeM3ErrorContainerDark,
+    onErrorContainer = ClaudeM3OnErrorContainerDark,
+    background = ClaudeBgDark1,
+    onBackground = ClaudeTextPrimaryDark,
+    surface = ClaudeBgDark1,
+    onSurface = ClaudeTextPrimaryDark,
+    surfaceVariant = ClaudeM3SurfaceVariantDark,
+    onSurfaceVariant = ClaudeTextSecondaryDark,
+    surfaceTint = ClaudeOrangeDark,
+    outline = ClaudeTextTertiaryDark,
+    outlineVariant = ClaudeBorderDark,
+    inverseSurface = ClaudeCardLight,
+    inverseOnSurface = ClaudeTextPrimaryLight,
+    inversePrimary = ClaudePrimaryDarkVariant,
+    surfaceContainerLowest = ClaudeBgDark1,
+    surfaceContainerLow = ClaudeBgDark2,
+    surfaceContainer = ClaudeM3SurfaceContainerDark,
+    surfaceContainerHigh = ClaudeCardDark,
+    surfaceContainerHighest = ClaudeM3SurfaceContainerHighDark,
 )
 
 internal fun lightSchemeFor(p: PaletteColors): ColorScheme {

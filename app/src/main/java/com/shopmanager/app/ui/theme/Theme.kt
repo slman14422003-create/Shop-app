@@ -114,11 +114,19 @@ fun ShopManagerTheme(
     // intentional hueless black/white escape hatch, and DYNAMIC reads the
     // wallpaper exactly as [effectiveColorMode]/[usingWallpaperColor] above
     // were already computed to support.
-    val colors = remember(useDark, effectiveColorMode, paletteColors, context) {
+    val colors = remember(useDark, effectiveColorMode, colorPalette, paletteColors, context) {
         when (effectiveColorMode) {
             AppColorMode.CLASSIC -> if (useDark) neutralDarkScheme() else neutralLightScheme()
             AppColorMode.DYNAMIC -> dynamicSchemeFor(context, useDark)
-            AppColorMode.MANUAL -> if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
+            // CLAUDE (the app's default) uses the reference Claude.ai design's
+            // exact color tokens instead of the generic hue-derived tone()
+            // approximation every other hand-tuned palette still uses — see
+            // claudeLightScheme()/claudeDarkScheme() in Palette.kt.
+            AppColorMode.MANUAL -> if (colorPalette == AppColorPalette.CLAUDE) {
+                if (useDark) claudeDarkScheme() else claudeLightScheme()
+            } else {
+                if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
+            }
         }
     }
 
