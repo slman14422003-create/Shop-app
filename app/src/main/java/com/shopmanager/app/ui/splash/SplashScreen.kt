@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shopmanager.app.ui.common.BrandGradient
+import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.LiquidGlassGlow
 import com.shopmanager.app.ui.common.liquidGlassSurface
 
@@ -125,7 +126,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
                 .size(420.dp)
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.14f), Color.Transparent)
+                        colors = listOf(BrandOnGradient.copy(alpha = 0.14f), Color.Transparent)
                     )
                 )
         )
@@ -145,7 +146,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
 
             Text(
                 "إدارة المحل",
-                color = Color.White,
+                color = BrandOnGradient,
                 fontWeight = FontWeight.Bold,
                 style = MaterialTheme.typography.headlineMedium.copy(fontSize = 30.sp, letterSpacing = 0.2.sp),
                 textAlign = TextAlign.Center
@@ -153,7 +154,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
             Spacer(Modifier.height(8.dp))
             Text(
                 "استقرار لإدارة المحل",
-                color = Color.White.copy(alpha = 0.82f),
+                color = BrandOnGradient.copy(alpha = 0.82f),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
@@ -184,18 +185,18 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
                 Modifier
                     .width(28.dp)
                     .height(1.dp)
-                    .background(Color.White.copy(alpha = 0.35f))
+                    .background(BrandOnGradient.copy(alpha = 0.35f))
             )
             Spacer(Modifier.height(10.dp))
             Box(
                 Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(Color.White.copy(alpha = 0.10f))
+                    .background(BrandOnGradient.copy(alpha = 0.10f))
                     .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
                 Text(
                     "تطوير المعالج الفيزيائي سلمان",
-                    color = Color.White.copy(alpha = 0.75f),
+                    color = BrandOnGradient.copy(alpha = 0.75f),
                     style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.3.sp),
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center
@@ -225,7 +226,7 @@ private fun LiquidGlassLogo() {
         Box(
             Modifier
                 .size(104.dp)
-                .border(1.dp, Color.White.copy(alpha = 0.28f), CircleShape)
+                .border(1.dp, BrandOnGradient.copy(alpha = 0.28f), CircleShape)
         )
         Box(
             Modifier
@@ -236,7 +237,7 @@ private fun LiquidGlassLogo() {
             Icon(
                 Icons.Filled.Storefront,
                 contentDescription = null,
-                tint = Color.White,
+                tint = BrandOnGradient,
                 modifier = Modifier.size(44.dp)
             )
         }
