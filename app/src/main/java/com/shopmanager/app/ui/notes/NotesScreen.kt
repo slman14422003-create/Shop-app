@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.PushPin
@@ -86,7 +87,8 @@ fun NotesScreen(
     onOpenMaterials: (String) -> Unit,
     viewModel: NotesViewModel = viewModel(),
     addNoteRequested: Boolean = false,
-    onAddNoteRequestHandled: () -> Unit = {}
+    onAddNoteRequestHandled: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     val state = viewModel.uiState.collectAsState().value
     val message = viewModel.message.collectAsState().value
@@ -157,6 +159,7 @@ fun NotesScreen(
                 title = { Text("ملاحظات هامة", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
+                    navigationIconContentColor = BrandOnGradient,
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
@@ -167,7 +170,17 @@ fun NotesScreen(
                     RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
                     highlight = false,
                     baseAlpha = 0.72f
-                )
+                ),
+                // BUG FIXED ("الأيقونة فوق الكلمة"): same fix as
+                // DebtsScreen/DashboardScreen/MaterialsScreen — the
+                // hamburger is this bar's own `navigationIcon` now, not a
+                // floating overlay from MainActivity sitting on top of the
+                // title in the same corner.
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "القائمة")
+                    }
+                }
             )
         }
     ) { padding ->
