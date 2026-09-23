@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Spa
@@ -44,10 +45,7 @@ import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
-import com.shopmanager.app.ui.common.BrandOnGradient
-import com.shopmanager.app.ui.common.GradientIconButton
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -111,7 +109,8 @@ fun DashboardScreen(
     onOpenSettings: () -> Unit,
     onNavigateToDebts: () -> Unit = {},
     onNavigateToMaterials: () -> Unit = {},
-    onOpenAdmin: () -> Unit = {}
+    onOpenAdmin: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     var showAdminPinDialog by remember { mutableStateOf(false) }
     // SECURITY FIX: "1442" is a fixed 4-digit password with no attempt
@@ -198,7 +197,8 @@ fun DashboardScreen(
             item {
                 DashboardHeader(
                     onOpenSettings = onOpenSettings,
-                    onAdminTap = { showAdminPinDialog = true }
+                    onAdminTap = { showAdminPinDialog = true },
+                    onOpenDrawer = onOpenDrawer
                 )
             }
 
@@ -415,17 +415,31 @@ fun DashboardScreen(
     }
 }
 
-/**
- * Large-title header, iOS-style: a bold oversized title with a small
- * secondary greeting above it, sitting on a flat brand-gradient panel with
- * softly rounded bottom corners instead of a hard-edged bar. The settings
- * affordance is a solid opaque circular button ([GradientIconButton]) — no
- * translucency/blur — which is what was reading as dated before (a plain
- * unstyled gear glyph floating directly on the gradient with no shape of
- * its own).
- */
+// REDESIGN ("افصل الشاشة الرئيسية عن بقية الشاشات" + "البار العلوي متل
+// Claude AI"): every other tab (Debts/Materials/Notes) opens with the same
+// boxed liquid-glass panel — a title sitting on a brand-gradient card with
+// rounded bottom corners. Home used to share that exact same treatment
+// ("إدارة المحل" on its own gradient card), which is exactly why it read as
+// just one more tab instead of the app's actual home screen, and why the
+// floating hamburger circle that used to sit on top of it visually
+// collided with that card's own title text in the same top-right corner.
+// Claude's own home screen ("Back at it, S") never puts its greeting on a
+// boxed card at all — just a transparent top bar (a plain menu icon, no
+// title) with the greeting sitting directly on the app's background right
+// below it. This header now follows that same split: a slim, fully
+// transparent row for the hamburger (a real layout element, not a floating
+// overlay — see MainActivity, which no longer draws one at all) and the
+// settings/admin buttons, then the greeting + "إدارة المحل" underneath,
+// also directly on the plain background. Nothing here can overlap the
+// hamburger anymore because the hamburger now *is* part of this layout
+// instead of a separate layer floating on top of it, and Home now visibly
+// stands apart from the boxed-card look every other tab keeps.
 @Composable
-private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit = {}) {
+private fun DashboardHeader(
+    onOpenSettings: () -> Unit,
+    onAdminTap: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
+) {
     // BUG FIXED ("صباح الخير" عالقة طول اليوم): `remember { timeBasedGreeting() }`
     // كان يُحسب مرة واحدة بس، أول ما هالهيدر يدخل التركيب — وبما إن تبويب
     // الرئيسية (صفحة بالـ HorizontalPager) يضل حي طول عمر التطبيق (ما
@@ -442,76 +456,63 @@ private fun DashboardHeader(onOpenSettings: () -> Unit, onAdminTap: () -> Unit =
             greeting = timeBasedGreeting()
         }
     }
-    Box(
+    Column(
         Modifier
             .fillMaxWidth()
-            // "زجاج سائل بشكل مذهل": this is the single most-seen surface
-            // in the app (the very first thing drawn every time it opens),
-            // so it's the one header that opts into the extra animated
-            // sheen sweep on top of the shared drift highlight every glass
-            // panel already has — see liquidGlassSurface's `sheen` param.
-            // طلب "تعميم ستايل الزجاج": highlight = false يطفي نفس اللمعة
-            // المطفاة أصلاً بـ GlassAlertDialog، وbaseAlpha = 0.72f يفتح
-            // شفافية حقيقية على تدرّج العلامة (كان دايمًا معتم 100%) بدل
-            // الاعتماد فقط على طبقات اللمعة لإيحاء الزجاج.
-            .liquidGlassSurface(
-                RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                highlight = false,
-                baseAlpha = 0.72f
-            )
-            // The glass panel (background/border above) already fills this
-            // Box's full bounds, which now extend up behind the
-            // transparent status bar; this only pushes the *content*
-            // (greeting/title/settings button) down far enough to clear
-            // the status bar icons, so it reads as one continuous glass
-            // surface from the true top of the screen instead of a seam
-            // between the system bar and the header.
+            // No liquidGlassSurface here on purpose (see the class-level
+            // REDESIGN note above) — Home sits directly on the app's plain
+            // background, unlike the boxed gradient card every other tab's
+            // header uses. This only clears the transparent status bar.
             .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = 20.dp, vertical = 22.dp)
+            .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        greeting.icon,
-                        contentDescription = null,
-                        tint = BrandOnGradient.copy(alpha = 0.78f),
-                        modifier = Modifier.size(15.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        greeting.text,
-                        color = BrandOnGradient.copy(alpha = 0.78f),
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "إدارة المحل",
-                    color = BrandOnGradient,
-                    style = MaterialTheme.typography.headlineSmall.copy(fontSize = 27.sp, lineHeight = 33.sp),
-                    fontWeight = FontWeight.Bold
+        // "البار العلوي" (top bar): a slim, transparent row — hamburger on
+        // the leading edge, settings/admin trailing — laid out inline like
+        // Claude's own top bar, never floating over anything below it.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(
+                    Icons.Default.Menu,
+                    contentDescription = "القائمة",
+                    tint = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Spacer(Modifier.width(10.dp))
-            GradientIconButton(icon = Icons.Rounded.Settings, contentDescription = "الإعدادات", onClick = onOpenSettings)
-            // BUG FIXED: this was only 10.dp, which reads as glued/touching
-            // once IconButton's own minimum-touch-target sizing is taken
-            // into account — the two glass circles visually met with no
-            // gap. Widened to a clearly organized gap between the two
-            // header buttons.
-            Spacer(Modifier.width(18.dp))
-            // زر لوحة المسؤول: بزر زجاجي حقيقي وواضح بجانب زر الإعدادات
-            // بمسافة كافية بينهما — مو نقطة مخفية بزاوية الهيدر متل قبل.
-            // نفس منطق فتح صندوق رمز الدخول (onAdminTap) ما تغيّر، بس صار
-            // الزر يشوفه أي مستخدم عادي.
-            GradientIconButton(
-                icon = Icons.Rounded.AdminPanelSettings,
-                contentDescription = "لوحة المسؤول",
-                onClick = onAdminTap
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Rounded.Settings, contentDescription = "الإعدادات", tint = MaterialTheme.colorScheme.onSurface)
+            }
+            // زر لوحة المسؤول: بجانب زر الإعدادات مباشرة — نفس منطق فتح
+            // صندوق رمز الدخول (onAdminTap) ما تغيّر.
+            IconButton(onClick = onAdminTap) {
+                Icon(Icons.Rounded.AdminPanelSettings, contentDescription = "لوحة المسؤول", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        // Greeting + title sit directly on the plain background, right
+        // below the transparent top bar — matching Claude's own "Back at
+        // it, S" home greeting instead of a boxed gradient card.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                greeting.icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                greeting.text,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium
             )
         }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "إدارة المحل",
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 27.sp, lineHeight = 33.sp),
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
