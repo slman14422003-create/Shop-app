@@ -5,7 +5,7 @@
       OS's default starting window was blank/white, and only once Compose
       finished its first composition did SetSystemBarsColor (in
       MainActivity.kt) repaint the status/nav bars to the brand color.
-      That white→indigo repaint, landing while Firebase/WorkManager/tier
+      That white→brand-color repaint, landing while Firebase/WorkManager/tier
       detection were still doing work on the main thread (see
       AndroidManifest.xml and MainActivity.kt), is what read as the app
       "shaking" for the first couple of seconds — content and system-bar
@@ -19,7 +19,7 @@
       to show — so the phone never shows a half-finished frame.
     -->
     <style name="Theme.ShopManager.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/brand_indigo</item>
+        <item name="windowSplashScreenBackground">@color/brand_claude_primary</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.ShopManager</item>
     </style>
@@ -44,7 +44,7 @@
          background underneath is already the right color instead of a
          white flash. -->
     <style name="Theme.ShopManager" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/brand_indigo</item>
+        <item name="android:windowBackground">@color/brand_claude_primary</item>
         <item name="android:windowAnimationStyle">@style/Theme.ShopManager.WindowAnimations</item>
 
         <!-- Ripple/touch-feedback tint on every tap, and the color of the

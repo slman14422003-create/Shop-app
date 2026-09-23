@@ -1,11 +1,17 @@
 <resources>
-    <!-- Brand — same values as ui/theme/Color.kt (BrandGradientStart/End),
-         kept here too because the splash screen / window background below
-         are drawn before any Compose/Kotlin code runs and can't reference
-         a Compose Color directly. Mirroring the exact hex keeps the splash
-         → first Compose frame handoff seamless (no color jump). -->
-    <color name="brand_indigo">#4F46E5</color>
-    <color name="brand_violet">#7C3AED</color>
+    <!-- Brand — same values as ui/theme/Color.kt's Claude40/Sand40 (the
+         CLAUDE palette's primaryLight/secondaryLight — see paletteColorsFor
+         in Palette.kt), kept here too because the splash screen / window
+         background below are drawn before any Compose/Kotlin code runs and
+         can't reference a Compose Color directly. FIXED: these used to
+         still be the old Indigo/Violet pair from before CLAUDE became the
+         app's default palette, so the splash screen flashed blue/purple
+         then handed off to Compose's actual warm terracotta theme — the
+         exact "flash of the wrong tone" this file's own handoff comments
+         warn about, just for a different color. Mirroring the exact hex
+         keeps the splash → first Compose frame handoff seamless again. -->
+    <color name="brand_claude_primary">#CC7A52</color>
+    <color name="brand_claude_secondary">#A98763</color>
 
     <!-- Semantic — mirrors Color.kt's SuccessGreen/WarningAmber/DangerRed/
          InfoBlue so anything drawn outside Compose (notification tint,
@@ -28,7 +34,9 @@
          read as generic/off-brand on every tap and every over-scroll.
          Tying them to the brand color instead makes even the smallest,
          most frequent touch feedback in the app feel like part of one
-         cohesive design instead of stock platform chrome. -->
-    <color name="ripple_brand">#334F46E5</color>
-    <color name="edge_glow_brand">#4F46E5</color>
+         cohesive design instead of stock platform chrome. Now the CLAUDE
+         palette's own light-mode primary (Claude40) instead of the old
+         Indigo value, so touch feedback matches the actual on-screen accent. -->
+    <color name="ripple_brand">#33CC7A52</color>
+    <color name="edge_glow_brand">#CC7A52</color>
 </resources>
