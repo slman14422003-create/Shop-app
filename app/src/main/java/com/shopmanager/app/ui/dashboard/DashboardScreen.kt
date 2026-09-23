@@ -178,12 +178,21 @@ fun DashboardScreen(
             onRefresh = { debtsViewModel.refresh(); materialsViewModel.refresh() },
             modifier = Modifier.padding(padding)
         ) {
-        // BUG FIXED: same as the other two pager tabs — the floating nav
-        // pill floats over this screen too, so its last card needs to
-        // clear the pill's real measured height, not just a flat 16dp.
+        // BUG FIXED ("آخر عنصر بالقائمة بيصير تحت الشريط السفلي"): same as
+        // the other pager tabs — the floating nav pill floats over this
+        // screen too, so the last card needs to clear the pill's real
+        // measured height, not just a flat gap. The flat gap on top of that
+        // was only 16.dp, noticeably thinner than every other tab's own
+        // clearance (Debts/Materials/Notes all reserve 32.dp+ beyond the
+        // pill) — on the one tab with the longest list (the shortage/market
+        // list below, which can run past a screen's worth of rows), that
+        // thinner gap was exactly what let the last row or two sit close
+        // enough to peek out from behind the pill's transparent side
+        // margins instead of clearing it with a visible gap like everywhere
+        // else. Matched to the same 32.dp the other tabs use.
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 16.dp + LocalFloatingBottomNavHeight.current),
+            contentPadding = PaddingValues(bottom = 32.dp + LocalFloatingBottomNavHeight.current),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
@@ -246,14 +255,28 @@ fun DashboardScreen(
 
             if (shortages.isNotEmpty()) {
                 item {
+                    // BUG FIXED ("قائمة المشتريات شكلها مو مرتب"): a bare
+                    // stack of name/quantity Rows with no separator between
+                    // them read as one dense, undifferentiated block of
+                    // text next to "آخر النشاطات" right below it (which has
+                    // a proper icon, two-line text, and its own row
+                    // height) — noticeably plainer than everywhere else in
+                    // the app once this list runs past a few items. A thin
+                    // divider between rows (not after the last one) gives
+                    // each item its own visual line without adding a full
+                    // bordered card per row, and the extra vertical padding
+                    // gives every row a bit more room to breathe.
                     SectionCard(title = "🛒 قائمة مشتريات السوق", color = marketAccent) {
-                        shortages.forEach { m ->
+                        shortages.forEachIndexed { index, m ->
                             Row(
-                                Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                Modifier.fillMaxWidth().padding(vertical = 8.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(m.name)
                                 Text(m.quantityLabel(), color = marketAccent, fontWeight = FontWeight.Medium)
+                            }
+                            if (index != shortages.lastIndex) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                             }
                         }
                     }
