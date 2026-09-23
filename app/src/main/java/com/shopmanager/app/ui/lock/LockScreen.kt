@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandGradient
+import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.LiquidGlassGlow
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import kotlinx.coroutines.delay
@@ -132,7 +133,7 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                         .liquidGlassSurface(CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = BrandOnGradient, modifier = Modifier.size(38.dp))
                 }
             }
 
