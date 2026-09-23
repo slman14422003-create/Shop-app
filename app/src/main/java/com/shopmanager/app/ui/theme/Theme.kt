@@ -141,6 +141,7 @@ fun ShopManagerTheme(
     val gradientColors = remember(colors) {
         listOf(colors.surfaceContainerHigh, colors.surfaceContainerHigh)
     }
+    val semanticColors = remember(colorPalette, useDark) { semanticColorsFor(colorPalette, useDark) }
 
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Rtl,
@@ -148,7 +149,11 @@ fun ShopManagerTheme(
         // Read by GlassAlertDialog so its brand-tint blend can avoid the
         // same pale tone-80 primary/tertiary roles dynamicGradientColors
         // already avoids for the header/nav.
-        LocalDynamicDarkMode provides (usingWallpaperColor && useDark)
+        LocalDynamicDarkMode provides (usingWallpaperColor && useDark),
+        // Status-icon colors (success/warning/danger/info) — see
+        // [SemanticColors]'s doc: exact reference accents under CLAUDE,
+        // unchanged flat constants for every other palette.
+        LocalSemanticColors provides semanticColors
     ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
     }

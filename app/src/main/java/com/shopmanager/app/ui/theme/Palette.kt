@@ -647,3 +647,51 @@ val LocalBrandGradientColors = staticCompositionLocalOf { listOf(BrandGradientSt
  * is true; a hand-tuned palette (MANUAL/CLASSIC) keeps blending toward its
  * own already-tuned `primary`/`tertiary` exactly as before. */
 val LocalDynamicDarkMode = staticCompositionLocalOf { false }
+
+/**
+ * Status-icon/badge colors (success ✓, warning ⚠, danger ✕, info) used
+ * across DeleteIconButton, SwipeToDeleteRow, MaterialsScreen, NotesScreen,
+ * PersonDetailScreen and SettingsScreen. These used to be flat, theme-blind
+ * constants (SuccessGreen/WarningAmber/DangerRed/InfoBlue in Color.kt) —
+ * fine for the 20 generic hue palettes, but wrong for CLAUDE specifically:
+ * a request to make the app match the reference Claude.ai design "fully"
+ * means these status colors too, not just backgrounds/cards/text. Under
+ * CLAUDE this now resolves to the reference design's own light/dark
+ * accent_green/accent_gold/accent_red tokens (accent_red mirrors
+ * colorScheme.error exactly, since [claudeLightScheme]/[claudeDarkScheme]
+ * already set `error` from the same token); "info" has no blue in the
+ * reference design at all, so it falls back to the same warm neutral
+ * secondary accent (accent_violet) the design uses for secondary chips
+ * instead of introducing an off-palette blue. Every other palette keeps
+ * the original flat constants unchanged.
+ */
+internal data class SemanticColors(
+    val success: Color,
+    val warning: Color,
+    val danger: Color,
+    val info: Color,
+)
+
+internal fun semanticColorsFor(palette: AppColorPalette, useDark: Boolean): SemanticColors =
+    if (palette == AppColorPalette.CLAUDE) {
+        if (useDark) SemanticColors(
+            success = ClaudeAccentGreenDark,
+            warning = ClaudeAccentGoldDark,
+            danger = ClaudeAccentRedDark,
+            info = ClaudeSecondaryDark,
+        ) else SemanticColors(
+            success = ClaudeAccentGreenLight,
+            warning = ClaudeAccentGoldLight,
+            danger = ClaudeAccentRedLight,
+            info = ClaudeSecondaryLight,
+        )
+    } else {
+        SemanticColors(success = SuccessGreen, warning = WarningAmber, danger = DangerRed, info = InfoBlue)
+    }
+
+/** Provided once near the root (see [ShopManagerTheme]); defaults to the
+ * original flat constants so anything outside the provider (previews)
+ * still renders correctly. */
+val LocalSemanticColors = staticCompositionLocalOf {
+    SemanticColors(success = SuccessGreen, warning = WarningAmber, danger = DangerRed, info = InfoBlue)
+}
