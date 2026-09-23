@@ -9,8 +9,16 @@ import androidx.compose.ui.graphics.Color
 // (see [hueOf]/[tone] in Palette.kt), picking this as the default palette is
 // what gives the *whole app* Claude's warm near-black dark mode and warm
 // cream light mode automatically, not just its accent color.
-val Claude80 = Color(0xFFF0C4AA)
-val Claude40 = Color(0xFFCC7A52)
+//
+// PRECISION FIX ("الوان التطبيق تحتاج تظبيط اكثر"): Claude40 is now
+// Anthropic's actual brand coral (#CC785C, "Crail") instead of the earlier
+// hand-picked approximation (#CC7A52) — a small shift toward slightly more
+// pink/less orange, but it's the real value the rest of Claude's own UI
+// uses, so every screen that reads off this palette (buttons, the drawer's
+// selection pill, headers, the primary dialog action) now matches Claude's
+// accent exactly rather than approximately.
+val Claude80 = Color(0xFFF0C6AE)
+val Claude40 = Color(0xFFCC785C)
 val Sand80 = Color(0xFFE8D6C3)
 val Sand40 = Color(0xFFA98763)
 
