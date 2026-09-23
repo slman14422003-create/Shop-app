@@ -73,6 +73,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
+import com.shopmanager.app.ui.theme.WarningAmber
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -565,10 +566,14 @@ private fun MaterialsList(
     // FAB too, and a fixed 72dp silently drifts wrong the moment either
     // one's real size changes. Replaced with real contentPadding sized off
     // the pill's actual measured height (LocalFloatingBottomNavHeight) plus
-    // the FAB's own real height + a small gap — computed once below,
-    // rather than a hardcoded row.
-    val fabHeight = 56.dp // MaterialDesign's fixed ExtendedFloatingActionButton height
-    val bottomClearance = LocalFloatingBottomNavHeight.current + fabHeight + 24.dp
+    // a fixed safety margin, computed once below, rather than a hardcoded
+    // row. "مادة جديدة" has since moved off this screen too (same shared
+    // quick-add "+" beside the pill as every other tab), so this margin is
+    // no longer one specific FAB's height either — kept at the same size
+    // regardless, as this list's general clearance against the pill's
+    // transparent side margins, matching every other list in the app.
+    val bottomSafetyMargin = 56.dp + 24.dp
+    val bottomClearance = LocalFloatingBottomNavHeight.current + bottomSafetyMargin
 
     // FEATURE ADDED ("ترتيب المواد بالضغط المطول وتحريكها"): a local copy
     // that the drag gesture below reorders live, in real time, as the
@@ -705,10 +710,23 @@ private fun MaterialRow(
         // FEATURE ADDED ("نجمة الأهمية"): a starred material gets a subtle
         // amber border so it also reads as important at a glance, not only
         // through the filled star icon.
+        // BUG FIXED ("كل الكروت شكلها متل بعض"): this used to be a raw
+        // hardcoded hex (0xFFFFA000) instead of this app's own WarningAmber
+        // (see Color.kt) — cosmetically almost the same shade, but now that
+        // the CLAUDE palette's default warm terracotta theme is actually
+        // rendering (see Theme.kt), that palette's own outlineVariant tone
+        // is itself warm/tan, not neutral grey the way it was under the old
+        // Material default scheme. Against a warm border, the *un*starred
+        // card's border and the starred card's amber border read as nearly
+        // the same color — exactly the "every card looks the same" effect.
+        // Dropping the ordinary border's alpha further keeps it visibly
+        // receding into the card regardless of theme, so the starred
+        // amber border actually stands out again as the one visual signal
+        // it's meant to be.
         border = BorderStroke(
             if (material.important) 1.5.dp else 1.dp,
-            if (material.important) Color(0xFFFFA000).copy(alpha = 0.6f)
-            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            if (material.important) WarningAmber.copy(alpha = 0.7f)
+            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
         ),
         tonalElevation = 0.dp,
         shadowElevation = if (isDragging) 6.dp else 0.dp
@@ -725,7 +743,7 @@ private fun MaterialRow(
                 Icon(
                     if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
                     contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
-                    tint = if (material.important) Color(0xFFFFA000) else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = if (material.important) WarningAmber else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Box(
@@ -832,7 +850,12 @@ private fun PricesList(
     // tall dead strip below the button in the old layout. The save action
     // no longer lives in this list at all (see the class doc comment
     // above), so the list only needs to clear the pill itself now.
-    val bottomClearance = LocalFloatingBottomNavHeight.current + 16.dp
+    // BUG FIXED ("آخر صف بيلزق بالشريط"): the flat 16.dp part of that was
+    // noticeably thinner than المواد tab's own 32.dp+ clearance right next
+    // to it (same pill, same screen) — thin enough for the last price row
+    // to sit close enough to the pill's transparent side margins to peek
+    // through instead of clearing it. Matched to the same 32.dp.
+    val bottomClearance = LocalFloatingBottomNavHeight.current + 32.dp
     Column(Modifier.fillMaxSize()) {
         // PERF FIX ("تقطيع" while typing a price): pricedCount/totalValue
         // used to be computed directly in *this* function with
