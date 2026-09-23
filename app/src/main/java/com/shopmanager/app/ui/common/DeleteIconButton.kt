@@ -4,7 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.shopmanager.app.ui.theme.DangerRed
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 
 /**
  * A small, clearly-marked circular "×" delete affordance shown next to a
@@ -22,7 +22,7 @@ import com.shopmanager.app.ui.theme.DangerRed
 fun DeleteIconButton(onClick: () -> Unit, modifier: Modifier = Modifier, contentDescription: String = "حذف") {
     ActionIconButton(
         icon = Icons.Default.Close,
-        tint = DangerRed,
+        tint = LocalSemanticColors.current.danger,
         contentDescription = contentDescription,
         onClick = onClick,
         modifier = modifier

@@ -23,7 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.shopmanager.app.ui.theme.DangerRed
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 
 /**
  * Wraps a list row with a right-to-left (or left-to-right, RTL-aware) swipe
@@ -63,7 +63,7 @@ fun SwipeToDeleteRow(
                 Modifier
                     .fillMaxSize()
                     .clip(MaterialTheme.shapes.medium)
-                    .background(DangerRed.copy(alpha = 0.85f))
+                    .background(LocalSemanticColors.current.danger.copy(alpha = 0.85f))
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterEnd
             ) {
