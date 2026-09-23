@@ -111,26 +111,16 @@ fun ShopManagerTheme(
         if (useDark) neutralDarkScheme() else neutralLightScheme()
     }
 
-    // The header/status-bar gradient comes from the selected palette's own
-    // gradient pair for every fixed-palette mode, or straight from the
-    // resolved dynamic scheme itself for DYNAMIC (see
-    // [dynamicGradientColors] — there's no palette to read a pair from in
-    // that mode, the wallpaper picks the hue).
-    //
-    // FLAT, NOT A GRADIENT ("للون المخصص والكلاسيكي لازم يكون لون واحد فقط
-    // متل الوضع التلقائي"): CLASSIC and MANUAL used to keep their real
-    // two-hue gradient pair (light→dark start/end stops) even after
-    // DYNAMIC's own header was flattened to one repeated color — see
-    // [dynamicGradientColors]'s doc for why that one was flattened. Same
-    // treatment here now: both stops are the same single tone
-    // (`ClassicGradientStart` / `paletteColors.gradientStart`), so
-    // `BrandGradient.brush()`'s `Brush.verticalGradient(...)` paints as one
-    // flat color for all three modes alike, not just DYNAMIC. The `*End`
-    // colors are kept around (still referenced by anything reading them
-    // directly) rather than deleted, in case a solid two-tone gradient is
-    // ever wanted again.
+    // "مش شبه هيدر كلود، متل بلوك لون مختلف عن الخلفية": headers used to be
+    // tinted from a fixed mid-gray brand constant, noticeably lighter than
+    // the near-black dark background (or just a same-toned floating gray
+    // bar in light mode) — reading as a separate colored block instead of
+    // part of the page, unlike Claude's own flush, headerless top bars.
+    // Now every header pulls the exact same [surfaceContainerHigh] tone
+    // every ordinary card already uses, so it blends into the page as a
+    // subtle "slightly raised" surface instead of standing out.
     val gradientColors = remember(colors) {
-        listOf(ClassicGradientStart, ClassicGradientStart)
+        listOf(colors.surfaceContainerHigh, colors.surfaceContainerHigh)
     }
 
     CompositionLocalProvider(
