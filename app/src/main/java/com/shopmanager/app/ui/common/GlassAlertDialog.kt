@@ -2,6 +2,8 @@ package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -109,14 +112,14 @@ fun GlassAlertDialog(
                 Column {
                     Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
                         icon?.let {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                                 CompositionLocalProvider(LocalContentColor provides resolvedTitleColor) { it() }
                             }
                         }
                         title?.let {
                             Box(
                                 Modifier.fillMaxWidth().padding(top = if (icon != null) 10.dp else 0.dp),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.CenterStart
                             ) {
                                 ProvideTextStyle(
                                     MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
@@ -133,15 +136,28 @@ fun GlassAlertDialog(
                             }
                         }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), thickness = 1.dp)
-                    Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // "متل نافذة تسجيل الخروج بكلود": شيلنا الشريط الكامل
+                    // المقسوم بخط فاصل (نمط iOS القديم)، وصار كل زر إله
+                    // شكل كبسولة مستقلة بمسافة بين الاثنين — بالضبط متل
+                    // "Cancel"/"Log out" بواجهة كلود.
+                    Row(
+                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 22.dp),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
+                    ) {
                         if (dismissButton != null) {
-                            DialogButtonCell(Modifier.weight(1f).fillMaxHeight()) {
+                            DialogButtonCell(
+                                Modifier.weight(1f).height(48.dp)
+                                    .clip(RoundedCornerShape(50))
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
+                            ) {
                                 dismissButton()
                             }
-                            VerticalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), thickness = 1.dp)
                         }
-                        DialogButtonCell(Modifier.weight(1f).fillMaxHeight()) {
+                        DialogButtonCell(
+                            Modifier.weight(1f).height(48.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        ) {
                             confirmButton()
                         }
                     }
