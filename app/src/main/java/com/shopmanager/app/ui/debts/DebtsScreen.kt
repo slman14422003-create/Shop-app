@@ -98,19 +98,25 @@ fun DebtsScreen(
 
     // BUG FIXED ("زر عميل جديد" sitting too high / list not lining up under
     // it): the list's own bottom clearance only ever accounted for the
-    // floating nav pill, never for the FAB-style quick-add button that
-    // floats on top of the pill — so a separate, hand-guessed
+    // floating nav pill, never for the FAB-style quick-add button that used
+    // to float on top of the pill — so a separate, hand-guessed
     // `Spacer(Modifier.height(72.dp))` item used to be tacked onto the end
     // of the list to make up the difference. That guess didn't track the
     // FAB's real height, so on the label-hidden/compact system font
     // settings it left too little clearance (last row peeking out from
     // under the button) and on larger font scales too much (a dead gap
-    // before the button). Mirrors MaterialsScreen's own formula exactly:
-    // pill height + the FAB's real fixed height + a small breathing gap,
-    // computed once and used directly as contentPadding — no separate
-    // guessed spacer item needed.
-    val fabHeight = 56.dp // ExtendedFloatingActionButton's fixed height
-    val listBottomClearance = LocalFloatingBottomNavHeight.current + fabHeight + 24.dp
+    // before the button).
+    // "عميل جديد" itself has since moved off this screen entirely (it's the
+    // shared quick-add "+" beside the pill now — see the comment a few
+    // lines below), so there's no separate FAB here to clear anymore. Kept
+    // the same total clearance regardless — it now reads as this list's
+    // general safety margin against the pill's transparent side margins
+    // (see FloatingBottomNav.kt's own doc comment on why a screen still
+    // needs a bit of its own gap on top of the pill's raw measured height)
+    // rather than one specific button's height, and every list in the app
+    // wants at least this much room.
+    val bottomSafetyMargin = 56.dp + 24.dp
+    val listBottomClearance = LocalFloatingBottomNavHeight.current + bottomSafetyMargin
 
     LaunchedEffect(message) {
         message?.let {
