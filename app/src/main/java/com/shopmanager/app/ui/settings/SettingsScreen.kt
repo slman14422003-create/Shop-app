@@ -91,7 +91,7 @@ import com.shopmanager.app.ui.theme.AppColorPalette
 import com.shopmanager.app.ui.theme.AppColorMode
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
-import com.shopmanager.app.ui.theme.SuccessGreen
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 import com.shopmanager.app.ui.theme.isDynamicColorAvailable
 import com.shopmanager.app.ui.theme.paletteColorsFor
 import kotlinx.coroutines.Dispatchers
@@ -613,7 +613,7 @@ fun SettingsScreen(
                             Modifier
                                 .size(10.dp)
                                 .clip(CircleShape)
-                                .background(if (isOnline) SuccessGreen else MaterialTheme.colorScheme.error)
+                                .background(if (isOnline) LocalSemanticColors.current.success else MaterialTheme.colorScheme.error)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(if (isOnline) "متصل" else "غير متصل بالإنترنت", fontWeight = FontWeight.SemiBold)
@@ -761,7 +761,7 @@ fun SettingsScreen(
                     Button(
                         onClick = { showExportShareChoice = true },
                         modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
+                        colors = ButtonDefaults.buttonColors(containerColor = LocalSemanticColors.current.success)
                     ) {
                         Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
