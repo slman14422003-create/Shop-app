@@ -102,14 +102,13 @@ fun ShopManagerTheme(
     val paletteColors = remember(colorPalette, effectiveColorMode, context) {
         paletteColorsFor(colorPalette)
     }
-    val colors = remember(effectiveColorMode, paletteColors, useDark, context) {
-        when (effectiveColorMode) {
-            AppColorMode.CLASSIC ->
-                if (useDark) neutralDarkScheme() else neutralLightScheme()
-            AppColorMode.MANUAL ->
-                if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
-            AppColorMode.DYNAMIC -> dynamicSchemeFor(context, useDark)
-        }
+    // "شيل الألوان، خليه بس ليلي/نهاري": no accent hue anywhere in the app
+    // any more — always the true grayscale CLASSIC scheme (day/night only),
+    // regardless of whatever colorMode/colorPalette was ever saved. Kept
+    // effectiveColorMode/paletteColors computed above (harmless, unused)
+    // rather than ripping out every call site that still passes them in.
+    val colors = remember(useDark, context) {
+        if (useDark) neutralDarkScheme() else neutralLightScheme()
     }
 
     // The header/status-bar gradient comes from the selected palette's own
@@ -130,12 +129,8 @@ fun ShopManagerTheme(
     // colors are kept around (still referenced by anything reading them
     // directly) rather than deleted, in case a solid two-tone gradient is
     // ever wanted again.
-    val gradientColors = remember(effectiveColorMode, paletteColors, colors) {
-        when (effectiveColorMode) {
-            AppColorMode.CLASSIC -> listOf(ClassicGradientStart, ClassicGradientStart)
-            AppColorMode.MANUAL -> listOf(paletteColors.gradientStart, paletteColors.gradientStart)
-            AppColorMode.DYNAMIC -> dynamicGradientColors(colors, useDark)
-        }
+    val gradientColors = remember(colors) {
+        listOf(ClassicGradientStart, ClassicGradientStart)
     }
 
     CompositionLocalProvider(
