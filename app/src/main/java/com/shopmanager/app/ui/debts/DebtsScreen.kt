@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Search
@@ -63,7 +64,8 @@ fun DebtsScreen(
     onOpenPerson: (String) -> Unit,
     viewModel: DebtsViewModel = viewModel(),
     addPersonRequested: Boolean = false,
-    onAddPersonRequestHandled: () -> Unit = {}
+    onAddPersonRequestHandled: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     val state = viewModel.uiState.collectAsState().value
     val message = viewModel.message.collectAsState().value
@@ -149,6 +151,7 @@ fun DebtsScreen(
                 title = { Text("الديون", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
+                    navigationIconContentColor = BrandOnGradient,
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
@@ -160,6 +163,19 @@ fun DebtsScreen(
                     highlight = false,
                     baseAlpha = 0.72f
                 ),
+                // BUG FIXED ("الأيقونة فوق الكلمة"): the hamburger used to
+                // float over this bar as a separate overlay from
+                // MainActivity, in the exact same top-right corner (RTL)
+                // this title already occupies — see DashboardScreen.kt's
+                // matching note. It's now this TopAppBar's own
+                // `navigationIcon`, a real slot inside the bar itself, so
+                // it takes its own space next to the title instead of
+                // sitting on top of it.
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "القائمة")
+                    }
+                },
                 actions = {
                     GlassIconButton(
                         icon = Icons.Default.Share,
