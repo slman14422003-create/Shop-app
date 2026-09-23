@@ -102,13 +102,24 @@ fun ShopManagerTheme(
     val paletteColors = remember(colorPalette, effectiveColorMode, context) {
         paletteColorsFor(colorPalette)
     }
-    // "شيل الألوان، خليه بس ليلي/نهاري": no accent hue anywhere in the app
-    // any more — always the true grayscale CLASSIC scheme (day/night only),
-    // regardless of whatever colorMode/colorPalette was ever saved. Kept
-    // effectiveColorMode/paletteColors computed above (harmless, unused)
-    // rather than ripping out every call site that still passes them in.
-    val colors = remember(useDark, context) {
-        if (useDark) neutralDarkScheme() else neutralLightScheme()
+    // FIXED ("صلح الألوان بالوضع الليلي والنهاري ونسق الـUI بشكل كلود"): a
+    // previous pass forced every theme to the true grayscale CLASSIC scheme
+    // regardless of [colorMode]/[colorPalette] — so the palette picker in
+    // Settings, the CLAUDE default, and DYNAMIC wallpaper color all silently
+    // did nothing, in both light and dark. Restored to actually honor
+    // [effectiveColorMode]: MANUAL paints the selected [AppColorPalette]
+    // (CLAUDE by default — see SettingsRepository.colorPalette — which is
+    // what gives the app Claude's warm terracotta/cream identity end to end,
+    // see the Claude80/Claude40 doc in Color.kt), CLASSIC keeps the
+    // intentional hueless black/white escape hatch, and DYNAMIC reads the
+    // wallpaper exactly as [effectiveColorMode]/[usingWallpaperColor] above
+    // were already computed to support.
+    val colors = remember(useDark, effectiveColorMode, paletteColors, context) {
+        when (effectiveColorMode) {
+            AppColorMode.CLASSIC -> if (useDark) neutralDarkScheme() else neutralLightScheme()
+            AppColorMode.DYNAMIC -> dynamicSchemeFor(context, useDark)
+            AppColorMode.MANUAL -> if (useDark) darkSchemeFor(paletteColors) else lightSchemeFor(paletteColors)
+        }
     }
 
     // "مش شبه هيدر كلود، متل بلوك لون مختلف عن الخلفية": headers used to be
