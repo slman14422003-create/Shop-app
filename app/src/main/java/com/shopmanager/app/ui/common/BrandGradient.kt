@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
@@ -51,4 +52,19 @@ object BrandGradient {
     }
 }
 
-val BrandOnGradient: Color = Color.White
+// "شيل الألوان، خليه بس ليلي/نهاري" + "ما شكلها متل كلود": this used to be a
+// fixed Color.White — safe back when every header/nav panel underneath it
+// was always a deep, hardcoded brand color (dark enough for white text in
+// either theme by construction). Headers are now toned from the ordinary
+// [MaterialTheme.colorScheme.surfaceContainerHigh] role instead (see
+// Theme.kt's `gradientColors`) — the same subtle "slightly raised card"
+// tone every other surface in the app uses, so the header blends into the
+// page instead of standing out as its own separate colored block, the way
+// Claude's own headers do. That tone is light in light mode / dark in dark
+// mode, so the text/icon color drawn on top of it has to follow the theme
+// too: this is now a computed property reading the live color scheme's own
+// [onSurface] role instead of a fixed constant, and every existing call
+// site (Icon/Text `tint`/`color = BrandOnGradient`) keeps working unchanged
+// since property-read syntax is identical to a plain val.
+val BrandOnGradient: Color
+    @Composable get() = MaterialTheme.colorScheme.onSurface

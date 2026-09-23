@@ -110,7 +110,7 @@ fun GlassIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = Color.White,
+    tint: Color = BrandOnGradient,
     size: Dp = 40.dp
 ) {
     val interactionSource = remember { MutableInteractionSource() }

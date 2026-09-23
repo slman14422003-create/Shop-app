@@ -21,7 +21,7 @@ fun GradientIconButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    tint: Color = Color.White
+    tint: Color = BrandOnGradient
 ) {
     GlassIconButton(
         icon = icon,
