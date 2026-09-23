@@ -21,7 +21,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,7 +47,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
@@ -87,13 +85,9 @@ import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.notifications.NotificationSync
 import com.shopmanager.app.ui.materials.MaterialsViewModel
-import com.shopmanager.app.ui.theme.AppColorPalette
-import com.shopmanager.app.ui.theme.AppColorMode
 import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.LocalSemanticColors
-import com.shopmanager.app.ui.theme.isDynamicColorAvailable
-import com.shopmanager.app.ui.theme.paletteColorsFor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -108,8 +102,6 @@ private val CURRENCY_OPTIONS = listOf("ل.س", "$", "SAR", "AED", "TRY")
 fun SettingsScreen(
     onBack: () -> Unit,
     onThemeChanged: (AppThemeMode) -> Unit,
-    onColorPaletteChanged: (AppColorPalette) -> Unit = {},
-    onColorModeChanged: (AppColorMode) -> Unit = {},
     onPerformancePreferenceChanged: (PerformanceMode) -> Unit = {},
     onRecheckDevicePerformance: () -> Unit = {},
     debtsViewModel: DebtsViewModel? = null,
@@ -120,8 +112,6 @@ fun SettingsScreen(
     val context = LocalContext.current
     val settings = remember { SettingsRepository(context) }
     var themeMode by remember { mutableStateOf(settings.themeMode) }
-    var colorPalette by remember { mutableStateOf(settings.colorPalette) }
-    var colorMode by remember { mutableStateOf(settings.colorMode) }
     var hasPin by remember { mutableStateOf(settings.hasPin) }
     var showSetPinDialog by remember { mutableStateOf(false) }
     var currency by remember { mutableStateOf(settings.currencySymbol) }
@@ -1124,285 +1114,6 @@ fun SettingsScreen(
     }
 }
 
-/**
- * "لوحة الألوان" — ways to color the app, each a segment in the pill
- * selector at the top instead of the mode being buried among unrelated
- * switches:
- *   • مخصص (manual): the original 20-swatch grid, sitting in its own
- *     tonal surfaceContainer card instead of floating directly on the
- *     section background.
- *   • تلقائي (dynamic, where available): color derived from the phone's
- *     own wallpaper.
- *   • كلاسيكي: "إيقاف لوحة الألوان" — a small monochrome preview strip
- *     instead of a picker, since there's nothing left to pick.
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ColorModeSection(
-    colorMode: AppColorMode,
-    colorPalette: AppColorPalette,
-    onModeSelected: (AppColorMode) -> Unit,
-    onPaletteSelected: (AppColorPalette) -> Unit
-) {
-    // "تلقائي من الخلفية" only makes sense where Android actually exposes
-    // a wallpaper-driven color API (12+) — omitted from the picker
-    // entirely below that, rather than shown and silently falling back,
-    // so nobody sees an option that can't do what its label says on their
-    // device.
-    val modes = remember {
-        buildList {
-            add(AppColorMode.MANUAL)
-            if (isDynamicColorAvailable()) add(AppColorMode.DYNAMIC)
-            add(AppColorMode.CLASSIC)
-        }
-    }
-    val effectiveMode = colorMode
-
-    Text(
-        "لوحة الألوان",
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.SemiBold
-    )
-    Spacer(Modifier.height(8.dp))
-
-    // Pill segmented selector — same visual language as
-    // MaterialsScreen's tab bar, but themed for a normal Settings card
-    // (tonal surfaceContainerHigh background) instead of a glass header.
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .padding(4.dp)
-    ) {
-        modes.forEach { mode ->
-            val selected = mode == effectiveMode
-            val bg by animateFloatAsState(
-                targetValue = if (selected) 1f else 0f,
-                animationSpec = MotionSpecs.quickSpring(),
-                label = "colorModeSelection"
-            )
-            Box(
-                Modifier
-                    .weight(1f)
-                    .then(if (bg > 0.01f) Modifier.shadow((2f * bg).dp, RoundedCornerShape(11.dp), clip = false) else Modifier)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = bg))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { onModeSelected(mode) }
-                    )
-                    .padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    when (mode) {
-                        AppColorMode.MANUAL -> "مخصص"
-                        AppColorMode.DYNAMIC -> "تلقائي"
-                        AppColorMode.CLASSIC -> "كلاسيكي"
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1
-                )
-            }
-        }
-    }
-
-    Spacer(Modifier.height(12.dp))
-
-    when (effectiveMode) {
-        AppColorMode.MANUAL -> Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .padding(14.dp)
-        ) {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                AppColorPalette.entries.forEach { palette ->
-                    ColorPaletteSwatch(
-                        palette = palette,
-                        selected = colorPalette == palette,
-                        onClick = { onPaletteSelected(palette) }
-                    )
-                }
-            }
-        }
-
-        AppColorMode.CLASSIC -> Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(Color.White, Color.Black)))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                "بدون لون مميز — أبيض وأسود فقط بدرجات الرمادي.",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-
-        // "تلقائي من الخلفية": no swatch grid at all here — the whole
-        // point of this mode is that there's nothing to pick, the colors
-        // are read straight from the phone's own wallpaper (Android 12+
-        // Material You). A live preview strip built from the *current*
-        // resolved MaterialTheme colors (which, while this mode is
-        // active, already are the dynamic ones) stands in for a picker.
-        AppColorMode.DYNAMIC -> Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(MaterialTheme.shapes.medium)
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-                .padding(14.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "الألوان تُستخرج تلقائيًا من خلفية جهازك — بدون اختيار يدوي، وتتغيّر مع تغيير الخلفية.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-            Spacer(Modifier.height(14.dp))
-            // REDESIGN ("الوضع التلقائي مو منسق نهائيًا"): the old preview
-            // was three flush rectangles glued edge-to-edge with zero
-            // spacing, no border, and no per-segment rounding — on a lot of
-            // real wallpapers (especially when the extracted primary lands
-            // close in lightness to this very card's own secondaryContainer
-            // backdrop) that read as a shapeless, boundary-less smear
-            // instead of a deliberate swatch, nothing like the crisp
-            // bordered circles every other mode in this picker
-            // ([ColorPaletteSwatch]) uses. Each dynamic tone now gets its
-            // own rounded, individually bordered + shadowed chip with real
-            // breathing room and a small role label underneath (Material
-            // You's own primary/secondary/tertiary naming), so "there's
-            // nothing to pick, here's what's active" finally reads as a
-            // designed part of this screen instead of a leftover strip.
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                listOf(
-                    "أساسي" to MaterialTheme.colorScheme.primary,
-                    "ثانوي" to MaterialTheme.colorScheme.secondary,
-                    "إضافي" to MaterialTheme.colorScheme.tertiary
-                ).forEach { (label, swatch) ->
-                    Column(
-                        Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(40.dp)
-                                .shadow(2.dp, RoundedCornerShape(12.dp), clip = false)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(swatch)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * One tappable swatch per [AppColorPalette] — a small circle split
- * diagonally between the palette's two brand-gradient colors so the person
- * can see the actual hue pair before picking it, plus a checkmark and label
- * on the currently-selected one. Kept as a fixed circle+ring instead of a
- * RadioButton row (like the theme-mode picker above it) because color is
- * inherently visual — reading "نيلي" vs "زمردي" as text doesn't tell you
- * what either looks like, seeing the swatch does.
- */
-@Composable
-private fun ColorPaletteSwatch(palette: AppColorPalette, selected: Boolean, onClick: () -> Unit) {
-    val colors = remember(palette) { paletteColorsFor(palette) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = when {
-            pressed -> 0.88f
-            selected -> 1.08f
-            else -> 1f
-        },
-        animationSpec = MotionSpecs.pressSpring(),
-        label = "paletteSwatchScale"
-    )
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .width(56.dp)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-    ) {
-        Box(
-            Modifier
-                .scale(scale)
-                .size(38.dp)
-                .shadow(if (selected) 4.dp else 0.dp, CircleShape, clip = false)
-                .background(
-                    // FEATURE ("للون المخصص والكلاسيكي لازم يكون لون واحد
-                    // فقط متل الوضع التلقائي"): the app itself now paints
-                    // "مخصص"'s header as a flat `gradientStart` fill (see
-                    // ShopManagerTheme's `gradientColors`), so this swatch
-                    // showing the old two-hue `gradientStart→gradientEnd`
-                    // sweep would misrepresent what picking it actually
-                    // looks like in the app. Flat fill here too, same
-                    // single color.
-                    Brush.linearGradient(listOf(colors.gradientStart, colors.gradientStart)),
-                    CircleShape
-                )
-                .border(
-                    width = if (selected) 2.5.dp else 1.dp,
-                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-                    shape = CircleShape
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            if (selected) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-            }
-        }
-        Spacer(Modifier.height(5.dp))
-        Text(
-            palette.label,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            maxLines = 1,
-            textAlign = TextAlign.Center
-        )
-    }
-}
 
 /**
  * iOS 26 REDESIGN ("عدل شاشة الاعدادات بتصميم جميل"): the old wrapper drew
