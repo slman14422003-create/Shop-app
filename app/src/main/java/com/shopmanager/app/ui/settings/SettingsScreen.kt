@@ -473,22 +473,10 @@ fun SettingsScreen(
                         }
                     )
                 }
-
-                Spacer(Modifier.height(12.dp))
-                ColorModeSection(
-                    colorMode = colorMode,
-                    colorPalette = colorPalette,
-                    onModeSelected = { mode ->
-                        colorMode = mode
-                        settings.colorMode = mode
-                        onColorModeChanged(mode)
-                    },
-                    onPaletteSelected = { palette ->
-                        colorPalette = palette
-                        settings.colorPalette = palette
-                        onColorPaletteChanged(palette)
-                    }
-                )
+                // "شيل الألوان، خليه بس ليلي/نهاري": لا وجود لأي خيار لون
+                // بعد اليوم — فاتح/داكن/حسب النظام فقط. لا حاجة لعرض
+                // ColorModeSection أصلاً بما إنه ما عاد له أي تأثير على
+                // شكل التطبيق (راجع ShopManagerTheme في Theme.kt).
             }
 
             // العملة (currency) — new feature
