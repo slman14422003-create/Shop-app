@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
@@ -99,7 +100,8 @@ fun MaterialsScreen(
     // tapping the note lands directly on that one item instead of the full
     // list.
     initialSearchQuery: String? = null,
-    onInitialSearchConsumed: () -> Unit = {}
+    onInitialSearchConsumed: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val catalog by viewModel.catalog.collectAsState()
@@ -191,7 +193,8 @@ fun MaterialsScreen(
                 onTabChange = { tab = it },
                 showClearAll = tab == 0 && state.materials.isNotEmpty(),
                 onClearAll = { showClearAllConfirm = true },
-                onShare = { showShareChoice = true }
+                onShare = { showShareChoice = true },
+                onOpenDrawer = onOpenDrawer
             )
         }
         // REDESIGN: no `floatingActionButton` slot here anymore — "مادة
@@ -373,7 +376,8 @@ private fun MaterialsHeader(
     onTabChange: (Int) -> Unit,
     showClearAll: Boolean,
     onClearAll: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onOpenDrawer: () -> Unit = {}
 ) {
     Column(
         Modifier
@@ -395,6 +399,14 @@ private fun MaterialsHeader(
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // BUG FIXED ("الأيقونة فوق الكلمة"): the hamburger used to be a
+            // floating overlay from MainActivity, pinned to this exact
+            // top-right (RTL) corner — the same corner the title text
+            // below already occupies — so the two visually collided. It's
+            // now a real leading element in this header's own Row, same
+            // fix as DashboardHeader/DebtsScreen.
+            GradientIconButton(icon = Icons.Default.Menu, contentDescription = "القائمة", onClick = onOpenDrawer)
+            Spacer(Modifier.width(10.dp))
             Text(
                 "المواد والأسعار",
                 modifier = Modifier.weight(1f),
