@@ -102,12 +102,13 @@ fun NotesScreen(
     // (DebtsScreen)، ما كان بشاشة الملاحظات إشي مشابه غير رقاقات الفلترة.
     val search = remember { mutableStateOf("") }
 
-    // Same formula as DebtsScreen/MaterialsScreen: pill height + the
-    // floating "+" button's own fixed height + a small breathing gap, so
-    // the last row in the list scrolls fully clear of both instead of
-    // stopping underneath either one.
-    val fabHeight = 56.dp
-    val listBottomClearance = LocalFloatingBottomNavHeight.current + fabHeight + 24.dp
+    // Same formula as DebtsScreen/MaterialsScreen: pill height + a fixed
+    // safety margin, so the last row in the list scrolls fully clear of the
+    // pill (and the shared "+" beside it — see below) with a visible gap,
+    // instead of stopping close enough to peek through its transparent
+    // side margins.
+    val bottomSafetyMargin = 56.dp + 24.dp
+    val listBottomClearance = LocalFloatingBottomNavHeight.current + bottomSafetyMargin
 
     // The shared "+" beside the bottom nav pill can't reach into this
     // screen's own dialog state directly - same request/handled pattern as
