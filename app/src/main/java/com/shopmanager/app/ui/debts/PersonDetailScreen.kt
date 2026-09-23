@@ -546,14 +546,14 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
             }
             Spacer(Modifier.width(14.dp))
             Column {
-                Text("إجمالي الديون", color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelLarge)
+                Text("إجمالي الديون", color = BrandOnGradient.copy(alpha = 0.85f), style = MaterialTheme.typography.labelLarge)
                 Text(
                     "${nf.format(total)} ${AppSettingsState.currencySymbol}",
-                    color = Color.White,
+                    color = BrandOnGradient,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold
                 )
-                Text("$debtsCount عملية دين مسجلة", color = Color.White.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
+                Text("$debtsCount عملية دين مسجلة", color = BrandOnGradient.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
