@@ -40,7 +40,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -800,13 +799,15 @@ private fun ShopManagerApp(
                             onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
-                            onOpenAdmin = { navController.navigate(ROUTE_ADMIN) }
+                            onOpenAdmin = { navController.navigate(ROUTE_ADMIN) },
+                            onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
                         PAGE_DEBTS -> DebtsScreen(
                             viewModel = debtsViewModel,
                             onOpenPerson = { personId -> navController.navigate("personDetail/$personId") },
                             addPersonRequested = addPersonRequested,
-                            onAddPersonRequestHandled = { addPersonRequested = false }
+                            onAddPersonRequestHandled = { addPersonRequested = false },
+                            onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
                         PAGE_MATERIALS -> MaterialsScreen(
                             viewModel = materialsViewModel,
@@ -816,7 +817,8 @@ private fun ShopManagerApp(
                             savePricesRequested = savePricesRequested,
                             onSavePricesRequestHandled = { savePricesRequested = false },
                             initialSearchQuery = pendingMaterialHighlight,
-                            onInitialSearchConsumed = { pendingMaterialHighlight = null }
+                            onInitialSearchConsumed = { pendingMaterialHighlight = null },
+                            onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
                         else -> NotesScreen(
                             viewModel = notesViewModel,
@@ -825,7 +827,8 @@ private fun ShopManagerApp(
                             onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.navigate("personDetail/$personId") },
                             onOpenMaterials = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
                             addNoteRequested = addNoteRequested,
-                            onAddNoteRequestHandled = { addNoteRequested = false }
+                            onAddNoteRequestHandled = { addNoteRequested = false },
+                            onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
                     }
                 }
@@ -898,24 +901,26 @@ private fun ShopManagerApp(
         // Drawn AFTER (so visually on top of) NavHost above — a real
         // overlay, not a layout slot with its own painted background.
         if (pillVisible) {
-            // "زر القائمة" (hamburger): opens the drawer declared on
-            // ModalNavigationDrawer above. Its own small glass circle
-            // (same QuickActionFab look every other floating button in
-            // this screen uses) rather than a header icon, since it needs
-            // to be reachable from all three main tabs — Home/Debts/
-            // Materials/Notes — not just whichever screen owns a top bar.
-            QuickActionFab(
-                action = QuickAction(
-                    icon = Icons.Default.Menu,
-                    contentDescription = "القائمة",
-                    onClick = { drawerScope.launch { drawerState.open() } }
-                ),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Start))
-                    .padding(20.dp)
-                    .size(48.dp)
-            )
+            // BUG FIXED ("شكل الايقونة فوق الكلمة/التصميم متراكب"): the
+            // hamburger used to be this exact floating glass circle,
+            // pinned to Alignment.TopStart over the *entire* NavHost — in
+            // this app's forced-RTL layout TopStart resolves to the
+            // top-RIGHT corner, which is exactly where every tab's own
+            // header already places its title text (DashboardHeader's
+            // "إدارة المحل", MaterialsHeader's "المواد والأسعار", ...).
+            // The floating circle and the header's own text were two
+            // independent layers drawn in the same corner, so they
+            // visually collided instead of one giving way to the other.
+            // Claude's own top bar never floats a control over live
+            // content like that — its hamburger is a real element laid
+            // out *inside* the bar itself, taking up its own space so
+            // nothing else can ever occupy that spot. Each screen now
+            // draws its own leading hamburger button inline in its own
+            // header/TopAppBar (see DashboardHeader, DebtsScreen's
+            // TopAppBar `navigationIcon`, MaterialsHeader, NotesScreen's
+            // TopAppBar `navigationIcon`) via the `onOpenDrawer` callback
+            // threaded down from here — so this floating overlay button
+            // is gone entirely; nothing replaces it at this layer.
 
             // REDESIGN: which quick-add action (if any) shows follows the
             // same `pagerState.currentPage` the drawer's own selection
