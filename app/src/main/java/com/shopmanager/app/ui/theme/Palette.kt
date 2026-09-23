@@ -402,42 +402,32 @@ internal fun lightSchemeFor(p: PaletteColors): ColorScheme {
     tertiary = p.secondaryLight,
     onTertiary = Color.White,
     tertiaryContainer = p.secondaryContainerLight,
-    // BUG FIXED ("فراغ أسود في الشاشة" — the plain neutral `background`
-    // showing through anywhere a screen doesn't paint its own card/surface
-    // over it, e.g. the reserved clearance below a bottom button or the
-    // floating nav pill's transparent margins): every surfaceContainer*
-    // tone was tinted toward the selected palette, but `background` itself
-    // used to stay flat and un-tinted regardless of which vivid palette was
-    // active. Since Scaffold paints `background` behind literally
-    // everything by default, any gap not covered by a tinted card read as
-    // a stray, colorless patch next to the tinted surfaces around it. A
-    // faint tone (same spirit as surfaceContainerLow, just subtler since
-    // this sits behind everything) keeps the original neutral read while
-    // no longer looking like a foreign, un-themed hole.
-    background = tone(hue, 0.05f, 0.985f),
+    // COLOR PRECISION FIX (see darkSchemeFor's matching note) — same
+    // correction, light side: real Claude's light background is a quiet,
+    // barely-warm off-white, not a noticeably tinted cream. Saturation cut
+    // to roughly a third across the board; `background`/`surface` stay
+    // close to the same near-white value since that part was already
+    // reasonably close, but with far less chroma behind it.
+    background = tone(hue, 0.018f, 0.99f),
     onBackground = Color(0xFF1C1B1F),
-    surface = tone(hue, 0.02f, 0.995f),
+    surface = tone(hue, 0.008f, 0.997f),
     onSurface = Color(0xFF1C1B1F),
-    surfaceVariant = tone(hue, 0.10f, 0.955f),
+    surfaceVariant = tone(hue, 0.035f, 0.965f),
     onSurfaceVariant = LightOnSurfaceVariant,
     surfaceTint = p.primaryLight,
-    outline = tone(hue, 0.22f, 0.55f),
-    outlineVariant = tone(hue, 0.14f, 0.82f),
+    outline = tone(hue, 0.08f, 0.55f),
+    outlineVariant = tone(hue, 0.05f, 0.85f),
     inverseSurface = Color(0xFF2F2D33),
     inverseOnSurface = Color(0xFFF4EFF4),
     inversePrimary = p.primaryContainerLight,
-    // "الألوان ينقصها شيء لتبدو زاهية وفخمة": each surfaceContainer step up
-    // is deliberately both a touch darker AND a touch *more saturated* than
-    // the one below it (0.02→0.20 saturation) instead of a flat gray a
-    // shade darker — the same "elevated surfaces catch more of the
-    // palette's color" idea the README's tone system calls for, so
-    // cards/dialogs/sheets read as lifted into richer light rather than
-    // just dimmed.
-    surfaceContainerLowest = tone(hue, 0.01f, 1f),
-    surfaceContainerLow = tone(hue, 0.07f, 0.98f),
-    surfaceContainer = tone(hue, 0.11f, 0.965f),
-    surfaceContainerHigh = tone(hue, 0.16f, 0.95f),
-    surfaceContainerHighest = tone(hue, 0.20f, 0.935f),
+    // Same corrected, much-lower saturation ladder as the dark scheme —
+    // elevated surfaces stay close to neutral, not visibly richer/more
+    // colored at each step up.
+    surfaceContainerLowest = tone(hue, 0.005f, 1f),
+    surfaceContainerLow = tone(hue, 0.02f, 0.985f),
+    surfaceContainer = tone(hue, 0.03f, 0.975f),
+    surfaceContainerHigh = tone(hue, 0.045f, 0.96f),
+    surfaceContainerHighest = tone(hue, 0.06f, 0.945f),
     error = DangerRed,
     )
 }
@@ -456,31 +446,39 @@ internal fun darkSchemeFor(p: PaletteColors): ColorScheme {
     tertiary = p.secondaryDark,
     onTertiary = p.onSecondaryDark,
     tertiaryContainer = p.secondaryContainerDark,
-    // See lightSchemeFor's matching comment — same fix, dark side. Dark
-    // neutrals sit at a much lower fixed brightness (V=0.10) than light
-    // mode's, with slightly higher saturation (0.16 vs 0.05) since dark
-    // surfaces need more of it to read as tinted rather than flat black.
-    background = tone(hue, 0.16f, 0.10f),
+    // COLOR PRECISION FIX ("الوان التطبيق مانها بتشبة كلود ابدأ" — with
+    // real Claude-app screenshots as the reference this time): the real
+    // Claude app's dark background is essentially true black with only a
+    // whisper of warmth — nowhere near as saturated/orange as this used to
+    // be. A previous pass ("الألوان ينقصها شيء لتبدو زاهية وفخمة") pushed
+    // saturation UP for a richer look; the actual reference screenshots
+    // show the opposite is true, so this corrects course: saturation cut
+    // to roughly a third of what it was, and `background` itself darkened
+    // toward true near-black (V 0.10 → 0.055) instead of a lighter warm
+    // charcoal. The palette's own primary/secondary (the coral accent
+    // itself, used for the logo mark, avatar, and buttons) are untouched —
+    // only the neutral shell around it changes.
+    background = tone(hue, 0.05f, 0.055f),
     onBackground = Color(0xFFE7E2EA),
-    surface = tone(hue, 0.14f, 0.135f),
+    surface = tone(hue, 0.045f, 0.075f),
     onSurface = Color(0xFFE7E2EA),
-    surfaceVariant = tone(hue, 0.16f, 0.19f),
+    surfaceVariant = tone(hue, 0.055f, 0.135f),
     onSurfaceVariant = DarkOnSurfaceVariant,
     surfaceTint = p.primaryDark,
-    outline = tone(hue, 0.24f, 0.62f),
-    outlineVariant = tone(hue, 0.18f, 0.32f),
+    outline = tone(hue, 0.09f, 0.55f),
+    outlineVariant = tone(hue, 0.06f, 0.28f),
     inverseSurface = Color(0xFFE7E2EA),
     inverseOnSurface = Color(0xFF2F2D33),
     inversePrimary = p.primaryContainerDark,
-    // Same rising-saturation ladder as the light scheme: each elevation
-    // step is both brighter AND more saturated than the one below it, so
-    // raised cards/dialogs/the glass bars read as catching more of the
-    // palette's own light rather than just fading to a lighter gray.
-    surfaceContainerLowest = tone(hue, 0.20f, 0.065f),
-    surfaceContainerLow = tone(hue, 0.16f, 0.145f),
-    surfaceContainer = tone(hue, 0.18f, 0.165f),
-    surfaceContainerHigh = tone(hue, 0.22f, 0.20f),
-    surfaceContainerHighest = tone(hue, 0.26f, 0.235f),
+    // Same corrected, much-lower saturation ladder — real Claude's raised
+    // cards/dialogs/sheets stay close to neutral gray as they lift off the
+    // near-black background, not a noticeably warmer/richer tint at each
+    // step.
+    surfaceContainerLowest = tone(hue, 0.045f, 0.045f),
+    surfaceContainerLow = tone(hue, 0.05f, 0.095f),
+    surfaceContainer = tone(hue, 0.05f, 0.115f),
+    surfaceContainerHigh = tone(hue, 0.055f, 0.15f),
+    surfaceContainerHighest = tone(hue, 0.06f, 0.185f),
     error = Color(0xFFFF6B6B),
     )
 }
