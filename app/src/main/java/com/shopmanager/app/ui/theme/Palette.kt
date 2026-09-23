@@ -665,7 +665,7 @@ val LocalDynamicDarkMode = staticCompositionLocalOf { false }
  * instead of introducing an off-palette blue. Every other palette keeps
  * the original flat constants unchanged.
  */
-internal data class SemanticColors(
+data class SemanticColors(
     val success: Color,
     val warning: Color,
     val danger: Color,
