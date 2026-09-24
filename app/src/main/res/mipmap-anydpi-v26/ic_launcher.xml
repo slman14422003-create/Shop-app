@@ -1,17 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    "زجاج سائل" launcher icon (API 26+ adaptive icon).
+    REDESIGN ("بتصميم cloude ai"): launcher icon (API 26+ adaptive icon)
+    now matches Claude's own app icon instead of the previous "liquid
+    glass" orb + storefront glyph.
 
-    background = the brand diagonal gradient (same colors as BrandGradient
-    in Kotlin, see colors.xml's brand_claude_primary/brand_claude_secondary).
-    foreground = the glass orb + storefront glyph, generated with a soft
-    drop shadow, a translucent gradient fill, a rim shadow, and a bright
-    specular highlight to read as glass rather than a flat circle — see
-    the design note in ic_launcher_foreground's source generation.
+    background = a flat brand-orange fill (splash_background in
+    colors.xml — the same tone the splash screen uses).
+    foreground = the flat white storefront mark (same silhouette
+    as the one drawn on the in-app splash screen — see
+    StorefrontMark in SplashScreen.kt), no gradient/shadow/glass.
 
     Pre-API26 launchers ignore this file entirely and use the flat PNGs in
-    mipmap-<density>/ic_launcher.png instead (regenerated to match this
-    same design, flattened to one layer, so both versions look identical).
+    mipmap-<density>/ic_launcher.png instead (same mark + cream fill
+    flattened to one layer, so both versions look identical).
 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
