@@ -39,4 +39,13 @@
          Indigo value, so touch feedback matches the actual on-screen accent. -->
     <color name="ripple_brand">#33CC7A52</color>
     <color name="edge_glow_brand">#CC7A52</color>
+
+    <!-- REDESIGN ("نفس التصميم بس الخلفية برتقالية والرسمة بيضاء"): the
+         splash (system + in-app) and the app icon both now use a flat
+         orange background with a white storefront mark on top — the same
+         orange as brand_claude_primary above, kept as its own named color
+         since it's referenced before Compose/Kotlin runs (see themes.xml).
+         Fixed regardless of light/night mode (mirrored in
+         values-night/colors.xml), same convention as brand_claude_* above. -->
+    <color name="splash_background">#DA7757</color>
 </resources>

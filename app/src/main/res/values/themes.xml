@@ -19,7 +19,9 @@
       to show — so the phone never shows a half-finished frame.
     -->
     <style name="Theme.ShopManager.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/brand_claude_primary</item>
+        <!-- REDESIGN: flat orange background behind the white storefront
+             mark — see splash_background's note in colors.xml. -->
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.ShopManager</item>
     </style>
@@ -44,7 +46,11 @@
          background underneath is already the right color instead of a
          white flash. -->
     <style name="Theme.ShopManager" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/brand_claude_primary</item>
+        <!-- Matches Theme.ShopManager.Splash above so a one-frame gap in
+             the handoff still shows the right tone instead of a flash of
+             the wrong color before the in-app splash's own background
+             paints. -->
+        <item name="android:windowBackground">@color/splash_background</item>
         <item name="android:windowAnimationStyle">@style/Theme.ShopManager.WindowAnimations</item>
 
         <!-- Ripple/touch-feedback tint on every tap, and the color of the
