@@ -36,5 +36,5 @@
 
     <!-- Same fixed splash tone as values/colors.xml — see that file's
          note; the splash stays identical in light/dark system theme. -->
-    <color name="splash_background">#DA7757</color>
+    <color name="splash_background">#151515</color>
 </resources>
