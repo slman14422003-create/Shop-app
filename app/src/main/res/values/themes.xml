@@ -19,8 +19,8 @@
       to show — so the phone never shows a half-finished frame.
     -->
     <style name="Theme.ShopManager.Splash" parent="Theme.SplashScreen">
-        <!-- REDESIGN: flat orange background behind the white storefront
-             mark — see splash_background's note in colors.xml. -->
+        <!-- REDESIGN: near-black background matching Claude's own splash —
+             see splash_background's note in colors.xml. -->
         <item name="windowSplashScreenBackground">@color/splash_background</item>
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <item name="postSplashScreenTheme">@style/Theme.ShopManager</item>

@@ -40,12 +40,12 @@
     <color name="ripple_brand">#33CC7A52</color>
     <color name="edge_glow_brand">#CC7A52</color>
 
-    <!-- REDESIGN ("نفس التصميم بس الخلفية برتقالية والرسمة بيضاء"): the
-         splash (system + in-app) and the app icon both now use a flat
-         orange background with a white storefront mark on top — the same
-         orange as brand_claude_primary above, kept as its own named color
-         since it's referenced before Compose/Kotlin runs (see themes.xml).
-         Fixed regardless of light/night mode (mirrored in
+    <!-- REDESIGN ("بدي ياها بستايل Claude هيك يعني حرفيا"): the splash
+         (system + in-app) now matches Claude's own splash — a near-black
+         background instead of the previous flat brand-orange — sampled
+         straight from Claude's splash screenshot. Kept as its own named
+         color since it's referenced before Compose/Kotlin runs (see
+         themes.xml). Fixed regardless of light/night mode (mirrored in
          values-night/colors.xml), same convention as brand_claude_* above. -->
-    <color name="splash_background">#DA7757</color>
+    <color name="splash_background">#151515</color>
 </resources>
