@@ -5,15 +5,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -46,28 +46,24 @@ import androidx.compose.ui.unit.sp
  * decision in earlier revisions of this file. Nothing below loops or
  * recomposes once settled.
  *
- * REDESIGN ("نفس التصميم بس الخلفية برتقالية والرسمة بيضاء"): the splash
- * (system + in-app) and the app icon both use a flat brand-orange
- * background (`splash_background` — see colors.xml; the *system*
- * pre-Compose splash in themes.xml uses the same color so there's no
- * flash of a different tone before this frame draws) with a flat white
- * storefront mark on top — an awning with a zig-zag fringe over a
- * building front with two windows and a door (the same mark used for the
- * app icon — see the adaptive icon drawables), the door/windows "cut out"
- * back to the orange background. One flat color pair, no
- * gradient/shadow/glass/blur — Claude's own flat single-color mark
- * language, applied to an actual shop pictogram instead of Claude's own
- * mark.
+ * REDESIGN ("بدي ياها بستايل Claude هيك يعني حرفيا"): matches Claude's own
+ * splash screen structure exactly instead of approximating it — a plain
+ * near-black background (`splash_background` — see colors.xml, sampled
+ * straight from Claude's own splash) with the mark and wordmark sitting
+ * side by side in one row (not stacked), the mark small and in the brand
+ * orange accent color instead of large and white/stacked above the text,
+ * exactly like the small orange asterisk next to "Claude". The mortar and
+ * pestle glyph itself is unchanged (see MortarAndPestleMark) — only its
+ * size, color and position relative to the wordmark changed to match the
+ * reference's proportions and layout.
  *  - the app name is set in a serif face (matching Claude's own wordmark
  *    treatment — see `AppTypography`'s `ClaudeSerif` for the same choice
- *    elsewhere in the app) instead of the bold sans title, and the
- *    subtitle line was dropped so the composition reads as just
- *    "mark + wordmark", like the reference.
- *  - the bottom credit is now a small plain letter-spaced caption reading
- *    "SEMO STUDIO" (no pill/chip background, no rule above it — bare text
- *    low on the screen, the same treatment Claude's own splash gives its
- *    "ANTHROPIC" line), replacing the previous "تطوير المعالج الفيزيائي
- *    سلمان" credit chip.
+ *    elsewhere in the app)
+ *  - the bottom credit stays the small plain letter-spaced "SEMO STUDIO"
+ *    caption (no pill/chip background, no rule above it — bare text low
+ *    on the screen), the same treatment Claude's own splash gives its
+ *    "ANTHROPIC" line, now in the same muted grey rather than a
+ *    translucent white so it reads correctly on the near-black background.
  *
  * PERF: still a fixed one-shot entrance on a handful of nodes (one Canvas
  * draw + two Text nodes) — same cost class as before, cheaper than the
@@ -83,8 +79,13 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
         label = "splashEntrance"
     )
 
-    val splashBackground = Color(0xFFDA7757)
+    // REDESIGN: near-black background + orange mark, sampled directly
+    // from Claude's own splash (background ~#151515, mark accent
+    // ~#D97858) instead of the previous flat-orange-bg/white-mark pair.
+    val splashBackground = Color(0xFF151515)
+    val markAccent = Color(0xFFDA7757)
     val onDark = Color.White
+    val creditGrey = Color(0xFF8A8A8A)
 
     Box(
         modifier
@@ -92,40 +93,39 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
             .background(splashBackground),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .fillMaxWidth()
                 .padding(horizontal = 32.dp)
                 .alpha(entrance)
                 .scale(0.94f + entrance * 0.06f)
         ) {
-            StorefrontMark(
-                modifier = Modifier.size(104.dp),
-                color = onDark,
+            MortarAndPestleMark(
+                modifier = Modifier.size(40.dp),
+                color = markAccent,
                 cutoutColor = splashBackground
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.width(14.dp))
 
             Text(
                 "إدارة المحل",
                 color = onDark,
                 fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Normal,
-                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 32.sp, letterSpacing = 0.2.sp),
+                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 34.sp, letterSpacing = 0.2.sp),
                 textAlign = TextAlign.Center
             )
         }
 
-        // FEATURE: نص الاعتماد بالأسفل صار "SEMO STUDIO" بنفس أسلوب
+        // FEATURE: نص الاعتماد بالأسفل "SEMO STUDIO" بنفس أسلوب
         // "ANTHROPIC" تحت شعار Claude — نص صغير مسافته بين الحروف واسعة،
-        // بلا خلفية أو خط فاصل، ثابت بالكامل (يتبع فقط نفس `entrance`
-        // العام لهذه الشاشة).
+        // بلا خلفية أو خط فاصل، بلون رمادي مطفي بدل الأبيض الشفاف (عشان
+        // يبين صح فوق الخلفية الغامقة الجديدة)، ثابت بالكامل (يتبع فقط
+        // نفس `entrance` العام لهذه الشاشة).
         Text(
             "SEMO STUDIO",
-            color = onDark.copy(alpha = 0.6f),
+            color = creditGrey,
             style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.sp),
             fontWeight = FontWeight.Medium,
             textAlign = TextAlign.Center,
@@ -138,107 +138,92 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
 }
 
 /**
- * The flat storefront glyph — same silhouette as the app icon (see the
- * adaptive-icon foreground drawable, generated from the same shape): a
- * rounded awning band, a zig-zag fringe hanging off it, a building front
- * below with two windows and a door. Drawn as a handful of flat filled
- * shapes with no blur/gradient/animation — the window/door "cut-outs" are
- * just drawn in [cutoutColor] (the splash's own background) on top, so
- * the whole mark costs the same tiny, one-time amount of work as a
- * couple of Text nodes.
+ * The flat mortar-and-pestle glyph — same silhouette as the app icon (see
+ * the adaptive-icon foreground drawable, generated from the same shape):
+ * a tapered bowl (mortar) with a pestle resting diagonally in it and a
+ * few scattered grains above. Drawn as a handful of flat filled shapes
+ * with no blur/gradient/animation — the bowl's rim "cut-out" is just
+ * drawn in [cutoutColor] (the splash's own background) on top, the same
+ * trick the old storefront glyph used for its windows/door — so the
+ * whole mark costs the same tiny, one-time amount of work as a couple of
+ * Text nodes.
  */
 @Composable
-private fun StorefrontMark(modifier: Modifier = Modifier, color: Color, cutoutColor: Color) {
+private fun MortarAndPestleMark(modifier: Modifier = Modifier, color: Color, cutoutColor: Color) {
     Canvas(modifier) {
-        val w = size.minDimension * 0.92f
-        val left = (size.width - w) / 2f
-        val right = left + w
+        val s = size.minDimension
         val cx = size.width / 2f
+        val cy = size.height / 2f
+        val w = s * 0.66f
 
-        val awningTop = size.height * 0.06f
-        val awningH = w * 0.20f
-        val awningBottom = awningTop + awningH
+        // ---- bowl (mortar) ----
+        val bowlW = w
+        val bowlH = w * 0.52f
+        val bowlLeft = cx - bowlW / 2f
+        val bowlRight = cx + bowlW / 2f
+        val bowlTop = cy
+        val bowlBottom = bowlTop + bowlH
+        val bowlCorner = bowlW * 0.16f
 
-        val fringeH = w * 0.14f
-        val fringeBottom = awningBottom + fringeH
-
-        val bodyTop = fringeBottom - size.height * 0.015f
-        val bodyBottom = size.height * 0.96f
-
-        val cornerAwning = w * 0.10f
-        val cornerBody = w * 0.05f
-
-        // 1) awning band — rounded corners all around, fringe covers the bottom
         drawRoundRect(
             color = color,
-            topLeft = Offset(left, awningTop),
-            size = Size(w, awningBottom + w * 0.04f - awningTop),
-            cornerRadius = CornerRadius(cornerAwning, cornerAwning)
+            topLeft = Offset(bowlLeft, bowlTop),
+            size = Size(bowlW, bowlH),
+            cornerRadius = CornerRadius(bowlCorner, bowlCorner)
         )
 
-        // 2) zig-zag fringe hanging off the awning
-        val n = 6
-        val seg = w / n
-        val fringePath = Path().apply {
-            moveTo(left, awningBottom)
-            for (i in 0 until n) {
-                val x0 = left + i * seg
-                val xm = x0 + seg / 2f
-                val x1 = x0 + seg
-                lineTo(xm, fringeBottom)
-                lineTo(x1, awningBottom)
-            }
-            lineTo(right, awningBottom)
+        // taper the bottom corners inward so it reads as a bowl, not a box
+        val taperW = bowlW * 0.20f
+        val taperH = bowlH * 0.62f
+        val pad = s * 0.01f
+        val leftTaper = Path().apply {
+            moveTo(bowlLeft - pad, bowlBottom - taperH)
+            lineTo(bowlLeft + taperW, bowlBottom + pad)
+            lineTo(bowlLeft - pad, bowlBottom + pad)
             close()
         }
-        drawPath(fringePath, color = color)
+        val rightTaper = Path().apply {
+            moveTo(bowlRight + pad, bowlBottom - taperH)
+            lineTo(bowlRight - taperW, bowlBottom + pad)
+            lineTo(bowlRight + pad, bowlBottom + pad)
+            close()
+        }
+        drawPath(leftTaper, color = cutoutColor)
+        drawPath(rightTaper, color = cutoutColor)
 
-        // 3) building body — rounded bottom corners, square top so it
-        // reads as one block with the fringe above it
-        drawRoundRect(
-            color = color,
-            topLeft = Offset(left, bodyTop),
-            size = Size(w, bodyBottom - bodyTop),
-            cornerRadius = CornerRadius(cornerBody, cornerBody)
-        )
-        drawRect(
-            color = color,
-            topLeft = Offset(left, bodyTop),
-            size = Size(w, w * 0.06f)
+        // ---- pestle, resting diagonally with its head in the bowl ----
+        val pestleLen = w * 0.98f
+        val pestleWidth = w * 0.20f
+        val dx = w * 0.10f
+        val dy = -w * 0.22f
+        val capsuleCenter = Offset(cx + dx, cy + dy)
+
+        rotate(degrees = -34f, pivot = capsuleCenter) {
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(capsuleCenter.x - pestleLen / 2f, capsuleCenter.y - pestleWidth / 2f),
+                size = Size(pestleLen, pestleWidth),
+                cornerRadius = CornerRadius(pestleWidth / 2f, pestleWidth / 2f)
+            )
+            val headR = pestleWidth * 0.62f
+            val headCx = capsuleCenter.x - pestleLen / 2f + headR * 0.65f
+            drawCircle(color = color, radius = headR, center = Offset(headCx, capsuleCenter.y))
+        }
+
+        // bowl opening (rim) — cut back to the background on top of
+        // everything so the pestle head reads as resting inside the bowl
+        val rimW = bowlW * 0.74f
+        val rimH = bowlH * 0.30f
+        val rimTop = bowlTop - rimH * 0.42f
+        drawOval(
+            color = cutoutColor,
+            topLeft = Offset(cx - rimW / 2f, rimTop),
+            size = Size(rimW, rimH)
         )
 
-        // 4) two windows (cut out to the background color)
-        val win = w * 0.19f
-        val winY0 = bodyTop + w * 0.11f
-        val inset = w * 0.11f
-        val winCorner = win * 0.20f
-        drawRoundRect(
-            color = cutoutColor,
-            topLeft = Offset(left + inset, winY0),
-            size = Size(win, win),
-            cornerRadius = CornerRadius(winCorner, winCorner)
-        )
-        drawRoundRect(
-            color = cutoutColor,
-            topLeft = Offset(right - inset - win, winY0),
-            size = Size(win, win),
-            cornerRadius = CornerRadius(winCorner, winCorner)
-        )
-
-        // 5) door (cut out to the background color), full height to the base
-        val doorW = w * 0.22f
-        val doorTop = winY0 + win + w * 0.07f
-        val doorCorner = doorW * 0.32f
-        drawRoundRect(
-            color = cutoutColor,
-            topLeft = Offset(cx - doorW / 2f, doorTop),
-            size = Size(doorW, bodyBottom - doorTop),
-            cornerRadius = CornerRadius(doorCorner, doorCorner)
-        )
-        drawRect(
-            color = cutoutColor,
-            topLeft = Offset(cx - doorW / 2f, bodyBottom - doorCorner),
-            size = Size(doorW, doorCorner)
-        )
+        // ---- a few scattered spice grains ----
+        drawCircle(color = color, radius = w * 0.045f, center = Offset(cx + w * 0.30f, cy - s * 0.20f))
+        drawCircle(color = color, radius = w * 0.032f, center = Offset(cx + w * 0.42f, cy - s * 0.115f))
+        drawCircle(color = color, radius = w * 0.030f, center = Offset(cx + w * 0.20f, cy - s * 0.26f))
     }
 }
