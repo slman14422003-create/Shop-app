@@ -33,4 +33,8 @@
 
     <color name="ripple_brand">#40F0C4AA</color>
     <color name="edge_glow_brand">#F0C4AA</color>
+
+    <!-- Same fixed splash tone as values/colors.xml — see that file's
+         note; the splash stays identical in light/dark system theme. -->
+    <color name="splash_background">#DA7757</color>
 </resources>
