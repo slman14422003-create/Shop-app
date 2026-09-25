@@ -395,6 +395,11 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // REDESIGN ("شاشة الاعدادات... عدلهم" — matching the reference
+            // screen's own top hero card): opens with a branded card first,
+            // above every grouped option list below it.
+            AppHeroCard(appVersion = appVersion, onOpenHelp = onOpenHelp)
+
             // تنبيه تلقائي: يظهر فقط إذا تعذر تحميل البيانات من الخادم
             // (وليس لمجرد أن القائمة فارغة فعليًا) وتوجد نسخة محلية يمكن
             // العودة إليها. لا يوجد استرجاع صامت تلقائي أبدًا — هذا زر
@@ -907,22 +912,10 @@ fun SettingsScreen(
                 }
             }
 
-            // حول التطبيق (about) — new, a small personal touch
+            // روابط إضافية — الاسم/الوصف/رقم الإصدار صاروا ببطاقة
+            // AppHeroCard أعلى الشاشة (بدل تكرارهم هون كمان)؛ هاد القسم
+            // ضل بس للرابطين الثانويين.
             SettingsSection(title = "حول التطبيق", icon = Icons.Default.Info) {
-                Text("إدارة المحل — الإصدار 1.0.0", style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "تطبيق واحد لإدارة الديون والمواد والأسعار، مبني خصيصًا لمحلك ويعمل حتى بدون اتصال دائم بالإنترنت.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "تطوير: سلمان",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-                Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = onOpenHelp, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
@@ -1158,6 +1151,61 @@ private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) 
             exit = fadeOut() + scaleOut(targetScale = 0.6f)
         ) {
             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+// REDESIGN ("شاشة الاعدادات... عدلهم" — matching the reference screen's own
+// top card): the reference opens with a branded card — name, a short
+// description, then one centered full-width pill button — sitting above
+// every grouped option list, not buried as just another list item near the
+// bottom. Same shape here: "إدارة المحل" name/description/version replace
+// the reference's own app name/tagline, and "دليل الاستخدام" (the user's
+// guide) fills the same slot as the reference's own action button. Uses the
+// same borderless `surfaceContainer` card language as SettingsSection below
+// it, just with its own centered layout instead of a left-aligned list.
+@Composable
+private fun AppHeroCard(appVersion: AppVersionInfo, onOpenHelp: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Text(
+                "إدارة المحل",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "تطبيق واحد لإدارة الديون والمواد والأسعار، مبني خصيصًا لمحلك ويعمل حتى بدون اتصال دائم بالإنترنت.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "الإصدار ${appVersion.name} — تطوير سلمان",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = onOpenHelp,
+                shape = RoundedCornerShape(50),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier.fillMaxWidth().height(48.dp)
+            ) {
+                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("دليل الاستخدام")
+            }
         }
     }
 }
