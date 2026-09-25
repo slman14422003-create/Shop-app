@@ -4,10 +4,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
@@ -15,10 +18,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -32,6 +43,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 
 /**
  * The floating pill's actual on-screen height (including its own top/
@@ -73,13 +85,65 @@ val LocalFloatingBottomNavHeight = compositionLocalOf { 0.dp }
  * it always lands above the floating pill — and by exactly 0.dp extra
  * when the pill isn't showing, so nothing shifts on screens/states where
  * there's no pill to clear.
+ *
+ * REDESIGN ("مربع حوار تم حذف المادة او الدين بكل التطبيق بدو اعادة تنسيق
+ * بشكل كامل"): every one of those "تم حذف المادة"/"تم حذف الدين" (and every
+ * other "تم ..."/"خطأ ...") confirmation across the app renders through
+ * this single shared host, so restyling it here is what restyles all of
+ * them at once. It used to fall through to the plain default Material
+ * `Snackbar` — a dark, low-contrast bar that didn't match the rest of the
+ * app's own flat "glass" card language (see GlassAlertDialog, GlassCard).
+ * Now it renders as [GlassSnackbar]: the same opaque, rounded, bordered
+ * surface used everywhere else in the app, with a status icon (a green
+ * check for a "تم ..." success message, a red outline for a "خطأ ..."
+ * failure one) so the result of a delete/edit/add reads at a glance
+ * instead of just as an unstyled line of text.
  */
 @Composable
 fun GlassSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
     SnackbarHost(
         hostState = hostState,
         modifier = modifier.padding(bottom = LocalFloatingBottomNavHeight.current + 12.dp)
-    )
+    ) { data -> GlassSnackbar(data) }
+}
+
+@Composable
+private fun GlassSnackbar(data: SnackbarData) {
+    val isError = data.visuals.message.startsWith("خطأ")
+    val semantic = LocalSemanticColors.current
+    val accent = if (isError) semantic.danger else semantic.success
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        shadowElevation = 6.dp
+    ) {
+        Row(
+            Modifier.padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                if (isError) Icons.Filled.ErrorOutline else Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(22.dp)
+            )
+            Text(
+                data.visuals.message,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            data.visuals.actionLabel?.let { label ->
+                TextButton(onClick = { data.performAction() }) {
+                    Text(label, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
 }
 
 /**
