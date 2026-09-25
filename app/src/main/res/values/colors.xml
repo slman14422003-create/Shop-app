@@ -26,8 +26,13 @@
     <color name="surface_variant_light">#F0EDE4</color>
 
     <!-- Ripple / touch-feedback tint and scroll edge-glow color, tied to
-         the same exact terracotta as Phizyo's claude_orange. -->
-    <color name="ripple_brand">#33C96442</color>
+         the same exact terracotta as Phizyo's claude_orange.
+         POLISH: alpha lowered from #33 (20%) to #1F (~12%) — the same
+         restrained-touch-feedback direction already applied elsewhere in
+         this app (header shadow dropped to 2dp, icon-button resting fill
+         dropped to 0), so the most frequent feedback in the app (every tap)
+         reads as a refined hint rather than a loud flash. -->
+    <color name="ripple_brand">#1FC96442</color>
     <color name="edge_glow_brand">#C96442</color>
 
     <!-- Unified with Phizyo's bg_deep_1: the splash now follows system
