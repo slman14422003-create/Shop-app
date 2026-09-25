@@ -105,21 +105,25 @@ import com.shopmanager.app.ui.theme.ShopManagerTheme
 import com.shopmanager.app.ui.theme.rememberIsDarkTheme
 
 
-// FIX: Home used to be its own NavHost destination, separate from the
-// Debts/Materials HorizontalPager, so swiping only ever worked between
-// those two and a swipe from Debts back to Home did nothing (you had to
-// tap the bottom tab instead). All three main tabs now live as pages of
-// the same HorizontalPager, so a flick right/left moves between Home,
-// Debts, and Materials exactly like tapping the tabs below, and the
-// gesture is consistent everywhere instead of only covering two of the
-// three screens.
+// FIX: Home/Debts/Materials/Notes all live as pages of one HorizontalPager
+// so every destination shares the exact same page-transition animation and
+// state-preservation machinery instead of each screen wiring its own.
+// REMOVED ("ميزة التنقل بين الشاشات الغيها"): a flick right/left used to
+// move between pages directly, the same as tapping a tab in the drawer —
+// two different gestures doing the same navigation, and a stray drag over
+// any tab's own content (a long list, a swipe-to-delete row, ...) could
+// switch the whole screen by accident. Navigation between the four tabs
+// now only ever happens through the drawer or a quick-action tap
+// (`openPager()` below); the pager itself is scrolled purely
+// programmatically, never by the user's finger — see `userScrollEnabled`
+// on the HorizontalPager further down.
 private const val ROUTE_MAIN_PAGER = "mainPager"
 private const val PAGE_DASHBOARD = 0
 private const val PAGE_DEBTS = 1
 private const val PAGE_MATERIALS = 2
 // ملاحظات هامة (Important Notes) - the 4th main tab, added alongside
 // Home/Debts/Materials in the same HorizontalPager/FloatingBottomNav so it
-// gets the exact same swipe-between-tabs behavior described above for free.
+// shares the exact same tab-switch animation described above for free.
 private const val PAGE_NOTES = 3
 private const val ROUTE_SETTINGS = "settings"
 // لوحة المسؤول السرية: not exposed through any visible nav item — reached
@@ -754,22 +758,25 @@ private fun ShopManagerApp(
             }
         ) {
             composable(ROUTE_MAIN_PAGER) {
-                // A single swipeable surface for Home, Debts, and Materials:
-                // flicking right or left moves between all three, exactly
-                // like switching the tabs below, just smoother. Each row's
-                // own delete action is a tap (see DeleteIconButton) rather
-                // than a horizontal swipe, so it never fights this
-                // page-swipe gesture over the same axis.
+                // One shared surface for Home, Debts, Materials, and Notes —
+                // `userScrollEnabled = false` below means the user can never
+                // drag between them directly; every switch goes through
+                // `openPager()` (drawer tap / quick action / notification),
+                // which still animates this exact pager with the same
+                // tuned curve (`pagerTabAnimationSpec`). Each row's own
+                // delete action stays a tap (see DeleteIconButton) rather
+                // than a horizontal swipe either way.
                 //
                 // PERF: this used to wrap every page in a per-frame
                 // graphicsLayer that scaled and faded it while dragging.
                 // With list-heavy screens full of ElevatedCards (each one
                 // already its own shadow-casting layer), animating a
                 // scale/alpha transform across the whole subtree on every
-                // scroll frame was expensive and was the main reason
-                // swiping between tabs felt heavy on real devices. The
-                // pager still swipes and snaps the same way without it —
-                // it just no longer pays that compositing cost.
+                // scroll frame was expensive. Now that the pager only ever
+                // moves via `animateScrollToPage()` (see `userScrollEnabled`
+                // below) that per-frame drag transform has no reason to
+                // exist at all — the programmatic tab-switch animation is
+                // driven entirely by `pagerTabAnimationSpec` instead.
                 HorizontalPager(
                     state = pagerState,
                     // PERF (تنقّل أنعم): compose الصفحة المجاورة (يمين/يسار)
@@ -782,6 +789,10 @@ private fun ShopManagerApp(
                     // ضروري - نفس منطق "دعم الوضعين" اللي يحدد isLowTierForPager
                     // نفسها فوق.
                     beyondViewportPageCount = if (isLowTierForPager) 0 else 1,
+                    // REMOVED ("ميزة التنقل بين الشاشات الغيها"): no
+                    // finger-drag between tabs anymore — see the class-level
+                    // FIX/REMOVED comment above this composable() block.
+                    userScrollEnabled = false,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     when (page) {
