@@ -415,8 +415,8 @@ fun SettingsScreen(
             // when dismissed or resolved.
             AnimatedVisibility(
                 visible = (debtsSyncError || materialsSyncError) && backups.isNotEmpty() && !dismissedServerErrorBanner,
-                enter = fadeIn(MotionSpecs.contentTween()) + scaleIn(MotionSpecs.popInSpring(), initialScale = 0.92f) + expandVertically(),
-                exit = fadeOut(MotionSpecs.contentTween()) + scaleOut(MotionSpecs.popInSpring(), targetScale = 0.92f) + shrinkVertically()
+                enter = fadeIn(MotionSpecs.contentTween()) + scaleIn(MotionSpecs.popInSpring(), initialScale = 0.92f) + expandVertically(MotionSpecs.expandSpring()),
+                exit = fadeOut(MotionSpecs.contentTween()) + scaleOut(MotionSpecs.popInSpring(), targetScale = 0.92f) + shrinkVertically(MotionSpecs.expandSpring())
             ) {
                 // BUG FIXED / RE-UNIFIED (see GlassCard.kt's own note): this
                 // was a raw Material3 ElevatedCard with the platform's own
@@ -524,8 +524,8 @@ fun SettingsScreen(
                 }
                 AnimatedVisibility(
                     visible = notificationsEnabled,
-                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(),
-                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically()
+                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
+                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically(MotionSpecs.expandSpring())
                 ) {
                     Column {
                         Spacer(Modifier.height(12.dp))
@@ -555,8 +555,8 @@ fun SettingsScreen(
                 }
                 AnimatedVisibility(
                     visible = notificationsEnabled && !systemNotificationsAllowed,
-                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(),
-                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically()
+                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
+                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically(MotionSpecs.expandSpring())
                 ) {
                     Column {
                         Spacer(Modifier.height(10.dp))
@@ -857,8 +857,8 @@ fun SettingsScreen(
                 }
                 AnimatedVisibility(
                     visible = isRestoring,
-                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(),
-                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically()
+                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
+                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically(MotionSpecs.expandSpring())
                 ) {
                     Column {
                         Spacer(Modifier.height(8.dp))
@@ -1156,7 +1156,7 @@ private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) 
         AnimatedVisibility(
             visible = selected,
             enter = fadeIn(MotionSpecs.popInSpring()) + scaleIn(MotionSpecs.popInSpring(), initialScale = 0.6f),
-            exit = fadeOut() + scaleOut(targetScale = 0.6f)
+            exit = fadeOut(MotionSpecs.popInSpring()) + scaleOut(MotionSpecs.popInSpring(), targetScale = 0.6f)
         ) {
             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
         }
