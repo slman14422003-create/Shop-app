@@ -12,7 +12,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -104,6 +103,7 @@ import com.shopmanager.app.ui.common.QuickAction
 import com.shopmanager.app.ui.common.QuickActionFab
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
 import com.shopmanager.app.ui.theme.AppThemeMode
@@ -161,12 +161,13 @@ private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 private const val SPLASH_MIN_DISPLAY_MS = 1000L
 private const val SPLASH_MIN_DISPLAY_LOW_MS = 650L
 
-// Apple's own standard screen-transition curve (UIView's system easing for
-// view controller push/pop and modal presentation) — reused here for the
-// splash→app hand-off, and already used for the bottom-nav page transitions
-// further down this file, so every major transition in the app shares the
-// same "iOS-smooth" curve instead of each one picking its own.
-private val iosStandardEasing = CubicBezierEasing(0.32f, 0f, 0.24f, 1f)
+// REPLACED WITH CLAUDE.AI-STYLE MOTION: this used to be Apple's own
+// UIView screen-transition curve. Every major transition in the app
+// (splash→app hand-off, bottom-nav page transitions further down this
+// file) now shares [MotionSpecs.claudeEasing] instead — the reference
+// Claude.ai design's own quick-start/gentle-stop, no-overshoot curve —
+// so nothing in the app still reads as borrowed from iOS.
+private val claudeStandardEasing = MotionSpecs.claudeEasing
 
 class MainActivity : ComponentActivity() {
     // Class-level (not inside setContent) so onNewIntent below - fired when
@@ -364,7 +365,19 @@ class MainActivity : ComponentActivity() {
                     // margins show the real page content/background instead
                     // of a separately-painted solid color.
                     navigationBarColor = Color.Transparent,
-                    statusBarDarkIcons = if (isReady && !unlocked) !isDark else false,
+                    // BUG FIXED ("في الوضع النهاري شريط الحالة يصبح ابيض كله"):
+                    // this used to force white/light icons (`false`) for
+                    // every *unlocked*, ready screen regardless of theme —
+                    // only the lock screen actually read `!isDark`. In light
+                    // mode that put white status-bar icons over the app's
+                    // own white/cream background, so the icons themselves
+                    // vanished and the whole status bar area read as a flat
+                    // blank white strip. Only the splash (`!isReady`, which
+                    // always sits on its own colored full-bleed background)
+                    // still needs the forced-white treatment; every other
+                    // ready screen — locked or not — now follows the actual
+                    // theme like navigationBarDarkIcons already did.
+                    statusBarDarkIcons = if (isReady) !isDark else false,
                     navigationBarDarkIcons = if (isReady) !isDark else false
                 )
 
@@ -389,15 +402,15 @@ class MainActivity : ComponentActivity() {
                             if (isLowTierForHandoff) {
                                 fadeIn(tween(90)) togetherWith fadeOut(tween(90))
                             } else {
-                                (fadeIn(tween(360, easing = iosStandardEasing)) +
+                                (fadeIn(tween(360, easing = claudeStandardEasing)) +
                                     scaleIn(
                                         initialScale = 0.96f,
-                                        animationSpec = tween(360, easing = iosStandardEasing)
+                                        animationSpec = tween(360, easing = claudeStandardEasing)
                                     )) togetherWith
-                                    (fadeOut(tween(260, easing = iosStandardEasing)) +
+                                    (fadeOut(tween(260, easing = claudeStandardEasing)) +
                                         scaleOut(
                                             targetScale = 1.04f,
-                                            animationSpec = tween(260, easing = iosStandardEasing)
+                                            animationSpec = tween(260, easing = claudeStandardEasing)
                                         ))
                             }
                         }
@@ -569,7 +582,7 @@ private fun ShopManagerApp(
     // swiping between Home/Debts/Materials/Notes, but through
     // `animateScrollToPage()`'s own default spec — a generic Compose
     // spring, completely unrelated to the deliberately-tuned iOS-style
-    // curve (`iosEasing`/`iosSlideSpec` below) every *pushed* screen
+    // curve (`MotionSpecs.claudeEasing`/`pushSlideSpec` below) every *pushed* screen
     // (Settings, Person Detail, ...) already animates with. The two kinds
     // of navigation in this same app were animating on two unrelated
     // curves/timings, which is exactly what reads as inconsistent even
@@ -580,7 +593,7 @@ private fun ShopManagerApp(
     val isLowTierForPager = LocalPerformanceTier.current == PerformanceTier.LOW
     val pagerTabAnimationSpec: FiniteAnimationSpec<Float> =
         if (isLowTierForPager) tween(0)
-        else tween(340, easing = CubicBezierEasing(0.32f, 0f, 0.24f, 1f))
+        else tween(300, easing = MotionSpecs.claudeEasing)
 
     @OptIn(ExperimentalFoundationApi::class)
     fun openPager(page: Int) {
@@ -708,9 +721,11 @@ private fun ShopManagerApp(
         // for why these are shaped the way they are — declared here, above
         // NavHost, since a function-call argument list can only contain
         // `name = value` arguments, not local `val` statements.
-        val iosEasing = CubicBezierEasing(0.32f, 0f, 0.24f, 1f)
-        val iosSlideSpec: FiniteAnimationSpec<IntOffset> = tween(340, easing = iosEasing)
-        val iosFadeSpec: FiniteAnimationSpec<Float> = tween(340, easing = iosEasing)
+        // CLAUDE.AI-STYLE MOTION: shares [MotionSpecs.claudeEasing] — the
+        // same no-overshoot curve every other transition in the app now
+        // uses — instead of a separately-tuned iOS curve.
+        val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(300, easing = MotionSpecs.claudeEasing)
+        val pushFadeSpec: FiniteAnimationSpec<Float> = tween(300, easing = MotionSpecs.claudeEasing)
         CompositionLocalProvider(
             LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp
         ) {
@@ -759,29 +774,28 @@ private fun ShopManagerApp(
             // PERF: LOW tier still keeps this at zero cost (EnterTransition/
             // ExitTransition.None below) — the fastest a screen change can
             // be, same as before this rewrite.
-            // `iosEasing` approximates UINavigationController's own curve —
-            // steeper off the start than Material's FastOutSlowInEasing
-            // (which is what made the old transition read as "Android" no
-            // matter what else changed) — and 340ms lands in iOS's own
-            // ~300-350ms range for a push, instead of the old 220ms/160ms
-            // split (which also made push/pop feel asymmetric in speed).
+            // `MotionSpecs.claudeEasing` is the same no-bounce, quick-start/
+            // gentle-stop curve every other transition in the app now
+            // shares (see MotionSpecs) — 300ms is quick enough to feel
+            // immediate without the old asymmetric 220ms/160ms push/pop
+            // split.
             enterTransition = {
                 if (isLowTier) EnterTransition.None
-                else slideInHorizontally(iosSlideSpec) { fullWidth -> fullWidth }
+                else slideInHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
             },
             exitTransition = {
                 if (isLowTier) ExitTransition.None
-                else slideOutHorizontally(iosSlideSpec) { fullWidth -> -fullWidth / 3 } +
-                    fadeOut(iosFadeSpec, targetAlpha = 0.72f)
+                else slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                    fadeOut(pushFadeSpec, targetAlpha = 0.72f)
             },
             popEnterTransition = {
                 if (isLowTier) EnterTransition.None
-                else slideInHorizontally(iosSlideSpec) { fullWidth -> -fullWidth / 3 } +
-                    fadeIn(iosFadeSpec, initialAlpha = 0.72f)
+                else slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                    fadeIn(pushFadeSpec, initialAlpha = 0.72f)
             },
             popExitTransition = {
                 if (isLowTier) ExitTransition.None
-                else slideOutHorizontally(iosSlideSpec) { fullWidth -> fullWidth }
+                else slideOutHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
             }
         ) {
             composable(ROUTE_MAIN_PAGER) {
