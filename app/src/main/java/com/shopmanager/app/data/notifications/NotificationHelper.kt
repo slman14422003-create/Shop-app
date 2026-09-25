@@ -67,7 +67,7 @@ object NotificationHelper {
     // approximation from before the in-app accent was corrected to
     // Anthropic's real brand coral (see colors.xml's brand_claude_primary,
     // fixed the same way) — now the exact same hex the rest of the app uses.
-    private val BRAND_COLOR = android.graphics.Color.parseColor("#C96442")
+    private val BRAND_COLOR = android.graphics.Color.parseColor("#2F80ED")
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
