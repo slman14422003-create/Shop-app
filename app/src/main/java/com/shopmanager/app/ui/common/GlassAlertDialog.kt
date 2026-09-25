@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -63,7 +62,14 @@ fun GlassAlertDialog(
     containerColor: Color = Color.Unspecified,
     titleContentColor: Color = Color.Unspecified,
     textContentColor: Color = Color.Unspecified,
-    properties: DialogProperties = DialogProperties()
+    // REDESIGN ("مربع الحوار... عدلهم"): the platform's default dialog
+    // width cap used to combine with this Box's own `widthIn(max = 340.dp)`
+    // below to make every dialog in the app noticeably narrower than the
+    // reference card (which spans almost the full screen width with just a
+    // small side margin). `usePlatformDefaultWidth = false` here lets this
+    // Box's own width modifier be the only thing controlling how wide the
+    // dialog gets, instead of two separate caps fighting each other.
+    properties: DialogProperties = DialogProperties(usePlatformDefaultWidth = false)
 ) {
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -98,7 +104,13 @@ fun GlassAlertDialog(
                         scaleY = scale
                     }
                     .alpha(contentAlpha)
-                    .widthIn(min = 260.dp, max = 340.dp)
+                    // REDESIGN: fills the screen edge-to-edge (minus a
+                    // 20.dp margin) instead of capping out at a fixed
+                    // 340.dp — a near-full-width card, same proportions as
+                    // the reference.
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .widthIn(max = 460.dp)
                     .liquidGlassSurface(
                         shape = shape,
                         baseBrush = androidx.compose.ui.graphics.Brush.linearGradient(
@@ -136,29 +148,35 @@ fun GlassAlertDialog(
                             }
                         }
                     }
-                    // "متل نافذة تسجيل الخروج بكلود": شيلنا الشريط الكامل
-                    // المقسوم بخط فاصل (نمط iOS القديم)، وصار كل زر إله
-                    // شكل كبسولة مستقلة بمسافة بين الاثنين — بالضبط متل
-                    // "Cancel"/"Log out" بواجهة كلود.
-                    Row(
+                    // REDESIGN ("مربع الحوار... عدلهم" — matching the
+                    // reference card's own button stack): buttons used to
+                    // sit side by side, each taking half the row's width.
+                    // The reference stacks them instead — one full-width
+                    // filled primary button, then a full-width outlined
+                    // secondary button directly beneath it — which also
+                    // gives a short label ("حفظ"/"إلغاء") much more visual
+                    // weight than half a narrow row ever could. Order
+                    // matches the reference: primary action on top,
+                    // dismiss/cancel below it.
+                    Column(
                         Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 22.dp),
-                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
+                        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
                     ) {
+                        DialogButtonCell(
+                            Modifier.fillMaxWidth().height(50.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        ) {
+                            confirmButton()
+                        }
                         if (dismissButton != null) {
                             DialogButtonCell(
-                                Modifier.weight(1f).height(48.dp)
+                                Modifier.fillMaxWidth().height(50.dp)
                                     .clip(RoundedCornerShape(50))
                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
                             ) {
                                 dismissButton()
                             }
-                        }
-                        DialogButtonCell(
-                            Modifier.weight(1f).height(48.dp)
-                                .clip(RoundedCornerShape(50))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                        ) {
-                            confirmButton()
                         }
                     }
                 }

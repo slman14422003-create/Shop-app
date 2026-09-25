@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Settings
@@ -39,12 +40,22 @@ import androidx.compose.ui.unit.dp
  * hamburger button). Laid out like Claude's own app drawer — a plain
  * icon+label row per destination, no card background, generous row
  * height — with الإعدادات pinned below a divider at the bottom instead of
- * scrolling with the other three, since it's a destination outside the
+ * scrolling with the other items, since it's a destination outside the
  * main tabs rather than one of them.
+ *
+ * BUG FIXED ("المنيو الجانبية ما فيها خيار الشاشة الرئيسية — إذا بدي ارجع
+ * لازم اطلع من التطبيق"): the drawer used to list only the three
+ * secondary tabs (Debts/Materials/Notes) and relied on the hardware/back
+ * gesture — which simply exits the app instead of returning to it — to get
+ * back to Home, since Home had no entry of its own anywhere in this list.
+ * الشاشة الرئيسية is now the first row here (page 0, same PAGE_DASHBOARD the
+ * pager already uses), so returning to the home screen is always a single
+ * tap away like every other destination instead of an app relaunch.
  */
 private data class DrawerNavItem(val icon: ImageVector, val label: String, val page: Int)
 
 private val drawerNavItems = listOf(
+    DrawerNavItem(Icons.Default.Home, "الشاشة الرئيسية", page = 0),
     DrawerNavItem(Icons.Default.AttachMoney, "الديون", page = 1),
     DrawerNavItem(Icons.Default.Inventory2, "المواد والأسعار", page = 2),
     DrawerNavItem(Icons.Default.Notes, "ملاحظات هامة", page = 3)
@@ -74,7 +85,7 @@ fun AppDrawerContent(
                 )
             }
             // Pushes الإعدادات (and its divider) to the bottom of the
-            // sheet regardless of how tall the three items above are.
+            // sheet regardless of how tall the items above are.
             Spacer(Modifier.weight(1f))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             DrawerRow(
