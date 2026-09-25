@@ -41,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -62,7 +61,6 @@ import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.GradientIconButton
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -382,19 +380,14 @@ private fun MaterialsHeader(
     Column(
         Modifier
             .fillMaxWidth()
-            // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
-            // — راجع الشرح بـ DashboardScreen.kt.
-            .liquidGlassSurface(
-                RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                highlight = false,
-                baseAlpha = 0.72f
-            )
-            // The glass panel itself (background/border above) already
-            // fills this Column's full bounds, which now extend up behind
-            // the transparent status bar; this only pushes the *content*
-            // (title/tabs) down far enough to clear the status bar icons,
-            // so there's no seam between the bar and the panel — it's one
-            // continuous glass surface from the true top of the screen.
+            // UNIFIED ON CLAUDE'S DESIGN ("عدل التصميم بشكل جذري ليصبح متل
+            // كلود"): this used to sit on its own boxed liquidGlassSurface
+            // panel with rounded bottom corners — the same "boxed card"
+            // header look DashboardHeader's own note already moved away
+            // from for Home. Removed here too, so every tab now sits
+            // directly on the app's plain background like Claude's own
+            // screens (Home *and* Settings) do — no screen has a separate
+            // toned panel behind its title any more.
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
@@ -469,11 +462,20 @@ private data class SegmentOption(val label: String, val icon: androidx.compose.u
  */
 @Composable
 private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSelect: (Int) -> Unit) {
-    // BUG FIXED (unreadable selected label): see original note — the
-    // selected pill is a fixed near-white glass surface in both themes,
-    // so its label needs the brand gradient's (theme-stable) start color
-    // rather than colorScheme.primary, which pales out in dark mode.
-    val selectedLabelColor = LocalBrandGradientColors.current.first()
+    // UNIFIED ON CLAUDE'S DESIGN: this control used to float on top of its
+    // own boxed brand-gradient header panel, which is why its track/thumb
+    // were hardcoded translucent-white overlays (readable against any
+    // colored backdrop) and the selected label read off the brand
+    // gradient's own start color instead of colorScheme.primary. Now that
+    // MaterialsHeader sits directly on the app's plain background like
+    // every other screen, this follows the same theme-aware tokens the
+    // rest of the app already uses for a segmented control (see the
+    // now-removed color-mode picker in SettingsScreen.kt for the same
+    // pattern): a tonal surfaceContainerHigh track, a flat `surface` thumb,
+    // and colorScheme.primary (Claude's own terracotta accent — vivid in
+    // both themes, not the pale primary80-style tone the old comment here
+    // was guarding against) for the selected label.
+    val selectedLabelColor = MaterialTheme.colorScheme.primary
     var trackWidthPx by remember { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val segmentWidth = with(density) {
@@ -490,8 +492,8 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
             .fillMaxWidth()
             .height(46.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(Color.White.copy(alpha = 0.14f))
-            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
             .padding(4.dp)
             .onSizeChanged { trackWidthPx = it.width }
     ) {
@@ -504,14 +506,10 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
                     .offset(x = thumbOffset)
                     .width(segmentWidth)
                     .fillMaxHeight()
-                    .shadow(elevation = 3.dp, shape = RoundedCornerShape(11.dp), clip = false)
+                    .shadow(elevation = 2.dp, shape = RoundedCornerShape(11.dp), clip = false)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.White.copy(alpha = 0.98f), Color.White.copy(alpha = 0.86f))
-                        )
-                    )
-                    .border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(11.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(11.dp))
             )
         }
 

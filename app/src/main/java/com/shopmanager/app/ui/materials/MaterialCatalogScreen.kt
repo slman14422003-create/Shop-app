@@ -33,7 +33,6 @@ import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.GlassSnackbarHost
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
@@ -85,7 +84,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text("اختر مادة", fontWeight = FontWeight.Bold) },
+                title = { Text("اختر مادة", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     // BUG FIXED: two issues here. (1) Icons.Default.ArrowBack
                     // always points left, which is backwards for a back
@@ -109,14 +108,11 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                     containerColor = Color.Transparent,
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
-                ),
-                // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
-                // — راجع الشرح بـ DashboardScreen.kt.
-                modifier = Modifier.liquidGlassSurface(
-                    RectangleShape,
-                    highlight = false,
-                    baseAlpha = 0.72f
                 )
+                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
+                // liquidGlassSurface panel this bar used to sit on — it now
+                // sits flush on the plain background like Home's own header
+                // and Claude's own "Settings" screen.
             )
         },
         // FIX: adding a new catalog name used to be a permanently-visible
