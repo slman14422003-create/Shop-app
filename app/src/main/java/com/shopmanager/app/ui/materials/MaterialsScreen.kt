@@ -64,6 +64,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.quantityLabel
+import com.shopmanager.app.ui.common.AppSearchBar
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.Formatters
@@ -432,39 +433,13 @@ private fun MaterialsHeader(
         // the page — the header itself "becomes" the search UI while
         // active, then reverts to the normal title + tabs when closed.
         if (isSearching) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                GradientIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "إغلاق البحث",
-                    onClick = { onSearchToggle(false); onSearchQueryChange("") }
-                )
-                Spacer(Modifier.width(10.dp))
-                BasicTextField(
-                    value = searchQuery,
-                    onValueChange = onSearchQueryChange,
-                    modifier = Modifier
-                        .weight(1f)
-                        .let { if (searchFocusRequester != null) it.focusRequester(searchFocusRequester) else it },
-                    singleLine = true,
-                    textStyle = MaterialTheme.typography.titleMedium.copy(color = BrandOnGradient),
-                    cursorBrush = SolidColor(BrandOnGradient),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {}),
-                    decorationBox = { inner ->
-                        if (searchQuery.isEmpty()) {
-                            Text(
-                                if (tab == 0) "بحث عن مادة..." else "بحث عن الأسعار...",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = BrandOnGradient.copy(alpha = 0.5f)
-                            )
-                        }
-                        inner()
-                    }
-                )
-                if (searchQuery.isNotEmpty()) {
-                    GradientIconButton(icon = Icons.Default.Clear, contentDescription = "مسح", onClick = { onSearchQueryChange("") })
-                }
-            }
+            AppSearchBar(
+                query = searchQuery,
+                onQueryChange = onSearchQueryChange,
+                onClose = { onSearchToggle(false); onSearchQueryChange("") },
+                placeholder = if (tab == 0) "بحث عن مادة..." else "بحث عن الأسعار...",
+                focusRequester = searchFocusRequester
+            )
         } else {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // BUG FIXED ("الأيقونة فوق الكلمة"): the hamburger used to be a
