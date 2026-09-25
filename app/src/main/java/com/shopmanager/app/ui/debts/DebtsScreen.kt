@@ -5,7 +5,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -30,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.ui.common.ActionIconButton
+import com.shopmanager.app.ui.common.AppSearchBar
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
@@ -54,11 +53,8 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.LocalSemanticColors
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -174,27 +170,13 @@ fun DebtsScreen(
                 // no layout jump, just the one bar's content swapping.
                 title = {
                     if (isSearching) {
-                        BasicTextField(
-                            value = search.value,
-                            onValueChange = { search.value = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(searchFocusRequester),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.titleLarge.copy(color = BrandOnGradient),
-                            cursorBrush = SolidColor(BrandOnGradient),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            keyboardActions = KeyboardActions(onSearch = { }),
-                            decorationBox = { inner ->
-                                if (search.value.isEmpty()) {
-                                    Text(
-                                        "بحث عن عميل...",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        color = BrandOnGradient.copy(alpha = 0.5f)
-                                    )
-                                }
-                                inner()
-                            }
+                        AppSearchBar(
+                            query = search.value,
+                            onQueryChange = { search.value = it },
+                            onClose = { isSearching = false; search.value = "" },
+                            placeholder = "بحث عن عميل...",
+                            focusRequester = searchFocusRequester,
+                            showBackButton = false
                         )
                     } else {
                         Text("الديون", style = MaterialTheme.typography.titleLarge)
@@ -219,11 +201,9 @@ fun DebtsScreen(
                 },
                 actions = {
                     if (isSearching) {
-                        if (search.value.isNotEmpty()) {
-                            IconButton(onClick = { search.value = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "مسح")
-                            }
-                        }
+                        // The clear glyph now lives inside AppSearchBar's own
+                        // pill (see `title` above), so there's nothing left
+                        // to draw in the actions slot while searching.
                     } else {
                         GlassIconButton(
                             icon = Icons.Default.Search,
