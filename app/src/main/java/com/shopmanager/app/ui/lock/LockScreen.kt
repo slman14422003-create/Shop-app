@@ -84,7 +84,11 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
     // primary/tertiary either; same flat surfaceContainerHigh panel every
     // other dialog/card in the app now uses.
     val cardColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    val cardRimColor = MaterialTheme.colorScheme.outlineVariant
+    // BORDERS UNIFIED WHITE — see GlassCard.kt's comment. (Also relies on
+    // liquidGlassSurface's rimColor now being a nullable "draw or don't",
+    // not a `== Color.White` sentinel that made passing white itself
+    // impossible.)
+    val cardRimColor = Color.White
 
     Box(
         Modifier
