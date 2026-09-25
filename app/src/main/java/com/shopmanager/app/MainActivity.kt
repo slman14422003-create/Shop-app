@@ -400,7 +400,7 @@ class MainActivity : ComponentActivity() {
                         label = "splashToApp",
                         transitionSpec = {
                             if (isLowTierForHandoff) {
-                                fadeIn(tween(90)) togetherWith fadeOut(tween(90))
+                                fadeIn(tween(90, easing = claudeStandardEasing)) togetherWith fadeOut(tween(90, easing = claudeStandardEasing))
                             } else {
                                 (fadeIn(tween(360, easing = claudeStandardEasing)) +
                                     scaleIn(
