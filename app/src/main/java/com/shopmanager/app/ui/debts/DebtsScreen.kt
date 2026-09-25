@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -29,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -52,6 +54,12 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.LocalSemanticColors
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -70,6 +78,15 @@ fun DebtsScreen(
     val message = viewModel.message.collectAsState().value
     val isRefreshing = viewModel.isRefreshing.collectAsState().value
     val search = remember { mutableStateOf("") }
+    // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي يتوسع بواجهة لحالة
+    // اثناء البحث"): search used to be a permanently-visible field sitting
+    // under the stats row, competing for space with the actual list on
+    // every visit to this tab even when nobody's searching. It's now a
+    // small icon button in the top bar that expands the *whole bar* into a
+    // focused search field when tapped — the field itself no longer takes
+    // up permanent room on the page.
+    var isSearching by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
     val showAddDialog = remember { mutableStateOf(false) }
 
     // The shared "+" beside the bottom nav pill (see MainActivity) can't
@@ -126,6 +143,10 @@ fun DebtsScreen(
         }
     }
 
+    LaunchedEffect(isSearching) {
+        if (isSearching) searchFocusRequester.requestFocus()
+    }
+
     Scaffold(
         // BUG FIXED (black strip above the bottom nav bar, Debts tab only):
         // unlike DashboardScreen/MaterialsScreen, this Scaffold had no
@@ -147,40 +168,78 @@ fun DebtsScreen(
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text("الديون", style = MaterialTheme.typography.titleLarge) },
+                // REDESIGN: title/navigationIcon/actions all branch on
+                // `isSearching` so the same bar reads as either the normal
+                // "الديون" header or a focused search field — no second bar,
+                // no layout jump, just the one bar's content swapping.
+                title = {
+                    if (isSearching) {
+                        BasicTextField(
+                            value = search.value,
+                            onValueChange = { search.value = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.titleLarge.copy(color = BrandOnGradient),
+                            cursorBrush = SolidColor(BrandOnGradient),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = { }),
+                            decorationBox = { inner ->
+                                if (search.value.isEmpty()) {
+                                    Text(
+                                        "بحث عن عميل...",
+                                        style = MaterialTheme.typography.titleLarge,
+                                        color = BrandOnGradient.copy(alpha = 0.5f)
+                                    )
+                                }
+                                inner()
+                            }
+                        )
+                    } else {
+                        Text("الديون", style = MaterialTheme.typography.titleLarge)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     navigationIconContentColor = BrandOnGradient,
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                // UNIFIED ON CLAUDE'S DESIGN ("عدل التصميم بشكل جذري ليصبح
-                // متل كلود"): this used to sit on its own boxed
-                // liquidGlassSurface panel with rounded bottom corners —
-                // removed, so this bar now sits flush on the plain
-                // background like Home's own header and every Claude
-                // screen (no separate toned panel behind the title).
-                // BUG FIXED ("الأيقونة فوق الكلمة"): the hamburger used to
-                // float over this bar as a separate overlay from
-                // MainActivity, in the exact same top-right corner (RTL)
-                // this title already occupies — see DashboardScreen.kt's
-                // matching note. It's now this TopAppBar's own
-                // `navigationIcon`, a real slot inside the bar itself, so
-                // it takes its own space next to the title instead of
-                // sitting on top of it.
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "القائمة")
+                    if (isSearching) {
+                        IconButton(onClick = { isSearching = false; search.value = "" }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "إغلاق البحث")
+                        }
+                    } else {
+                        IconButton(onClick = onOpenDrawer) {
+                            Icon(Icons.Default.Menu, contentDescription = "القائمة")
+                        }
                     }
                 },
                 actions = {
-                    GlassIconButton(
-                        icon = Icons.Default.Share,
-                        contentDescription = "مشاركة",
-                        onClick = { showShareChoice.value = true },
-                        modifier = Modifier.padding(end = 8.dp),
-                        size = 36.dp
-                    )
+                    if (isSearching) {
+                        if (search.value.isNotEmpty()) {
+                            IconButton(onClick = { search.value = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "مسح")
+                            }
+                        }
+                    } else {
+                        GlassIconButton(
+                            icon = Icons.Default.Search,
+                            contentDescription = "بحث",
+                            onClick = { isSearching = true },
+                            modifier = Modifier.padding(end = 4.dp),
+                            size = 36.dp
+                        )
+                        GlassIconButton(
+                            icon = Icons.Default.Share,
+                            contentDescription = "مشاركة",
+                            onClick = { showShareChoice.value = true },
+                            modifier = Modifier.padding(end = 8.dp),
+                            size = 36.dp
+                        )
+                    }
                 }
             )
         },
@@ -197,32 +256,31 @@ fun DebtsScreen(
         Column(Modifier.fillMaxSize()) {
             StatsRow(state.totalPersons, state.totalDebts, state.totalAmount)
 
-            // iOS 26 REDESIGN: a filled, fully-rounded capsule search
-            // field (no visible outline) instead of the boxy outlined
-            // Material text field — this is the exact shape of iOS's own
-            // search bar (UISearchBar / SwiftUI .searchable).
-            OutlinedTextField(
-                value = search.value,
-                onValueChange = { search.value = it },
+            // REDESIGN ("زر اضافة عميل جديد يجب ان يكون زر عريض مكان شريط
+            // البحث للي شلته"): the permanent search field that used to sit
+            // here moved into the top bar itself (see topBar above, toggled
+            // by the search icon there) — this space is now a wide,
+            // prominent "عميل جديد" button instead, so the single most
+            // common action on this screen (adding a customer) has a clear,
+            // full-width target right under the stats instead of only being
+            // reachable from the small floating "+" beside the nav pill.
+            Surface(
+                onClick = { showAddDialog.value = true },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("بحث عن عميل...") },
-                leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                trailingIcon = {
-                    if (search.value.isNotEmpty()) {
-                        IconButton(onClick = { search.value = "" }) {
-                            Icon(Icons.Default.Clear, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                },
-                singleLine = true,
                 shape = RoundedCornerShape(50),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
-                )
-            )
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("عميل جديد", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                }
+            }
 
             // PERF: same remember-keyed fix as the materials tabs — skip
             // re-filtering the whole person list unless `search` or
