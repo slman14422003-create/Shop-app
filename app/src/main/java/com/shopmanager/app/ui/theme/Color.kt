@@ -54,7 +54,13 @@ val ClaudeBorderSoftDark = Color(0xFF2A2A2A)
 
 // Text.
 val ClaudeTextPrimaryLight = Color(0xFF3D3929)
-val ClaudeTextSecondaryLight = Color(0xFF78766D)
+// ACCESSIBILITY FIX: the previous #78766D only reached ~3.9:1 against
+// background_light (#F5F4EE) and ~4.1:1 against surfaceVariant (#F0EDE4) —
+// both under the WCAG AA 4.5:1 minimum for normal-size text, and this token
+// is what onSurfaceVariant reads for every secondary label/subtitle in the
+// app. #6B6960 keeps the exact same warm, muted hue (imperceptible next to
+// the old value) while clearing 4.5:1 in both contexts.
+val ClaudeTextSecondaryLight = Color(0xFF6B6960)
 val ClaudeTextTertiaryLight = Color(0xFFA6A399)
 val ClaudeTextPrimaryDark = Color(0xFFF2F2F2)
 val ClaudeTextSecondaryDark = Color(0xFFA6A6A6)

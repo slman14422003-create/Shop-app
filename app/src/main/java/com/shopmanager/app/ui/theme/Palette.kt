@@ -79,6 +79,16 @@ internal fun claudeLightScheme(): ColorScheme = lightColorScheme(
     surfaceContainer = ClaudeM3SurfaceContainerLight,
     surfaceContainerHigh = ClaudeCardLight,
     surfaceContainerHighest = ClaudeM3SurfaceContainerHighLight,
+    // COMPLETENESS FIX: lightColorScheme()/darkColorScheme() fall back to
+    // Material3's own default seed (a purple baseline) for any role left
+    // unspecified. surfaceDim/surfaceBright were the two roles in this
+    // family still missing here, so any Material3-internal component that
+    // reads them directly (Slider track, NavigationBar, pull-to-refresh,
+    // bottom-sheet scrim edges) could have rendered an off-palette purple
+    // sliver instead of this app's own neutral tone. Filled from the same
+    // background ladder as the rest of the surface family.
+    surfaceDim = ClaudeBgLight3,
+    surfaceBright = ClaudeCardLight,
 )
 
 internal fun claudeDarkScheme(): ColorScheme = darkColorScheme(
@@ -117,6 +127,9 @@ internal fun claudeDarkScheme(): ColorScheme = darkColorScheme(
     surfaceContainer = ClaudeM3SurfaceContainerDark,
     surfaceContainerHigh = ClaudeCardDark,
     surfaceContainerHighest = ClaudeM3SurfaceContainerHighDark,
+    // See claudeLightScheme's note above — same fix, mirrored for dark.
+    surfaceDim = ClaudeBgDark1,
+    surfaceBright = ClaudeBorderDark,
 )
 
 /** Carries the app's single flat brand-gradient color (Claude's terracotta
