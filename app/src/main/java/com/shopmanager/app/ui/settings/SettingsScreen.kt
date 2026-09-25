@@ -593,6 +593,24 @@ fun SettingsScreen(
                 }
             }
 
+            // الحماية (security / PIN lock) — REORGANIZED ("اعد ترتيب
+            // الشاشة"): moved up next to الإشعارات so the two "protect my
+            // device/data" toggles sit together near the top, ahead of the
+            // more technical المزامنة/الأداء sections below.
+            SettingsSection(title = "الحماية", icon = if (hasPin) Icons.Default.Lock else Icons.Default.LockOpen) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(if (hasPin) "قفل برمز PIN مفعّل" else "قفل برمز PIN غير مفعّل")
+                        Text("يحمي فتح التطبيق برمز محلي على هذا الجهاز فقط", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (hasPin) {
+                        TextButton(onClick = { settings.clearPin(); hasPin = false }) { Text("إلغاء") }
+                    } else {
+                        TextButton(onClick = { showSetPinDialog = true }) { Text("تفعيل") }
+                    }
+                }
+            }
+
             // المزامنة — new section: real connectivity + last successful
             // sync time + a manual "مزامنة الآن" retry, built on the new
             // sync helper layer (data/sync/SyncStatus.kt) instead of the
@@ -723,21 +741,6 @@ fun SettingsScreen(
                         onRecheckDevicePerformance()
                         recheckTick++
                     }) { Text("إعادة فحص أداء الجهاز") }
-                }
-            }
-
-            // الحماية (security / PIN lock)
-            SettingsSection(title = "الحماية", icon = if (hasPin) Icons.Default.Lock else Icons.Default.LockOpen) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text(if (hasPin) "قفل برمز PIN مفعّل" else "قفل برمز PIN غير مفعّل")
-                        Text("يحمي فتح التطبيق برمز محلي على هذا الجهاز فقط", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (hasPin) {
-                        TextButton(onClick = { settings.clearPin(); hasPin = false }) { Text("إلغاء") }
-                    } else {
-                        TextButton(onClick = { showSetPinDialog = true }) { Text("تفعيل") }
-                    }
                 }
             }
 
@@ -898,7 +901,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (isCheckingUpdate) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(8.dp))
                         Text("جارٍ التحقق...")
                     } else {
@@ -913,16 +916,11 @@ fun SettingsScreen(
                 }
             }
 
-            // روابط إضافية — الاسم/الوصف/رقم الإصدار صاروا ببطاقة
-            // AppHeroCard أعلى الشاشة (بدل تكرارهم هون كمان)؛ هاد القسم
-            // ضل بس للرابطين الثانويين.
+            // حول التطبيق — تم حذف زر "دليل الاستخدام" المكرر من هنا
+            // (BUG FIXED: "دليل المستخدم صار موجود مرتين") — الزر الوحيد
+            // له الآن هو الزر البارز أعلى الشاشة في AppHeroCard؛ هذا القسم
+            // صار مخصصًا فقط للروابط التي لا تظهر في مكان آخر.
             SettingsSection(title = "حول التطبيق", icon = Icons.Default.Info) {
-                OutlinedButton(onClick = onOpenHelp, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("دليل الاستخدام")
-                }
-                Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onOpenPrivacyPolicy, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
