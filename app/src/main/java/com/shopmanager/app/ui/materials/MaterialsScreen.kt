@@ -728,22 +728,54 @@ private fun MaterialsList(
                                         draggingId = null
                                         dragOffset = 0f
                                     },
+                                    // BUG FIXED ("تقنية السحب والافلات... بدها تحسين وتطوير
+                                    // بآلية العمل بشكل دقيق"): the swap threshold and the
+                                    // amount `dragOffset` got corrected by on every swap used
+                                    // to both be the *dragged* item's own height alone (`step`
+                                    // above). That's only correct when every row is the same
+                                    // height. Rows here aren't — a material whose name wraps
+                                    // to two lines (e.g. "بذور القرع / اليقطين") is visibly
+                                    // taller than a one-line row like "بيتزا" right next to it
+                                    // (see the reference screenshot). Using only the dragged
+                                    // row's own height meant swapping past a taller neighbor
+                                    // triggered too early (threshold too small) and left the
+                                    // dragged row's finger-relative offset wrong by the
+                                    // difference in height (correction too small), so the row
+                                    // under the finger visibly snapped to the wrong spot —
+                                    // worse the more the two rows' heights differed.
+                                    // Fixed by looking up the *actual* neighbor being swapped
+                                    // past (not assuming it's the same height as the dragged
+                                    // row): the swap now triggers at the midpoint between the
+                                    // two rows' real heights, and the offset is corrected by
+                                    // the neighbor's real height (the exact distance the
+                                    // dragged row visually jumps as it trades places), so the
+                                    // row tracks the finger precisely regardless of how the
+                                    // heights differ.
                                     onDrag = { change, delta ->
                                         change.consume()
                                         dragOffset += delta.y
-                                        val step = (itemHeightsPx[m.id] ?: 0) + 8.dp.toPx()
-                                        if (step > 0f) {
-                                            val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
-                                            if (dragOffset > step / 2 && currentIndex < orderedItems.lastIndex) {
+                                        val gap = 8.dp.toPx()
+                                        val myHeight = (itemHeightsPx[m.id] ?: 0).toFloat()
+                                        val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
+                                        if (dragOffset > 0f && currentIndex < orderedItems.lastIndex) {
+                                            val neighbor = orderedItems[currentIndex + 1]
+                                            val neighborHeight = (itemHeightsPx[neighbor.id] ?: myHeight.toInt()).toFloat()
+                                            val threshold = (myHeight + neighborHeight) / 2f + gap
+                                            if (dragOffset > threshold) {
                                                 orderedItems = orderedItems.toMutableList().apply {
                                                     add(currentIndex + 1, removeAt(currentIndex))
                                                 }
-                                                dragOffset -= step
-                                            } else if (dragOffset < -step / 2 && currentIndex > 0) {
+                                                dragOffset -= (neighborHeight + gap)
+                                            }
+                                        } else if (dragOffset < 0f && currentIndex > 0) {
+                                            val neighbor = orderedItems[currentIndex - 1]
+                                            val neighborHeight = (itemHeightsPx[neighbor.id] ?: myHeight.toInt()).toFloat()
+                                            val threshold = (myHeight + neighborHeight) / 2f + gap
+                                            if (-dragOffset > threshold) {
                                                 orderedItems = orderedItems.toMutableList().apply {
                                                     add(currentIndex - 1, removeAt(currentIndex))
                                                 }
-                                                dragOffset += step
+                                                dragOffset += (neighborHeight + gap)
                                             }
                                         }
                                     }
