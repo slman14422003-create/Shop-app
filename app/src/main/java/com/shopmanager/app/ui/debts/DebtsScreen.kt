@@ -44,7 +44,6 @@ import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.listItemEntrance
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
@@ -52,7 +51,7 @@ import com.shopmanager.app.ui.common.ShareFormatDialog
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
-import com.shopmanager.app.ui.theme.SuccessGreen
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -148,21 +147,19 @@ fun DebtsScreen(
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text("الديون", fontWeight = FontWeight.Bold) },
+                title = { Text("الديون", style = MaterialTheme.typography.titleLarge) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     navigationIconContentColor = BrandOnGradient,
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                // طلب "تعميم ستايل الزجاج": نفس التعديل الموحّد لكل الهيدرات
-                // (highlight = false + baseAlpha = 0.72f) — راجع الشرح
-                // بـ DashboardScreen.kt.
-                modifier = Modifier.liquidGlassSurface(
-                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                    highlight = false,
-                    baseAlpha = 0.72f
-                ),
+                // UNIFIED ON CLAUDE'S DESIGN ("عدل التصميم بشكل جذري ليصبح
+                // متل كلود"): this used to sit on its own boxed
+                // liquidGlassSurface panel with rounded bottom corners —
+                // removed, so this bar now sits flush on the plain
+                // background like Home's own header and every Claude
+                // screen (no separate toned panel behind the title).
                 // BUG FIXED ("الأيقونة فوق الكلمة"): the hamburger used to
                 // float over this bar as a separate overlay from
                 // MainActivity, in the exact same top-right corner (RTL)
@@ -308,14 +305,14 @@ fun DebtsScreen(
     payTarget.value?.let { person ->
         GlassAlertDialog(
             onDismissRequest = { payTarget.value = null },
-            icon = { Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen) },
+            icon = { Icon(Icons.Default.Check, contentDescription = null, tint = LocalSemanticColors.current.success) },
             title = { Text("تأكيد السداد") },
             text = { Text("هل \"${person.name}\" وفى ${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف كل ديونه من السجل وإرسال إشعار.") },
             confirmButton = {
                 TextButton(shape = RectangleShape, onClick = {
                     viewModel.markPersonAsPaid(person)
                     payTarget.value = null
-                }) { Text("تم السداد", color = SuccessGreen, fontWeight = FontWeight.Bold) }
+                }) { Text("تم السداد", color = LocalSemanticColors.current.success, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { payTarget.value = null }) { Text("إلغاء") } }
         )
@@ -509,7 +506,7 @@ private fun PersonRow(
                     Text(
                         "لا يوجد دين حالياً",
                         style = MaterialTheme.typography.bodySmall,
-                        color = SuccessGreen
+                        color = LocalSemanticColors.current.success
                     )
                 }
             }
@@ -529,7 +526,7 @@ private fun PersonRow(
             if (person.amount > 0) {
                 ActionIconButton(
                     icon = Icons.Default.Check,
-                    tint = SuccessGreen,
+                    tint = LocalSemanticColors.current.success,
                     contentDescription = "تسجيل سداد كامل الدين",
                     onClick = onMarkPaid
                 )

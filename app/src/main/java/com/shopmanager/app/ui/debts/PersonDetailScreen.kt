@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
@@ -40,7 +39,6 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.GlassSnackbarHost
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.listItemEntrance
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
@@ -49,7 +47,6 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.GlassCard
 import com.shopmanager.app.ui.notes.NoteEditScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
-import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -110,29 +107,6 @@ fun PersonDetailScreen(
     }
 
     val total = debts.sumOf { it.amount }
-    // BUG FIXED ("اللونان بالشريط العلوي منفصلان بخط، لازم يكونوا نفس اللون
-    // متصل"): the TopAppBar and PersonHeader right below it are two
-    // *independent* liquidGlassSurface panels (see `topFlush`'s own doc on
-    // that function — merging them into one panel isn't possible here since
-    // one lives in Scaffold's `topBar` slot and the other is the first
-    // LazyColumn item). `topFlush` already killed the shadow/topEdge-glare/
-    // rim-border that used to draw an extra line at their seam, but each
-    // panel's default `baseBrush` (`BrandGradient.brush()`) still built its
-    // OWN full gradientStart→gradientEnd sweep across *its own* local
-    // height — a `Brush.verticalGradient` with no explicit end resolves
-    // against whatever height it's actually drawn into. TopAppBar (~64dp +
-    // status bar) finished its sweep all the way at gradientEnd right at its
-    // own bottom edge, while PersonHeader started its *own* sweep fresh at
-    // gradientStart one pixel below — two different colors meeting head-on,
-    // which is exactly the visible line in the screenshot. Giving the
-    // TopAppBar a flat `gradientStart` fill instead (no sweep of its own)
-    // means its bottom edge is now the *same* color PersonHeader's gradient
-    // begins at, so the seam disappears and all the fading into
-    // `gradientEnd` happens across PersonHeader's own, taller panel instead.
-    val brandGradientColors = LocalBrandGradientColors.current
-    val topBarBrush = remember(brandGradientColors) {
-        SolidColor(brandGradientColors.first())
-    }
 
     Scaffold(
         // Off-pager screen (no bottom nav bar of its own) — the outer app
@@ -148,7 +122,7 @@ fun PersonDetailScreen(
                 title = {
                     Text(
                         person.name,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
@@ -177,16 +151,10 @@ fun PersonDetailScreen(
                     navigationIconContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
-                // — راجع الشرح بـ DashboardScreen.kt. baseBrush = topBarBrush
-                // (flat gradientStart, not the usual sweep) — راجع تعليق
-                // "اللونان بالشريط العلوي منفصلان بخط" فوق.
-                modifier = Modifier.liquidGlassSurface(
-                    androidx.compose.ui.graphics.RectangleShape,
-                    baseBrush = topBarBrush,
-                    highlight = false,
-                    baseAlpha = 0.72f
-                ),
+                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
+                // liquidGlassSurface panel (and the flat-brush seam-matching
+                // hack it needed against PersonHeader below) — both now sit
+                // flush on the plain background like every other screen.
                 actions = {
                     // BUG FIXED (الزرين فايتين ببعض / overlapping icons):
                     // each button previously carried its own `padding(end
@@ -512,21 +480,12 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
     Box(
         Modifier
             .fillMaxWidth()
-            // topFlush = true: this sits directly beneath the TopAppBar's
-            // own liquidGlassSurface, so it reads as a continuation of the
-            // same glass panel instead of a second one with a shadow/
-            // highlight/border seam at the boundary — see the bug note on
-            // `topFlush` in LiquidGlass.kt.
-            // طلب "تعميم ستايل الزجاج": highlight = false (topFlush وحدها ما
-            // كانت تطفي topHighlight — راجع تعريفه بـ LiquidGlass.kt) +
-            // baseAlpha = 0.72f بنفس قيمة اللوحة اللي فوقها مباشرة، عشان
-            // تضل تبين كصفيحة زجاج واحدة مستمرة.
-            .liquidGlassSurface(
-                androidx.compose.ui.graphics.RectangleShape,
-                topFlush = true,
-                highlight = false,
-                baseAlpha = 0.72f
-            )
+            // UNIFIED ON CLAUDE'S DESIGN: this used to be a second
+            // liquidGlassSurface panel matched flush against the TopAppBar's
+            // own (via `topFlush` + a shared flat brush) so the two read as
+            // one continuous glass slab. Both panels are gone now — this
+            // sits directly on the plain background like the rest of the
+            // screen, so there's no seam left to match in the first place.
             .padding(20.dp)
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
