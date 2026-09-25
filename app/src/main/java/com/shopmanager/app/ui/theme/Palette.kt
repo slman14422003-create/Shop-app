@@ -31,10 +31,21 @@ import androidx.compose.ui.graphics.Color
  * bg_dialog_card drawables all use), not a computed tint.
  */
 internal fun claudeLightScheme(): ColorScheme = lightColorScheme(
-    primary = ClaudeOrangeLight,
+    // NEUTRALIZED ("الرموز والازرار كلها برتقالي لازم تكون ابيض متل كلاود"):
+    // `primary` is read by every un-styled Material3 control — Switch's
+    // checked track/thumb, the settings theme-picker's trailing checkmark
+    // tint, TextButton's default label color (the dialog confirm/dismiss
+    // buttons in GlassAlertDialog) — so as long as it pointed at the brand
+    // terracotta, all of those read as orange even though the real Claude
+    // app's own chrome for these same controls is neutral black/white/gray,
+    // with color reserved for destructive labels (error) and the small
+    // brand mark alone (splash, notification icon). Pointing primary at the
+    // same near-black text tone as onSurface, instead of the orange, fixes
+    // every one of those controls in this one place.
+    primary = ClaudeTextPrimaryLight,
     onPrimary = Color.White,
-    primaryContainer = ClaudeM3PrimaryContainerLight,
-    onPrimaryContainer = ClaudeM3OnPrimaryContainerLight,
+    primaryContainer = ClaudeBgLight3,
+    onPrimaryContainer = ClaudeTextPrimaryLight,
     secondary = ClaudeSecondaryLight,
     onSecondary = Color.White,
     secondaryContainer = ClaudeM3SecondaryContainerLight,
@@ -53,12 +64,12 @@ internal fun claudeLightScheme(): ColorScheme = lightColorScheme(
     onSurface = ClaudeTextPrimaryLight,
     surfaceVariant = ClaudeM3SurfaceVariantLight,
     onSurfaceVariant = ClaudeTextSecondaryLight,
-    surfaceTint = ClaudeOrangeLight,
+    surfaceTint = Color.Transparent,
     outline = ClaudeTextTertiaryLight,
     outlineVariant = ClaudeBorderLight,
     inverseSurface = ClaudeCardDark,
     inverseOnSurface = ClaudeTextPrimaryDark,
-    inversePrimary = ClaudePrimaryDarkVariantOnDark,
+    inversePrimary = ClaudeTextPrimaryDark,
     // The exact "glass" ladder: cards/dialogs/settings-groups/headers all
     // read surfaceContainerHigh, which is the reference's literal
     // glass_fill_strong — pure white, with a hairline glass_border drawn
@@ -71,10 +82,12 @@ internal fun claudeLightScheme(): ColorScheme = lightColorScheme(
 )
 
 internal fun claudeDarkScheme(): ColorScheme = darkColorScheme(
-    primary = ClaudeOrangeDark,
-    onPrimary = Color(0xFF2B140A),
-    primaryContainer = ClaudeM3PrimaryContainerDark,
-    onPrimaryContainer = ClaudeM3OnPrimaryContainerDark,
+    // NEUTRALIZED — see claudeLightScheme's note above; same fix, mirrored
+    // for dark mode (near-white instead of near-black text tone).
+    primary = ClaudeTextPrimaryDark,
+    onPrimary = ClaudeBgDark1,
+    primaryContainer = ClaudeBgDark3,
+    onPrimaryContainer = ClaudeTextPrimaryDark,
     secondary = ClaudeSecondaryDark,
     onSecondary = ClaudeBgDark1,
     secondaryContainer = ClaudeM3SecondaryContainerDark,
@@ -93,12 +106,12 @@ internal fun claudeDarkScheme(): ColorScheme = darkColorScheme(
     onSurface = ClaudeTextPrimaryDark,
     surfaceVariant = ClaudeM3SurfaceVariantDark,
     onSurfaceVariant = ClaudeTextSecondaryDark,
-    surfaceTint = ClaudeOrangeDark,
+    surfaceTint = Color.Transparent,
     outline = ClaudeTextTertiaryDark,
     outlineVariant = ClaudeBorderDark,
     inverseSurface = ClaudeCardLight,
     inverseOnSurface = ClaudeTextPrimaryLight,
-    inversePrimary = ClaudePrimaryDarkVariant,
+    inversePrimary = ClaudeTextPrimaryLight,
     surfaceContainerLowest = ClaudeBgDark1,
     surfaceContainerLow = ClaudeBgDark2,
     surfaceContainer = ClaudeM3SurfaceContainerDark,
