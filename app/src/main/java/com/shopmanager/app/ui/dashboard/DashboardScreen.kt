@@ -52,7 +52,7 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
-import com.shopmanager.app.ui.theme.WarningAmber as WarningAmberColor
+import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.SimpleDateFormat
 import java.text.NumberFormat
 import java.util.Calendar
@@ -131,7 +131,14 @@ fun DashboardScreen(
     // Every material in the list is, by definition, a shortage the shop
     // needs to buy - it's a live shopping list, not a stock count.
     val shortages = remember(materialsState.materials) { materialsState.materials }
-    val marketAccent = WarningAmberColor
+    // UNIFIED ON CLAUDE'S DESIGN: this used to be a fixed, theme-independent
+    // generic amber (WarningAmber, #F59E0B) — not Claude's own warning tone
+    // in either theme. LocalSemanticColors.current.warning already resolves
+    // to Claude's own gold accent (ClaudeAccentGoldLight/Dark, correctly
+    // matching each theme — see semanticColorsFor in Palette.kt), so the
+    // market-shortage badges below now match every other warning-colored
+    // element in the app.
+    val marketAccent = LocalSemanticColors.current.warning
     val topDebtors = remember(debtsState.persons) {
         debtsState.persons.sortedByDescending { it.amount }.take(5)
     }
