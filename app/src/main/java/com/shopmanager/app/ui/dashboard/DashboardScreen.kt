@@ -42,6 +42,7 @@ import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
+import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.LocalSemanticColors
@@ -576,20 +577,35 @@ private fun HeroStatsCard(
     marketAccent: Color,
     nf: NumberFormat
 ) {
-    val primary = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.secondary
+    // REDESIGN ("بدي تصميم جميل اجمل من هيك"): this card's tint used to come
+    // from `primary`/`secondary`, both of which Palette.kt intentionally
+    // points at the neutral near-black/near-white text tone — so the "warm
+    // gradient" here actually rendered as a flat gray wash with no color at
+    // all, on the single most prominent card on the whole dashboard. Swapped
+    // to the same success/warning semantic accents the two stat icons below
+    // already use, so the card's own background echoes the colors of the
+    // numbers sitting on top of it instead of contradicting them, and a
+    // faint shadow lifts it off the page instead of sitting perfectly flush.
+    val heroStart = LocalSemanticColors.current.success
+    val heroEnd = if (hasShortages) marketAccent else LocalSemanticColors.current.warning
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .liquidGlassSurface(
+                shape = MaterialTheme.shapes.extraLarge,
+                baseBrush = androidx.compose.ui.graphics.Brush.linearGradient(
+                    listOf(heroStart.copy(alpha = 0.20f), heroEnd.copy(alpha = 0.12f))
+                ),
+                elevation = 6.dp,
+                highlight = false
+            ),
         shape = MaterialTheme.shapes.extraLarge,
         color = Color.Transparent
     ) {
         Box(
             Modifier
-                .background(
-                    androidx.compose.ui.graphics.Brush.linearGradient(
-                        listOf(primary.copy(alpha = 0.16f), secondary.copy(alpha = 0.10f))
-                    )
-                )
                 .padding(18.dp)
         ) {
             // IntrinsicSize.Min: lets the thin divider below use
