@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.rounded.AdminPanelSettings
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -106,7 +105,6 @@ private fun timeBasedGreeting(): TimeGreeting {
 fun DashboardScreen(
     debtsViewModel: DebtsViewModel,
     materialsViewModel: MaterialsViewModel,
-    onOpenSettings: () -> Unit,
     onNavigateToDebts: () -> Unit = {},
     onNavigateToMaterials: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
@@ -203,7 +201,6 @@ fun DashboardScreen(
         ) {
             item {
                 DashboardHeader(
-                    onOpenSettings = onOpenSettings,
                     onAdminTap = { showAdminPinDialog = true },
                     onOpenDrawer = onOpenDrawer
                 )
@@ -443,7 +440,6 @@ fun DashboardScreen(
 // stands apart from the boxed-card look every other tab keeps.
 @Composable
 private fun DashboardHeader(
-    onOpenSettings: () -> Unit,
     onAdminTap: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
@@ -485,11 +481,17 @@ private fun DashboardHeader(
                 )
             }
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Rounded.Settings, contentDescription = "الإعدادات", tint = MaterialTheme.colorScheme.onSurface)
-            }
-            // زر لوحة المسؤول: بجانب زر الإعدادات مباشرة — نفس منطق فتح
-            // صندوق رمز الدخول (onAdminTap) ما تغيّر.
+            // BUG FIXED ("زر الاعدادات بالشاشة الرئيسية ما لازم يكون لانه
+            // فعلا في الشاشة المنيو"): removed the duplicate settings
+            // IconButton that used to sit here — الإعدادات is already a
+            // pinned row at the bottom of the side drawer (AppDrawerContent),
+            // one tap away via the hamburger, so a second entry point on
+            // Home was pure redundancy. onOpenSettings is kept as a
+            // parameter (still wired from MainActivity to the drawer) even
+            // though this header no longer calls it directly.
+            // زر لوحة المسؤول: بمكانه القديم نفسه، بس هلق أول عنصر بالطرف
+            // البادئ بعد المسافة — نفس منطق فتح صندوق رمز الدخول
+            // (onAdminTap) ما تغيّر.
             IconButton(onClick = onAdminTap) {
                 Icon(Icons.Rounded.AdminPanelSettings, contentDescription = "لوحة المسؤول", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
