@@ -85,7 +85,7 @@ fun GlassAlertDialog(
         )
         val contentAlpha by animateFloatAsState(
             targetValue = if (visible) 1f else 0f,
-            animationSpec = tween(180),
+            animationSpec = tween(180, easing = MotionSpecs.claudeEasing),
             label = "glassDialogAlpha"
         )
 

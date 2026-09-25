@@ -138,7 +138,7 @@ fun FloatingQuickActions(
             visible = quickAction != null,
             modifier = Modifier.align(Alignment.CenterEnd),
             enter = fadeIn(MotionSpecs.popInSpring()) + androidx.compose.animation.scaleIn(animationSpec = MotionSpecs.popInSpring(), initialScale = 0.6f),
-            exit = fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.6f)
+            exit = fadeOut(MotionSpecs.popInSpring()) + androidx.compose.animation.scaleOut(animationSpec = MotionSpecs.popInSpring(), targetScale = 0.6f)
         ) {
             lastQuickAction?.let { action -> QuickActionFab(action, modifier = Modifier.size(52.dp)) }
         }
@@ -146,7 +146,7 @@ fun FloatingQuickActions(
             visible = secondaryAction != null,
             modifier = Modifier.align(Alignment.CenterStart),
             enter = fadeIn(MotionSpecs.popInSpring()) + androidx.compose.animation.scaleIn(animationSpec = MotionSpecs.popInSpring(), initialScale = 0.6f),
-            exit = fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.6f)
+            exit = fadeOut(MotionSpecs.popInSpring()) + androidx.compose.animation.scaleOut(animationSpec = MotionSpecs.popInSpring(), targetScale = 0.6f)
         ) {
             lastSecondaryAction?.let { action -> QuickActionFab(action, modifier = Modifier.size(52.dp)) }
         }
