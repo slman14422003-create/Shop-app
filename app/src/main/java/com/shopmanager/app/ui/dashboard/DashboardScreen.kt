@@ -232,12 +232,35 @@ fun DashboardScreen(
                     // gives every row a bit more room to breathe.
                     SectionCard(title = "قائمة مشتريات السوق", color = marketAccent, icon = Icons.Default.ShoppingCart) {
                         shortages.forEachIndexed { index, m ->
+                            // REDESIGN (reference screenshot: each shortage
+                            // row carries its own small colored icon circle
+                            // on the lead side and a rounded, color-coded
+                            // quantity badge on the trailing side, instead
+                            // of two bare Text() values) — mirrors the same
+                            // icon-circle language "آخر النشاطات" already
+                            // uses below, so every row in this card family
+                            // reads as one consistent pattern.
                             Row(
                                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(m.name)
-                                Text(m.quantityLabel(), color = marketAccent, fontWeight = FontWeight.Medium)
+                                Box(
+                                    Modifier.size(30.dp).clip(CircleShape).background(marketAccent.copy(alpha = 0.16f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Spa, contentDescription = null, tint = marketAccent, modifier = Modifier.size(15.dp))
+                                }
+                                Spacer(Modifier.width(10.dp))
+                                Text(
+                                    m.name,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                )
+                                com.shopmanager.app.ui.common.PillBadge(
+                                    text = m.quantityLabel(),
+                                    color = com.shopmanager.app.ui.common.pillColorForQuantity(m.quantity)
+                                )
                             }
                             if (index != shortages.lastIndex) {
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -577,7 +600,12 @@ private fun HeroStatsCard(
                 HeroStat(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.AttachMoney,
-                    accentColor = primary,
+                    // REDESIGN (reference screenshot: the debts total's
+                    // icon circle reads a distinct green, not the same
+                    // neutral tone as the rest of the card's chrome) — the
+                    // semantic "success" accent already used for a settled
+                    // debt/paid check elsewhere in the app.
+                    accentColor = LocalSemanticColors.current.success,
                     title = "إجمالي الديون",
                     valueContent = {
                         AnimatedCounterText(
