@@ -32,7 +32,10 @@
     <color name="background_light">#131313</color>
     <color name="surface_variant_light">#2B2B2B</color>
 
-    <color name="ripple_brand">#40D97757</color>
+    <!-- POLISH: see values/colors.xml's note — same proportional alpha cut
+         applied here (was #40 / 25%), keeping the original light/dark
+         ripple-strength ratio intact. -->
+    <color name="ripple_brand">#26D97757</color>
     <color name="edge_glow_brand">#D97757</color>
 
     <!-- Unified with Phizyo's bg_deep_1 (dark mode) — the splash follows
