@@ -77,11 +77,15 @@ fun Modifier.liquidGlassSurface(
     highlight: Boolean = false,
     animated: Boolean = false,
     baseAlpha: Float = 1f,
-    // A hairline border color. `Color.White` (the default) means "no
-    // border" for panels that sit on the app's own colored gradient; any
-    // other color draws a subtle border, e.g. for a panel sitting on a
-    // plain surface.
-    rimColor: Color = Color.White
+    // BUG FIXED ("حدود بيضاء بكل التطبيق"): a hairline border color used
+    // to be signalled by a magic-value check (`rimColor == Color.White`
+    // meant "no border"), which made it impossible for a caller to ever
+    // actually draw a *white* border — the one color this app-wide
+    // white-border pass needs (see GlassAlertDialog's title/LockScreen's
+    // cardRimColor, both now Color.White on purpose). Replaced with an
+    // explicit nullable: `null` (the default) means "no border", any real
+    // Color — white included — draws one.
+    rimColor: Color? = null
 ): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     return this
@@ -93,7 +97,7 @@ fun Modifier.liquidGlassSurface(
         .clip(shape)
         .background(baseBrush)
         .let {
-            if (rimColor == Color.White) it
+            if (rimColor == null) it
             else it.border(1.dp, rimColor.copy(alpha = 0.12f), shape)
         }
 }

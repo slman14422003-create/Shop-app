@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.ui.theme.LocalSemanticColors
@@ -118,7 +119,8 @@ private fun GlassSnackbar(data: SnackbarData) {
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
         shadowElevation = 6.dp
     ) {
         Row(

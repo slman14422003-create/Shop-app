@@ -54,7 +54,14 @@ fun GlassCard(
                 elevation = elevation,
                 highlight = false
             )
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), shape)
+            // BORDERS UNIFIED WHITE ("بدي حدود... بكل التطبيق يكون لونها
+            // ابيض... بشفافية خفيفة"): every card/box border app-wide
+            // switched from the theme's (warm-tan in light mode,
+            // near-black in dark mode) outlineVariant token to a flat
+            // white hairline at a light, consistent alpha — see the same
+            // change across MaterialRow/PersonRow/NoteRow/catalog rows/
+            // dialogs/segmented tabs.
+            .border(1.dp, Color.White.copy(alpha = 0.5f), shape)
     ) {
         content()
     }

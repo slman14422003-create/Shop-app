@@ -118,7 +118,13 @@ fun GlassAlertDialog(
                         ),
                         elevation = 24.dp,
                         highlight = false,
-                        rimColor = MaterialTheme.colorScheme.outlineVariant
+                        // BORDERS UNIFIED WHITE — see GlassCard.kt's
+                        // comment. (Also relies on liquidGlassSurface's
+                        // rimColor now being a nullable "draw or don't",
+                        // not a `== Color.White` sentinel — that old
+                        // check made it impossible to ever pass white
+                        // itself as a real border color.)
+                        rimColor = Color.White
                     )
             ) {
                 Column {
@@ -173,7 +179,8 @@ fun GlassAlertDialog(
                             DialogButtonCell(
                                 Modifier.fillMaxWidth().height(50.dp)
                                     .clip(RoundedCornerShape(50))
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
+                                    // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+                                    .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
                             ) {
                                 dismissButton()
                             }
