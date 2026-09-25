@@ -1,9 +1,7 @@
 package com.shopmanager.app.ui.dashboard
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -18,7 +16,9 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WarningAmber
@@ -273,7 +273,7 @@ fun DashboardScreen(
                     // each item its own visual line without adding a full
                     // bordered card per row, and the extra vertical padding
                     // gives every row a bit more room to breathe.
-                    SectionCard(title = "🛒 قائمة مشتريات السوق", color = marketAccent) {
+                    SectionCard(title = "قائمة مشتريات السوق", color = marketAccent, icon = Icons.Default.ShoppingCart) {
                         shortages.forEachIndexed { index, m ->
                             Row(
                                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -292,7 +292,7 @@ fun DashboardScreen(
 
             if (recentActivity.isNotEmpty()) {
                 item {
-                    SectionCard(title = "🕓 آخر النشاطات", icon = Icons.Default.History) {
+                    SectionCard(title = "آخر النشاطات", icon = Icons.Default.History) {
                         recentActivity.forEach { row ->
                             Row(
                                 Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -344,7 +344,7 @@ fun DashboardScreen(
 
             if (topDebtors.isNotEmpty()) {
                 item {
-                    SectionCard(title = "أكبر الديون") {
+                    SectionCard(title = "أكبر الديون", icon = Icons.Default.Groups) {
                         topDebtors.forEach { p ->
                             Row(
                                 Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -634,8 +634,11 @@ private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, 
         modifier
             .scale(scale)
             .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            .border(1.dp, accent.copy(alpha = 0.16f), MaterialTheme.shapes.large)
+            // REDESIGN ("اعد تصميم الالوان في كل التطبيق"): dropped the
+            // faint accent-tinted border in favor of the same plain
+            // `surfaceContainer` fill StatCard/SectionCard use above — one
+            // borderless card language across the whole home screen.
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -669,6 +672,13 @@ private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, 
 // eye reads accent → number in one line instead of scanning top-to-bottom
 // through three same-weight rows. No new animated/blurred layers, so this
 // is exactly as cheap on LOW tier as the previous version.
+//
+// REDESIGN ("اعد تصميم الالوان في كل التطبيق"): this card used to sit on
+// the plain `surface` color with a hairline `outlineVariant` border around
+// it — a different card language from Settings' own grouped sections
+// (SettingsSection: a filled `surfaceContainer` tone, no border at all).
+// Switched to that same filled/borderless treatment so Home's cards read
+// as the same family as Settings' instead of a visibly different style.
 @Composable
 private fun StatCard(
     modifier: Modifier = Modifier,
@@ -678,14 +688,10 @@ private fun StatCard(
     valueContent: @Composable () -> Unit,
     subtitle: String
 ) {
-    // iOS 26 REDESIGN: flat card — a plain surface with a hairline border
-    // instead of a drop-shadowed ElevatedCard. Real iOS cards read as
-    // "grouped" via a subtle 1dp separator, not a floating shadow.
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
@@ -723,6 +729,16 @@ private fun StatCard(
     }
 }
 
+// REDESIGN ("اعد تصميم الالوان في كل التطبيق" + fixed unused `icon` param):
+// same borderless `surfaceContainer` treatment as StatCard above, for the
+// same reason — one card language shared with Settings instead of a
+// hairline-outlined one just on Home. `icon` used to be accepted but never
+// actually drawn anywhere in this composable, so every call site that
+// passed one (or the leading emoji baked into a couple of titles, e.g.
+// "🛒 قائمة مشتريات السوق") was really just decorating the title string by
+// hand. Now rendered as a real leading glyph — plain, tinted with `color`,
+// same size/spacing language as SettingsSection's own header row — so
+// every call site can pass a proper Material icon instead of an emoji.
 @Composable
 private fun SectionCard(
     title: String,
@@ -733,13 +749,18 @@ private fun SectionCard(
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall, color = color)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(title, style = MaterialTheme.typography.titleSmall, color = color)
+            }
             Spacer(Modifier.height(8.dp))
             content()
         }
