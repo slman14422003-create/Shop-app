@@ -11,30 +11,32 @@
   less possible flash of the wrong tone during the splash → first-frame
   handoff when the app is opened in dark mode.
 
-  FIXED (colors): ripple_brand/edge_glow_brand below used to be the old
-  Indigo80 pale lavender-blue, left over from before CLAUDE became the
-  default palette — mismatched against every actual on-screen accent in
-  dark mode. Now Claude80, the CLAUDE palette's own dark-mode primary (see
-  paletteColorsFor in Palette.kt), so touch feedback matches the real
-  accent here too.
+  FIXED (colors): brand_claude_*/ripple_brand/edge_glow_brand below are now
+  unified 1:1 with the Phizyo reference app's values-night/colors.xml
+  (claude_orange #D97757 in dark mode), replacing the old off-palette
+  #CC7A52/lavender-blue values, so touch feedback matches the real
+  Compose-rendered accent exactly in dark mode too.
 -->
 <resources>
-    <color name="brand_claude_primary">#CC7A52</color>
-    <color name="brand_claude_secondary">#A98763</color>
+    <color name="brand_claude_primary">#D97757</color>
+    <color name="brand_claude_secondary">#B7B4AC</color>
 
-    <color name="success_green">#16A34A</color>
-    <color name="warning_amber">#F59E0B</color>
-    <color name="danger_red">#DC2626</color>
-    <color name="info_blue">#2563EB</color>
+    <color name="success_green">#8CB894</color>
+    <color name="warning_amber">#D3A461</color>
+    <color name="danger_red">#E0916D</color>
+    <color name="info_blue">#B7B4AC</color>
 
-    <color name="surface_light">#1B1B24</color>
-    <color name="background_light">#121218</color>
-    <color name="surface_variant_light">#2A2A38</color>
+    <!-- Unified with Phizyo's surface_dark/bg_deep_2/m3_surface_variant
+         (dark mode) instead of the old cool-toned #1B1B24/#121218/#2A2A38. -->
+    <color name="surface_light">#1F1F1F</color>
+    <color name="background_light">#131313</color>
+    <color name="surface_variant_light">#2B2B2B</color>
 
-    <color name="ripple_brand">#40F0C4AA</color>
-    <color name="edge_glow_brand">#F0C4AA</color>
+    <color name="ripple_brand">#40D97757</color>
+    <color name="edge_glow_brand">#D97757</color>
 
-    <!-- Same fixed splash tone as values/colors.xml — see that file's
-         note; the splash stays identical in light/dark system theme. -->
-    <color name="splash_background">#151515</color>
+    <!-- Unified with Phizyo's bg_deep_1 (dark mode) — the splash follows
+         system theme like the reference app now; see values/colors.xml's
+         note for the light-mode counterpart. -->
+    <color name="splash_background">#131313</color>
 </resources>
