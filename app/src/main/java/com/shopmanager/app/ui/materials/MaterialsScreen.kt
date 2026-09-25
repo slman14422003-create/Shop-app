@@ -765,11 +765,6 @@ private fun MaterialRow(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(material.name, fontWeight = FontWeight.Medium)
-                Text(
-                    "الكمية المطلوبة: ${material.quantityLabel()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 if (material.notes.isNotBlank()) {
                     Text(
                         material.notes,
@@ -779,6 +774,17 @@ private fun MaterialRow(
                     )
                 }
             }
+            // REDESIGN (reference screenshot: the shortage list's quantity
+            // shows as a small rounded, color-coded badge instead of a
+            // plain "الكمية المطلوبة: X" text line) — same PillBadge the
+            // dashboard's own shortage-list rows now use, so a material's
+            // quantity reads identically whether it's seen from Home or
+            // from this full list.
+            com.shopmanager.app.ui.common.PillBadge(
+                text = material.quantityLabel(),
+                color = com.shopmanager.app.ui.common.pillColorForQuantity(material.quantity)
+            )
+            Spacer(Modifier.width(4.dp))
             IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
             Spacer(Modifier.width(2.dp))
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف المادة")
