@@ -37,6 +37,24 @@ import androidx.compose.runtime.staticCompositionLocalOf
  *   others below (as `glEsVersion`, and folded into `tier` alongside RAM/
  *   cores), so a weak GPU alone is now enough to land a device on LOW even
  *   when its RAM and core count look fine.
+ * - IMPROVEMENT ADDED (دقة أعلى للكشف): `ActivityManager.getMemoryClass()`
+ *   — the per-app heap ceiling in MB the OS itself hands this process — is
+ *   folded in as its own independent trigger too. It is not just "RAM
+ *   again": OEMs tune this value per device based on their own internal
+ *   tiering (RAM, expected workload, sometimes region/SKU), so it catches
+ *   OEM-flagged budget units whose raw RAM number alone reads as
+ *   borderline-fine (e.g. 4GB with a heap capped at 128MB, versus a
+ *   "real" 4GB device with a 192MB+ heap). Free to read (no allocation),
+ *   same call already made once via `activityManager` above.
+ * - IMPROVEMENT ADDED (إبطال التخزين المؤقت تلقائيًا عند تحسين المنطق):
+ *   the cached tier used to persist forever once written, so a phone that
+ *   was misclassified before a later logic improvement (like the GPU or
+ *   heap-class checks above) stayed on the old, wrong classification until
+ *   someone opened Settings and tapped "إعادة فحص" — or reinstalled.
+ *   [detectTier] now stores a `DETECTION_VERSION` alongside the cached
+ *   tier and ignores (re-measures) any cache written under an older
+ *   version, so every detection-logic upgrade in this file self-heals on
+ *   the very next app launch, for every device, with no manual action.
  *
  * Any one of these tripping is enough to land a device on LOW — false
  * positives (an OK phone getting the lighter UI) just mean slightly fewer
@@ -74,6 +92,14 @@ fun resolvePerformanceTier(detected: PerformanceTier, mode: PerformanceMode): Pe
 object DevicePerformance {
     private const val PREFS = "shop_manager_device"
     private const val KEY_TIER = "performance_tier"
+    // IMPROVEMENT ADDED: written alongside KEY_TIER every time a fresh
+    // measurement is cached. detectTier() only trusts a cached value when
+    // its stored version matches CURRENT below — bump this number whenever
+    // the detection logic in currentDeviceInfo() changes, and every
+    // previously-cached device is automatically re-measured on next
+    // launch instead of staying pinned to a now-outdated verdict.
+    private const val KEY_DETECTION_VERSION = "performance_tier_version"
+    private const val CURRENT_DETECTION_VERSION = 2
 
     private const val LOW_RAM_THRESHOLD_MB = 3072L
     private const val LOW_CORE_THRESHOLD = 4
@@ -82,6 +108,13 @@ object DevicePerformance {
     // ES 3.0 shipped in 2012/Android 4.3, so by now a sub-3.0 report means
     // a genuinely weak GPU, not just an unusual one.
     private const val MIN_GL_ES_VERSION = 0x30000
+    // IMPROVEMENT ADDED: ActivityManager.getMemoryClass() is the per-app
+    // heap ceiling (MB) the OS grants this process — OEMs tune it per
+    // device, so it often flags a budget unit that raw RAM alone reads as
+    // borderline-fine. 96MB and below is the historical "low-end" heap
+    // class band (stock AOSP's own low-RAM default is ~48–64MB; a normal
+    // modern mid-ranger is 192–256MB+).
+    private const val LOW_MEMORY_CLASS_MB = 96
 
     /** FEATURE ADDED (Settings → الأداء diagnostics): the raw signals
      * [detectTier] measures, exposed on their own so the person can see
@@ -96,6 +129,8 @@ object DevicePerformance {
         val osFlaggedLowRam: Boolean,
         val glEsVersion: Int,
         val weakGpu: Boolean,
+        val memoryClassMb: Int,
+        val weakMemoryClass: Boolean,
         val tier: PerformanceTier
     )
 
@@ -112,34 +147,50 @@ object DevicePerformance {
         // android:glEsVersion>` checks against at install time.
         val glEsVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: MIN_GL_ES_VERSION
         val weakGpu = glEsVersion in 1 until MIN_GL_ES_VERSION
+        // getMemoryClass() is likewise free (no allocation) — just the
+        // OEM-declared per-app heap ceiling for this device.
+        val memoryClassMb = activityManager?.memoryClass ?: (LOW_MEMORY_CLASS_MB + 1)
+        val weakMemoryClass = memoryClassMb in 1..LOW_MEMORY_CLASS_MB
         val lowRam = totalRamMb in 1..LOW_RAM_THRESHOLD_MB
         val lowCores = cores in 1..LOW_CORE_THRESHOLD
-        val tier = if (osFlaggedLowRam || weakGpu || (lowRam && lowCores)) PerformanceTier.LOW else PerformanceTier.STANDARD
-        return DeviceInfo(totalRamMb, cores, osFlaggedLowRam, glEsVersion, weakGpu, tier)
+        val tier = if (osFlaggedLowRam || weakGpu || weakMemoryClass || (lowRam && lowCores))
+            PerformanceTier.LOW
+        else
+            PerformanceTier.STANDARD
+        return DeviceInfo(totalRamMb, cores, osFlaggedLowRam, glEsVersion, weakGpu, memoryClassMb, weakMemoryClass, tier)
     }
 
     /**
      * Reads the cached tier if this device has been classified before
-     * (every launch after the first), otherwise measures it once and
-     * persists the result — so this never re-runs the ActivityManager
-     * query on every cold start.
+     * under the current detection logic (every launch after the first,
+     * until [CURRENT_DETECTION_VERSION] next changes), otherwise measures
+     * it fresh and persists the result — so this never re-runs the
+     * ActivityManager query on every cold start, while still self-healing
+     * the moment the detection logic below improves.
      */
     fun detectTier(context: Context): PerformanceTier {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        prefs.getString(KEY_TIER, null)?.let { cached ->
-            return runCatching { PerformanceTier.valueOf(cached) }.getOrDefault(PerformanceTier.STANDARD)
+        val cachedVersion = prefs.getInt(KEY_DETECTION_VERSION, -1)
+        if (cachedVersion == CURRENT_DETECTION_VERSION) {
+            prefs.getString(KEY_TIER, null)?.let { cached ->
+                return runCatching { PerformanceTier.valueOf(cached) }.getOrDefault(PerformanceTier.STANDARD)
+            }
         }
 
         // Reuses the exact same signals/thresholds as [currentDeviceInfo]
         // (see the BUG FIXED note that used to live here: LOW only when
         // isLowRamDevice OR both RAM *and* core count point that way, never
-        // from a single weak signal alone — except a weak GPU, which is
-        // its own independent trigger since a phone can easily have fine
-        // RAM/cores paired with an old/entry-level GPU) — one shared
-        // implementation, so the diagnostics shown in Settings can never
-        // silently drift from what actually decided the cached tier.
+        // from a single weak signal alone — except a weak GPU or a weak
+        // OEM-declared heap class, each its own independent trigger since a
+        // phone can easily have fine raw RAM/cores paired with a weak GPU
+        // or a heap ceiling the OEM tuned down) — one shared implementation,
+        // so the diagnostics shown in Settings can never silently drift
+        // from what actually decided the cached tier.
         val tier = currentDeviceInfo(context).tier
-        prefs.edit().putString(KEY_TIER, tier.name).apply()
+        prefs.edit()
+            .putString(KEY_TIER, tier.name)
+            .putInt(KEY_DETECTION_VERSION, CURRENT_DETECTION_VERSION)
+            .apply()
         return tier
     }
 
@@ -148,7 +199,10 @@ object DevicePerformance {
      * if a "recheck device" option in Settings is ever added, so a
      * misclassification doesn't require a reinstall to fix. */
     fun resetCachedTier(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(KEY_TIER).apply()
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .remove(KEY_TIER)
+            .remove(KEY_DETECTION_VERSION)
+            .apply()
     }
 }
 
