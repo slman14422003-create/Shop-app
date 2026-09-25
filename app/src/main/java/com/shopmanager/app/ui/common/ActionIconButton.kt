@@ -2,6 +2,7 @@ package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.size
@@ -65,6 +66,14 @@ fun ActionIconButton(
     )
     val haptics = LocalHapticFeedback.current
 
+    // CONTRAST FIX ("الوان الثيمات بشكل عام بدها تحسين وتباين بكلا
+    // الوضعين"): a 12% tint fill barely separated from the card behind it
+    // in dark mode — against ClaudeCardDark (#1F1F1F) a semantic green/red
+    // at 12% alpha reads as almost the same dark neutral tone, exactly the
+    // "muddy" check/delete circles reported. Raised to 22% fill plus a
+    // matching-tint hairline border, so the circle reads as a distinct,
+    // clearly-colored button at rest in both themes instead of only the
+    // small icon glyph inside it carrying any contrast.
     IconButton(
         onClick = {
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -75,7 +84,8 @@ fun ActionIconButton(
             .size(36.dp)
             .scale(scale)
             .clip(CircleShape)
-            .background(tint.copy(alpha = 0.12f))
+            .background(tint.copy(alpha = 0.22f))
+            .border(1.dp, tint.copy(alpha = 0.35f), CircleShape)
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(18.dp))
     }
