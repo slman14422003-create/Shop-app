@@ -80,16 +80,17 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
         label = "splashEntrance"
     )
 
-    // Unified with the Phizyo reference app's own splash tokens (exact
-    // bg_deep_1/claude_orange/text_primary/text_secondary hex, per theme)
-    // instead of separately eyeballed values, and now follows light/dark
-    // system theme like that reference splash does — not a single fixed
-    // dark background regardless of theme.
+    // REDESIGN ("صمم الالوان بتصميم ChatGPT"): unified with
+    // ui/theme/Color.kt's ChatGPT-palette tokens (ClaudeBgDark1/Light1,
+    // ClaudeOrangeDark/Light, ClaudeTextPrimaryDark/Light,
+    // ClaudeTextSecondaryDark/Light) instead of the old cream/terracotta
+    // ones — pure black / white splash, ChatGPT's link-blue accent — and
+    // still follows light/dark system theme, not a single fixed background.
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val splashBackground = if (isDark) Color(0xFF131313) else Color(0xFFF5F4EE)
-    val markAccent = if (isDark) Color(0xFFD97757) else Color(0xFFC96442)
-    val onDark = if (isDark) Color(0xFFF2F2F2) else Color(0xFF3D3929)
-    val creditGrey = if (isDark) Color(0xFFA6A6A6) else Color(0xFF78766D)
+    val splashBackground = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
+    val markAccent = if (isDark) Color(0xFF5B9DF9) else Color(0xFF2F80ED)
+    val onDark = if (isDark) Color(0xFFECECEC) else Color(0xFF0D0D0D)
+    val creditGrey = if (isDark) Color(0xFFA6A6A6) else Color(0xFF676767)
 
     Box(
         modifier
