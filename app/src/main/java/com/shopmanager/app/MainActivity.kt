@@ -799,7 +799,6 @@ private fun ShopManagerApp(
                         PAGE_DASHBOARD -> DashboardScreen(
                             debtsViewModel = debtsViewModel,
                             materialsViewModel = materialsViewModel,
-                            onOpenSettings = { navController.navigate(ROUTE_SETTINGS) },
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
                             onOpenAdmin = { navController.navigate(ROUTE_ADMIN) },
