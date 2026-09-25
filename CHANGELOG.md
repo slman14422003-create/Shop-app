@@ -1,3 +1,6 @@
+## v1.0.853 — 2026-09-25
+- Remove onOpenSettings callback from DashboardScreen
+
 ## v1.0.851 — 2026-09-25
 - تحسينات وإصلاحات عامة
 
