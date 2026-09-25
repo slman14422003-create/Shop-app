@@ -76,6 +76,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
+import com.shopmanager.app.ui.common.GlassCard
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.ShareFormatDialog
@@ -417,10 +418,16 @@ fun SettingsScreen(
                 enter = fadeIn(MotionSpecs.contentTween()) + scaleIn(MotionSpecs.popInSpring(), initialScale = 0.92f) + expandVertically(),
                 exit = fadeOut(MotionSpecs.contentTween()) + scaleOut(MotionSpecs.popInSpring(), targetScale = 0.92f) + shrinkVertically()
             ) {
-                ElevatedCard(
+                // BUG FIXED / RE-UNIFIED (see GlassCard.kt's own note): this
+                // was a raw Material3 ElevatedCard with the platform's own
+                // default tonal-elevation shadow — the one visibly
+                // "un-Claude" card left in the app. GlassCard gives the same
+                // errorContainer tint with the app's own flat-fill +
+                // hairline-border look instead.
+                GlassCard(
                     Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    containerColor = MaterialTheme.colorScheme.errorContainer
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -553,10 +560,12 @@ fun SettingsScreen(
                 ) {
                     Column {
                         Spacer(Modifier.height(10.dp))
-                        ElevatedCard(
+                        // Same fix as the server-unreachable banner above —
+                        // GlassCard instead of a raw Material ElevatedCard.
+                        GlassCard(
                             Modifier.fillMaxWidth(),
                             shape = MaterialTheme.shapes.large,
-                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                            containerColor = MaterialTheme.colorScheme.errorContainer
                         ) {
                             Column(Modifier.padding(16.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
