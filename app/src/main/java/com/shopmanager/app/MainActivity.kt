@@ -948,22 +948,16 @@ private fun ShopManagerApp(
             // threaded down from here — so this floating overlay button
             // is gone entirely; nothing replaces it at this layer.
 
-            // REDESIGN: which quick-add action (if any) shows follows the
-            // same `pagerState.currentPage` the drawer's own selection
-            // tracks — one page, one source of truth for "what tab is
-            // this". Home has nothing to add, so it's null there and the
-            // button fades out entirely.
+            // REDESIGN ("زر ال+ لازم تشيلة لان في فوق زر"): الديون and
+            // المواد both now have their own wide, on-screen "عميل جديد" /
+            // "مادة جديدة" button right in the list (see DebtsScreen /
+            // MaterialsScreen — wired to the same `addPersonRequested` /
+            // ROUTE_MATERIAL_CATALOG actions this floating button used to
+            // trigger), so this shared floating "+" would just be a second,
+            // redundant control for the exact same action on those two
+            // pages. It now only shows on الملاحظات, which has no on-screen
+            // add button of its own yet.
             val quickAction = when (pagerState.currentPage) {
-                PAGE_DEBTS -> QuickAction(
-                    icon = Icons.Default.Add,
-                    contentDescription = "عميل جديد",
-                    onClick = { addPersonRequested = true }
-                )
-                PAGE_MATERIALS -> QuickAction(
-                    icon = Icons.Default.Add,
-                    contentDescription = "مادة جديدة",
-                    onClick = { navController.navigate(ROUTE_MATERIAL_CATALOG) }
-                )
                 PAGE_NOTES -> QuickAction(
                     icon = Icons.Default.Add,
                     contentDescription = "ملاحظة جديدة",
