@@ -1,8 +1,8 @@
 package com.shopmanager.app.ui.splash
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import com.shopmanager.app.ui.common.MotionSpecs
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -76,7 +76,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) { settled = true }
     val entrance by animateFloatAsState(
         targetValue = if (settled) 1f else 0f,
-        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        animationSpec = tween(380, easing = MotionSpecs.claudeEasing),
         label = "splashEntrance"
     )
 
