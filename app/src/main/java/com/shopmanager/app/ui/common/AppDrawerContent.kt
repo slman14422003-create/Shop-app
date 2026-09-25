@@ -64,8 +64,10 @@ import com.shopmanager.app.ui.theme.LocalSemanticColors
  * behind a small icon" language DashboardScreen already uses for its own
  * stat/quick-action badges), so the list reads as a set of distinct,
  * colorful destinations at a glance instead of a plain monochrome list.
- * The selected row's badge switches to a solid `primary` fill so the
- * current tab is unmistakable even with every row now carrying color.
+ * The selected row's badge deepens to a stronger tint of that same accent
+ * (see the BUG FIXED note on itemAccents/DrawerRow below for why it's a
+ * tint and not a solid fill) so the current tab is unmistakable even with
+ * every row now carrying color.
  *
  * MOVED ("انقل ايقونة المسؤول الى المنيو الى جانب الاعدادات"): the hidden
  * لوحة المسؤول button used to live in DashboardScreen's own header,
@@ -96,8 +98,22 @@ fun AppDrawerContent(
     val semantic = LocalSemanticColors.current
     // One accent per destination so the badges read as distinct, colorful
     // stops rather than four copies of the same tint.
+    //
+    // BUG FIXED ("شوف كيف لونها ابيض بدهم تناسق اكثر" — الشاشة الرئيسية's
+    // badge was unreadable when selected): this used to start with
+    // `MaterialTheme.colorScheme.primary`. In this app's own palette
+    // `primary` is literally the neutral text tone (near-white in dark
+    // mode, near-black in light — see the "NEUTRALIZED" note in
+    // Palette.kt), not a real accent color. DrawerRow below fills the
+    // selected badge solid with its accent and draws the icon in white on
+    // top of it — white-on-near-white, i.e. an all-but-invisible icon, and
+    // visually the odd one out next to the other rows' actual colors
+    // (gold/gray/gold). `semantic.success` (a real green) replaces it here
+    // so every row — selected or not — carries a genuine, legible color
+    // from the same muted family the rest of the app already uses for
+    // status accents.
     val itemAccents = listOf(
-        MaterialTheme.colorScheme.primary,
+        semantic.success,
         semantic.warning,
         MaterialTheme.colorScheme.secondary,
         MaterialTheme.colorScheme.tertiary
@@ -170,17 +186,27 @@ private fun DrawerRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        // BUG FIXED (see the itemAccents note above): the badge used to
+        // swap to a *solid* accent fill with a white icon on selection —
+        // fine for a strong color, but unreadable for any accent close to
+        // white (exactly what `primary` was). The icon now always renders
+        // in its own accent color at full opacity, on a softly-tinted
+        // circle of that same accent; only the circle's tint strength
+        // changes with selection (plus the row's own highlighted
+        // background/bold label below). This can never go invisible,
+        // whichever accent a row uses, and every badge — selected or not —
+        // now reads as the same consistent, colorful family.
         Box(
             Modifier
                 .size(38.dp)
                 .clip(CircleShape)
-                .background(if (selected) accent else accent.copy(alpha = 0.14f)),
+                .background(accent.copy(alpha = if (selected) 0.24f else 0.14f)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 icon,
                 contentDescription = null,
-                tint = if (selected) Color.White else accent,
+                tint = accent,
                 modifier = Modifier.size(19.dp)
             )
         }
