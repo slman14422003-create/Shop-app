@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 
@@ -120,11 +122,17 @@ fun FloatingQuickActions(
     // its own bottom strip (matching the navigation-bar inset plus a
     // little margin) and never paints a background, so both corners stay
     // genuinely transparent over whichever tab is showing underneath.
+    // BUG FIXED ("زر اضافة المواد احس مكانه مش ظابط"): 14.dp of bottom
+    // margin sat right at the edge of the list's own last row underneath
+    // it, close enough to read as overlapping/crowding it rather than a
+    // clearly separate floating control. Widened to give the button its
+    // own visible breathing room above the content, same on every screen
+    // that shows a quick-action circle.
     Box(
         modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 20.dp, vertical = 14.dp)
+            .padding(horizontal = 20.dp, vertical = 22.dp)
     ) {
         AnimatedVisibility(
             visible = quickAction != null,
@@ -165,16 +173,26 @@ fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
         animationSpec = MotionSpecs.pressSpring(),
         label = "quickActionFabScale"
     )
+    // REDESIGN ("الوان الثيمات بشكل عام بدها تحسين وتباين"): this used to
+    // fill with the same neutral surfaceContainerHigh tone every header
+    // uses (see BrandGradient/Theme.kt's gradientColors) — a flat add
+    // button reading as just another gray circle, low-contrast against a
+    // near-black page in dark mode, exactly like the muddy check/delete
+    // circles fixed in ActionIconButton. The one circular "+" that starts
+    // a new person/material/price-save action is this app's single most
+    // important floating control, so it now fills with the actual brand
+    // accent instead of a neutral tone, with a solid, high-contrast icon
+    // on top — a real call-to-action instead of a hard-to-see disc.
+    val primary = MaterialTheme.colorScheme.primary
     Box(
         modifier
             .scale(scale)
-            // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha =
-            // 0.72f — نفس قيمة الكبسولة المجاورة لها بالضبط.
             .liquidGlassSurface(
                 CircleShape,
-                elevation = 2.dp,
+                baseBrush = Brush.linearGradient(listOf(primary, primary)),
+                elevation = 6.dp,
                 highlight = false,
-                baseAlpha = 0.72f
+                baseAlpha = 1f
             )
             .clickable(
                 interactionSource = interactionSource,
@@ -186,8 +204,8 @@ fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
         Icon(
             action.icon,
             contentDescription = action.contentDescription,
-            tint = BrandOnGradient,
-            modifier = Modifier.size(22.dp)
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(24.dp)
         )
     }
 }
