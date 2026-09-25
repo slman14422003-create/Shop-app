@@ -64,6 +64,7 @@ import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.updates.ApkDownloader
+import com.shopmanager.app.data.updates.AppVersion
 import com.shopmanager.app.data.updates.AppVersionInfo
 import com.shopmanager.app.data.updates.DownloadState
 import com.shopmanager.app.data.updates.UpdateCheckResult
@@ -1165,7 +1166,7 @@ private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) 
 // same borderless `surfaceContainer` card language as SettingsSection below
 // it, just with its own centered layout instead of a left-aligned list.
 @Composable
-private fun AppHeroCard(appVersion: AppVersionInfo, onOpenHelp: () -> Unit) {
+private fun AppHeroCard(appVersion: AppVersion, onOpenHelp: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
