@@ -12,6 +12,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -21,6 +24,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -41,14 +45,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -107,6 +115,13 @@ fun MaterialsScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     var tab by remember { mutableStateOf(0) }
     var search by remember { mutableStateOf("") }
+    // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي يتوسع بواجهة لحالة
+    // اثناء البحث"): the search field used to sit permanently above the
+    // list; it now lives as a small icon button in MaterialsHeader that
+    // expands the header's own title row into a focused search field when
+    // tapped, instead of taking up its own row on the page at all times.
+    var isSearching by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
     var editingMaterial by remember { mutableStateOf<Material?>(null) }
     var deleteTarget by remember { mutableStateOf<Material?>(null) }
     var showClearAllConfirm by remember { mutableStateOf(false) }
@@ -138,6 +153,10 @@ fun MaterialsScreen(
 
     LaunchedEffect(message) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
+    }
+
+    LaunchedEffect(isSearching) {
+        if (isSearching) searchFocusRequester.requestFocus()
     }
 
     // PERF: this used to re-run the .filter{} scan over the whole
@@ -192,7 +211,12 @@ fun MaterialsScreen(
                 showClearAll = tab == 0 && state.materials.isNotEmpty(),
                 onClearAll = { showClearAllConfirm = true },
                 onShare = { showShareChoice = true },
-                onOpenDrawer = onOpenDrawer
+                onOpenDrawer = onOpenDrawer,
+                isSearching = isSearching,
+                onSearchToggle = { isSearching = it },
+                searchQuery = search,
+                onSearchQueryChange = { search = it },
+                searchFocusRequester = searchFocusRequester
             )
         }
         // REDESIGN: no `floatingActionButton` slot here anymore — "مادة
@@ -212,27 +236,31 @@ fun MaterialsScreen(
                 // list, and materials below it - no extra banners competing
                 // for attention. The "مادة جديدة" action lives only in the
                 // floating button at the bottom of the screen.
+                // REDESIGN ("زر اضافة مادة جديدة يجب ان يكون زر عريض مكان
+                // شريط البحث للي شلته"): the permanent search field that
+                // used to sit here moved into MaterialsHeader's own search
+                // icon (see topBar above); this space is now a wide,
+                // prominent "مادة جديدة" button instead, using the
+                // `onAddNew` callback MainActivity already wires to the
+                // catalog-picker screen.
                 Column(Modifier.fillMaxSize()) {
-                    OutlinedTextField(
-                        value = search,
-                        onValueChange = { search = it },
+                    Surface(
+                        onClick = onAddNew,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                        placeholder = { Text("بحث عن مادة...") },
-                        leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                        trailingIcon = {
-                            if (search.isNotEmpty()) {
-                                IconButton(onClick = { search = "" }) { Icon(Icons.Default.Clear, null) }
-                            }
-                        },
-                        singleLine = true,
-                        shape = CircleShape,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                        )
-                    )
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("مادة جديدة", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     // NEW: sums the fixed catalog price of every shortage
                     // material currently shown (looked up from state.prices,
                     // the same map the "الأسعار" tab now edits against the
@@ -375,7 +403,12 @@ private fun MaterialsHeader(
     showClearAll: Boolean,
     onClearAll: () -> Unit,
     onShare: () -> Unit,
-    onOpenDrawer: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
+    isSearching: Boolean = false,
+    onSearchToggle: (Boolean) -> Unit = {},
+    searchQuery: String = "",
+    onSearchQueryChange: (String) -> Unit = {},
+    searchFocusRequester: FocusRequester? = null
 ) {
     Column(
         Modifier
@@ -391,6 +424,47 @@ private fun MaterialsHeader(
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
+        // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي يتوسع بواجهة
+        // لحالة اثناء البحث"): tapping the search icon below swaps this
+        // whole title row for a focused search field instead of opening a
+        // second bar or keeping a permanently-visible field elsewhere on
+        // the page — the header itself "becomes" the search UI while
+        // active, then reverts to the normal title + tabs when closed.
+        if (isSearching) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                GradientIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "إغلاق البحث",
+                    onClick = { onSearchToggle(false); onSearchQueryChange("") }
+                )
+                Spacer(Modifier.width(10.dp))
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .let { if (searchFocusRequester != null) it.focusRequester(searchFocusRequester) else it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.titleMedium.copy(color = BrandOnGradient),
+                    cursorBrush = SolidColor(BrandOnGradient),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {}),
+                    decorationBox = { inner ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                "بحث عن مادة...",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = BrandOnGradient.copy(alpha = 0.5f)
+                            )
+                        }
+                        inner()
+                    }
+                )
+                if (searchQuery.isNotEmpty()) {
+                    GradientIconButton(icon = Icons.Default.Clear, contentDescription = "مسح", onClick = { onSearchQueryChange("") })
+                }
+            }
+        } else {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // BUG FIXED ("الأيقونة فوق الكلمة"): the hamburger used to be a
             // floating overlay from MainActivity, pinned to this exact
@@ -417,12 +491,17 @@ private fun MaterialsHeader(
             // which read as the two circular buttons glued together. Both
             // now sit in their own Row with real breathing room
             // (spacedBy) between them instead of a single thin gap.
-            if (showClearAll) {
-                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    GradientIconButton(icon = Icons.Default.DeleteSweep, contentDescription = "مسح كل المواد", onClick = onClearAll)
-                    GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
+            //
+            // REDESIGN: a search icon now sits in this same row (المواد tab
+            // only — الأسعار has its own always-editable list where a
+            // header search field would compete with per-row price inputs).
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (tab == 0) {
+                    GradientIconButton(icon = Icons.Default.Search, contentDescription = "بحث", onClick = { onSearchToggle(true) })
                 }
-            } else {
+                if (showClearAll) {
+                    GradientIconButton(icon = Icons.Default.DeleteSweep, contentDescription = "مسح كل المواد", onClick = onClearAll)
+                }
                 GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
             }
         }
@@ -435,6 +514,7 @@ private fun MaterialsHeader(
             ),
             onSelect = onTabChange
         )
+        }
     }
 }
 
