@@ -1,1 +1,13 @@
-
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one motion curve every animation in this app now shares — same
+     cubic-bezier as MotionSpecs.claudeEasing in Compose (0.16, 1, 0.3, 1):
+     quick to start, gently easing to a dead stop with no overshoot. This
+     is the XML equivalent so the window-level transitions in res/anim/
+     (the one place a window/Activity animation exists outside Compose)
+     read as the same brand of motion instead of the platform's own
+     decelerate/accelerate interpolators. -->
+<pathInterpolator xmlns:android="http://schemas.android.com/apk/res/android"
+    android:controlX1="0.16"
+    android:controlY1="1"
+    android:controlX2="0.3"
+    android:controlY2="1" />
