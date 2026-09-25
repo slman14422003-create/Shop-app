@@ -49,7 +49,6 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.MotionSpecs
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.common.listItemEntrance
 import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.SimpleDateFormat
@@ -156,21 +155,17 @@ fun NotesScreen(
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             TopAppBar(
-                title = { Text("ملاحظات هامة", fontWeight = FontWeight.Bold) },
+                title = { Text("ملاحظات هامة", style = MaterialTheme.typography.titleLarge) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
                     navigationIconContentColor = BrandOnGradient,
                     titleContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
                 ),
-                // نفس تعميم ستايل الزجاج المستخدم بكل هيدرات التطبيق
-                // (highlight = false + baseAlpha = 0.72f) - راجع الشرح
-                // بـ DashboardScreen.kt.
-                modifier = Modifier.liquidGlassSurface(
-                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                    highlight = false,
-                    baseAlpha = 0.72f
-                ),
+                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
+                // liquidGlassSurface panel (rounded bottom corners) this bar
+                // used to sit on — it now sits flush on the plain background
+                // like Home's own header and every Claude screen.
                 // BUG FIXED ("الأيقونة فوق الكلمة"): same fix as
                 // DebtsScreen/DashboardScreen/MaterialsScreen — the
                 // hamburger is this bar's own `navigationIcon` now, not a

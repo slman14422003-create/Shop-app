@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -38,7 +37,6 @@ import com.shopmanager.app.data.notes.ImportantNote
 import com.shopmanager.app.data.notes.NoteLinkType
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -286,7 +284,7 @@ private fun NoteEditScreenContent(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text(if (isNew) "ملاحظة جديدة" else "تعديل الملاحظة", fontWeight = FontWeight.Bold) },
+                title = { Text(if (isNew) "ملاحظة جديدة" else "تعديل الملاحظة", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onBack, enabled = !isSaving) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "إلغاء")
@@ -309,12 +307,11 @@ private fun NoteEditScreenContent(
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient,
                     actionIconContentColor = BrandOnGradient
-                ),
-                modifier = Modifier.liquidGlassSurface(
-                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                    highlight = false,
-                    baseAlpha = 0.72f
                 )
+                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
+                // liquidGlassSurface panel (rounded bottom corners) this bar
+                // used to sit on — it now sits flush on the plain background
+                // like Home's own header and Claude's own "Settings" screen.
             )
         }
     ) { padding -> content(padding) }
