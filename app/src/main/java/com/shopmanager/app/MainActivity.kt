@@ -26,9 +26,13 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -47,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -77,6 +82,7 @@ import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.data.performance.resolvePerformanceTier
+import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.admin.AdminPanelScreen
 import com.shopmanager.app.ui.dashboard.DashboardScreen
@@ -91,6 +97,7 @@ import com.shopmanager.app.ui.notes.NotesScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppDrawerContent
+import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.FloatingQuickActions
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.QuickAction
@@ -126,12 +133,21 @@ private const val PAGE_MATERIALS = 2
 // shares the exact same tab-switch animation described above for free.
 private const val PAGE_NOTES = 3
 private const val ROUTE_SETTINGS = "settings"
-// لوحة المسؤول السرية: not exposed through any visible nav item — reached
-// only via the hidden dot on the dashboard header + the PIN dialog it
-// opens (see DashboardScreen). Deliberately not shown in the bottom bar
-// or Settings so a regular user has no path to it except knowing it's
-// there.
+// لوحة المسؤول السرية: reached only via the small admin-panel button
+// pinned next to الإعدادات at the bottom of the side drawer (see
+// AppDrawerContent) + the PIN dialog it opens (AdminPinDialog below).
+// MOVED ("انقل ايقونة المسؤول الى المنيو الى جانب الاعدادات"): this used
+// to be a hidden button on DashboardScreen's own header, reachable only
+// from the Home tab. The trigger — and the PIN-gate state/dialog that
+// guards it — now live here at the same level as the drawer itself, so
+// لوحة المسؤول is reachable from the drawer regardless of which tab is
+// open, exactly like الإعدادات already is.
 private const val ROUTE_ADMIN = "adminPanel"
+// SECURITY: fixed 4-digit developer password gating لوحة المسؤول, distinct
+// from the user-chosen app-lock PIN in Settings. Attempts are throttled via
+// the shared PinAttemptThrottle (see AdminPinDialog below) so this can't be
+// brute-forced directly from the dialog's keypad.
+private const val ADMIN_PANEL_PASSWORD = "1442"
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
 private const val ROUTE_HELP = "help"
 private const val ROUTE_PRIVACY = "privacy"
@@ -541,6 +557,13 @@ private fun ShopManagerApp(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerScope = rememberCoroutineScope()
 
+    // لوحة المسؤول السرية: PIN-gate state, hoisted up here from
+    // DashboardScreen now that the trigger button lives in the drawer
+    // instead of Home's own header (see the ROUTE_ADMIN comment above).
+    var showAdminPinDialog by remember { mutableStateOf(false) }
+    val adminContext = LocalContext.current
+    val adminThrottle = remember { PinAttemptThrottle(adminContext, "shop_manager_admin_throttle") }
+
     // BUG FIXED ("ترابط بين جميع الانميشن"): tapping a bottom-nav tab (or a
     // notification landing on a specific tab) drove the SAME pager as
     // swiping between Home/Debts/Materials/Notes, but through
@@ -672,6 +695,10 @@ private fun ShopManagerApp(
                 onOpenSettings = {
                     navController.navigate(ROUTE_SETTINGS)
                     drawerScope.launch { drawerState.close() }
+                },
+                onOpenAdmin = {
+                    drawerScope.launch { drawerState.close() }
+                    showAdminPinDialog = true
                 }
             )
         }
@@ -801,7 +828,6 @@ private fun ShopManagerApp(
                             materialsViewModel = materialsViewModel,
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
-                            onOpenAdmin = { navController.navigate(ROUTE_ADMIN) },
                             onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
                         PAGE_DEBTS -> DebtsScreen(
@@ -981,6 +1007,32 @@ private fun ShopManagerApp(
     }
     } // ModalNavigationDrawer
 
+    // لوحة المسؤول السرية: PIN gate, triggered from the admin button in the
+    // side drawer (see AppDrawerContent's onOpenAdmin above). Rendered as a
+    // sibling of the drawer's Box, same reasoning as the notification
+    // dialog just below — a dialog is its own layer, not part of that
+    // layout, and this needs to be reachable regardless of which tab is
+    // currently open underneath it.
+    if (showAdminPinDialog) {
+        AdminPinDialog(
+            throttle = adminThrottle,
+            onDismiss = { showAdminPinDialog = false },
+            onSubmit = { entered ->
+                if (adminThrottle.isLocked()) {
+                    false
+                } else if (entered == ADMIN_PANEL_PASSWORD) {
+                    adminThrottle.registerSuccess()
+                    showAdminPinDialog = false
+                    navController.navigate(ROUTE_ADMIN)
+                    true
+                } else {
+                    adminThrottle.registerFailure()
+                    false
+                }
+            }
+        )
+    }
+
     // The confirmation dialog a tapped notification opens the app to show
     // ("تم تسديد الدين", "عميل جديد", "قائمة المشتريات"). Rendered as a
     // sibling of the Box above (an AlertDialog is its own system window,
@@ -1030,4 +1082,77 @@ private fun navigateTopLevel(navController: androidx.navigation.NavController, r
         launchSingleTop = true
         restoreState = true
     }
+}
+
+// لوحة المسؤول السرية: PIN entry dialog gating ROUTE_ADMIN. MOVED here
+// from DashboardScreen ("انقل ايقونة المسؤول الى المنيو الى جانب
+// الاعدادات") along with its trigger button, which now lives in the side
+// drawer next to الإعدادات instead of on Home's own header — see
+// showAdminPinDialog/adminThrottle above and AppDrawerContent's
+// onOpenAdmin. Behavior is unchanged from before: same fixed password
+// (ADMIN_PANEL_PASSWORD) and the same shared PinAttemptThrottle lockout,
+// just triggered from a different place now.
+@Composable
+private fun AdminPinDialog(
+    throttle: PinAttemptThrottle,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Boolean
+) {
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf(false) }
+    var lockRemaining by remember { mutableLongStateOf(throttle.lockRemainingSeconds()) }
+    val isLocked = lockRemaining > 0
+
+    LaunchedEffect(isLocked) {
+        while (lockRemaining > 0) {
+            delay(1000)
+            lockRemaining = throttle.lockRemainingSeconds()
+        }
+    }
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("دخول لوحة المطوّر") },
+        text = {
+            Column {
+                AppTextField(
+                    value = pin,
+                    onValueChange = { pin = it.filter { c -> c.isDigit() }.take(8); error = false },
+                    label = "كلمة المرور",
+                    singleLine = true,
+                    enabled = !isLocked,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = error
+                )
+                if (isLocked) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "محاولات كثيرة خاطئة — حاول بعد $lockRemaining ثانية",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                } else if (error) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "كلمة المرور غير صحيحة",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !isLocked, shape = RectangleShape, onClick = {
+                if (!onSubmit(pin)) {
+                    error = true
+                    lockRemaining = throttle.lockRemainingSeconds()
+                }
+            }) { Text("دخول") }
+        },
+        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
