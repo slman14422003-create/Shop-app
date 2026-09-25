@@ -269,7 +269,8 @@ fun DebtsScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 shape = RoundedCornerShape(50),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -413,7 +414,8 @@ private fun StatsRow(persons: Int, debts: Int, amount: Double) {
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
@@ -522,7 +524,8 @@ private fun PersonRow(
             ),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
