@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Pairs with fade_in.xml. Same claude_ease curve as every other
+     transition in the app — Claude's own UI never uses a separate
+     accelerate curve for exits, just a shorter duration than the
+     entrance, so this drops the platform's accelerate_quad interpolator
+     to match. -->
 <alpha xmlns:android="http://schemas.android.com/apk/res/android"
     android:fromAlpha="1.0"
     android:toAlpha="0.0"
     android:duration="160"
-    android:interpolator="@android:interpolator/accelerate_quad" />
+    android:interpolator="@interpolator/claude_ease" />
