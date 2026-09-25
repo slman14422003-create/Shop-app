@@ -301,7 +301,7 @@ fun MaterialsScreen(
                     )
                 }
             } else {
-                PricesList(catalogItems = catalog, prices = state.prices, edited = editedPrices)
+                PricesList(catalogItems = catalog, prices = state.prices, edited = editedPrices, search = search)
             }
         }
         }
@@ -452,7 +452,7 @@ private fun MaterialsHeader(
                     decorationBox = { inner ->
                         if (searchQuery.isEmpty()) {
                             Text(
-                                "بحث عن مادة...",
+                                if (tab == 0) "بحث عن مادة..." else "بحث عن الأسعار...",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = BrandOnGradient.copy(alpha = 0.5f)
                             )
@@ -492,13 +492,13 @@ private fun MaterialsHeader(
             // now sit in their own Row with real breathing room
             // (spacedBy) between them instead of a single thin gap.
             //
-            // REDESIGN: a search icon now sits in this same row (المواد tab
-            // only — الأسعار has its own always-editable list where a
-            // header search field would compete with per-row price inputs).
+            // REDESIGN: a search icon now sits in this same row on both
+            // tabs (المواد *and* الأسعار — a real catalog/price list can run
+            // long on either), expanding the header itself into the search
+            // field above instead of either tab keeping its own
+            // permanently-visible field further down the page.
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                if (tab == 0) {
-                    GradientIconButton(icon = Icons.Default.Search, contentDescription = "بحث", onClick = { onSearchToggle(true) })
-                }
+                GradientIconButton(icon = Icons.Default.Search, contentDescription = "بحث", onClick = { onSearchToggle(true) })
                 if (showClearAll) {
                     GradientIconButton(icon = Icons.Default.DeleteSweep, contentDescription = "مسح كل المواد", onClick = onClearAll)
                 }
@@ -898,7 +898,8 @@ private fun MaterialRow(
 private fun PricesList(
     catalogItems: List<MaterialCatalogItem>,
     prices: Map<String, Double>,
-    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>
+    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
+    search: String
 ) {
     // FIX: this tab used to price whatever happened to be on the shortage
     // list (state.materials) — which meant a material's price disappeared
@@ -913,7 +914,11 @@ private fun PricesList(
     // comment) rather than created here, so the externally-triggered save
     // action can reach the same in-progress buffer this list is writing
     // into.
-    var search by remember { mutableStateOf("") }
+    // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي"): `search` is now
+    // lifted all the way up to MaterialsScreen and driven by the shared
+    // header search field (MaterialsHeader), rather than this tab keeping
+    // its own separate always-visible field — same change already made to
+    // the شورتيج/المواد tab above.
 
     if (catalogItems.isEmpty()) {
         EmptyState(icon = Icons.Default.Inventory2, text = "أضف مواد للقائمة الثابتة أولاً لتسعيرها")
@@ -979,26 +984,6 @@ private fun PricesList(
             edited = edited,
             currency = currency,
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
-        )
-        OutlinedTextField(
-            value = search,
-            onValueChange = { search = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder = { Text("بحث عن مادة...") },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-            trailingIcon = {
-                if (search.isNotEmpty()) {
-                    IconButton(onClick = { search = "" }) { Icon(Icons.Default.Clear, null) }
-                }
-            },
-            singleLine = true,
-            shape = CircleShape,
-            colors = OutlinedTextFieldDefaults.colors(
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                unfocusedBorderColor = Color.Transparent,
-                focusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-            )
         )
         if (filtered.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
