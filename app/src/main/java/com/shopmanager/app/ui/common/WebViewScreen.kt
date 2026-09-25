@@ -133,7 +133,7 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
         topBar = {
             Column {
                 TopAppBar(
-                    title = { Text(title, fontWeight = FontWeight.Bold) },
+                    title = { Text(title, style = MaterialTheme.typography.titleLarge) },
                     navigationIcon = {
                         GlassIconButton(
                             icon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -183,14 +183,11 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
                         titleContentColor = BrandOnGradient,
                         navigationIconContentColor = BrandOnGradient,
                         actionIconContentColor = BrandOnGradient
-                    ),
-                    // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
-                    // — راجع الشرح بـ DashboardScreen.kt.
-                    modifier = Modifier.liquidGlassSurface(
-                        androidx.compose.ui.graphics.RectangleShape,
-                        highlight = false,
-                        baseAlpha = 0.72f
                     )
+                    // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
+                    // liquidGlassSurface panel this bar used to sit on — it
+                    // now sits flush on the plain background like Home's own
+                    // header and Claude's own "Settings" screen.
                 )
 
                 // FEATURE ADDED: find-in-page bar — appears under the top
