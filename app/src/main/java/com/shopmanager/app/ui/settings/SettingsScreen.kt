@@ -741,7 +741,12 @@ fun SettingsScreen(
                             // رسوميات ضعيف"): surfaces the new GPU signal
                             // alongside RAM/cores so "kind of an OK phone but
                             // still landed on LOW" isn't a mystery anymore.
-                            (if (deviceInfo.weakGpu) " — معالج رسوميات ضعيف/قديم" else ""),
+                            (if (deviceInfo.weakGpu) " — معالج رسوميات ضعيف/قديم" else "") +
+                            // IMPROVEMENT ADDED: surfaces the new memoryClass
+                            // signal too, so a device flagged LOW purely by
+                            // its OEM-tuned heap ceiling (fine RAM/cores/GPU
+                            // on paper) isn't a mystery either.
+                            (if (deviceInfo.weakMemoryClass) " — ذاكرة تطبيق محدودة (${deviceInfo.memoryClassMb}MB)" else ""),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
