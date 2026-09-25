@@ -497,10 +497,20 @@ private fun PersonRow(
                 // as a good state, in the same green used for the "paid"
                 // check button elsewhere on this row.
                 if (person.amount > 0) {
-                    Text(
-                        "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    // REDESIGN ("تصميم بشكل اجمل" + "الوان الثيمات بدها
+                    // تحسين وتباين"): the owed amount used to be a plain
+                    // low-contrast onSurfaceVariant line, identical in
+                    // weight to every other muted label on the row — the
+                    // single most important number on this list read no
+                    // differently than a footnote. Now a small rounded,
+                    // colored badge (same PillBadge language المواد
+                    // already uses for its own quantities) so it stands
+                    // out at a glance and pairs the two lists' visual
+                    // vocabulary.
+                    Spacer(Modifier.height(2.dp))
+                    com.shopmanager.app.ui.common.PillBadge(
+                        text = "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
+                        color = LocalSemanticColors.current.danger
                     )
                 } else {
                     Text(
