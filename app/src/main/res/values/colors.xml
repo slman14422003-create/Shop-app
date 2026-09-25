@@ -2,42 +2,36 @@
     <!-- Brand — kept here too because the splash screen / window
          background below are drawn before any Compose/Kotlin code runs and
          can't reference a Compose Color directly.
-         Unified with the Phizyo app's reference values/colors.xml —
-         claude_orange, exact hex, so pre-Compose chrome (splash, window
-         background, ripple) matches Compose's ClaudeOrangeLight precisely
-         instead of the old off-palette #CC7A52. -->
-    <color name="brand_claude_primary">#C96442</color>
-    <color name="brand_claude_secondary">#6A6968</color>
+         REDESIGN ("صمم الالوان بتصميم ChatGPT"): unified with
+         ui/theme/Color.kt's ClaudeOrangeLight — ChatGPT's own link/highlight
+         blue, replacing the old terracotta #C96442, so pre-Compose chrome
+         (splash, window background, ripple) matches Compose's actual accent. -->
+    <color name="brand_claude_primary">#2F80ED</color>
+    <color name="brand_claude_secondary">#6E6E80</color>
 
-    <!-- Semantic — mirrors Color.kt's SuccessGreen/WarningAmber/DangerRed/
-         InfoBlue so anything drawn outside Compose (notification tint,
-         adaptive icon, future widgets) stays visually consistent with the
-         in-app palette instead of picking its own colors. -->
-    <color name="success_green">#5F8768</color>
-    <color name="warning_amber">#B07A2E</color>
-    <color name="danger_red">#BC4C34</color>
-    <color name="info_blue">#6A6968</color>
+    <!-- Semantic — mirrors Color.kt's ClaudeAccentGreenLight/GoldLight/
+         RedLight/SecondaryLight so anything drawn outside Compose
+         (notification tint, adaptive icon, future widgets) stays visually
+         consistent with the in-app palette instead of picking its own
+         colors. -->
+    <color name="success_green">#10A37F</color>
+    <color name="warning_amber">#B5811B</color>
+    <color name="danger_red">#D93025</color>
+    <color name="info_blue">#6E6E80</color>
 
-    <!-- Light-mode surfaces — unified with Phizyo's bg_deep_1/surface_dark
-         (warm cream, not the old cool #FAFAFC/#F1F0FA), used by the window
-         background and any XML-drawn chrome before Compose takes over. -->
+    <!-- Light-mode surfaces — clean white/off-white ChatGPT ladder, used by
+         the window background and any XML-drawn chrome before Compose takes
+         over. -->
     <color name="surface_light">#FFFFFF</color>
-    <color name="background_light">#F5F4EE</color>
-    <color name="surface_variant_light">#F0EDE4</color>
+    <color name="background_light">#FFFFFF</color>
+    <color name="surface_variant_light">#ECECF1</color>
 
     <!-- Ripple / touch-feedback tint and scroll edge-glow color, tied to
-         the same exact terracotta as Phizyo's claude_orange.
-         POLISH: alpha lowered from #33 (20%) to #1F (~12%) — the same
-         restrained-touch-feedback direction already applied elsewhere in
-         this app (header shadow dropped to 2dp, icon-button resting fill
-         dropped to 0), so the most frequent feedback in the app (every tap)
-         reads as a refined hint rather than a loud flash. -->
-    <color name="ripple_brand">#1FC96442</color>
-    <color name="edge_glow_brand">#C96442</color>
+         the same exact blue as ClaudeOrangeLight. -->
+    <color name="ripple_brand">#1F2F80ED</color>
+    <color name="edge_glow_brand">#2F80ED</color>
 
-    <!-- Unified with Phizyo's bg_deep_1: the splash now follows system
-         light/dark theme like the reference app (cream here, near-black in
-         values-night/colors.xml) instead of a single fixed near-black tone
-         regardless of theme. -->
-    <color name="splash_background">#F5F4EE</color>
+    <!-- Splash follows system light/dark theme (white here, pure black in
+         values-night/colors.xml). -->
+    <color name="splash_background">#FFFFFF</color>
 </resources>
