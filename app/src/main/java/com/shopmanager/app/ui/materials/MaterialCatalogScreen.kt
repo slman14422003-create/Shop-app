@@ -265,7 +265,8 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onEdit: (
             ),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {

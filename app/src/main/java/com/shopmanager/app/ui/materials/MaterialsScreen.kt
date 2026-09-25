@@ -249,7 +249,8 @@ fun MaterialsScreen(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                         shape = RoundedCornerShape(50),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
                     ) {
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -573,7 +574,8 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
             .height(46.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
             .padding(4.dp)
             .onSizeChanged { trackWidthPx = it.width }
     ) {
@@ -589,7 +591,8 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
                     .shadow(elevation = 2.dp, shape = RoundedCornerShape(11.dp), clip = false)
                     .clip(RoundedCornerShape(11.dp))
                     .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), RoundedCornerShape(11.dp))
+                    // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+                    .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(11.dp))
             )
         }
 
@@ -689,6 +692,22 @@ private fun MaterialsList(
 
     LazyColumn(
         Modifier.fillMaxSize(),
+        // BUG FIXED ("السحب والافلات... كلشي يخفتي فوقها فما بقدر ارجع
+        // للأعلى"): this screen sits inside PullToRefreshContent, whose
+        // pull-to-refresh gesture and this LazyColumn's own scroll both
+        // listen for the same vertical drag through Compose's nested-
+        // scroll system. A row's reorder-drag only consumes pointer
+        // *events* (`change.consume()` below), which stops the LazyColumn
+        // from treating that drag as a scroll — but it doesn't stop the
+        // list from being a live nested-scroll participant, so a drag that
+        // starts right at the top of the list (dragging the very first
+        // item) could still get read as a pull-to-refresh gesture at the
+        // same time, leaving the refresh indicator dimming the top of the
+        // list and stuck mid-gesture, unable to scroll, until released.
+        // Disabling the list's own scrolling for the whole duration of a
+        // row-drag removes it from nested scroll entirely, so no drag can
+        // ever be mistaken for a pull-to-refresh again.
+        userScrollEnabled = draggingId == null,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomClearance),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -757,6 +776,26 @@ private fun MaterialsList(
                                         val gap = 8.dp.toPx()
                                         val myHeight = (itemHeightsPx[m.id] ?: 0).toFloat()
                                         val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
+                                        // BUG FIXED (part of the same
+                                        // "السحب... فما بقدر ارجع للأعلى" fix
+                                        // as userScrollEnabled above): the
+                                        // first item has no neighbor above it
+                                        // to swap with, so nothing here ever
+                                        // stopped `dragOffset` itself from
+                                        // still climbing negative as the
+                                        // finger kept moving up — the row
+                                        // just kept sliding up past its own
+                                        // resting slot with no floor,
+                                        // visually detaching from the list
+                                        // (and symmetrically for the last
+                                        // item dragged past the bottom).
+                                        // Clamped to 0 in whichever
+                                        // direction has no neighbor to swap
+                                        // into, so the dragged row never
+                                        // moves further than the real list
+                                        // actually allows.
+                                        if (currentIndex == 0 && dragOffset < 0f) dragOffset = 0f
+                                        if (currentIndex == orderedItems.lastIndex && dragOffset > 0f) dragOffset = 0f
                                         if (dragOffset > 0f && currentIndex < orderedItems.lastIndex) {
                                             val neighbor = orderedItems[currentIndex + 1]
                                             val neighborHeight = (itemHeightsPx[neighbor.id] ?: myHeight.toInt()).toFloat()
@@ -841,14 +880,18 @@ private fun MaterialRow(
         // Material default scheme. Against a warm border, the *un*starred
         // card's border and the starred card's amber border read as nearly
         // the same color — exactly the "every card looks the same" effect.
-        // Dropping the ordinary border's alpha further keeps it visibly
-        // receding into the card regardless of theme, so the starred
-        // amber border actually stands out again as the one visual signal
-        // it's meant to be.
+        // BORDERS UNIFIED WHITE ("بدي حدود مربع المادة... يكون لونها
+        // ابيض... بشفافية خفيفة"): the ordinary (un-starred) border now
+        // matches every other card border in the app — a flat white
+        // hairline at a light alpha — instead of the old theme-tinted
+        // outlineVariant token. The starred row keeps its own distinct
+        // amber border untouched: that's a separate semantic signal
+        // ("this one's important"), not the app's general card border, so
+        // it stays the one border color that's still meant to stand out.
         border = BorderStroke(
             if (material.important) 1.5.dp else 1.dp,
             if (material.important) LocalSemanticColors.current.warning.copy(alpha = 0.7f)
-            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f)
+            else Color.White.copy(alpha = 0.4f)
         ),
         tonalElevation = 0.dp,
         shadowElevation = if (isDragging) 6.dp else 0.dp
@@ -1103,7 +1146,8 @@ private fun PricesSummaryCard(
         modifier = modifier,
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -1153,7 +1197,8 @@ private fun PriceRow(
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
