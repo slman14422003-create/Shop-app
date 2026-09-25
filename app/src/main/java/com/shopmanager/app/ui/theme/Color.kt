@@ -100,3 +100,26 @@ val ClaudeM3ErrorContainerDark = Color(0xFF5A2820)
 val ClaudeM3OnErrorContainerDark = Color(0xFFFFDAD2)
 val ClaudeM3SurfaceContainerDark = Color(0xFF1B1B1B)
 val ClaudeM3SurfaceContainerHighDark = Color(0xFF2B2B2B)
+
+// ============================================================================
+// REDESIGN ("بدي تصميم جميل اجمل من هيك"): a small curated ladder of warm,
+// muted hues — all pulled from the same terracotta/gold/sage family already
+// used for brand + semantic accents elsewhere, never a generic rainbow — so
+// avatar circles and per-item icon chips read as intentionally varied
+// instead of every single one falling back to one flat gray. Fixed (not
+// theme-dependent): callers like [avatarColorFor] are plain, non-Composable
+// functions used from places with no access to the current color scheme
+// (NotificationHelper), so each tone here is picked to sit comfortably on
+// both the cream light background and the near-black dark one, with white
+// avatar-initial text always staying comfortably legible on top.
+// ============================================================================
+val AvatarPalette = listOf(
+    Color(0xFFC96442), // terracotta (brand)
+    Color(0xFF5F8768), // sage green
+    Color(0xFFB07A2E), // gold / amber
+    Color(0xFF7E7BB0), // dusty lavender-slate
+    Color(0xFFAD5237), // deep terracotta
+    Color(0xFF6E8B8B), // muted teal
+    Color(0xFF8B6F47), // warm clay
+    Color(0xFFBC4C34), // clay red
+)
