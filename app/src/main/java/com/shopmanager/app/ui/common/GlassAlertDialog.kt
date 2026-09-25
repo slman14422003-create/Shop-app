@@ -168,12 +168,35 @@ fun GlassAlertDialog(
                         Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 22.dp),
                         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
                     ) {
+                        // REDESIGN ("ازرار الحفظ لونها ابيض"): the confirm/save
+                        // button used to just read `surfaceContainerHighest`
+                        // (the same neutral tone as the rest of the dialog),
+                        // so it barely stood out from the card behind it. It's
+                        // now a solid white pill in both themes. Every call
+                        // site's confirmButton is a plain TextButton with no
+                        // explicit colors, so its label reads
+                        // colorScheme.primary — a `TextButton` sets that
+                        // color on its own inner Surface, which would win
+                        // over a plain outer `CompositionLocalProvider`. A
+                        // nested MaterialTheme overriding just `primary` (to
+                        // black) reaches that same lookup, so every existing
+                        // confirmButton reads as black-on-white without
+                        // touching each call site individually. A call site
+                        // that sets its own explicit Text `color` (e.g. the
+                        // green "تم السداد" success label) still wins, since
+                        // an explicit color always overrides the ambient one.
                         DialogButtonCell(
                             Modifier.fillMaxWidth().height(50.dp)
                                 .clip(RoundedCornerShape(50))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                .background(Color.White)
                         ) {
-                            confirmButton()
+                            MaterialTheme(
+                                colorScheme = MaterialTheme.colorScheme.copy(primary = Color.Black),
+                                typography = MaterialTheme.typography,
+                                shapes = MaterialTheme.shapes
+                            ) {
+                                confirmButton()
+                            }
                         }
                         if (dismissButton != null) {
                             DialogButtonCell(
