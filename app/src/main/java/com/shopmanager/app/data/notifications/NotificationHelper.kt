@@ -57,14 +57,17 @@ object NotificationHelper {
     private const val NOTIF_ID_DEBTS_SUMMARY = 1900
 
     // Same Claude accent as res/values/colors.xml's brand_claude_primary /
-    // the in-app theme (see ui/theme/Color.kt's Claude40) — applied via
+    // the in-app theme (see ui/theme/Color.kt's ClaudeOrangeLight) — applied via
     // setColor() below so the small icon's accent circle (API 21+
     // notification shade) and any heads-up banner tint match the rest of
     // the app instead of falling back to a generic system grey, another
     // piece of "الإشعارات مش متطورة" (the icon itself is fixed too — see
-    // ic_stat_notify.xml). FIXED: this was still the old Indigo brand color
-    // from before CLAUDE became the app's default palette.
-    private val BRAND_COLOR = android.graphics.Color.parseColor("#CC7A52")
+    // ic_stat_notify.xml). UNIFIED ON CLAUDE'S DESIGN ("عدل التصميم بشكل جذري
+    // ليصبح متل كلود"): this was still #CC7A52, the old hand-picked
+    // approximation from before the in-app accent was corrected to
+    // Anthropic's real brand coral (see colors.xml's brand_claude_primary,
+    // fixed the same way) — now the exact same hex the rest of the app uses.
+    private val BRAND_COLOR = android.graphics.Color.parseColor("#C96442")
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
