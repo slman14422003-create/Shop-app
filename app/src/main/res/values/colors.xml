@@ -1,51 +1,38 @@
 <resources>
-    <!-- Brand — same values as ui/theme/Color.kt's Claude40/Sand40 (the
-         CLAUDE palette's primaryLight/secondaryLight — see paletteColorsFor
-         in Palette.kt), kept here too because the splash screen / window
+    <!-- Brand — kept here too because the splash screen / window
          background below are drawn before any Compose/Kotlin code runs and
-         can't reference a Compose Color directly. FIXED: these used to
-         still be the old Indigo/Violet pair from before CLAUDE became the
-         app's default palette, so the splash screen flashed blue/purple
-         then handed off to Compose's actual warm terracotta theme — the
-         exact "flash of the wrong tone" this file's own handoff comments
-         warn about, just for a different color. Mirroring the exact hex
-         keeps the splash → first Compose frame handoff seamless again. -->
-    <color name="brand_claude_primary">#CC7A52</color>
-    <color name="brand_claude_secondary">#A98763</color>
+         can't reference a Compose Color directly.
+         Unified with the Phizyo app's reference values/colors.xml —
+         claude_orange, exact hex, so pre-Compose chrome (splash, window
+         background, ripple) matches Compose's ClaudeOrangeLight precisely
+         instead of the old off-palette #CC7A52. -->
+    <color name="brand_claude_primary">#C96442</color>
+    <color name="brand_claude_secondary">#6A6968</color>
 
     <!-- Semantic — mirrors Color.kt's SuccessGreen/WarningAmber/DangerRed/
          InfoBlue so anything drawn outside Compose (notification tint,
          adaptive icon, future widgets) stays visually consistent with the
          in-app palette instead of picking its own colors. -->
-    <color name="success_green">#16A34A</color>
-    <color name="warning_amber">#F59E0B</color>
-    <color name="danger_red">#DC2626</color>
-    <color name="info_blue">#2563EB</color>
+    <color name="success_green">#5F8768</color>
+    <color name="warning_amber">#B07A2E</color>
+    <color name="danger_red">#BC4C34</color>
+    <color name="info_blue">#6A6968</color>
 
-    <!-- Light-mode surfaces — same values as Color.kt's LightBackground/
-         LightSurface/LightSurfaceVariant, used by the window background
-         and any XML-drawn chrome before Compose takes over. -->
+    <!-- Light-mode surfaces — unified with Phizyo's bg_deep_1/surface_dark
+         (warm cream, not the old cool #FAFAFC/#F1F0FA), used by the window
+         background and any XML-drawn chrome before Compose takes over. -->
     <color name="surface_light">#FFFFFF</color>
-    <color name="background_light">#FAFAFC</color>
-    <color name="surface_variant_light">#F1F0FA</color>
+    <color name="background_light">#F5F4EE</color>
+    <color name="surface_variant_light">#F0EDE4</color>
 
-    <!-- Ripple / touch-feedback tint and scroll edge-glow color — both
-         previously left at the Android default (a flat grey/black), which
-         read as generic/off-brand on every tap and every over-scroll.
-         Tying them to the brand color instead makes even the smallest,
-         most frequent touch feedback in the app feel like part of one
-         cohesive design instead of stock platform chrome. Now the CLAUDE
-         palette's own light-mode primary (Claude40) instead of the old
-         Indigo value, so touch feedback matches the actual on-screen accent. -->
-    <color name="ripple_brand">#33CC7A52</color>
-    <color name="edge_glow_brand">#CC7A52</color>
+    <!-- Ripple / touch-feedback tint and scroll edge-glow color, tied to
+         the same exact terracotta as Phizyo's claude_orange. -->
+    <color name="ripple_brand">#33C96442</color>
+    <color name="edge_glow_brand">#C96442</color>
 
-    <!-- REDESIGN ("بدي ياها بستايل Claude هيك يعني حرفيا"): the splash
-         (system + in-app) now matches Claude's own splash — a near-black
-         background instead of the previous flat brand-orange — sampled
-         straight from Claude's splash screenshot. Kept as its own named
-         color since it's referenced before Compose/Kotlin runs (see
-         themes.xml). Fixed regardless of light/night mode (mirrored in
-         values-night/colors.xml), same convention as brand_claude_* above. -->
-    <color name="splash_background">#151515</color>
+    <!-- Unified with Phizyo's bg_deep_1: the splash now follows system
+         light/dark theme like the reference app (cream here, near-black in
+         values-night/colors.xml) instead of a single fixed near-black tone
+         regardless of theme. -->
+    <color name="splash_background">#F5F4EE</color>
 </resources>
