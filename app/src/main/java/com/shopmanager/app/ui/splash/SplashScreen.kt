@@ -47,15 +47,16 @@ import androidx.compose.ui.unit.sp
  * recomposes once settled.
  *
  * REDESIGN ("بدي ياها بستايل Claude هيك يعني حرفيا"): matches Claude's own
- * splash screen structure exactly instead of approximating it — a plain
- * near-black background (`splash_background` — see colors.xml, sampled
- * straight from Claude's own splash) with the mark and wordmark sitting
- * side by side in one row (not stacked), the mark small and in the brand
- * orange accent color instead of large and white/stacked above the text,
- * exactly like the small orange asterisk next to "Claude". The mortar and
- * pestle glyph itself is unchanged (see MortarAndPestleMark) — only its
- * size, color and position relative to the wordmark changed to match the
- * reference's proportions and layout.
+ * splash screen structure exactly instead of approximating it — a
+ * background that follows the system theme just like the Phizyo reference
+ * app's splash (`splash_background` — see colors.xml: warm cream in light
+ * mode, exact near-black in dark mode, not a single fixed dark tone) with
+ * the mark and wordmark sitting side by side in one row (not stacked), the
+ * mark small and in the brand orange accent color instead of large and
+ * white/stacked above the text, exactly like the small orange asterisk
+ * next to "Claude". The mortar and pestle glyph itself is unchanged (see
+ * MortarAndPestleMark) — only its size, color and position relative to the
+ * wordmark changed to match the reference's proportions and layout.
  *  - the app name is set in a serif face (matching Claude's own wordmark
  *    treatment — see `AppTypography`'s `ClaudeSerif` for the same choice
  *    elsewhere in the app)
@@ -79,13 +80,16 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
         label = "splashEntrance"
     )
 
-    // REDESIGN: near-black background + orange mark, sampled directly
-    // from Claude's own splash (background ~#151515, mark accent
-    // ~#D97858) instead of the previous flat-orange-bg/white-mark pair.
-    val splashBackground = Color(0xFF151515)
-    val markAccent = Color(0xFFDA7757)
-    val onDark = Color.White
-    val creditGrey = Color(0xFF8A8A8A)
+    // Unified with the Phizyo reference app's own splash tokens (exact
+    // bg_deep_1/claude_orange/text_primary/text_secondary hex, per theme)
+    // instead of separately eyeballed values, and now follows light/dark
+    // system theme like that reference splash does — not a single fixed
+    // dark background regardless of theme.
+    val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val splashBackground = if (isDark) Color(0xFF131313) else Color(0xFFF5F4EE)
+    val markAccent = if (isDark) Color(0xFFD97757) else Color(0xFFC96442)
+    val onDark = if (isDark) Color(0xFFF2F2F2) else Color(0xFF3D3929)
+    val creditGrey = if (isDark) Color(0xFFA6A6A6) else Color(0xFF78766D)
 
     Box(
         modifier
