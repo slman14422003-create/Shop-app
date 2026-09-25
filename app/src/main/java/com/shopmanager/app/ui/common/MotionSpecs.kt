@@ -1,7 +1,8 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -16,28 +17,31 @@ import com.shopmanager.app.data.performance.PerformanceTier
  * actual animation specs every small interactive motion in the app uses —
  * button-press scale, list-reorder, expand/collapse.
  *
- * BUG FIXED (تفضيل الأداء didn't reach most animations): only a few spots
- * — the nav-transition fade, the dashboard totals counter, the header
- * gradient — actually read [LocalPerformanceTier]. Every press-scale
- * spring, list-reorder spring, and expand/collapse tween was hardcoded
- * with its own fixed spec, so picking "منخفض" in Settings sped up almost
- * nothing you'd notice while actually tapping around, and picking "مرتفع"
- * didn't add anything beyond what STANDARD already did by default — it
- * just looked identical, which read as effects being "missing". Every
- * call site below now asks this object instead, so:
+ * REPLACED WITH CLAUDE.AI-STYLE MOTION ("ازل جميع الانميشن واضف انميشن نمط
+ * تطبيق كلاود ai"): every spec here used to be a bouncy spring
+ * (DampingRatioMediumBouncy/LowBouncy) that visibly overshot and settled
+ * back — a lively, "iOS 26" feel, but not what the reference Claude.ai
+ * design actually does. Claude's own UI never overshoots: every transition
+ * (a panel opening, a control responding to a tap) is a short,
+ * critically-damped ease-out — it moves briskly and stops exactly where
+ * it's going, with zero wobble. [claudeEasing] is that same curve (a
+ * fast-start/gentle-stop "ease-out expo" shape) used everywhere a
+ * duration-based tween is needed, and every spring below is now
+ * [Spring.DampingRatioNoBouncy] — only the stiffness (how quickly it gets
+ * there) still varies by call site and by performance tier:
  *
- * - LOW: every spring settles at [Spring.StiffnessHigh] with no bounce —
- *   about as close to an instant snap as a spring animation gets — and
- *   every duration-based effect drops to a fraction of its normal length.
- *   This is deliberately snappier than STANDARD, not just "no animation",
- *   so the UI still feels alive rather than dead/static.
- * - STANDARD/HIGH: noticeably livelier than the old hardcoded specs —
- *   higher stiffness than Compose's spring() default (StiffnessMedium)
- *   paired with a touch of bounce, so a tap/reorder/expand visibly
- *   responds and settles quickly instead of feeling like it's catching up
- *   a beat behind the input.
+ * - LOW ("الوضع الاقتصادي"): [Spring.StiffnessHigh] — settles in a couple
+ *   of frames, as close to an instant snap as a spring gets — and every
+ *   duration-based effect drops to a fraction of its normal length, so
+ *   battery/CPU cost stays minimal without the UI going fully static.
+ * - STANDARD/HIGH ("وضع الأداء العالي"): quick but perceptible, so a tap,
+ *   reorder or expand still visibly responds — just without any bounce.
  */
 object MotionSpecs {
+
+    /** Claude.ai's own transition curve — quick to start, gently easing to
+     * a dead stop with no overshoot. Used for every tween in this object. */
+    val claudeEasing: Easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
 
     @Composable
     private fun isLowTier(): Boolean = LocalPerformanceTier.current == PerformanceTier.LOW
@@ -45,11 +49,10 @@ object MotionSpecs {
     /** Button/row press scale-down feedback, and any other quick single-value
      * spring (color/dp highlight, etc.) that should track the same feel. */
     @Composable
-    fun <T> quickSpring(): FiniteAnimationSpec<T> = if (isLowTier()) {
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-    } else {
-        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow * 3f)
-    }
+    fun <T> quickSpring(): FiniteAnimationSpec<T> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 2.2f
+    )
 
     /** Button/row press scale-down feedback. */
     @Composable
@@ -57,79 +60,68 @@ object MotionSpecs {
 
     /** List-item reorder/insert/remove placement (LazyColumn animateItem's placementSpec). */
     @Composable
-    fun reorderSpring(): FiniteAnimationSpec<IntOffset> = if (isLowTier()) {
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-    } else {
-        spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow * 2f)
-    }
+    fun reorderSpring(): FiniteAnimationSpec<IntOffset> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 1.6f
+    )
 
     /** expandVertically/shrinkVertically size animation. */
     @Composable
-    fun expandSpring(): FiniteAnimationSpec<IntSize> = if (isLowTier()) {
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-    } else {
-        spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)
-    }
+    fun expandSpring(): FiniteAnimationSpec<IntSize> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow
+    )
 
-    /** Expand/collapse duration in ms for AnimatedVisibility-style effects. */
     /**
      * تحسين أنيميشن: اختفاء الصف عند حذفه/تسديده (fadeOutSpec في animateItem).
-     * كان الصف يختفي فجأة ثم تقفز الصفوف تحته؛ الآن يخفت لحظة بينما تنزلق
-     * الباقية إلى مكانها بنفس نابض الترتيب [reorderSpring] — أقصر بكثير على
-     * الأجهزة الضعيفة (60ms) كبقية حركات هذا الملف.
+     * يخفت لحظة بينما تنزلق الباقية إلى مكانها بنفس نابض الترتيب
+     * [reorderSpring] — أقصر بكثير على الأجهزة الضعيفة (60ms) كبقية حركات
+     * هذا الملف، وبمنحنى Claude نفسه [claudeEasing].
      */
     @Composable
     fun listItemFadeOut(): FiniteAnimationSpec<Float> =
-        tween(durationMillis = fadeMillis(), easing = FastOutSlowInEasing)
+        tween(durationMillis = fadeMillis(), easing = claudeEasing)
 
     @Composable
-    fun expandMillis(): Int = if (isLowTier()) 90 else 220
+    fun expandMillis(): Int = if (isLowTier()) 90 else 200
 
     @Composable
-    fun collapseMillis(): Int = if (isLowTier()) 70 else 180
+    fun collapseMillis(): Int = if (isLowTier()) 70 else 160
 
     @Composable
-    fun fadeMillis(): Int = if (isLowTier()) 60 else 150
+    fun fadeMillis(): Int = if (isLowTier()) 60 else 140
 
     /**
-     * Springy "pop in" for anything that appears on top of existing
-     * content without pushing it (dialogs, one-off banners like the
-     * server-outage restore prompt, snackbars) — a little overshoot then
-     * settle, so it reads as arriving with some life rather than just
-     * being switched on. Same LOW-tier treatment as every other spec here:
-     * near-instant with no bounce, never fully disabled.
+     * "Pop in" for anything that appears on top of existing content
+     * without pushing it (dialogs, one-off banners like the server-outage
+     * restore prompt, snackbars). Previously a springy overshoot; now a
+     * flat, no-bounce ease-out — it arrives and settles immediately,
+     * matching how Claude's own modals/toasts appear with no wobble.
      */
     @Composable
-    fun popInSpring(): FiniteAnimationSpec<Float> = if (isLowTier()) {
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-    } else {
-        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-    }
+    fun popInSpring(): FiniteAnimationSpec<Float> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium
+    )
 
     /**
      * The floating bottom nav's sliding selection highlight (tab → tab).
-     * iOS 26's own tab-bar indicator moves with a quick, only-slightly-
-     * bouncy spring — snappy enough to feel immediate when someone taps a
-     * tab, without overshooting so far it looks like it's wobbling into
-     * place. Higher stiffness than [pressSpring] since this travels a
-     * real horizontal distance rather than a tiny scale change, so it
-     * needs more energy to still read as "quick" over that distance.
+     * A quick, no-bounce ease so the indicator moves to the tapped tab and
+     * stops cleanly instead of wobbling past it.
      */
     @Composable
-    fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = if (isLowTier()) {
-        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh)
-    } else {
-        spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
-    }
+    fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = spring(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium
+    )
 
     /**
      * Smooth content fade+slide for anything that swaps in place (a
-     * status line changing, a list of local backups loading in) —
-     * FastOutSlowInEasing is Material's own standard curve: quick to
-     * start, easing gently to a stop, which is what makes a transition
-     * read as "smooth" rather than linear/mechanical.
+     * status line changing, a list of local backups loading in) — uses
+     * [claudeEasing], the same curve every other transition in the app now
+     * shares, so nothing reads as "off-brand" next to it.
      */
     @Composable
     fun contentTween(): FiniteAnimationSpec<Float> =
-        tween(durationMillis = if (isLowTier()) 90 else 260, easing = FastOutSlowInEasing)
+        tween(durationMillis = if (isLowTier()) 90 else 220, easing = claudeEasing)
 }

@@ -1,7 +1,6 @@
 package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,9 +34,10 @@ import com.shopmanager.app.data.performance.PerformanceTier
  * what a count-up looks like when it's "just" animating rather than
  * feeling designed — it starts and ends at the same constant speed with
  * no ease-out, so the final digits change at the same pace as the middle
- * ones and the stop reads as abrupt. FastOutSlowInEasing (Material's
- * standard easing curve) starts fast and settles gently instead, which is
- * what makes the same animation read as smooth rather than mechanical.
+ * ones and the stop reads as abrupt. [MotionSpecs.claudeEasing] (the same
+ * no-bounce curve every other transition in the app now uses) starts fast
+ * and settles gently instead, which is what makes the same animation read
+ * as smooth rather than mechanical.
  *
  * BUG FIXED (cold-start "jitter"): [animate] lets a caller mark that its
  * data hasn't actually loaded yet (e.g. `!debtsState.isLoading`). While
@@ -89,7 +89,7 @@ fun AnimatedCounterText(
             progress.snapTo(0f)
             progress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = 380, easing = MotionSpecs.claudeEasing)
             )
         }
     }

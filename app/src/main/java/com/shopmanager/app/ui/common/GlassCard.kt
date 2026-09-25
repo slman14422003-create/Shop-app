@@ -6,40 +6,51 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * REDESIGN ("بدي تصميم جميل اجمل من هيك"): card panel used for list
- * rows/forms (DebtRow, LinkedNoteRow, AddDebtCard, ...). Previously this
- * always forced `elevation = 0.dp` into [liquidGlassSurface] regardless of
- * the `elevation` parameter passed in here, so every card in the app sat
- * perfectly flush with zero shadow — reading as flat/paper-thin rather than
- * a distinct raised surface (visible in the reference screenshots: every
- * card blends into the page with no separation). The caller's `elevation`
- * is now actually used, and the fill is a very subtle top-to-bottom
- * gradient (surfaceContainerHigh → a hair lighter/darker) instead of one
- * flat color, so cards read with a touch of real depth instead of being a
- * plain color swatch — while staying well within the app's existing
- * restrained, low-shadow visual language.
+ * Card panel used for list rows/forms (DebtRow, LinkedNoteRow, AddDebtCard,
+ * PersonDetailScreen's summary/info cards, ...).
+ *
+ * BUG FIXED / RE-UNIFIED ("بادق التفاصيل في ملفات ما تعدلت مع تصميم
+ * الواجهة"): this file predates the later app-wide move to Claude's actual
+ * flat design language and never got updated when the rest of the app did.
+ * It still forced a heavy 8.dp drop shadow plus a top-to-bottom two-tone
+ * gradient fill — exactly the "distinct floating card" look Claude.ai's own
+ * cards don't have. Every other panel in the app (see
+ * [Modifier.liquidGlassSurface]'s own doc comment, and the flat
+ * `surfaceContainerHigh` fill [claudeLightScheme]/[claudeDarkScheme]
+ * describe as the reference's literal, non-gradient `glass_fill_strong`)
+ * already reads as "separated by tone, not by shadow" — a single flat fill
+ * plus a hairline border, at most 2.dp of lift. GlassCard now matches
+ * that: flat single-color fill, and a default elevation that falls back to
+ * [liquidGlassSurface]'s own Claude-style 2.dp instead of overriding it.
+ *
+ * [containerColor] lets a caller reuse this same flat-card look for a
+ * differently-toned panel (e.g. an error/warning banner using
+ * `colorScheme.errorContainer`) instead of every non-neutral card in the
+ * app reaching for a raw `androidx.compose.material3.ElevatedCard` with
+ * its own default Material tonal-elevation shadow — see the settings
+ * screen's "server unreachable" / "notifications blocked" banners, which
+ * used to do exactly that.
  */
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(20.dp),
-    elevation: Dp = 8.dp,
+    elevation: Dp = 2.dp,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     content: @Composable () -> Unit
 ) {
-    val toneColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    val liftedTone = MaterialTheme.colorScheme.surfaceContainerHighest
-
     Box(
         modifier
             .liquidGlassSurface(
                 shape = shape,
-                baseBrush = Brush.verticalGradient(listOf(liftedTone, toneColor)),
+                baseBrush = SolidColor(containerColor),
                 elevation = elevation,
                 highlight = false
             )

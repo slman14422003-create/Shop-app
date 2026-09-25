@@ -1,7 +1,6 @@
 package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,7 +72,7 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
             played.value = true
             val staggerMs = (index.coerceAtMost(8)) * 28L
             if (staggerMs > 0) delay(staggerMs)
-            progress.animateTo(1f, animationSpec = tween(360, easing = FastOutSlowInEasing))
+            progress.animateTo(1f, animationSpec = tween(320, easing = MotionSpecs.claudeEasing))
         }
     }
     return this.graphicsLayer {
