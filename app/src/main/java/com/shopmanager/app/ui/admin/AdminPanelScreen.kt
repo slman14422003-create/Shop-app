@@ -35,7 +35,6 @@ import com.shopmanager.app.data.updates.UpdateChecker
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.BrandOnGradient
-import com.shopmanager.app.ui.common.liquidGlassSurface
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import kotlinx.coroutines.launch
@@ -116,7 +115,7 @@ fun AdminPanelScreen(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
             TopAppBar(
-                title = { Text("لوحة المطوّر", fontWeight = FontWeight.Bold) },
+                title = { Text("لوحة المطوّر", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     GlassIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -130,14 +129,11 @@ fun AdminPanelScreen(
                     containerColor = Color.Transparent,
                     titleContentColor = BrandOnGradient,
                     navigationIconContentColor = BrandOnGradient
-                ),
-                // طلب "تعميم ستايل الزجاج": highlight = false + baseAlpha = 0.72f
-                // — راجع الشرح بـ DashboardScreen.kt.
-                modifier = Modifier.liquidGlassSurface(
-                    RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp),
-                    highlight = false,
-                    baseAlpha = 0.72f
                 )
+                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
+                // liquidGlassSurface panel (rounded bottom corners) this bar
+                // used to sit on — it now sits flush on the plain background
+                // like Home's own header and Claude's own "Settings" screen.
             )
         }
     ) { padding ->
