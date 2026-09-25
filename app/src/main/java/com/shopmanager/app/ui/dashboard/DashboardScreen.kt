@@ -8,7 +8,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Bedtime
@@ -25,7 +24,6 @@ import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
-import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,22 +31,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shopmanager.app.data.materials.quantityLabel
-import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
-import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.LocalSemanticColors
@@ -65,14 +58,6 @@ private data class ActivityRow(
     val subtitle: String,
     val timestamp: Long
 )
-
-/** لوحة المسؤول السرية: fixed PIN gate for the tiny hidden admin button on
- * this screen's header (see DashboardHeader/AdminAccessDot below). Not
- * related to the app-lock PIN in Settings — that one is user-chosen and
- * protects the whole app; this one is a fixed developer password that
- * only unlocks the developer/admin panel. Change this constant if the
- * password ever needs to rotate — it's the single place it's defined. */
-private const val ADMIN_PANEL_PASSWORD = "1442"
 
 /**
  * REDESIGN ("تصميم صباح الخير أكثر تناسق مع الواجهة"): this used to embed a
@@ -107,17 +92,8 @@ fun DashboardScreen(
     materialsViewModel: MaterialsViewModel,
     onNavigateToDebts: () -> Unit = {},
     onNavigateToMaterials: () -> Unit = {},
-    onOpenAdmin: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
-    var showAdminPinDialog by remember { mutableStateOf(false) }
-    // SECURITY FIX: "1442" is a fixed 4-digit password with no attempt
-    // limit at all previously — trivially brute-forceable (10,000 tries
-    // max, no delay) directly from this dialog's keypad. Same escalating
-    // lockout as the main app-lock PIN now, via the shared throttle — see
-    // PinAttemptThrottle and AdminPinDialog below.
-    val context = LocalContext.current
-    val adminThrottle = remember { PinAttemptThrottle(context, "shop_manager_admin_throttle") }
     val debtsState by debtsViewModel.uiState.collectAsState()
     val materialsState by materialsViewModel.uiState.collectAsState()
     val debtsRefreshing by debtsViewModel.isRefreshing.collectAsState()
@@ -200,9 +176,29 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
-                DashboardHeader(
-                    onAdminTap = { showAdminPinDialog = true },
-                    onOpenDrawer = onOpenDrawer
+                DashboardHeader(onOpenDrawer = onOpenDrawer)
+            }
+
+            // REDESIGN ("اعد ترتيب الشاشة الرئيسية بشكل كامل وجميل"): the
+            // two flat StatCards used to sit in their own row *below* the
+            // quick actions — two small, same-weight numbers competing
+            // with everything else on the screen for attention despite
+            // being the most important thing on this whole tab. They're
+            // now a single merged, gradient-tinted hero card right under
+            // the greeting (see HeroStatsCard below) — the first thing
+            // the eye lands on — with quick actions moved underneath it,
+            // since "what do I owe/need" outranks "add something new" as
+            // the opening beat of this screen.
+            item {
+                HeroStatsCard(
+                    totalDebt = debtsState.totalAmount,
+                    totalPersons = debtsState.totalPersons,
+                    shortagesCount = shortages.size,
+                    debtsLoading = debtsState.isLoading,
+                    materialsLoading = materialsState.isLoading,
+                    hasShortages = shortages.isNotEmpty(),
+                    marketAccent = marketAccent,
+                    nf = nf
                 )
             }
 
@@ -211,42 +207,6 @@ fun DashboardScreen(
                     onAddPerson = onNavigateToDebts,
                     onAddMaterial = onNavigateToMaterials
                 )
-            }
-
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.AttachMoney,
-                        accentColor = MaterialTheme.colorScheme.primary,
-                        title = "إجمالي الديون",
-                        valueContent = {
-                            AnimatedCounterText(
-                                targetValue = debtsState.totalAmount,
-                                format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
-                                animate = !debtsState.isLoading
-                            )
-                        },
-                        subtitle = "${debtsState.totalPersons} عميل"
-                    )
-                    StatCard(
-                        modifier = Modifier.weight(1f),
-                        icon = Icons.Default.Inventory2,
-                        accentColor = if (shortages.isNotEmpty()) marketAccent else MaterialTheme.colorScheme.secondary,
-                        title = "قائمة النواقص",
-                        valueContent = {
-                            AnimatedCounterText(
-                                targetValue = shortages.size.toDouble(),
-                                format = { it.toInt().toString() },
-                                animate = !materialsState.isLoading
-                            )
-                        },
-                        subtitle = if (shortages.isNotEmpty()) "بانتظار الشراء" else "لا يوجد نواقص"
-                    )
-                }
             }
 
             if (isLoading && debtsState.persons.isEmpty() && materialsState.materials.isEmpty()) {
@@ -397,26 +357,6 @@ fun DashboardScreen(
         }
         }
     }
-
-    if (showAdminPinDialog) {
-        AdminPinDialog(
-            throttle = adminThrottle,
-            onDismiss = { showAdminPinDialog = false },
-            onSubmit = { entered ->
-                if (adminThrottle.isLocked()) {
-                    false
-                } else if (entered == ADMIN_PANEL_PASSWORD) {
-                    adminThrottle.registerSuccess()
-                    showAdminPinDialog = false
-                    onOpenAdmin()
-                    true
-                } else {
-                    adminThrottle.registerFailure()
-                    false
-                }
-            }
-        )
-    }
 }
 
 // REDESIGN ("افصل الشاشة الرئيسية عن بقية الشاشات" + "البار العلوي متل
@@ -432,15 +372,20 @@ fun DashboardScreen(
 // title) with the greeting sitting directly on the app's background right
 // below it. This header now follows that same split: a slim, fully
 // transparent row for the hamburger (a real layout element, not a floating
-// overlay — see MainActivity, which no longer draws one at all) and the
-// settings/admin buttons, then the greeting + "إدارة المحل" underneath,
-// also directly on the plain background. Nothing here can overlap the
-// hamburger anymore because the hamburger now *is* part of this layout
-// instead of a separate layer floating on top of it, and Home now visibly
-// stands apart from the boxed-card look every other tab keeps.
+// overlay — see MainActivity, which no longer draws one at all), then the
+// greeting + "إدارة المحل" underneath, also directly on the plain
+// background. Nothing here can overlap the hamburger anymore because the
+// hamburger now *is* part of this layout instead of a separate layer
+// floating on top of it, and Home now visibly stands apart from the boxed-
+// card look every other tab keeps.
+//
+// MOVED ("انقل ايقونة المسؤول الى المنيو الى جانب الاعدادات"): لوحة
+// المسؤول's trigger button used to sit at the trailing end of this exact
+// top bar. It now lives in the side drawer next to الإعدادات instead (see
+// AppDrawerContent/MainActivity), so this header goes back to being just
+// the hamburger — nothing trailing it anymore.
 @Composable
 private fun DashboardHeader(
-    onAdminTap: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
     // BUG FIXED ("صباح الخير" عالقة طول اليوم): `remember { timeBasedGreeting() }`
@@ -469,9 +414,11 @@ private fun DashboardHeader(
             .windowInsetsPadding(WindowInsets.statusBars)
             .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
-        // "البار العلوي" (top bar): a slim, transparent row — hamburger on
-        // the leading edge, settings/admin trailing — laid out inline like
-        // Claude's own top bar, never floating over anything below it.
+        // "البار العلوي" (top bar): a slim, transparent row with just the
+        // hamburger on the leading edge — laid out inline like Claude's
+        // own top bar, never floating over anything below it. Settings and
+        // لوحة المسؤول both now live one tap away in the drawer instead of
+        // duplicating an entry point up here.
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onOpenDrawer) {
                 Icon(
@@ -479,21 +426,6 @@ private fun DashboardHeader(
                     contentDescription = "القائمة",
                     tint = MaterialTheme.colorScheme.onSurface
                 )
-            }
-            Spacer(Modifier.weight(1f))
-            // BUG FIXED ("زر الاعدادات بالشاشة الرئيسية ما لازم يكون لانه
-            // فعلا في الشاشة المنيو"): removed the duplicate settings
-            // IconButton that used to sit here — الإعدادات is already a
-            // pinned row at the bottom of the side drawer (AppDrawerContent),
-            // one tap away via the hamburger, so a second entry point on
-            // Home was pure redundancy. onOpenSettings is kept as a
-            // parameter (still wired from MainActivity to the drawer) even
-            // though this header no longer calls it directly.
-            // زر لوحة المسؤول: بمكانه القديم نفسه، بس هلق أول عنصر بالطرف
-            // البادئ بعد المسافة — نفس منطق فتح صندوق رمز الدخول
-            // (onAdminTap) ما تغيّر.
-            IconButton(onClick = onAdminTap) {
-                Icon(Icons.Rounded.AdminPanelSettings, contentDescription = "لوحة المسؤول", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -523,71 +455,6 @@ private fun DashboardHeader(
             fontWeight = FontWeight.Bold
         )
     }
-}
-
-@Composable
-private fun AdminPinDialog(
-    throttle: com.shopmanager.app.data.security.PinAttemptThrottle,
-    onDismiss: () -> Unit,
-    onSubmit: (String) -> Boolean
-) {
-    var pin by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf(false) }
-    var lockRemaining by remember { mutableLongStateOf(throttle.lockRemainingSeconds()) }
-    val isLocked = lockRemaining > 0
-
-    LaunchedEffect(isLocked) {
-        while (lockRemaining > 0) {
-            kotlinx.coroutines.delay(1000)
-            lockRemaining = throttle.lockRemainingSeconds()
-        }
-    }
-
-    GlassAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("دخول لوحة المطوّر") },
-        text = {
-            Column {
-                AppTextField(
-                    value = pin,
-                    onValueChange = { pin = it.filter { c -> c.isDigit() }.take(8); error = false },
-                    label = "كلمة المرور",
-                    singleLine = true,
-                    enabled = !isLocked,
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                    isError = error
-                )
-                if (isLocked) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "محاولات كثيرة خاطئة — حاول بعد $lockRemaining ثانية",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                } else if (error) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "كلمة المرور غير صحيحة",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = !isLocked, shape = RectangleShape, onClick = {
-                if (!onSubmit(pin)) {
-                    error = true
-                    lockRemaining = throttle.lockRemainingSeconds()
-                }
-            }) { Text("دخول") }
-        },
-        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
-    )
 }
 
 @Composable
@@ -665,24 +532,90 @@ private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, 
     }
 }
 
-// REDESIGN: StatCard's icon badge and value used to share the same visual
-// weight as everything else on the card (a small tinted square, then plain
-// text) — the number itself, which is the whole point of the card, didn't
-// stand out from its own label/subtitle. The badge is now a circle (matches
-// QuickActionButton's badge language above) and sits beside a slim
-// accent-colored vertical rule instead of stacked above the text, so the
-// eye reads accent → number in one line instead of scanning top-to-bottom
-// through three same-weight rows. No new animated/blurred layers, so this
-// is exactly as cheap on LOW tier as the previous version.
-//
-// REDESIGN ("اعد تصميم الالوان في كل التطبيق"): this card used to sit on
-// the plain `surface` color with a hairline `outlineVariant` border around
-// it — a different card language from Settings' own grouped sections
-// (SettingsSection: a filled `surfaceContainer` tone, no border at all).
-// Switched to that same filled/borderless treatment so Home's cards read
-// as the same family as Settings' instead of a visibly different style.
+// REDESIGN ("اعد ترتيب الشاشة الرئيسية بشكل كامل وجميل مع تصميم جميل"):
+// replaces the old two-StatCard row. Those were two identical flat
+// `surfaceContainer` boxes competing for attention with everything else on
+// the tab, despite being the single most important thing on this screen.
+// HeroStatsCard merges both numbers into one wide, gradient-tinted card
+// (primary → secondary, both at low alpha so text/icons stay legible in
+// both themes) positioned right under the greeting — the first thing the
+// eye lands on. A slim vertical divider (echoes the old accent rule, now
+// shared by both halves) keeps "الديون" and "النواقص" visually paired as
+// one glanceable summary instead of two separate cards.
 @Composable
-private fun StatCard(
+private fun HeroStatsCard(
+    totalDebt: Double,
+    totalPersons: Int,
+    shortagesCount: Int,
+    debtsLoading: Boolean,
+    materialsLoading: Boolean,
+    hasShortages: Boolean,
+    marketAccent: Color,
+    nf: NumberFormat
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = Color.Transparent
+    ) {
+        Box(
+            Modifier
+                .background(
+                    androidx.compose.ui.graphics.Brush.linearGradient(
+                        listOf(primary.copy(alpha = 0.16f), secondary.copy(alpha = 0.10f))
+                    )
+                )
+                .padding(18.dp)
+        ) {
+            // IntrinsicSize.Min: lets the thin divider below use
+            // fillMaxHeight() to match the two HeroStat columns' own
+            // content height, instead of the unbounded height a LazyColumn
+            // item would otherwise hand this Row.
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                HeroStat(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.AttachMoney,
+                    accentColor = primary,
+                    title = "إجمالي الديون",
+                    valueContent = {
+                        AnimatedCounterText(
+                            targetValue = totalDebt,
+                            format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
+                            animate = !debtsLoading
+                        )
+                    },
+                    subtitle = "$totalPersons عميل"
+                )
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .padding(vertical = 4.dp)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                )
+                HeroStat(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Inventory2,
+                    accentColor = if (hasShortages) marketAccent else secondary,
+                    title = "قائمة النواقص",
+                    valueContent = {
+                        AnimatedCounterText(
+                            targetValue = shortagesCount.toDouble(),
+                            format = { it.toInt().toString() },
+                            animate = !materialsLoading
+                        )
+                    },
+                    subtitle = if (hasShortages) "بانتظار الشراء" else "لا يوجد نواقص"
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroStat(
     modifier: Modifier = Modifier,
     icon: ImageVector,
     accentColor: Color,
@@ -690,44 +623,24 @@ private fun StatCard(
     valueContent: @Composable () -> Unit,
     subtitle: String
 ) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(Modifier.padding(14.dp)) {
-            Box(
-                Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(50))
-                    .background(accentColor.copy(alpha = 0.55f))
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(30.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.15f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                valueContent()
-                Spacer(Modifier.height(2.dp))
-                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
-            }
+    Column(modifier.padding(horizontal = 4.dp)) {
+        Box(
+            Modifier.size(34.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
         }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+        Spacer(Modifier.height(4.dp))
+        valueContent()
+        Spacer(Modifier.height(2.dp))
+        Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
     }
 }
 
