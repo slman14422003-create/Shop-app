@@ -66,8 +66,10 @@ import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.updates.ApkDownloader
 import com.shopmanager.app.data.updates.AppVersion
 import com.shopmanager.app.data.updates.AppVersionInfo
-import com.shopmanager.app.data.updates.DownloadState
 import com.shopmanager.app.data.updates.UpdateCheckResult
+import com.shopmanager.app.data.updates.UpdateDownloadPhase
+import com.shopmanager.app.data.updates.UpdateDownloadService
+import com.shopmanager.app.data.updates.UpdateDownloadState
 import com.shopmanager.app.data.updates.UpdateChecker
 import com.shopmanager.app.data.updates.UpdateManifest
 import androidx.compose.foundation.text.KeyboardOptions
@@ -219,11 +221,47 @@ fun SettingsScreen(
     val appVersion = remember { AppVersionInfo.current(context) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateStatusMessage by remember { mutableStateOf<String?>(null) }
-    var pendingUpdate by remember { mutableStateOf<UpdateManifest?>(null) }
-    var isDownloadingUpdate by remember { mutableStateOf(false) }
-    var downloadPercent by remember { mutableStateOf(0) }
+    // BUG FIXED ("لازم التحميل ينحفظ ... مو كل ما بدي اطلع وفوت اعيد
+    // تحميلة"، "والتحميل يكون في الخلفية"): pendingUpdate seeds itself from
+    // whatever UpdateDownloadState already knows about — so if a download
+    // was already running when this screen composes again (the person
+    // left Settings mid-download and came back, or just rotated), the
+    // dialog reappears showing the real in-progress state instead of
+    // starting blank. The download itself no longer runs in this
+    // composable's scope at all — see UpdateDownloadService/UpdateDownloadState.
+    var pendingUpdate by remember { mutableStateOf(UpdateDownloadState.activeManifest) }
     var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
     var needsInstallPermission by remember { mutableStateOf(false) }
+    val downloadPhase by UpdateDownloadState.phase.collectAsState()
+    val isDownloadingUpdate = downloadPhase is UpdateDownloadPhase.InProgress
+    val downloadPercent = (downloadPhase as? UpdateDownloadPhase.InProgress)?.percent ?: 0
+
+    // Reacts once per actual phase *change* (not per recomposition), so a
+    // download finishing/failing while this screen isn't even the one that
+    // started it (came back to Settings mid-download) still gets handled
+    // exactly once.
+    LaunchedEffect(Unit) {
+        UpdateDownloadState.phase.collect { phase ->
+            when (phase) {
+                is UpdateDownloadPhase.Done -> {
+                    downloadedApk = phase.file
+                    if (ApkDownloader.canInstallPackages(context)) {
+                        ApkDownloader.install(context, phase.file)
+                        pendingUpdate = null
+                        UpdateDownloadState.reset()
+                    } else {
+                        needsInstallPermission = true
+                    }
+                }
+                is UpdateDownloadPhase.Error -> {
+                    updateStatusMessage = phase.message
+                    pendingUpdate = null
+                    UpdateDownloadState.reset()
+                }
+                else -> Unit
+            }
+        }
+    }
 
     fun checkForUpdate() {
         isCheckingUpdate = true
@@ -242,28 +280,7 @@ fun SettingsScreen(
     }
 
     fun startDownload(manifest: UpdateManifest) {
-        isDownloadingUpdate = true
-        downloadPercent = 0
-        scope.launch {
-            when (val state = ApkDownloader.download(context, manifest.apkUrl) { percent -> downloadPercent = percent }) {
-                is DownloadState.Done -> {
-                    isDownloadingUpdate = false
-                    if (ApkDownloader.canInstallPackages(context)) {
-                        ApkDownloader.install(context, state.file)
-                        pendingUpdate = null
-                    } else {
-                        downloadedApk = state.file
-                        needsInstallPermission = true
-                    }
-                }
-                is DownloadState.Error -> {
-                    isDownloadingUpdate = false
-                    updateStatusMessage = state.message
-                    pendingUpdate = null
-                }
-                is DownloadState.InProgress -> Unit
-            }
-        }
+        UpdateDownloadService.start(context, manifest)
     }
 
     val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
@@ -1063,7 +1080,7 @@ fun SettingsScreen(
     pendingUpdate?.let { manifest ->
         GlassAlertDialog(
             onDismissRequest = { if (!isDownloadingUpdate) pendingUpdate = null },
-            title = { Text("يتوفر تحديث جديد 🎉") },
+            title = { Text("يتوفر تحديث جديد") },
             text = {
                 // MODERN UPDATE ICON: this used to also dump manifest.notes —
                 // the raw GitHub release body markdown (## headers, **bold**,
