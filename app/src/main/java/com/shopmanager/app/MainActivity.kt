@@ -725,7 +725,22 @@ private fun ShopManagerApp(
         // same no-overshoot curve every other transition in the app now
         // uses — instead of a separately-tuned iOS curve.
         val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(300, easing = MotionSpecs.claudeEasing)
-        val pushFadeSpec: FiniteAnimationSpec<Float> = tween(300, easing = MotionSpecs.claudeEasing)
+        // REPLACED THE OLD ALPHA-DIM ("الانميشن غير جميل / بدي ياه متكامل
+        // وبلا تقطيع"): the covered screen used to dim via fadeOut/fadeIn
+        // down to 72% alpha while it translated. Animating the *alpha* of a
+        // whole subtree full of Material3 ElevatedCards means every card's
+        // shadow gets re-composited at a shifting opacity on top of
+        // whatever's underneath it, frame by frame — on a weaker GPU that
+        // shows up as visible banding/seams right where the shadows are,
+        // reading as "تقطيع" (choppy) rather than one solid, cohesive
+        // sheet of UI sliding as a unit. Scale reads as pure depth instead
+        // (the same "recede a step back" cue iOS/Claude modals already use
+        // elsewhere in this app) with nothing to re-blend, so it stays a
+        // single flat layer moving — smooth on any GPU, and the *same*
+        // slide+scale language as everything else (see MotionSpecs'
+        // popInSpring/pressSpring), which is what makes it read as one
+        // integrated motion system instead of a one-off for this screen.
+        val pushScaleSpec: FiniteAnimationSpec<Float> = tween(300, easing = MotionSpecs.claudeEasing)
         CompositionLocalProvider(
             LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp
         ) {
@@ -759,18 +774,20 @@ private fun ShopManagerApp(
             // motion is wrong: iOS's UINavigationController push is a full
             // one-screen-covers-another slide, where the screen underneath
             // doesn't fade away — it slides a third of the way off-screen
-            // and dims slightly (parallax), staying spatially "behind" the
-            // new one rather than disappearing in place. Rebuilt as that
-            // exact shape below, with the direction mirrored for push vs.
-            // pop so it always reads as one screen genuinely covering (or
-            // uncovering) another:
+            // and recedes slightly (parallax), staying spatially "behind"
+            // the new one rather than disappearing in place. Rebuilt as
+            // that exact shape below, with the direction mirrored for push
+            // vs. pop so it always reads as one screen genuinely covering
+            // (or uncovering) another:
             //  - push (enter/exit): incoming screen slides in the *entire*
             //    width from the right; the screen it's covering slides a
-            //    third of its own width to the left and dims to ~72%.
+            //    third of its own width to the left and scales down to
+            //    94% (see the note on `pushScaleSpec` above for why this
+            //    is a scale now, not an alpha dim).
             //  - pop (popEnter/popExit): the top screen slides the entire
             //    width back out to the right; the screen being revealed
             //    slides back in from a third off-screen on the left and
-            //    brightens back to full.
+            //    scales back up to full size.
             // PERF: LOW tier still keeps this at zero cost (EnterTransition/
             // ExitTransition.None below) — the fastest a screen change can
             // be, same as before this rewrite.
@@ -786,12 +803,12 @@ private fun ShopManagerApp(
             exitTransition = {
                 if (isLowTier) ExitTransition.None
                 else slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
-                    fadeOut(pushFadeSpec, targetAlpha = 0.72f)
+                    scaleOut(pushScaleSpec, targetScale = 0.94f)
             },
             popEnterTransition = {
                 if (isLowTier) EnterTransition.None
                 else slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
-                    fadeIn(pushFadeSpec, initialAlpha = 0.72f)
+                    scaleIn(pushScaleSpec, initialScale = 0.94f)
             },
             popExitTransition = {
                 if (isLowTier) ExitTransition.None
