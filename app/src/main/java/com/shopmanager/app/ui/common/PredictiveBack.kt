@@ -86,8 +86,25 @@ class OneUiBackController internal constructor(
         if (progressAnimatable.isRunning) return
         scope.launch {
             progressAnimatable.animateTo(1f, tween(180, easing = MotionSpecs.claudeEasing))
-            navController.popBackStack()
+            // BUG FIXED ("الرجوع بكل الشاشات ترجع بشكل مو حلو ابدا" — the
+            // screen landed on after going back would briefly show up
+            // shrunk/rounded itself, sitting over the OneUiBackBackdrop
+            // panel, before snapping to its normal size): this used to
+            // reset progress to 0 AFTER popBackStack(). `progress` is one
+            // Animatable SHARED by the whole NavHost's modifier (every
+            // screen reads the exact same value) — so for however long it
+            // takes the destination screen to actually finish composing
+            // and laying out after the pop (a screen with its own data
+            // collection/LazyColumn measuring is never truly zero-cost,
+            // unlike a trivial composable), it was reading `progress`
+            // still sitting at 1 from the shrink that just finished, and
+            // rendered shrunk/rounded itself the moment it appeared.
+            // Resetting to 0 BEFORE popping instead means the destination
+            // screen's very first frame already reads 0, however long its
+            // own composition takes — there's no window left where it can
+            // read anything else.
             progressAnimatable.snapTo(0f)
+            navController.popBackStack()
         }
     }
 }
@@ -112,10 +129,12 @@ fun rememberOneUiBackController(navController: NavHostController): OneUiBackCont
             // Gesture committed (the flow finished without being
             // cancelled) — finish the shrink the rest of the way, usually
             // already near 1f by the time the system commits it, then
-            // actually pop, then reset for whatever screen is now on top.
+            // reset BEFORE popping (not after — see triggerBack's doc
+            // above for why the order matters: it's the exact same shared
+            // `progress` value and the exact same bug otherwise).
             progress.animateTo(1f, tween(90, easing = MotionSpecs.claudeEasing))
-            navController.popBackStack()
             progress.snapTo(0f)
+            navController.popBackStack()
         } catch (cancellation: CancellationException) {
             // Gesture abandoned mid-swipe — ease back to fully settled
             // instead of snapping, so letting go still feels intentional
