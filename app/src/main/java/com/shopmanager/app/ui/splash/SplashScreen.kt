@@ -86,11 +86,17 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
     // ClaudeTextSecondaryDark/Light) instead of the old cream/terracotta
     // ones — pure black / white splash, ChatGPT's link-blue accent — and
     // still follows light/dark system theme, not a single fixed background.
+    //
+    // CONSISTENCY FIX: this used to duplicate those tokens' hex values by
+    // hand instead of importing them — if Color.kt's palette ever changes,
+    // this screen would silently drift out of sync with the rest of the
+    // app. Now reads the same constants Color.kt/Palette.kt do, so there's
+    // one source of truth for the whole theme.
     val isDark = androidx.compose.foundation.isSystemInDarkTheme()
-    val splashBackground = if (isDark) Color(0xFF000000) else Color(0xFFFFFFFF)
-    val markAccent = if (isDark) Color(0xFF5B9DF9) else Color(0xFF2F80ED)
-    val onDark = if (isDark) Color(0xFFECECEC) else Color(0xFF0D0D0D)
-    val creditGrey = if (isDark) Color(0xFFA6A6A6) else Color(0xFF676767)
+    val splashBackground = if (isDark) com.shopmanager.app.ui.theme.ClaudeBgDark1 else com.shopmanager.app.ui.theme.ClaudeBgLight1
+    val markAccent = if (isDark) com.shopmanager.app.ui.theme.ClaudeOrangeDark else com.shopmanager.app.ui.theme.ClaudeOrangeLight
+    val onDark = if (isDark) com.shopmanager.app.ui.theme.ClaudeTextPrimaryDark else com.shopmanager.app.ui.theme.ClaudeTextPrimaryLight
+    val creditGrey = if (isDark) com.shopmanager.app.ui.theme.ClaudeTextSecondaryDark else com.shopmanager.app.ui.theme.ClaudeTextSecondaryLight
 
     Box(
         modifier
