@@ -104,9 +104,6 @@ import com.shopmanager.app.ui.common.QuickActionFab
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.MotionSpecs
-import com.shopmanager.app.ui.common.rememberOneUiBackController
-import com.shopmanager.app.ui.common.oneUiPredictiveBack
-import com.shopmanager.app.ui.common.OneUiBackBackdrop
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
 import com.shopmanager.app.ui.theme.AppThemeMode
@@ -638,16 +635,6 @@ private fun ShopManagerApp(
     onConsumeNotificationAction: () -> Unit = {}
 ) {
     val navController = rememberNavController()
-    // FEATURE (the same technique for every back exit in the app, gesture
-    // or tap, and now the exact mirror of the forward push below — see
-    // PredictiveBack.kt for the full rationale): `oneUiBack.progress`
-    // drives the slide-back-out/slide-back-in transform applied to the
-    // whole NavHost content and its backdrop below; every `onBack`
-    // callback passed into a `composable()` further down calls
-    // `oneUiBack.triggerBack()` instead of `navController.popBackStack()`
-    // directly, so a tapped back arrow animates identically to the real
-    // swipe gesture.
-    val oneUiBack = rememberOneUiBackController(navController)
     // Shared across screens so everyone sees the same live data instead of
     // spinning up duplicate Firestore listeners per screen.
     val debtsViewModel: DebtsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -852,15 +839,6 @@ private fun ShopManagerApp(
         Modifier
             .fillMaxSize()
     ) {
-        // ONE UI 8.5 ("بدي ياه متل ال one ui 8.5 بكل التطبيق"): the synthetic
-        // "next screen surfacing from behind" layer — see OneUiBackBackdrop's
-        // own doc — has to sit BEHIND the NavHost content below, so it's the
-        // first child here rather than a modifier on this same Box (that's
-        // also why `oneUiPredictiveBack` itself moved from this Box onto
-        // NavHost's own modifier just below: both layers need to be
-        // siblings, each carrying its own half of the transform, not one
-        // Box carrying both).
-        OneUiBackBackdrop(oneUiBack)
         // See the BUG FIXED note below (inside NavHost's transition params)
         // for why these are shaped the way they are — declared here, above
         // NavHost, since a function-call argument list can only contain
@@ -908,47 +886,55 @@ private fun ShopManagerApp(
                     } else {
                         Modifier
                     }
-                )
-                .oneUiPredictiveBack(oneUiBack),
-            // BUG FIXED ("عدل الانميشن والانتقالات... تشبه iOS بشكل كامل"):
-            // this used to be a fade+small-slide on the incoming screen
-            // (only fullWidth/8 — a ~12% peek, not a real push) paired with
-            // a plain fadeOut on the outgoing one that never moved at all.
-            // That reads as a generic Android crossfade no matter how the
-            // easing/duration are tuned, because the actual *shape* of the
-            // motion is wrong: iOS's UINavigationController push is a full
-            // one-screen-covers-another slide, where the screen underneath
-            // doesn't fade away — it slides a third of the way off-screen
-            // and recedes slightly (parallax), staying spatially "behind"
-            // the new one rather than disappearing in place. Rebuilt as
-            // that exact shape below, with the direction mirrored for push
-            // vs. pop so it always reads as one screen genuinely covering
-            // (or uncovering) another:
+                ),
+            // BUG FIXED ("الرجوع مو منسق مع بقية الانميشن — كل الشاشات"):
+            // the previous fix routed every back exit (swipe gesture AND
+            // every screen's own tap-back-arrow) through a hand-rolled
+            // `OneUiBackController`: it played the exit slide on the real
+            // outgoing screen, but the screen being REVEALED underneath was
+            // never the real previous screen — it was a plain, single-color
+            // `OneUiBackBackdrop` panel standing in for it (see that file's
+            // own doc for why: rendering the real previous screen live
+            // underneath would've meant keeping two full destinations
+            // composed at once). So every back exit looked like: smooth
+            // slide of a blank panel into view, then — the instant
+            // `popBackStack()` actually ran — an abrupt, unanimated SWAP of
+            // that blank panel for the real screen (`popEnterTransition`/
+            // `popExitTransition` were `None`, on purpose, to avoid
+            // double-animating on top of the hack). That swap is exactly
+            // the "مو منسق" (uncoordinated) cut the user kept seeing on
+            // MaterialCatalogScreen (مادة جديدة), PersonDetailScreen
+            // (تفاصيل الديون), SettingsScreen, and every other screen —
+            // it's a structural property of the hack, not one screen's bug.
+            //
+            // FIX: delete the hand-rolled controller/backdrop entirely
+            // (PredictiveBack.kt is no longer used anywhere and can be
+            // removed from the project) and instead give `popEnterTransition`/
+            // `popExitTransition` below the real mirror of the push, and let
+            // Navigation Compose 2.10's own predictive-back support run it.
+            // Since 2.8, NavHost keeps BOTH the outgoing and the real
+            // incoming destination genuinely composed and live-tracks the
+            // system swipe's progress against these exact transitions — no
+            // synthetic backdrop needed — and it plays the very same
+            // transitions (as a normal timed animation instead of a
+            // gesture-driven one) whenever a screen's own back arrow calls
+            // plain `navController.popBackStack()`. That's what makes tap
+            // and swipe finally look identical: they're the same
+            // AnimatedContent transition now, not two different
+            // implementations.
             //  - push (enter/exit): incoming screen slides in the *entire*
             //    width from the right; the screen it's covering slides a
-            //    third of its own width to the left and scales down to
-            //    94% (see the note on `pushScaleSpec` above for why this
-            //    is a scale now, not an alpha dim).
-            //  - pop is intentionally EnterTransition.None/ExitTransition
-            //    .None below, unconditionally — see PredictiveBack.kt.
-            //    Every back exit (real swipe gesture or a tap on a
-            //    screen's own back arrow) now goes through
-            //    `oneUiBack`/`OneUiBackController`, which slides the WHOLE
-            //    NavHost content back out to the right and the backdrop
-            //    behind it back in from the left+94% — the exact mirror of
-            //    this push, so entrance and exit finally share one
-            //    direction instead of two unrelated motions. Running
-            //    NavHost's own pop slide *as well as* that transform would
-            //    be the double, out-of-sync motion that read as "تقطيع"
-            //    before.
-            // PERF: LOW tier still keeps this at zero cost (EnterTransition/
-            // ExitTransition.None below) — the fastest a screen change can
-            // be, same as before this rewrite.
-            // `MotionSpecs.claudeEasing` is the same no-bounce, quick-start/
-            // gentle-stop curve every other transition in the app now
-            // shares (see MotionSpecs) — 300ms is quick enough to feel
-            // immediate without the old asymmetric 220ms/160ms push/pop
-            // split.
+            //    third of its own width to the left and scales down to 94%
+            //    (see the note on `pushScaleSpec` above for why this is a
+            //    scale now, not an alpha dim).
+            //  - pop (popEnter/popExit): the EXACT reverse — the revealed
+            //    screen slides back in from a third off the left while
+            //    scaling 94%→100%, and the screen being left slides the
+            //    entire width out to the right. Same `pushSlideSpec`/
+            //    `pushScaleSpec` (same 300ms, same `claudeEasing`), so the
+            //    speed and easing match too, not just the direction.
+            // PERF: LOW tier still keeps all four at zero cost (`.None`
+            // below) — the fastest a screen change can be, unchanged.
             enterTransition = {
                 if (isLowTier) EnterTransition.None
                 else slideInHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
@@ -958,8 +944,15 @@ private fun ShopManagerApp(
                 else slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
                     scaleOut(pushScaleSpec, targetScale = 0.94f)
             },
-            popEnterTransition = { EnterTransition.None },
-            popExitTransition = { ExitTransition.None }
+            popEnterTransition = {
+                if (isLowTier) EnterTransition.None
+                else slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                    scaleIn(pushScaleSpec, initialScale = 0.94f)
+            },
+            popExitTransition = {
+                if (isLowTier) ExitTransition.None
+                else slideOutHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
+            }
         ) {
             composable(ROUTE_MAIN_PAGER) {
                 // One shared surface for Home, Debts, Materials, and Notes —
@@ -1041,12 +1034,12 @@ private fun ShopManagerApp(
             composable(ROUTE_MATERIAL_CATALOG) {
                 MaterialCatalogScreen(
                     viewModel = materialsViewModel,
-                    onBack = { oneUiBack.triggerBack() }
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(
-                    onBack = { oneUiBack.triggerBack() },
+                    onBack = { navController.popBackStack() },
                     onThemeChanged = onThemeChanged,
                     onPerformancePreferenceChanged = onPerformancePreferenceChanged,
                     onRecheckDevicePerformance = onRecheckDevicePerformance,
@@ -1058,7 +1051,7 @@ private fun ShopManagerApp(
             }
             composable(ROUTE_ADMIN) {
                 AdminPanelScreen(
-                    onBack = { oneUiBack.triggerBack() },
+                    onBack = { navController.popBackStack() },
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel
                 )
@@ -1067,14 +1060,14 @@ private fun ShopManagerApp(
                 WebViewScreen(
                     url = "file:///android_asset/help.html",
                     title = "دليل الاستخدام",
-                    onBack = { oneUiBack.triggerBack() }
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(ROUTE_PRIVACY) {
                 WebViewScreen(
                     url = "file:///android_asset/privacy.html",
                     title = "سياسة الخصوصية",
-                    onBack = { oneUiBack.triggerBack() }
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable(
@@ -1094,7 +1087,7 @@ private fun ShopManagerApp(
                         // المعروضة هون تضل نفس البيانات الحية، وإضافة/تعديل
                         // ملاحظة من هالشاشة ينعكس فورًا بتبويب الملاحظات وبالعكس.
                         notesViewModel = notesViewModel,
-                        onBack = { oneUiBack.triggerBack() }
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }
