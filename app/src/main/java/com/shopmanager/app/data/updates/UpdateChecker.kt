@@ -7,6 +7,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLConnection
+import java.net.URLEncoder
 
 /** Result of a single "تحقق من التحديثات" tap. Modeled as a sealed class
  * (rather than a plain nullable) so the admin panel can show *why* a check
@@ -22,6 +23,66 @@ sealed class UpdateCheckResult {
 object UpdateChecker {
 
     private const val TIMEOUT_MS = 12_000
+
+    // The mandatory startup check (MainActivity, every cold start) uses
+    // this shorter timeout instead of TIMEOUT_MS — a manual "تحقق من
+    // التحديثات" tap in Settings is a deliberate action the person expects
+    // to wait a bit for, but stalling app LAUNCH itself for up to 12s on a
+    // slow/unreachable server would be a bad trade for a check that fails
+    // open anyway (see ForceUpdateScreen's doc). Short enough to stay
+    // invisible on a normal connection, long enough not to false-positive
+    // "unreachable" on a merely slow one.
+    const val STARTUP_TIMEOUT_MS = 5_000
+
+    // FEATURE ADDED ("لان جيتهاب يحظر سوريا — اعمل لي وركر cloudflare مراه
+    // بروكسي لحل المشكلة"): GitHub (both api.github.com and github.com's
+    // release-download links) is blocked for people connecting from
+    // Syria, which breaks the update check AND the APK download below it.
+    // See cloudflare-worker/ at the repo root for the actual Worker code
+    // and cloudflare-worker/README-ar.md for how to deploy it (a few
+    // `wrangler` commands, a couple minutes, free Cloudflare plan).
+    //
+    // Left BLANK by default so this is a no-op — the app keeps talking to
+    // GitHub directly, exactly as before — until you deploy the Worker
+    // and paste its URL here. Once set, every GitHub-hosted URL this file
+    // touches (the releases-API manifest URL AND the apkUrl parsed out of
+    // its response) is transparently rewritten to go through it instead;
+    // nothing else in the app (ApkDownloader, SettingsScreen, the admin
+    // panel) needs to know or care that the proxy exists.
+    private const val PROXY_BASE_URL = ""
+
+    /** Hosts this file will route through [PROXY_BASE_URL] when it's set
+     * — everything GitHub-related the update flow ever touches: the
+     * Releases API itself, the `github.com/.../releases/download/...`
+     * redirect, and the CDN hosts that redirect actually lands on. A
+     * manually-configured custom manifest/apkUrl pointing anywhere else
+     * (see the admin panel's "رابط التحديثات" override) is left alone —
+     * the proxy only ever exists to route around GitHub specifically. */
+    private val GITHUB_PROXIED_HOSTS = setOf(
+        "api.github.com",
+        "github.com",
+        "codeload.github.com",
+        "objects.githubusercontent.com",
+        "raw.githubusercontent.com",
+        "release-assets.githubusercontent.com"
+    )
+
+    /** Rewrites [url] to `$PROXY_BASE_URL/proxy?url=<url-encoded url>` when
+     * a proxy is configured AND [url]'s host is one this update flow
+     * actually needs GitHub for (see [GITHUB_PROXIED_HOSTS]) — returns
+     * [url] unchanged otherwise (no proxy configured, or a non-GitHub URL
+     * that never needed one in the first place). */
+    private fun githubProxied(url: String): String {
+        if (PROXY_BASE_URL.isBlank()) return url
+        val host = try {
+            URL(url).host
+        } catch (e: Exception) {
+            return url
+        }
+        if (host !in GITHUB_PROXIED_HOSTS) return url
+        val encoded = URLEncoder.encode(url, "UTF-8")
+        return "${PROXY_BASE_URL.trimEnd('/')}/proxy?url=$encoded"
+    }
 
     // MANUAL BUILDS: hardcoded to the dedicated updates repo, since you're
     // now building the APK by hand (not through GitHub Actions) — there's
@@ -41,9 +102,12 @@ object UpdateChecker {
      * offer the download — no manifest URL ever needs typing into the
      * admin panel by hand. */
     fun defaultManifestUrl(): String =
-        "https://api.github.com/repos/$UPDATES_REPO/releases/latest"
+        githubProxied("https://api.github.com/repos/$UPDATES_REPO/releases/latest")
 
-    suspend fun check(context: Context, manifestUrl: String): UpdateCheckResult = withContext(Dispatchers.IO) {
+    /** [timeoutMs] defaults to the manual-check timeout ([TIMEOUT_MS]);
+     * MainActivity's mandatory startup check passes [STARTUP_TIMEOUT_MS]
+     * instead — see its doc above for why the two differ. */
+    suspend fun check(context: Context, manifestUrl: String, timeoutMs: Int = TIMEOUT_MS): UpdateCheckResult = withContext(Dispatchers.IO) {
         val current = AppVersionInfo.current(context)
         if (manifestUrl.isBlank()) {
             return@withContext UpdateCheckResult.Failed("لم يتم إعداد رابط التحديثات بعد")
@@ -53,8 +117,8 @@ object UpdateChecker {
         try {
             val url = URL(manifestUrl)
             connection = (url.openConnection() as HttpURLConnection).apply {
-                connectTimeout = TIMEOUT_MS
-                readTimeout = TIMEOUT_MS
+                connectTimeout = timeoutMs
+                readTimeout = timeoutMs
                 requestMethod = "GET"
                 setRequestProperty("Cache-Control", "no-cache")
                 setRequestProperty("Accept", "application/vnd.github+json")
@@ -111,7 +175,17 @@ object UpdateChecker {
     // For a non-GitHub (custom JSON manifest) URL, 404 just means the
     // file isn't at that address — a plainer message covers that case.
     private fun describeHttpFailure(status: Int, requestUrl: String, connection: HttpURLConnection): String {
-        val isGitHubReleasesApi = requestUrl.contains("api.github.com/repos/") && requestUrl.contains("/releases/")
+        // FIX: this used to require the literal substrings
+        // "api.github.com/repos/" and "/releases/" in requestUrl — true
+        // for a direct GitHub Releases API call, but once PROXY_BASE_URL
+        // is set (see githubProxied above) requestUrl is actually the
+        // *proxied* URL with the real GitHub URL sitting URL-encoded
+        // inside a `?url=` query value, where every "/" becomes "%2F".
+        // The host "api.github.com" itself survives encoding unchanged
+        // (letters/dots are never percent-encoded), so checking for just
+        // that substring still correctly recognizes a GitHub Releases API
+        // request whether it went there directly or through the proxy.
+        val isGitHubReleasesApi = requestUrl.contains("api.github.com")
         if (status == 404 && isGitHubReleasesApi) {
             val ghMessage = try {
                 connection.errorStream?.bufferedReader()?.use { it.readText() }
@@ -193,7 +267,7 @@ object UpdateChecker {
         return UpdateManifest(
             versionCode = versionCode,
             versionName = tagName,
-            apkUrl = finalApkUrl,
+            apkUrl = githubProxied(finalApkUrl),
             notes = json.optString("body", "")
         )
     }
