@@ -31,10 +31,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,10 +46,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.updates.ApkDownloader
 import com.shopmanager.app.data.updates.AppVersion
-import com.shopmanager.app.data.updates.DownloadState
+import com.shopmanager.app.data.updates.UpdateDownloadPhase
+import com.shopmanager.app.data.updates.UpdateDownloadService
+import com.shopmanager.app.data.updates.UpdateDownloadState
 import com.shopmanager.app.data.updates.UpdateManifest
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -91,43 +92,49 @@ fun ForceUpdateScreen(
     BackHandler(enabled = true) {}
 
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
 
-    var isDownloading by remember { mutableStateOf(false) }
-    var downloadPercent by remember { mutableStateOf(0) }
+    // BUG FIXED / FEATURE ADDED ("لازم التحميل ينحفظ"، "والتحميل يكون في
+    // الخلفية"): the download itself now runs inside [UpdateDownloadService]
+    // (a real foreground service) instead of a coroutine scoped to this
+    // Composable — see [UpdateDownloadState] for the full reasoning. This
+    // screen just renders whatever the shared state currently says, so it
+    // survives this screen recomposing, the app backgrounding, or the
+    // person having started the same download from the optional dialog in
+    // Settings before this mandatory screen ever appeared.
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var needsInstallPermission by remember { mutableStateOf(false) }
     var downloadedFile by remember { mutableStateOf<File?>(null) }
+    val downloadPhase by UpdateDownloadState.phase.collectAsState()
+    val isDownloading = downloadPhase is UpdateDownloadPhase.InProgress
+    val downloadPercent = (downloadPhase as? UpdateDownloadPhase.InProgress)?.percent ?: 0
 
     fun tryInstall(file: File) {
         if (ApkDownloader.canInstallPackages(context)) {
             ApkDownloader.install(context, file)
+            UpdateDownloadState.reset()
             onUpdateInstalled()
         } else {
             needsInstallPermission = true
         }
     }
 
-    fun startDownload() {
-        errorMessage = null
-        isDownloading = true
-        downloadPercent = 0
-        scope.launch {
-            when (val state = ApkDownloader.download(context, manifest.apkUrl) { percent ->
-                downloadPercent = percent
-            }) {
-                is DownloadState.Done -> {
-                    isDownloading = false
-                    downloadedFile = state.file
-                    tryInstall(state.file)
+    LaunchedEffect(Unit) {
+        UpdateDownloadState.phase.collect { phase ->
+            when (phase) {
+                is UpdateDownloadPhase.Done -> {
+                    errorMessage = null
+                    downloadedFile = phase.file
+                    tryInstall(phase.file)
                 }
-                is DownloadState.Error -> {
-                    isDownloading = false
-                    errorMessage = state.message
-                }
-                is DownloadState.InProgress -> Unit
+                is UpdateDownloadPhase.Error -> errorMessage = phase.message
+                else -> Unit
             }
         }
+    }
+
+    fun startDownload() {
+        errorMessage = null
+        UpdateDownloadService.start(context, manifest)
     }
 
     // Gentle up/down pulse on the update glyph — same motion language as
