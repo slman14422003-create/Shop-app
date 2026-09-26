@@ -44,19 +44,24 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "com.shopmanager.app"
-    // BUILD UPDATE: latest stable API level AGP 8.13.2 supports (was 34).
-    // The app already renders fully edge-to-edge with its own status/nav
-    // bar handling (see ui/theme/SystemBars.kt +
+    // BUILD UPDATE (٢٠٢٦-٠٩): bumped to 37 (Android 17) — reached Platform
+    // Stability in beta 3 and its stable public rollout was back in June
+    // 2026, so this is a shipped stable SDK, not a preview. This is also
+    // what unlocks the AndroidX bumps below that gate on it (core-ktx
+    // 1.19.x, lifecycle 2.11.x, the current compose-bom line) — those
+    // libraries' own AAR metadata requires compileSdk 37+ AGP 9.1+, which
+    // this project now has. The app already renders fully edge-to-edge
+    // with its own status/nav bar handling (see ui/theme/SystemBars.kt +
     // WindowCompat.setDecorFitsSystemWindows(window, false) in
     // MainActivity) rather than relying on the OS's default chrome, so the
     // targetSdk 35+ "edge-to-edge enforced" behavior change that trips up
     // apps which don't handle their own insets doesn't apply here.
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.shopmanager.app"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         // MANUAL RELEASES: you're now building and uploading Release APKs
         // by hand (not through GitHub Actions/release.yml anymore), so
         // GITHUB_RUN_NUMBER never exists at build time — versionCode was
@@ -154,17 +159,20 @@ android {
         }
     }
 
-    // JAVA VERSION: bumped from 17 to 21 (current LTS — AGP 8.13.2 / Gradle
-    // 8.13 / Kotlin 2.3.21, see the root build.gradle.kts and CI workflow,
-    // all officially support building with and targeting JDK 21). minSdk 24
-    // is unaffected: D8 still desugars whatever the target device's runtime
-    // can't run natively, exactly as it did for Java 17 language features.
+    // JAVA VERSION (٢٠٢٦-٠٩): bumped from 21 to 25 — JDK 25 is now the
+    // current LTS (released Sept 2025) and JDK 21's own free-updates
+    // window closes this same month (Sept 2026), a year after JDK 25
+    // shipped; AGP 9.4.0 / Gradle 9.7.1 / Kotlin 2.4.20 (see the root
+    // build.gradle.kts and CI workflow) all officially build with and run
+    // on JDK 25. minSdk 24 is unaffected: D8 still desugars whatever the
+    // target device's runtime can't run natively, exactly as it did for
+    // Java 21 language features.
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+        sourceCompatibility = JavaVersion.VERSION_25
+        targetCompatibility = JavaVersion.VERSION_25
     }
 
-    // Kotlin's own JVM target (matches JAVA VERSION 21 above) now lives in
+    // Kotlin's own JVM target (matches JAVA VERSION 25 above) now lives in
     // the top-level kotlin{} block below this android{} block — see the
     // BUILD FIX comment there. The old android.kotlinOptions{} DSL that
     // used to sit here is a hard compile error as of this Kotlin version.
@@ -214,14 +222,14 @@ android {
 // BUILD FIX: "Using 'jvmTarget: String' is an error. Please migrate to the
 // compilerOptions DSL" (https://kotl.in/u1r8ln) — Kotlin 2.2 deprecated the
 // old android.kotlinOptions{} block that used to sit inside android{}
-// above, and Kotlin 2.3.21 (this project's version) turns that deprecation
-// into a hard compile error instead of a warning. kotlin.compilerOptions{}
-// is the replacement: a top-level block (a sibling of android{}, exactly
-// like composeCompiler{} below), using the typed JvmTarget enum instead of
-// a raw string. Set to JVM_21 to match compileOptions' VERSION_21 above.
+// above, and Kotlin 2.3+ turns that deprecation into a hard compile error
+// instead of a warning. kotlin.compilerOptions{} is the replacement: a
+// top-level block (a sibling of android{}, exactly like composeCompiler{}
+// below), using the typed JvmTarget enum instead of a raw string. Set to
+// JVM_25 to match compileOptions' VERSION_25 above.
 kotlin {
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_21)
+        jvmTarget.set(JvmTarget.JVM_25)
     }
 }
 
@@ -233,11 +241,11 @@ composeCompiler {
 }
 
 dependencies {
-    // BUILD UPDATE (latest stable, verified individually — see the CHANGELOG
-    // entry for this update for the source of each number): every androidx/
-    // Compose/Firebase/Kotlin dependency in this file was bumped from what
-    // it pinned before to its own current stable release, not just the BOMs.
-    implementation("androidx.core:core-ktx:1.18.0")
+    // BUILD UPDATE (٢٠٢٦-٠٩, latest stable, verified individually): every
+    // androidx/Compose/Firebase/Kotlin dependency in this file was bumped
+    // from what it pinned before to its own current stable release, not
+    // just the BOMs. Nothing here is an alpha/beta/RC.
+    implementation("androidx.core:core-ktx:1.19.1")
     // Standard AndroidX SplashScreen API — shows a static app icon on a
     // flat background immediately at cold start instead of a blank/white
     // starting window, and is kept on screen (see MainActivity) until the
@@ -261,30 +269,24 @@ dependencies {
     // (debug build) never benefits from this, or from R8/minify below;
     // always judge real-world smoothness from an installed *release* APK,
     // never a debug run.
-    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.activity:activity-compose:1.13.0")
-    // BUILD FIX: "Dependency 'androidx.lifecycle:lifecycle-runtime-compose-
-    // android:2.11.0' ... requires libraries and applications that depend
-    // on it to compile against version 37 or later of the Android APIs"
-    // (same error for lifecycle-viewmodel-compose-android:2.11.0) — as of
-    // this release, androidx.lifecycle's AAR metadata requires compileSdk
-    // 37 + AGP 9.1.0+, and AGP 8.13.2's own max recommended compileSdk is
-    // 36 (see the root build.gradle.kts comment on deliberately not
-    // jumping to AGP 9 yet). lifecycle-runtime-compose isn't declared
-    // directly — it comes in transitively through lifecycle-viewmodel-
-    // compose below — so pinning both explicit lifecycle lines back to
-    // 2.10.0 (the stable release right before this compileSdk-37 bump)
-    // pulls that transitive dependency down to a compatible version too.
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
-    implementation("androidx.navigation:navigation-compose:2.9.8")
+    // BUILD UPDATE: previously pinned to 2.10.0 because lifecycle 2.11.0's
+    // AAR metadata requires compileSdk 37 + AGP 9.1.0+, which this project
+    // didn't have yet. Now that compileSdk is 37 and AGP is 9.4.0 (see
+    // android{} above and the root build.gradle.kts), that requirement is
+    // met and the pin is no longer needed — bumped straight to the current
+    // stable release.
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
 
     // BUILD UPDATE: latest stable Compose BOM as of this update — brings in
     // Compose UI/Foundation/Material3/Runtime 1.11.x across the board (see
     // the per-artifact versions on developer.android.com/jetpack/androidx/
     // versions/stable-channel). All existing composeOptions/BOM-driven code
     // in this project (PullToRefreshBox etc.) stays source-compatible.
-    val composeBom = platform("androidx.compose:compose-bom:2026.06.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -293,12 +295,12 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Firebase — initialized manually via FirebaseOptions (no google-services.json / plugin needed)
-    val firebaseBom = platform("com.google.firebase:firebase-bom:34.14.0")
+    val firebaseBom = platform("com.google.firebase:firebase-bom:34.17.0")
     implementation(firebaseBom)
     // BUILD FIX: "Could not find com.google.firebase:firebase-firestore-ktx:"
     // (empty version, same for firebase-common-ktx) — Firebase stopped
     // releasing the standalone -ktx modules and dropped them from the BoM
-    // entirely as of BoM v34.0.0 (this project pins 34.14.0), so there's no
+    // entirely as of BoM v34.0.0 (this project pins 34.17.0), so there's no
     // version left here for Gradle to resolve against. The KTX extension
     // APIs were merged into these same main modules back in BoM 32.5.0+
     // under the same package names, so no source change is needed — every
