@@ -8,9 +8,31 @@ on:
 permissions:
   contents: write
 
+# CONCURRENCY GUARD: two pushes to main close together used to start two
+# overlapping runs of this same workflow. Both would build fine on their
+# own, but the last two steps (create the release + commit CHANGELOG.md
+# back to this repo) race: whichever run's "git push" lands second fails
+# outright (non-fast-forward — the other run's commit is already there),
+# or worse, both runs try to create/attach assets to the same
+# v1.0.${{ github.run_number }} tag-shaped release at once. Since each run
+# number is unique per run anyway, there's nothing to gain from letting
+# two run back-to-back — cancelling the older, still-in-progress run the
+# moment a newer push comes in for the same branch removes the race
+# entirely instead of just hoping it doesn't happen.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    # SAFETY NET: caps a hung/runaway run (a stuck Gradle daemon, a stalled
+    # network call) instead of letting it sit "in progress" for GitHub's
+    # default 6-hour job ceiling, quietly burning Actions minutes the
+    # whole time. 40 minutes is generous headroom over a normal run of this
+    # workflow (two full assembles + tests + lint on a small single-module
+    # app) while still catching a real hang quickly.
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,17 +46,17 @@ jobs:
           # actual prior commits.
           fetch-depth: 0
 
-      # JDK: bumped from 17 to 21 (the current LTS release — 17's successor,
-      # 21 is a Long-Term-Support build so it keeps getting security/stability
-      # patches for years, unlike a short-term feature release). AGP 8.5.2 +
-      # Gradle 8.7 + Kotlin 1.9.24 (see build.gradle.kts) all officially
-      # support running on JDK 21, so this is a safe bump with no other
-      # version changes required.
-      - name: Setup JDK 21
+      # JDK: bumped from 21 to 25 — 25 is now the current LTS (released
+      # Sept 2025, successor to 21's LTS line) and 21's own free-updates
+      # window closes this same month (Sept 2026). AGP 9.4.0 + Gradle 9.7.1
+      # + Kotlin 2.4.20 (see build.gradle.kts) all officially support
+      # running on JDK 25, so this is a safe bump with no other version
+      # changes required here.
+      - name: Setup JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '25'
 
       # CI FIX (٢٠٢٦-٠٩-١٤/١٥ - عطل عام مو متعلق بكود التطبيق): جوجل شالت
       # الحزمة القديمة "tools" نهائيًا من مستودع Android SDK (كانت متروكة/
@@ -54,14 +76,44 @@ jobs:
         with:
           packages: ''
 
-      # BUILD UPDATE: bumped to match AGP 8.13.2's own minimum-required
+      # BUILD UPDATE: bumped to match AGP 9.4.0's own minimum-required
       # Gradle version (see build.gradle.kts / app/build.gradle.kts) — AGP
-      # 8.13.x needs Gradle 8.13+ to run at all, so this has to move in
-      # lockstep with the AGP bump, not independently.
+      # 9.4.x needs Gradle 9.6.0+ to run at all, so this has to move in
+      # lockstep with the AGP bump, not independently. 9.7.1 is the latest
+      # stable Gradle release, comfortably above that floor.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.13'
+          gradle-version: '9.7.1'
+
+      # QUALITY GATE (unit tests): fails the whole run if a unit test
+      # actually breaks, same as any real Android CI pipeline — catching a
+      # regression here instead of only after it's already in a published
+      # release. If this module has no unit tests yet, Gradle reports the
+      # task as NO-SOURCE and this step just passes; nothing to configure
+      # either way for that case.
+      - name: Run unit tests
+        run: gradle testDebugUnitTest --no-daemon
+
+      # QUALITY CHECK (lint), non-blocking on purpose: `continue-on-error`
+      # means a pre-existing lint finding somewhere in the app can't
+      # suddenly start blocking every push to main / the auto-release this
+      # workflow does — that would turn "add one new lint-flagged line"
+      # into "the app stops shipping updates" with no warning. The report
+      # itself is still generated and uploaded (see the next step) so
+      # findings stay visible without being a hard gate.
+      - name: Run Android Lint (release)
+        id: lint
+        continue-on-error: true
+        run: gradle lintRelease --no-daemon
+
+      - name: Upload lint report
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-release.html
+          if-no-files-found: ignore
+          retention-days: 30
 
       # FIX: this used to only ever run `assembleDebug`, so every GitHub
       # Release only ever shipped the debug build — larger, unshrunk,
@@ -81,6 +133,21 @@ jobs:
           RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           cp "$DEBUG_APK" shop-manager-debug.apk
           cp "$RELEASE_APK" shop-manager-release.apk
+
+      # In addition to the GitHub Release on Shop-app-updates further down
+      # (the one the app's own updater checks), also attach both APKs
+      # directly to THIS workflow run's own artifacts — lets you grab a
+      # build straight from the Actions tab (e.g. a workflow_dispatch test
+      # run you don't want to publish as a public release yet) without
+      # needing a release to exist at all.
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apks-${{ github.run_number }}
+          path: |
+            shop-manager-debug.apk
+            shop-manager-release.apk
+          retention-days: 30
 
       # AUTOMATIC RELEASE NOTES ("بدي ملاحظات الإصدار تلقائيًا تتغير، ما
       # اضطر اغيّر باللوج كل مرة"): this used to read CHANGELOG.md's own
