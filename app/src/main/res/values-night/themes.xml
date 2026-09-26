@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Night-mode override: everything else (splash screen, ripple/edge colors,
-  window animation style) stays identical to values/themes.xml — only
-  windowBackground changes, from the fixed brand color to this app's
+  Night-mode override: everything else (splash screen, ripple/edge colors)
+  stays identical to values/themes.xml — only windowBackground changes, from the fixed brand color to this app's
   actual dark-mode background (Color.kt's DarkBackground, #121218, via the
   night-qualified background_light in values-night/colors.xml). The brand
   color behind a *dark* first Compose frame was a mismatched flash for
@@ -10,9 +9,13 @@
   removes that regardless of which theme the person is using.
 -->
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- BUG FIXED ("تقطيع لما اخرج من شاشة اضافة مادة وشاشات للتطبيق"):
+         see values/themes.xml's comment above Theme.ShopManager —
+         `android:windowAnimationStyle` used to double up with every
+         GlassAlertDialog's own Compose pop-in/out animation. Removed here
+         too so dark mode isn't left with the same choppy double motion. -->
     <style name="Theme.ShopManager" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/background_light</item>
-        <item name="android:windowAnimationStyle">@style/Theme.ShopManager.WindowAnimations</item>
         <item name="android:colorControlHighlight">@color/ripple_brand</item>
         <item name="android:colorEdgeEffect" tools:targetApi="s">@color/edge_glow_brand</item>
     </style>
