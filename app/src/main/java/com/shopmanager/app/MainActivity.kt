@@ -106,6 +106,7 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.rememberOneUiBackController
 import com.shopmanager.app.ui.common.oneUiPredictiveBack
+import com.shopmanager.app.ui.common.OneUiBackBackdrop
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
 import com.shopmanager.app.ui.theme.AppThemeMode
@@ -285,6 +286,17 @@ class MainActivity : ComponentActivity() {
             var themeMode by remember { mutableStateOf(settings.themeMode) }
             var unlocked by remember { mutableStateOf(!settings.hasPin) }
 
+            // FEATURE ADDED ("التحديثات اجبارية ... لما افتح التطبيق يتحقق
+            // من التحديث"): a mandatory update check on every cold start,
+            // separate from the optional "تحقق من التحديثات" button in
+            // Settings (unchanged, still there). See ForceUpdateScreen's
+            // own doc for the full rationale, including why this fails
+            // OPEN (lets the person into the app) rather than closed
+            // whenever the check itself can't complete — only a CONFIRMED
+            // newer versionCode ever blocks entry.
+            var forceUpdateManifest by remember { mutableStateOf<com.shopmanager.app.data.updates.UpdateManifest?>(null) }
+            var forceUpdateCheckDone by remember { mutableStateOf(false) }
+
             // "تفضيل الأداء": loaded once here (not re-read from disk on
             // every recomposition), then kept in sync live when changed in
             // Settings via onPerformancePreferenceChanged below — same
@@ -420,6 +432,40 @@ class MainActivity : ComponentActivity() {
                         if (!ready) {
                             AppSplashScreen()
                         } else {
+                            // Runs exactly once, right as the splash hands
+                            // off to the real UI. Uses `ready` as the key
+                            // (not Unit) purely so this can never fire
+                            // during the brief `!ready` frames above —
+                            // functionally it only ever runs the one time
+                            // `ready` flips true for the life of this
+                            // Activity instance.
+                            LaunchedEffect(ready) {
+                                when (val result = com.shopmanager.app.data.updates.UpdateChecker.check(
+                                    applicationContext,
+                                    settings.updateManifestUrl,
+                                    timeoutMs = com.shopmanager.app.data.updates.UpdateChecker.STARTUP_TIMEOUT_MS
+                                )) {
+                                    is com.shopmanager.app.data.updates.UpdateCheckResult.UpdateAvailable -> {
+                                        forceUpdateManifest = result.manifest
+                                    }
+                                    else -> Unit // UpToDate or Failed: fail open, see ForceUpdateScreen's doc.
+                                }
+                                forceUpdateCheckDone = true
+                            }
+
+                            if (!forceUpdateCheckDone) {
+                                // Same splash the person was already looking
+                                // at a moment ago — the mandatory check is
+                                // meant to be quick and invisible when
+                                // there's nothing to install, not a second,
+                                // visibly different loading screen.
+                                AppSplashScreen()
+                            } else if (forceUpdateManifest != null) {
+                                com.shopmanager.app.ui.update.ForceUpdateScreen(
+                                    manifest = forceUpdateManifest!!,
+                                    currentVersion = com.shopmanager.app.data.updates.AppVersionInfo.current(applicationContext)
+                                )
+                            } else {
                             CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
                                 // Load the persisted currency symbol into the
                                 // app-wide holder once, so every screen
@@ -454,6 +500,7 @@ class MainActivity : ComponentActivity() {
                                         onConsumeNotificationAction = { pendingNotificationAction = null }
                                     )
                                 }
+                            }
                             }
                         }
                     }
@@ -730,8 +777,16 @@ private fun ShopManagerApp(
     Box(
         Modifier
             .fillMaxSize()
-            .oneUiPredictiveBack(oneUiBack)
     ) {
+        // ONE UI 8.5 ("بدي ياه متل ال one ui 8.5 بكل التطبيق"): the synthetic
+        // "next screen surfacing from behind" layer — see OneUiBackBackdrop's
+        // own doc — has to sit BEHIND the NavHost content below, so it's the
+        // first child here rather than a modifier on this same Box (that's
+        // also why `oneUiPredictiveBack` itself moved from this Box onto
+        // NavHost's own modifier just below: both layers need to be
+        // siblings, each carrying its own half of the transform, not one
+        // Box carrying both).
+        OneUiBackBackdrop(oneUiBack)
         // See the BUG FIXED note below (inside NavHost's transition params)
         // for why these are shaped the way they are — declared here, above
         // NavHost, since a function-call argument list can only contain
@@ -779,7 +834,8 @@ private fun ShopManagerApp(
                     } else {
                         Modifier
                     }
-                ),
+                )
+                .oneUiPredictiveBack(oneUiBack),
             // BUG FIXED ("عدل الانميشن والانتقالات... تشبه iOS بشكل كامل"):
             // this used to be a fade+small-slide on the incoming screen
             // (only fullWidth/8 — a ~12% peek, not a real push) paired with
