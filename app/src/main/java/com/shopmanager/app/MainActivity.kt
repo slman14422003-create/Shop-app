@@ -104,6 +104,8 @@ import com.shopmanager.app.ui.common.QuickActionFab
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.MotionSpecs
+import com.shopmanager.app.ui.common.rememberOneUiBackController
+import com.shopmanager.app.ui.common.oneUiPredictiveBack
 import com.shopmanager.app.ui.settings.SettingsScreen
 import com.shopmanager.app.ui.splash.AppSplashScreen
 import com.shopmanager.app.ui.theme.AppThemeMode
@@ -516,6 +518,15 @@ private fun ShopManagerApp(
     onConsumeNotificationAction: () -> Unit = {}
 ) {
     val navController = rememberNavController()
+    // FEATURE ("رجوع تنبؤي متل One UI 8.5" — the same technique for every
+    // back exit in the app, gesture or tap): see PredictiveBack.kt for the
+    // full rationale. `oneUiBack.progress` drives the shrink/round/shift
+    // transform applied to the whole NavHost content below; every
+    // `onBack` callback passed into a `composable()` further down calls
+    // `oneUiBack.triggerBack()` instead of `navController.popBackStack()`
+    // directly, so a tapped back arrow animates identically to the real
+    // swipe gesture.
+    val oneUiBack = rememberOneUiBackController(navController)
     // Shared across screens so everyone sees the same live data instead of
     // spinning up duplicate Firestore listeners per screen.
     val debtsViewModel: DebtsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
@@ -716,7 +727,11 @@ private fun ShopManagerApp(
             )
         }
     ) {
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .oneUiPredictiveBack(oneUiBack)
+    ) {
         // See the BUG FIXED note below (inside NavHost's transition params)
         // for why these are shaped the way they are — declared here, above
         // NavHost, since a function-call argument list can only contain
@@ -784,10 +799,15 @@ private fun ShopManagerApp(
             //    third of its own width to the left and scales down to
             //    94% (see the note on `pushScaleSpec` above for why this
             //    is a scale now, not an alpha dim).
-            //  - pop (popEnter/popExit): the top screen slides the entire
-            //    width back out to the right; the screen being revealed
-            //    slides back in from a third off-screen on the left and
-            //    scales back up to full size.
+            //  - pop is intentionally EnterTransition.None/ExitTransition
+            //    .None below, unconditionally — see PredictiveBack.kt.
+            //    Every back exit (real swipe gesture or a tap on a
+            //    screen's own back arrow) now goes through
+            //    `oneUiBack`/`OneUiBackController`, which shrinks, rounds
+            //    the corners of, and eases the WHOLE NavHost content
+            //    ("رجوع تنبؤي متل One UI 8.5") — running NavHost's own pop
+            //    slide *as well as* that transform is the double,
+            //    out-of-sync motion that read as "تقطيع" before.
             // PERF: LOW tier still keeps this at zero cost (EnterTransition/
             // ExitTransition.None below) — the fastest a screen change can
             // be, same as before this rewrite.
@@ -805,15 +825,8 @@ private fun ShopManagerApp(
                 else slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
                     scaleOut(pushScaleSpec, targetScale = 0.94f)
             },
-            popEnterTransition = {
-                if (isLowTier) EnterTransition.None
-                else slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
-                    scaleIn(pushScaleSpec, initialScale = 0.94f)
-            },
-            popExitTransition = {
-                if (isLowTier) ExitTransition.None
-                else slideOutHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
-            }
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { ExitTransition.None }
         ) {
             composable(ROUTE_MAIN_PAGER) {
                 // One shared surface for Home, Debts, Materials, and Notes —
@@ -895,12 +908,12 @@ private fun ShopManagerApp(
             composable(ROUTE_MATERIAL_CATALOG) {
                 MaterialCatalogScreen(
                     viewModel = materialsViewModel,
-                    onBack = { navController.popBackStack() }
+                    onBack = { oneUiBack.triggerBack() }
                 )
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { oneUiBack.triggerBack() },
                     onThemeChanged = onThemeChanged,
                     onPerformancePreferenceChanged = onPerformancePreferenceChanged,
                     onRecheckDevicePerformance = onRecheckDevicePerformance,
@@ -912,7 +925,7 @@ private fun ShopManagerApp(
             }
             composable(ROUTE_ADMIN) {
                 AdminPanelScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { oneUiBack.triggerBack() },
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel
                 )
@@ -921,14 +934,14 @@ private fun ShopManagerApp(
                 WebViewScreen(
                     url = "file:///android_asset/help.html",
                     title = "دليل الاستخدام",
-                    onBack = { navController.popBackStack() }
+                    onBack = { oneUiBack.triggerBack() }
                 )
             }
             composable(ROUTE_PRIVACY) {
                 WebViewScreen(
                     url = "file:///android_asset/privacy.html",
                     title = "سياسة الخصوصية",
-                    onBack = { navController.popBackStack() }
+                    onBack = { oneUiBack.triggerBack() }
                 )
             }
             composable(
@@ -948,7 +961,7 @@ private fun ShopManagerApp(
                         // المعروضة هون تضل نفس البيانات الحية، وإضافة/تعديل
                         // ملاحظة من هالشاشة ينعكس فورًا بتبويب الملاحظات وبالعكس.
                         notesViewModel = notesViewModel,
-                        onBack = { navController.popBackStack() }
+                        onBack = { oneUiBack.triggerBack() }
                     )
                 }
             }
