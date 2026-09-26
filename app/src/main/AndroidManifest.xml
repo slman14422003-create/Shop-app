@@ -24,6 +24,11 @@
          يعيد تشغيلها بعد إعادة تشغيل الجهاز أو تحديث التطبيق. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- FEATURE ADDED (تحميل التحديث بالخلفية، UpdateDownloadService): مطلوبة
+         على أندرويد 14+ (API 34) لأي خدمة أمامية بنوع dataSync — وهو النوع
+         الصحيح هنا لأنه تحميل ملف فعلي، بعكس specialUse أعلاه المخصص
+         لمزامنة Firestore. بدونها ترفض الأنظمة الحديثة بدء الخدمة أصلاً. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
@@ -39,6 +44,12 @@
       OEM/ROM, and is the pattern Play Console itself recommends for an
       app that installs its own updates.
     -->
+    <!-- FEATURE ADDED (توافق أوسع مع الأجهزة، لا يؤثر على الهواتف): يصرّح
+         صراحة أن التطبيق لا يحتاج شاشة لمس فعلياً — بدونها يستبعد متجر Play
+         تلقائياً أي جهاز بلا لمس (كروم بوك، بعض التابلت مع فأرة/لوحة مفاتيح
+         فقط) من رؤية التطبيق أصلاً، رغم أن واجهته تعمل بشكل طبيعي بالنقر. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -167,6 +178,18 @@
                 android:value="Keeps a Firestore listener alive to deliver shop debt, stock and note notifications from other devices in real time" />
         </service>
 
+        <!--
+          FEATURE ADDED ("والتحميل يكون في الخلفية"): خدمة أمامية من نوع
+          dataSync تُنزّل ملف APK التحديث بنفسها — انظر UpdateDownloadService
+          وUpdateDownloadState لسبب نقل هذا من كود Compose (كان يتوقف فور
+          مغادرة الشاشة) إلى هنا. exported="false" لأنها تُشغَّل فقط من
+          داخل التطبيق نفسه (UpdateDownloadService.start).
+        -->
+        <service
+            android:name=".data.updates.UpdateDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- يعيد تشغيل الخدمة بعد الإقلاع/تحديث التطبيق. بثّان محميان من النظام. -->
         <receiver
             android:name=".data.notifications.BootReceiver"
@@ -183,6 +206,7 @@
             android:launchMode="singleTop"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.ShopManager.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
