@@ -7,7 +7,11 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableIntState
 import androidx.compose.runtime.derivedStateOf
@@ -36,9 +40,19 @@ import kotlinx.coroutines.launch
  * screen out from under another the way the old iOS-style push/pop here
  * did — the CURRENT screen shrinks in place, its corners round off, and
  * it eases a few dp toward whichever edge the gesture came from, like a
- * card lifting and pulling back, with nothing sliding in from off-screen.
- * That's exactly what [OneUiBackController.progress]/[oneUiPredictiveBack]
- * reproduce, driven live by the real system gesture through
+ * card lifting and pulling back.
+ *
+ * UPDATED FOR ONE UI 8.5 ("بدي ياه متل ال one ui 8.5 بكل التطبيق"): One UI
+ * 8.5 added "Back Swipe Preview" — the gesture no longer just shrinks the
+ * current screen over a blank void, the screen you're returning to visibly
+ * surfaces from behind as you drag, so it reads as peeling back a layer
+ * rather than the current page shrinking into nothing. [OneUiBackBackdrop]
+ * below reproduces that same "something is surfacing from behind" cue as a
+ * lightweight synthetic panel layered underneath the shrinking foreground
+ * (see its own doc for why it's a synthetic panel and not the literal
+ * previous screen). [OneUiBackController.progress]/[oneUiPredictiveBack]
+ * still drive the foreground shrink/round/shift exactly as before, and
+ * both are driven live by the real system gesture through
  * [PredictiveBackHandler] (so it tracks the finger 1:1, frame by frame,
  * instead of a fixed-duration animation guessing at where the finger is),
  * or by [OneUiBackController.triggerBack] for a plain tap on a back arrow.
@@ -136,3 +150,58 @@ fun Modifier.oneUiPredictiveBack(controller: OneUiBackController): Modifier =
         shape = RoundedCornerShape(corner)
         clip = p > 0.001f
     }
+
+/**
+ * The One UI 8.5 "Back Swipe Preview" layer: sits directly BEHIND whatever
+ * carries [oneUiPredictiveBack] (the foreground/current screen) and reads
+ * as the destination screen surfacing into view as the gesture progresses
+ * — scaling up from a touch smaller, fading in, and easing in from the
+ * opposite edge to the foreground's shift, so the two layers visually
+ * separate (one receding, one arriving) instead of moving together.
+ *
+ * This is a synthetic surface-toned panel, not a literal render of the
+ * previous screen's real content: doing that faithfully would mean
+ * keeping two full NavHost destinations composed and measured at once
+ * (a much larger restructure of every screen's navigation entry point),
+ * which is out of proportion to what a visual pass on the back gesture
+ * calls for. A plain themed panel reproduces the exact same *sensation*
+ * — "another layer of the app is right behind this one" — at a fraction
+ * of the cost: one extra Box, its transform read live inside a single
+ * graphicsLayer (draw-phase only, like [oneUiPredictiveBack] itself), so
+ * it never triggers a recomposition of its own as the gesture moves.
+ *
+ * Usage: place as the first child of the same Box that hosts the
+ * [oneUiPredictiveBack]-modified content, so it paints underneath it:
+ * ```
+ * Box(Modifier.fillMaxSize()) {
+ *     OneUiBackBackdrop(oneUiBack)
+ *     NavHost(modifier = Modifier.fillMaxSize().oneUiPredictiveBack(oneUiBack), ...)
+ * }
+ * ```
+ */
+@Composable
+fun OneUiBackBackdrop(controller: OneUiBackController, modifier: Modifier = Modifier) {
+    val backdropColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    Box(
+        modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val p = controller.progress
+                val scale = 0.94f + 0.06f * p
+                scaleX = scale
+                scaleY = scale
+                alpha = p
+                val maxShift = 8.dp.toPx()
+                // Opposite direction to the foreground's shift (see
+                // oneUiPredictiveBack above) — the two layers separate as
+                // they move instead of travelling together, which is what
+                // actually sells "one surfacing from behind the other"
+                // rather than "the same image at two sizes".
+                translationX = if (controller.swipeEdge == BackEventCompat.EDGE_RIGHT) maxShift * (1f - p) else -maxShift * (1f - p)
+                val corner = 28.dp.toPx() * p
+                shape = RoundedCornerShape(corner)
+                clip = true
+            }
+            .background(backdropColor)
+    )
+}
