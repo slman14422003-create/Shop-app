@@ -53,6 +53,7 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.LocalSemanticColors
+import com.shopmanager.app.ui.theme.glassHairlineColor
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -250,7 +251,9 @@ fun DebtsScreen(
                 shape = RoundedCornerShape(50),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
+                // LIGHT-MODE CONTRAST FIX: this "عميل جديد" button was
+                // borderless and nearly invisible in light mode.
+                border = BorderStroke(1.dp, glassHairlineColor(0.5f))
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -395,7 +398,7 @@ private fun StatsRow(persons: Int, debts: Int, amount: Double) {
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
@@ -505,7 +508,7 @@ private fun PersonRow(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {

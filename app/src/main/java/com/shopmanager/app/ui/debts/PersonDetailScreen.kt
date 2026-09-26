@@ -613,13 +613,21 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
                         Icon(
                             Icons.Default.Notes, contentDescription = null,
                             modifier = Modifier.size(13.dp).padding(top = 2.dp),
-                            tint = MaterialTheme.colorScheme.outline
+                            // LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع
+                            // النهاري"): `outline` is ≈2.5:1 against a white
+                            // card — well under the 3:1 UI-component floor,
+                            // and far under the 4.5:1 text needs at this
+                            // labelSmall size. onSurfaceVariant (used for
+                            // debt.date right above, ≈5.6:1) is the color
+                            // this app already uses for this exact kind of
+                            // secondary text.
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
                             debt.note,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2
                         )
                     }
@@ -690,7 +698,11 @@ private fun LinkedNoteRow(
                     Text(
                         note.content,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
+                        // LIGHT-MODE CONTRAST FIX: see the matching note on
+                        // DebtRow's debt.note text above — `outline` fails
+                        // text contrast in light mode, onSurfaceVariant is
+                        // this app's established secondary-text color.
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 2,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
