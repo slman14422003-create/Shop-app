@@ -1065,17 +1065,64 @@ fun SettingsScreen(
             onDismissRequest = { if (!isDownloadingUpdate) pendingUpdate = null },
             title = { Text("يتوفر تحديث جديد 🎉") },
             text = {
-                Column {
-                    Text("الإصدار ${manifest.versionName} متوفر الآن (نسختك الحالية: ${appVersion.name}).")
-                    if (manifest.notes.isNotBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(manifest.notes, style = MaterialTheme.typography.bodySmall)
+                // MODERN UPDATE ICON: this used to also dump manifest.notes —
+                // the raw GitHub release body markdown (## headers, **bold**,
+                // emoji, apk filenames — see UpdateChecker.kt for where it
+                // comes from and release.yml's "Generate changelog" step for
+                // how it's built) — straight into a plain Text(), with no
+                // Markdown renderer to turn those symbols into real
+                // formatting. It just showed the literal markdown source.
+                // Replaced with a single consistent glyph instead: the same
+                // Icons.Default.SystemUpdate already used for this section's
+                // own icon and its "تحقق من التحديثات" button above, so the
+                // whole update flow reads as one visual language. A gentle
+                // up/down pulse (plain animateFloatAsState — already used
+                // elsewhere in this file, no new dependency) is what gives it
+                // the "متسق وعصري" feel the download bar sits under.
+                var pulseUp by remember { mutableStateOf(false) }
+                LaunchedEffect(manifest) {
+                    while (true) {
+                        kotlinx.coroutines.delay(650)
+                        pulseUp = !pulseUp
                     }
+                }
+                val arrowOffset by animateFloatAsState(
+                    targetValue = if (pulseUp) -6f else 0f,
+                    label = "updateArrowOffset"
+                )
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .offset(y = arrowOffset.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "الإصدار ${manifest.versionName} متوفر الآن (نسختك الحالية: ${appVersion.name}).",
+                        textAlign = TextAlign.Center
+                    )
                     if (isDownloadingUpdate) {
-                        Spacer(Modifier.height(14.dp))
+                        Spacer(Modifier.height(16.dp))
                         LinearProgressIndicator(
                             progress = { downloadPercent / 100f },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(50))
                         )
                         Spacer(Modifier.height(6.dp))
                         Text("$downloadPercent%", style = MaterialTheme.typography.labelSmall)
