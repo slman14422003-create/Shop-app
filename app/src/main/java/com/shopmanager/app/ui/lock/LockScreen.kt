@@ -88,7 +88,14 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
     // liquidGlassSurface's rimColor now being a nullable "draw or don't",
     // not a `== Color.White` sentinel that made passing white itself
     // impossible.)
-    val cardRimColor = Color.White
+    // LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع النهاري"): this rim used
+    // to be literal Color.White regardless of theme. liquidGlassSurface
+    // re-applies its own fixed 0.12f alpha on top, so only the RGB here
+    // matters — white was invisible against this card's own white
+    // `surfaceContainerHigh` fill in light mode, so the entire PIN card
+    // had no visible edge at all. `onSurface` is the theme's own ink tone
+    // and keeps dark mode's look unchanged (near-white there too).
+    val cardRimColor = MaterialTheme.colorScheme.onSurface
 
     Box(
         Modifier
