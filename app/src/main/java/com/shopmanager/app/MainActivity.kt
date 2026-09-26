@@ -500,17 +500,60 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
 
-                                if (!unlocked) {
-                                    LockScreen(settings = settings, onUnlocked = { unlocked = true })
-                                } else {
-                                    ShopManagerApp(
-                                        settings = settings,
-                                        onThemeChanged = { themeMode = it },
-                                        onPerformancePreferenceChanged = { performancePreference = it },
-                                        onRecheckDevicePerformance = onRecheckDevicePerformance,
-                                        pendingNotificationAction = pendingNotificationAction,
-                                        onConsumeNotificationAction = { pendingNotificationAction = null }
-                                    )
+                                // BUG FIXED ("الخروج من الشاشات" لا يعمل —
+                                // شاشة القفل تحديدًا): this was a plain
+                                // `if (!unlocked) LockScreen else
+                                // ShopManagerApp` — a hard, un-animated cut
+                                // the instant the PIN is accepted. Every
+                                // other hand-off in this file (splash→app
+                                // right above, every screen push/pop in
+                                // NavHost) got the full Claude-motion
+                                // treatment; this one silently never did,
+                                // so "unlocking" was the one exit in the
+                                // whole app with literally zero animation
+                                // — exactly the kind of gap that reads as
+                                // "the exit animation doesn't work" even
+                                // though every other screen's exit does.
+                                // Reuses the exact same fade+scale curve
+                                // and `isLowTierForHandoff`/
+                                // `claudeStandardEasing` as the splash→app
+                                // AnimatedContent just above, so unlocking
+                                // now reads as one continuous motion
+                                // language with the rest of the app instead
+                                // of a one-off snap.
+                                AnimatedContent(
+                                    targetState = unlocked,
+                                    label = "lockToApp",
+                                    transitionSpec = {
+                                        if (isLowTierForHandoff) {
+                                            fadeIn(tween(90, easing = claudeStandardEasing)) togetherWith
+                                                fadeOut(tween(90, easing = claudeStandardEasing))
+                                        } else {
+                                            (fadeIn(tween(360, easing = claudeStandardEasing)) +
+                                                scaleIn(
+                                                    initialScale = 0.96f,
+                                                    animationSpec = tween(360, easing = claudeStandardEasing)
+                                                )) togetherWith
+                                                (fadeOut(tween(260, easing = claudeStandardEasing)) +
+                                                    scaleOut(
+                                                        targetScale = 1.04f,
+                                                        animationSpec = tween(260, easing = claudeStandardEasing)
+                                                    ))
+                                        }
+                                    }
+                                ) { isUnlocked ->
+                                    if (!isUnlocked) {
+                                        LockScreen(settings = settings, onUnlocked = { unlocked = true })
+                                    } else {
+                                        ShopManagerApp(
+                                            settings = settings,
+                                            onThemeChanged = { themeMode = it },
+                                            onPerformancePreferenceChanged = { performancePreference = it },
+                                            onRecheckDevicePerformance = onRecheckDevicePerformance,
+                                            pendingNotificationAction = pendingNotificationAction,
+                                            onConsumeNotificationAction = { pendingNotificationAction = null }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -595,11 +638,12 @@ private fun ShopManagerApp(
     onConsumeNotificationAction: () -> Unit = {}
 ) {
     val navController = rememberNavController()
-    // FEATURE ("رجوع تنبؤي متل One UI 8.5" — the same technique for every
-    // back exit in the app, gesture or tap): see PredictiveBack.kt for the
-    // full rationale. `oneUiBack.progress` drives the shrink/round/shift
-    // transform applied to the whole NavHost content below; every
-    // `onBack` callback passed into a `composable()` further down calls
+    // FEATURE (the same technique for every back exit in the app, gesture
+    // or tap, and now the exact mirror of the forward push below — see
+    // PredictiveBack.kt for the full rationale): `oneUiBack.progress`
+    // drives the slide-back-out/slide-back-in transform applied to the
+    // whole NavHost content and its backdrop below; every `onBack`
+    // callback passed into a `composable()` further down calls
     // `oneUiBack.triggerBack()` instead of `navController.popBackStack()`
     // directly, so a tapped back arrow animates identically to the real
     // swipe gesture.
@@ -889,11 +933,14 @@ private fun ShopManagerApp(
             //    .None below, unconditionally — see PredictiveBack.kt.
             //    Every back exit (real swipe gesture or a tap on a
             //    screen's own back arrow) now goes through
-            //    `oneUiBack`/`OneUiBackController`, which shrinks, rounds
-            //    the corners of, and eases the WHOLE NavHost content
-            //    ("رجوع تنبؤي متل One UI 8.5") — running NavHost's own pop
-            //    slide *as well as* that transform is the double,
-            //    out-of-sync motion that read as "تقطيع" before.
+            //    `oneUiBack`/`OneUiBackController`, which slides the WHOLE
+            //    NavHost content back out to the right and the backdrop
+            //    behind it back in from the left+94% — the exact mirror of
+            //    this push, so entrance and exit finally share one
+            //    direction instead of two unrelated motions. Running
+            //    NavHost's own pop slide *as well as* that transform would
+            //    be the double, out-of-sync motion that read as "تقطيع"
+            //    before.
             // PERF: LOW tier still keeps this at zero cost (EnterTransition/
             // ExitTransition.None below) — the fastest a screen change can
             // be, same as before this rewrite.
