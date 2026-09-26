@@ -108,6 +108,17 @@ class SettingsRepository(context: Context) {
         get() = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_UPDATE_CHECK, value).apply()
 
+    /** "تفعيل التحديث الاجباري" — master on/off switch for the automatic,
+     * blocking update check MainActivity runs on every cold start (see
+     * ForceUpdateScreen). Defaults to on so existing behavior doesn't
+     * change for anyone until a developer opens لوحة المسؤول and turns it
+     * off. Switching this off never touches the separate, always-available
+     * manual "تحقق من التحديثات" button in Settings — that one is
+     * unaffected either way. */
+    var forceUpdateEnabled: Boolean
+        get() = prefs.getBoolean(KEY_FORCE_UPDATE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_FORCE_UPDATE_ENABLED, value).apply()
+
     val hasPin: Boolean get() = prefs.contains(KEY_PIN_HASH)
 
     fun setPin(pin: String) {
@@ -177,5 +188,6 @@ class SettingsRepository(context: Context) {
         private const val KEY_PERFORMANCE_MODE = "performance_mode"
         private const val KEY_UPDATE_MANIFEST_URL = "update_manifest_url"
         private const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"
+        private const val KEY_FORCE_UPDATE_ENABLED = "force_update_enabled"
     }
 }
