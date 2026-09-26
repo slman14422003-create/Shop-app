@@ -40,6 +40,30 @@
         <item name="android:windowExitAnimation">@anim/slide_out_left</item>
     </style>
 
+    <!-- BUG FIXED ("تقطيع لما اخرج من شاشة اضافة مادة وشاشات للتطبيق"):
+         `Theme.ShopManager.WindowAnimations` above was wired up as this
+         MAIN theme's `android:windowAnimationStyle` — but every
+         `androidx.compose.ui.window.Dialog` in the app (GlassAlertDialog,
+         which MaterialEditDialog/PersonEditDialog/AdminPinDialog/the
+         notification confirmation dialogs/etc. all sit on top of — see
+         GlassAlertDialog.kt) opens a real platform Window that inherits
+         `windowAnimationStyle` from this same Activity theme unless told
+         otherwise. So every one of those dialogs was ALSO playing this
+         View-based slide_in_right/slide_out_left window animation
+         underneath its own Compose-driven scale+fade pop-in/out — the
+         exact double, out-of-sync-motion problem already diagnosed and
+         fixed for screen navigation in PredictiveBack.kt's doc comment,
+         just never caught here. That is what read as "تقطيع" leaving
+         MaterialEditDialog (شاشة اضافة مادة) and any other GlassAlertDialog
+         screen. `Theme.ShopManager.WindowAnimations` is no longer attached
+         to the app's main theme at all — this single-Activity app never
+         actually transitions between two real Activities anyway, so the
+         style (and res/anim/*.xml) stays in the project only for that
+         hypothetical future second Activity, not applied here by default.
+         Removing it leaves every dialog's own Compose animation as the
+         only motion, which is what the OneUiBackController doc already
+         calls out as the app's one-technique-per-transition rule. -->
+
     <!-- windowBackground now matches the brand color instead of the
          Material default white: if there's ever a one-frame gap between
          the splash screen handing off and Compose's first pixel, the
@@ -51,7 +75,6 @@
              the wrong color before the in-app splash's own background
              paints. -->
         <item name="android:windowBackground">@color/splash_background</item>
-        <item name="android:windowAnimationStyle">@style/Theme.ShopManager.WindowAnimations</item>
 
         <!-- Ripple/touch-feedback tint on every tap, and the color of the
              glow shown at scroll edges/over-scroll — both previously the
