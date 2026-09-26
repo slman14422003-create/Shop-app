@@ -1,19 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    REDESIGN ("بتصميم cloude ai"): launcher icon (API 26+ adaptive icon)
-    now matches Claude's own app icon instead of the previous "liquid
-    glass" orb + storefront glyph.
-
-    background = a flat brand-orange fill (splash_background in
-    colors.xml — the same tone the splash screen uses).
-    foreground = the flat white storefront mark (same silhouette
-    as the one drawn on the in-app splash screen — see
-    StorefrontMark in SplashScreen.kt), no gradient/shadow/glass.
-
-    Pre-API26 launchers ignore this file entirely and use the flat PNGs in
-    mipmap-<density>/ic_launcher.png instead (same mark + cream fill
-    flattened to one layer, so both versions look identical).
--->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
     <foreground android:drawable="@drawable/ic_launcher_foreground" />
