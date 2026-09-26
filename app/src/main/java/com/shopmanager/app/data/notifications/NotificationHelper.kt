@@ -280,7 +280,27 @@ object NotificationHelper {
             .addAction(0, "تأجيل ساعة", buildActionIntent(context, id, snoozeIntent))
             .build()
 
-        NotificationManagerCompat.from(context).notify(id, notification)
+        // LINT FIX (MissingPermission, 7 identical errors across this
+        // file): every one of these calls already sits behind a
+        // `hasPermission(context)` early-return guard above it, but
+        // Android Lint's permission checker only recognizes the
+        // POST_NOTIFICATIONS check when it's written inline in the same
+        // method as the call — it doesn't trace through a private
+        // helper function to see that the check already happened,
+        // so it flags the call as "unchecked" regardless. Wrapping the
+        // call itself in try/catch(SecurityException) is the pattern
+        // Lint's checker DOES special-case as a satisfied permission
+        // check, and it's genuinely correct defense-in-depth here too:
+        // the permission can still be revoked in the moment between
+        // hasPermission()'s check and this call (e.g. the person
+        // backgrounds the app and revokes it from system Settings),
+        // so catching it means a lost-permission race can never crash
+        // the app — it just silently skips that one notification.
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
     }
 
     fun cancelNoteReminderNotification(context: Context, noteId: String) {
@@ -320,7 +340,13 @@ object NotificationHelper {
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
             .build()
 
-        NotificationManagerCompat.from(context).notify(id, notification)
+        // LINT FIX (MissingPermission) — see the first occurrence of this
+        // pattern above (showNoteReminderNotification) for why.
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
     }
 
     /**
@@ -359,7 +385,13 @@ object NotificationHelper {
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
             .build()
 
-        NotificationManagerCompat.from(context).notify(id, notification)
+        // LINT FIX (MissingPermission) — see the first occurrence of this
+        // pattern above (showNoteReminderNotification) for why.
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
     }
 
     fun showShoppingListNotification(context: Context, shortageNames: List<String>) {
@@ -387,7 +419,13 @@ object NotificationHelper {
             .addAction(0, "تم الشراء", buildActionIntent(context, NOTIF_ID_SHOPPING_LIST, dismissIntent))
             .build()
 
-        NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_LIST, notification)
+        // LINT FIX (MissingPermission) — see the first occurrence of this
+        // pattern above (showNoteReminderNotification) for why.
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_LIST, notification)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
     }
 
     fun cancelShoppingListNotification(context: Context) {
@@ -448,7 +486,13 @@ object NotificationHelper {
             builder.addAction(0, "تسديد", buildActionIntent(context, id, payIntent))
         }
 
-        NotificationManagerCompat.from(context).notify(id, builder.build())
+        // LINT FIX (MissingPermission) — see the first occurrence of this
+        // pattern above (showNoteReminderNotification) for why.
+        try {
+            NotificationManagerCompat.from(context).notify(id, builder.build())
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
         postDebtsGroupSummary(context)
     }
 
@@ -476,7 +520,13 @@ object NotificationHelper {
             .setContentIntent(buildContentIntent(context, id, NotificationAction.DebtPaid(personName, amount, currencySymbol)))
             .build()
 
-        NotificationManagerCompat.from(context).notify(id, notification)
+        // LINT FIX (MissingPermission) — see the first occurrence of this
+        // pattern above (showNoteReminderNotification) for why.
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
         postDebtsGroupSummary(context)
     }
 
@@ -502,7 +552,13 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
-        NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBTS_SUMMARY, summary)
+        // LINT FIX (MissingPermission) — see the first occurrence of this
+        // pattern above (showNoteReminderNotification) for why.
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBTS_SUMMARY, summary)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
     }
 
     /**
