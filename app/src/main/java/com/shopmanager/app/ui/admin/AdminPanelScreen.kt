@@ -66,6 +66,7 @@ fun AdminPanelScreen(
     val performanceTier = LocalPerformanceTier.current
 
     var manifestUrl by remember { mutableStateOf(settings.updateManifestUrl) }
+    var forceUpdateEnabled by remember { mutableStateOf(settings.forceUpdateEnabled) }
     var savedMessage by remember { mutableStateOf<String?>(null) }
     var isTesting by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
@@ -163,6 +164,30 @@ fun AdminPanelScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("التحديث الإجباري عند فتح التطبيق", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Text(
+                            "عند التفعيل، تظهر شاشة إجبارية عند بدء التطبيق إن وُجد تحديث أحدث ولا يمكن تجاوزها. عند الإيقاف، يعمل التطبيق بشكل طبيعي بدون أي فحص تلقائي — زر \"تحقق من التحديثات\" اليدوي بالإعدادات يبقى متاحاً دائماً بغض النظر عن هذا الخيار.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = forceUpdateEnabled,
+                        onCheckedChange = {
+                            forceUpdateEnabled = it
+                            settings.forceUpdateEnabled = it
+                            savedMessage = if (it) "تم تفعيل التحديث الإجباري ✅" else "تم إيقاف التحديث الإجباري ✅"
+                        }
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 AppTextField(
                     value = manifestUrl,
