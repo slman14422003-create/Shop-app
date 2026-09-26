@@ -83,7 +83,8 @@ fun ShopManagerTheme(
     CompositionLocalProvider(
         LocalLayoutDirection provides LayoutDirection.Rtl,
         LocalBrandGradientColors provides gradientColors,
-        LocalSemanticColors provides semanticColors
+        LocalSemanticColors provides semanticColors,
+        LocalIsDarkTheme provides useDark
     ) {
         MaterialTheme(colorScheme = colors, typography = AppTypography, shapes = AppShapes, content = content)
     }

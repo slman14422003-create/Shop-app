@@ -3,6 +3,7 @@ package com.shopmanager.app.ui.theme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
@@ -175,3 +176,51 @@ internal fun semanticColorsFor(useDark: Boolean): SemanticColors =
  * light-theme semantic colors so anything outside the provider (previews)
  * still renders correctly. */
 val LocalSemanticColors = staticCompositionLocalOf { semanticColorsFor(useDark = false) }
+
+/**
+ * The app's resolved dark/light state *after* [AppThemeMode]'s
+ * LIGHT/DARK/SYSTEM override — provided once near the root (see
+ * ShopManagerTheme) so any descendant that needs to branch on "are we
+ * actually in dark mode right now" doesn't have to re-derive it by calling
+ * `isSystemInDarkTheme()` directly, which would silently ignore an explicit
+ * Settings → المظهر → light/dark override and just reflect the raw OS
+ * setting instead (see [glassHairlineColor]'s own note, and the same bug
+ * this fixes in WebViewScreen's force-dark for the help/privacy pages).
+ */
+val LocalIsDarkTheme = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+/**
+ * Theme-correct replacement for the app-wide "glass" hairline border that
+ * used to be drawn as literal `Color.White` at a fixed alpha everywhere —
+ * GlassCard, every list-row card (materials/notes/debts), dialogs, the
+ * segmented tab track/thumb, FloatingBottomNav's snackbar, the "مادة جديدة"
+ * pill button.
+ *
+ * LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع النهاري"): a white hairline
+ * reads correctly in dark mode — a soft light catching the edge of a pane
+ * of glass against this theme's near-black surfaces. But every one of
+ * those same surfaces (`surface`/`surfaceContainerHigh`) is already white
+ * or near-white in light mode, so the identical white line disappears
+ * completely: cards lose their edge, the "مادة جديدة" button and dialog
+ * "إلغاء" button become borderless and nearly invisible, and the segmented
+ * tab's selected-thumb indicator has nothing but a faint shadow to show
+ * which tab is active. Dark mode is left exactly as it was (the same
+ * white, at the same alpha the reference redesign already tuned). Light
+ * mode swaps the base tone to the theme's own ink color instead — the same
+ * pattern [com.shopmanager.app.ui.common.AppTextField] already uses for
+ * its own hairline rim — at a lower alpha ceiling than the dark-mode
+ * value: the identical alpha rendered as a *dark* line on a *light* card
+ * reads as a flat printed outline rather than a soft glow, so it takes
+ * less of it to read as the same subtle hairline instead of a heavy
+ * Material-style border.
+ */
+@Composable
+fun glassHairlineColor(whiteAlpha: Float): Color {
+    val isDark = LocalIsDarkTheme.current
+    return if (isDark) {
+        Color.White.copy(alpha = whiteAlpha)
+    } else {
+        val scaled = (whiteAlpha * 0.26f).coerceIn(0.06f, 0.16f)
+        androidx.compose.material3.MaterialTheme.colorScheme.onSurface.copy(alpha = scaled)
+    }
+}
