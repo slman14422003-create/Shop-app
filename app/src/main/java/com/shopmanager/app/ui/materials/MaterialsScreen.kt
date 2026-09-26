@@ -82,6 +82,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.LocalSemanticColors
+import com.shopmanager.app.ui.theme.glassHairlineColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -251,7 +252,9 @@ fun MaterialsScreen(
                         shape = RoundedCornerShape(50),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f))
+                        // LIGHT-MODE CONTRAST FIX: this "مادة جديدة" button
+                        // was borderless and nearly invisible in light mode.
+                        border = BorderStroke(1.dp, glassHairlineColor(0.5f))
                     ) {
                         Row(
                             Modifier.fillMaxWidth().padding(vertical = 14.dp),
@@ -550,7 +553,9 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-            .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+            // LIGHT-MODE CONTRAST FIX: invisible against this track's own
+            // white fill in light mode.
+            .border(1.dp, glassHairlineColor(0.5f), RoundedCornerShape(14.dp))
             .padding(4.dp)
             .onSizeChanged { trackWidthPx = it.width }
     ) {
@@ -567,7 +572,10 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
                     .clip(RoundedCornerShape(11.dp))
                     .background(MaterialTheme.colorScheme.surface)
                     // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-                    .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(11.dp))
+                    // LIGHT-MODE CONTRAST FIX: the selected-tab thumb had no
+                    // visible edge in light mode, only a faint 2.dp shadow
+                    // to distinguish it from the identically-white track.
+                    .border(1.dp, glassHairlineColor(0.6f), RoundedCornerShape(11.dp))
             )
         }
 
@@ -866,7 +874,9 @@ private fun MaterialRow(
         border = BorderStroke(
             if (material.important) 1.5.dp else 1.dp,
             if (material.important) LocalSemanticColors.current.warning.copy(alpha = 0.7f)
-            else Color.White.copy(alpha = 0.4f)
+            // LIGHT-MODE CONTRAST FIX: was invisible against this row's
+            // own white surface fill in light mode.
+            else glassHairlineColor(0.4f)
         ),
         tonalElevation = 0.dp,
         shadowElevation = if (isDragging) 6.dp else 0.dp
@@ -1122,7 +1132,7 @@ private fun PricesSummaryCard(
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
         // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))
+        border = BorderStroke(1.dp, glassHairlineColor(0.4f))
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
@@ -1144,7 +1154,12 @@ private fun PricesSummaryCard(
                 Text(
                     "إجمالي قيمة القائمة",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    // LIGHT-MODE CONTRAST FIX: the extra 0.7f alpha on top
+                    // of an already-secondary color pushed this caption
+                    // below readable contrast in light mode (≈2.9:1,
+                    // under the 4.5:1 normal text needs). onSurfaceVariant
+                    // alone is already dimmed appropriately for a caption.
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Text(
@@ -1173,7 +1188,7 @@ private fun PriceRow(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
@@ -1188,7 +1203,19 @@ private fun PriceRow(
                     .background(if (hasPrice) avatarColor else avatarColor.copy(alpha = 0.35f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Sell, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                // LIGHT-MODE CONTRAST FIX: this icon was always
+                // Color.White, but the un-priced state dims its own
+                // circle to 0.35f alpha — on the resulting pale tint over
+                // a light card, a white icon nearly disappeared. Keeping
+                // the icon at the avatar's full-strength color once the
+                // circle is dimmed gives a "tonal container" pairing
+                // that stays visible in both states/themes.
+                Icon(
+                    Icons.Default.Sell,
+                    contentDescription = null,
+                    tint = if (hasPrice) Color.White else avatarColor,
+                    modifier = Modifier.size(18.dp)
+                )
             }
             Spacer(Modifier.width(10.dp))
             // BUG FIXED: a long material name had no line/overflow limit, so

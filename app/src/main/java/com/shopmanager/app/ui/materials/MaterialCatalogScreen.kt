@@ -36,6 +36,7 @@ import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.theme.glassHairlineColor
 
 /**
  * Standalone screen for picking which shortage to add: pick a name from the
@@ -266,7 +267,7 @@ private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onEdit: (
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.5f)),
+        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp
     ) {
