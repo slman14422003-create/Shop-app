@@ -7,7 +7,6 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -102,7 +101,17 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
     var loadError by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     val context = LocalContext.current
-    val isDark = isSystemInDarkTheme()
+    // THEME-CONSISTENCY FIX ("حسّن الثيم بشكل كامل"): this used to read the
+    // raw OS dark-mode flag directly, which ignores an explicit Settings →
+    // المظهر light/dark override. If someone forces the app to Dark while
+    // their phone's system setting is Light (or the reverse), the WebView's
+    // force-dark — and help.html/privacy.html's own `prefers-color-scheme`
+    // styling, which also only sees the OS setting — would render in the
+    // wrong shade compared to every other screen in the app.
+    // `LocalIsDarkTheme` (see ShopManagerTheme) is the theme's actual
+    // resolved state after that override, so this page now always matches
+    // the rest of the app.
+    val isDark = com.shopmanager.app.ui.theme.LocalIsDarkTheme.current
     val focusManager = LocalFocusManager.current
 
     var showSearch by remember { mutableStateOf(false) }

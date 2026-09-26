@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import com.shopmanager.app.ui.theme.glassHairlineColor
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.Layout
@@ -124,7 +125,18 @@ fun GlassAlertDialog(
                         // not a `== Color.White` sentinel — that old
                         // check made it impossible to ever pass white
                         // itself as a real border color.)
-                        rimColor = Color.White
+                        //
+                        // LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع
+                        // النهاري"): liquidGlassSurface always re-applies
+                        // its own fixed 0.12f alpha on top of whatever hue
+                        // is passed here, so only the RGB matters — white
+                        // was invisible against this dialog's own white
+                        // `resolvedContainer` fill in light mode.
+                        // `onSurface` resolves to the theme's own ink tone
+                        // (still near-white in dark mode, so that look is
+                        // unchanged) and gives a real hairline in light
+                        // mode too.
+                        rimColor = MaterialTheme.colorScheme.onSurface
                     )
             ) {
                 Column {
@@ -203,7 +215,11 @@ fun GlassAlertDialog(
                                 Modifier.fillMaxWidth().height(50.dp)
                                     .clip(RoundedCornerShape(50))
                                     // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-                                    .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(50))
+                                    // LIGHT-MODE CONTRAST FIX: this outline-only
+                                    // "إلغاء" button had no fill and, in light
+                                    // mode, no visible border either — it was a
+                                    // functional but effectively invisible button.
+                                    .border(1.dp, glassHairlineColor(0.5f), RoundedCornerShape(50))
                             ) {
                                 dismissButton()
                             }

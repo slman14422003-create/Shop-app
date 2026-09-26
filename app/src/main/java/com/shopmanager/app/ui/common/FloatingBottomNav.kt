@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.ui.theme.LocalSemanticColors
+import com.shopmanager.app.ui.theme.glassHairlineColor
 
 /**
  * The floating pill's actual on-screen height (including its own top/
@@ -120,7 +121,9 @@ private fun GlassSnackbar(data: SnackbarData) {
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         contentColor = MaterialTheme.colorScheme.onSurface,
         // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+        // LIGHT-MODE CONTRAST FIX: was invisible against this snackbar's
+        // own white surfaceContainerHigh fill in light mode.
+        border = BorderStroke(1.dp, glassHairlineColor(0.4f)),
         shadowElevation = 6.dp
     ) {
         Row(

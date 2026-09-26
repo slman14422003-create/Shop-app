@@ -143,6 +143,15 @@ fun GlassIconButton(
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonRim"
     )
+    // LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع النهاري"): this press
+    // feedback used to be literal Color.White regardless of theme. These
+    // icons sit on the header, which reads `surfaceContainerHigh` — white
+    // in light mode — so a white press-tint on a white header was
+    // completely invisible: tapping a header icon showed no feedback at
+    // all in light mode. `onSurface` is this theme's own ink color (still
+    // near-white in dark mode, so dark mode's look is unchanged), giving a
+    // visible tint in both.
+    val pressTint = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
 
     IconButton(
         onClick = onClick,
@@ -151,10 +160,10 @@ fun GlassIconButton(
             .size(size)
             .scale(scale)
             .clip(CircleShape)
-            .background(Brush.linearGradient(listOf(Color.White.copy(alpha = fillAlpha), Color.White.copy(alpha = fillAlpha))))
+            .background(Brush.linearGradient(listOf(pressTint.copy(alpha = fillAlpha), pressTint.copy(alpha = fillAlpha))))
             .border(
                 1.dp,
-                Brush.linearGradient(listOf(Color.White.copy(alpha = rimAlpha), Color.White.copy(alpha = rimAlpha))),
+                Brush.linearGradient(listOf(pressTint.copy(alpha = rimAlpha), pressTint.copy(alpha = rimAlpha))),
                 CircleShape
             )
     ) {

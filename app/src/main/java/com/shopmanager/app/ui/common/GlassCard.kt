@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.ui.theme.glassHairlineColor
 
 /**
  * Card panel used for list rows/forms (DebtRow, LinkedNoteRow, AddDebtCard,
@@ -61,7 +62,14 @@ fun GlassCard(
             // white hairline at a light, consistent alpha — see the same
             // change across MaterialRow/PersonRow/NoteRow/catalog rows/
             // dialogs/segmented tabs.
-            .border(1.dp, Color.White.copy(alpha = 0.5f), shape)
+            //
+            // LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع النهاري"): that
+            // white hairline is invisible in light mode, where this card's
+            // own `surfaceContainerHigh` fill is already white — every
+            // card in the app lost its edge entirely. [glassHairlineColor]
+            // keeps dark mode exactly as it was and swaps to a scaled-down
+            // dark hairline only in light mode.
+            .border(1.dp, glassHairlineColor(0.5f), shape)
     ) {
         content()
     }
