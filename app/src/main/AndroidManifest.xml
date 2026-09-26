@@ -51,6 +51,26 @@
         </intent>
     </queries>
 
+    <!--
+      BUG FIXED ("الرجوع مو منسق مع بقية الانميشن" — لسا نفس المشكلة بعد
+      محاولتين مختلفتين تمامًا بالكود على MainActivity.kt وحده): هاد كان
+      true. لما يكون true، أندرويد يفعّل نظام "predictive back" الحقيقي على
+      مستوى النظام نفسه — يعني أي سحبة من الحافة (edge swipe)، أندرويد
+      نفسه (مو التطبيق) بيعرض فوقها معاينة افتراضية جاهزة تبعه هو (نفس
+      "تصغير الشاشة ودوران زواياها" اللي كان موصوف بكومنتات PredictiveBack.kt
+      القديمة كـ"البَغّ الأصلي") لحد ما تكتمل السحبة فعليًا — وهاي معاينة
+      النظام نفسها هي يلي كانت ضاهرة بدل أي انميشن حطيناه بالكود
+      (`popEnterTransition`/`popExitTransition`, أو حتى `OneUiBackController`
+      القديم قبلها)، لأنه ولا واحد فيهم كان فعليًا ماسك السحبة الحيّة
+      وملغي معاينة النظام (كان لازم PredictiveBackHandler مخصص يمسكها
+      حرفيًا، وهاد كان موجود بالنسخة الأولى بس فيه بَغّ "الخلفية الوهمية"،
+      وبعدين انشال بالكامل بمحاولة لاحقة اعتمادًا على دعم NavHost المفترض
+      يكون تلقائي — وما كان يشتغل هون). الحل الأضمن: إطفاء نظام
+      الـpredictive-back بالكامل — هيك أي رجوع (سحبة أو زر) ينفذ فورًا زي
+      الرجوع "التقليدي" بدون أي معاينة نظام فوقه، وبيشغّل
+      `popEnterTransition`/`popExitTransition` تبعنا (بـMainActivity.kt)
+      كحركة ثابتة كاملة، زي الدخول تمامًا بس بالعكس، في كل مرة.
+    -->
     <application
         android:name=".ShopManagerApplication"
         android:allowBackup="true"
@@ -63,7 +83,7 @@
         android:theme="@style/Theme.ShopManager"
         android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="false"
-        android:enableOnBackInvokedCallback="true">
+        android:enableOnBackInvokedCallback="false">
 
         <!--
           FEATURE ADDED (privacy — ties directly into "سياسة الخصوصية": "لا
