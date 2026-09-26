@@ -5,55 +5,81 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>سياسة الخصوصية</title>
 <style>
+  /* THEME REWRITE — see help.html's own note for the full rationale; same
+     tokens, copied 1:1 from ui/theme/Color.kt/Theme.kt/Typography.kt so
+     both pages stay identical to each other and to the rest of the app. */
   :root {
     color-scheme: light dark;
-    --brand-start: #4F46E5;
-    --brand-end: #7C3AED;
-    --bg: #FAFAFC;
+    --bg: #FFFFFF;
     --card: #FFFFFF;
-    --text: #1B1B24;
-    --muted: #5B5876;
-    --border: #EEEEF5;
+    --text: #0D0D0D;
+    --muted: #676767;
+    --border: rgba(13,13,13,0.12);
+    --accent: #2F80ED;
+    --accent-soft: rgba(47,128,237,0.13);
+    --green: #10A37F;
+    --green-soft: rgba(16,163,127,0.13);
+    --gold: #B5811B;
+    --gold-soft: rgba(181,129,27,0.14);
+    --red: #D93025;
+    --red-soft: rgba(217,48,37,0.13);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #121218;
-      --card: #1B1B24;
-      --text: #F1F0FA;
-      --muted: #C7C5D6;
-      --border: #2A2A38;
+      --bg: #000000;
+      --card: #171717;
+      --text: #ECECEC;
+      --muted: #A6A6A6;
+      --border: rgba(255,255,255,0.16);
+      --accent: #5B9DF9;
+      --accent-soft: rgba(91,157,249,0.16);
+      --green: #19C37D;
+      --green-soft: rgba(25,195,125,0.16);
+      --gold: #E0AC4F;
+      --gold-soft: rgba(224,172,79,0.16);
+      --red: #F2685C;
+      --red-soft: rgba(242,104,92,0.16);
     }
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    font-family: -apple-system, "Segoe UI", Roboto, Tahoma, Arial, sans-serif;
     line-height: 1.7;
     padding-bottom: 32px;
   }
   header {
-    background: linear-gradient(180deg, var(--brand-start), var(--brand-end));
-    color: #fff;
-    padding: 28px 20px 24px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 26px 20px 20px;
   }
-  header h1 { margin: 0 0 4px; font-size: 22px; }
-  header p { margin: 0; opacity: 0.9; font-size: 14px; }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 25px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    letter-spacing: -0.2px;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
   main { padding: 16px; max-width: 640px; margin: 0 auto; }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 20px;
     padding: 16px 18px;
     margin-bottom: 14px;
+    scroll-margin-top: 56px;
   }
   .card h2 {
     font-size: 16px;
+    font-weight: 600;
     margin: 0 0 8px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
   .card p, .card li { color: var(--muted); font-size: 14px; margin: 4px 0; }
   .card ul { padding-inline-start: 20px; margin: 6px 0; }
@@ -61,15 +87,17 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px; height: 28px;
-    border-radius: 8px;
-    background: rgba(124,58,237,0.15);
+    width: 30px; height: 30px;
+    flex: none;
+    border-radius: 10px;
+    background: var(--accent-soft);
     font-size: 15px;
   }
-  /* FEATURE ADDED: same sticky quick-jump pattern as help.html — a privacy
-     policy is exactly the kind of page someone opens looking for one
-     specific answer ("أين تُخزَّن بياناتي؟") rather than reading top to
-     bottom, so letting them jump straight there matters even more here. */
+  .badge.gold { background: var(--gold-soft); }
+  .badge.red { background: var(--red-soft); }
+  /* Same sticky quick-jump pattern as help.html — a privacy policy is
+     exactly the kind of page someone opens looking for one specific
+     answer ("أين تُخزَّن بياناتي؟") rather than reading top to bottom. */
   nav.toc {
     position: sticky;
     top: 0;
@@ -84,16 +112,17 @@
   }
   nav.toc a {
     flex: none;
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: 999px;
     background: var(--card);
     border: 1px solid var(--border);
     color: var(--text);
     font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.1px;
     text-decoration: none;
     white-space: nowrap;
   }
-  .card { scroll-margin-top: 56px; }
   footer {
     text-align: center;
     color: var(--muted);
@@ -137,12 +166,12 @@
     </div>
 
     <div class="card" id="pin">
-      <h2><span class="badge">🔑</span> رمز القفل (PIN)</h2>
+      <h2><span class="badge gold">🔑</span> رمز القفل (PIN)</h2>
       <p>إذا فعّلت قفل التطبيق، يُخزَّن رمز الـPIN على جهازك فقط، ولا يُرسل أو يُخزَّن على أي خادم.</p>
     </div>
 
     <div class="card" id="sharing">
-      <h2><span class="badge">🚫</span> المشاركة مع أطراف أخرى</h2>
+      <h2><span class="badge red">🚫</span> المشاركة مع أطراف أخرى</h2>
       <p>لا يشارك التطبيق بياناتك مع أي طرف ثالث لأغراض إعلانية أو تسويقية، ولا يحتوي على إعلانات أو أدوات تتبع. المتصفح الداخلي المستخدم لعرض هذه الصفحة نفسها معطّل فيه جمع إحصاءات الاستخدام أيضًا.</p>
     </div>
 
@@ -152,7 +181,7 @@
     </div>
 
     <div class="card" id="deletion">
-      <h2><span class="badge">🗑️</span> حذف البيانات</h2>
+      <h2><span class="badge red">🗑️</span> حذف البيانات</h2>
       <p>يمكنك حذف أي عميل أو مادة في أي وقت من داخل التطبيق. حذف العنصر يزيله نهائيًا من السجل.</p>
     </div>
 

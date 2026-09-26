@@ -5,70 +5,116 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>دليل الاستخدام</title>
 <style>
+  /*
+    THEME REWRITE ("حدث شاشتي دليل الاستخدام والسياسة الخصوصية لتتماشى مع
+    ستايل التطبيق"): this page used to run its own indigo/purple gradient
+    (#4F46E5 → #7C3AED) with a generic system font — a color that doesn't
+    exist anywhere else in the real app. Every value below is copied
+    directly from the app's own design system instead of invented for this
+    page: colors from ui/theme/Color.kt (ClaudeBg/Card/Text/Accent
+    Light/Dark), corner radii from ui/theme/Theme.kt's AppShapes
+    (10/14/18/20/24/32), and the serif-heading / sans-body split from
+    ui/theme/Typography.kt's AppTypography. Light mode's --card is
+    intentionally identical to --bg — that mirrors the real app exactly
+    (surfaceContainerHigh == background in claudeLightScheme; see
+    Palette.kt), where a card is only ever separated from the page by its
+    hairline border, never a fill or shadow difference.
+  */
   :root {
     color-scheme: light dark;
-    --brand-start: #4F46E5;
-    --brand-end: #7C3AED;
-    --bg: #FAFAFC;
+    --bg: #FFFFFF;
     --card: #FFFFFF;
-    --text: #1B1B24;
-    --muted: #5B5876;
-    --border: #EEEEF5;
+    --text: #0D0D0D;
+    --muted: #676767;
+    --border: rgba(13,13,13,0.12);
+    --accent: #2F80ED;
+    --accent-soft: rgba(47,128,237,0.13);
+    --green: #10A37F;
+    --green-soft: rgba(16,163,127,0.13);
+    --gold: #B5811B;
+    --gold-soft: rgba(181,129,27,0.14);
+    --red: #D93025;
+    --red-soft: rgba(217,48,37,0.13);
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #121218;
-      --card: #1B1B24;
-      --text: #F1F0FA;
-      --muted: #C7C5D6;
-      --border: #2A2A38;
+      --bg: #000000;
+      --card: #171717;
+      --text: #ECECEC;
+      --muted: #A6A6A6;
+      --border: rgba(255,255,255,0.16);
+      --accent: #5B9DF9;
+      --accent-soft: rgba(91,157,249,0.16);
+      --green: #19C37D;
+      --green-soft: rgba(25,195,125,0.16);
+      --gold: #E0AC4F;
+      --gold-soft: rgba(224,172,79,0.16);
+      --red: #F2685C;
+      --red-soft: rgba(242,104,92,0.16);
     }
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, "Segoe UI", Tahoma, Arial, sans-serif;
+    font-family: -apple-system, "Segoe UI", Roboto, Tahoma, Arial, sans-serif;
     line-height: 1.7;
     padding-bottom: 32px;
   }
+  /* Flat header, matching the app's own — no color-blocked banner. Real
+     screen headers here read surfaceContainerHigh, i.e. the same flat
+     tone as the page itself, with a hairline border as the only seam. */
   header {
-    background: linear-gradient(180deg, var(--brand-start), var(--brand-end));
-    color: #fff;
-    padding: 28px 20px 24px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: 26px 20px 20px;
   }
-  header h1 { margin: 0 0 4px; font-size: 22px; }
-  header p { margin: 0; opacity: 0.9; font-size: 14px; }
+  header h1 {
+    margin: 0 0 6px;
+    font-size: 25px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    letter-spacing: -0.2px;
+  }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
   main { padding: 16px; max-width: 640px; margin: 0 auto; }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 16px;
+    border-radius: 20px;
     padding: 16px 18px;
     margin-bottom: 14px;
+    scroll-margin-top: 56px; /* keeps a jumped-to card clear of the sticky nav */
   }
   .card h2 {
     font-size: 16px;
+    font-weight: 600;
     margin: 0 0 8px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
   }
   .card p, .card li { color: var(--muted); font-size: 14px; margin: 4px 0; }
+  .card b { color: var(--text); font-weight: 600; }
   .card ul { padding-inline-start: 20px; margin: 6px 0; }
   .badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px; height: 28px;
-    border-radius: 8px;
-    background: rgba(124,58,237,0.15);
+    width: 30px; height: 30px;
+    flex: none;
+    border-radius: 10px;
+    background: var(--accent-soft);
     font-size: 15px;
   }
-  /* FEATURE ADDED: quick-jump chips under the header so a long page isn't
-     pure top-to-bottom scrolling — tap a section name to jump straight to
-     it. Sticky so it's still reachable after scrolling past the header. */
+  .badge.green { background: var(--green-soft); }
+  .badge.gold { background: var(--gold-soft); }
+  /* Quick-jump chips under the header — tap a section name to jump
+     straight there. Sticky so it's still reachable after scrolling past
+     the header. Same pill shape as the app's own segmented tabs/buttons
+     (a fully rounded 999px capsule). */
   nav.toc {
     position: sticky;
     top: 0;
@@ -83,16 +129,17 @@
   }
   nav.toc a {
     flex: none;
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: 999px;
     background: var(--card);
     border: 1px solid var(--border);
     color: var(--text);
     font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.1px;
     text-decoration: none;
     white-space: nowrap;
   }
-  .card { scroll-margin-top: 56px; } /* keeps a jumped-to card clear of the sticky nav above */
   footer {
     text-align: center;
     color: var(--muted);
@@ -122,7 +169,7 @@
     </div>
 
     <div class="card" id="debts">
-      <h2><span class="badge">💰</span> الديون</h2>
+      <h2><span class="badge green">💰</span> الديون</h2>
       <ul>
         <li>اضغط على أي عميل لعرض سجل ديونه بالتفصيل.</li>
         <li>اسحب أي عميل لليسار لحذفه (بعد تأكيد).</li>
@@ -143,7 +190,7 @@
     </div>
 
     <div class="card" id="settings">
-      <h2><span class="badge">⚙️</span> الإعدادات</h2>
+      <h2><span class="badge gold">⚙️</span> الإعدادات</h2>
       <ul>
         <li><b>المظهر:</b> فاتح / داكن / حسب النظام.</li>
         <li><b>العملة:</b> غيّرها لتنعكس بكل الشاشات فورًا.</li>
