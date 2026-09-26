@@ -243,6 +243,17 @@ object NotificationHelper {
      * stay visible instead of overwriting one another.
      */
     fun showNoteReminderNotification(context: Context, noteId: String, title: String, content: String) {
+        // BUG FIXED (Lint error, MissingPermission, NotificationHelper.kt:272):
+        // this was the one notify() call in the whole file missing the
+        // `hasPermission(context)` guard every sibling function here already
+        // has (showNoteDoneNotification right below, showNewNoteNotification,
+        // showShoppingListNotification, ...) — a plain oversight, not a
+        // different case that needed different handling. Without it, calling
+        // notify() when the person denied (or never granted) the Android 13+
+        // POST_NOTIFICATIONS runtime permission can throw a SecurityException
+        // and crash the app, instead of just silently skipping the reminder
+        // the way every other notification type in this file already does.
+        if (!hasPermission(context)) return
         if (!hasPermission(context)) return
         val id = NOTIF_ID_NOTE_BASE + (noteId.hashCode() and 0xFFF)
         val body = content.ifBlank { "تذكير بملاحظة هامة" }
