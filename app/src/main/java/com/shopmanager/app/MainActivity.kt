@@ -294,8 +294,22 @@ class MainActivity : ComponentActivity() {
             // OPEN (lets the person into the app) rather than closed
             // whenever the check itself can't complete — only a CONFIRMED
             // newer versionCode ever blocks entry.
+            //
+            // FEATURE ("والتحقق من التحديثات خليها منفصلة عن السبلاش"):
+            // this check no longer gates the splash→app hand-off — see the
+            // AnimatedContent block below, where the real app renders as
+            // soon as `isReady` flips regardless of whether this check has
+            // even finished yet. `forceUpdateManifest` becoming non-null is
+            // now the ONLY thing that puts [ForceUpdateScreen] up, drawn as
+            // an overlay on top of whatever the person is already looking
+            // at, rather than a state the splash branch has to wait on.
+            //
+            // "تفعيل التحديث الاجباري" (لوحة المسؤول): a developer-only
+            // on/off switch (settings.forceUpdateEnabled, default on) for
+            // this whole automatic cold-start gate — see AdminPanelScreen.
+            // Turning it off never touches the manual "تحقق من التحديثات"
+            // button in Settings, only this silent startup check.
             var forceUpdateManifest by remember { mutableStateOf<com.shopmanager.app.data.updates.UpdateManifest?>(null) }
-            var forceUpdateCheckDone by remember { mutableStateOf(false) }
 
             // "تفضيل الأداء": loaded once here (not re-read from disk on
             // every recomposition), then kept in sync live when changed in
@@ -439,33 +453,31 @@ class MainActivity : ComponentActivity() {
                             // functionally it only ever runs the one time
                             // `ready` flips true for the life of this
                             // Activity instance.
+                            //
+                            // FEATURE ("خليها منفصلة عن السبلاش"): this no
+                            // longer blocks anything from rendering below —
+                            // it just runs in the background and, if it
+                            // ever confirms a newer versionCode, sets
+                            // `forceUpdateManifest`, which the overlay right
+                            // after this AnimatedContent block picks up. The
+                            // person reaches the real app immediately either
+                            // way; a slow network only delays the mandatory
+                            // screen showing up, never the app opening.
                             LaunchedEffect(ready) {
-                                when (val result = com.shopmanager.app.data.updates.UpdateChecker.check(
-                                    applicationContext,
-                                    settings.updateManifestUrl,
-                                    timeoutMs = com.shopmanager.app.data.updates.UpdateChecker.STARTUP_TIMEOUT_MS
-                                )) {
-                                    is com.shopmanager.app.data.updates.UpdateCheckResult.UpdateAvailable -> {
-                                        forceUpdateManifest = result.manifest
+                                if (settings.forceUpdateEnabled) {
+                                    when (val result = com.shopmanager.app.data.updates.UpdateChecker.check(
+                                        applicationContext,
+                                        settings.updateManifestUrl,
+                                        timeoutMs = com.shopmanager.app.data.updates.UpdateChecker.STARTUP_TIMEOUT_MS
+                                    )) {
+                                        is com.shopmanager.app.data.updates.UpdateCheckResult.UpdateAvailable -> {
+                                            forceUpdateManifest = result.manifest
+                                        }
+                                        else -> Unit // UpToDate or Failed: fail open, see ForceUpdateScreen's doc.
                                     }
-                                    else -> Unit // UpToDate or Failed: fail open, see ForceUpdateScreen's doc.
                                 }
-                                forceUpdateCheckDone = true
                             }
 
-                            if (!forceUpdateCheckDone) {
-                                // Same splash the person was already looking
-                                // at a moment ago — the mandatory check is
-                                // meant to be quick and invisible when
-                                // there's nothing to install, not a second,
-                                // visibly different loading screen.
-                                AppSplashScreen()
-                            } else if (forceUpdateManifest != null) {
-                                com.shopmanager.app.ui.update.ForceUpdateScreen(
-                                    manifest = forceUpdateManifest!!,
-                                    currentVersion = com.shopmanager.app.data.updates.AppVersionInfo.current(applicationContext)
-                                )
-                            } else {
                             CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
                                 // Load the persisted currency symbol into the
                                 // app-wide holder once, so every screen
@@ -501,8 +513,26 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             }
-                            }
                         }
+                    }
+
+                    // FEATURE ("والتحقق من التحديثات خليها منفصلة عن
+                    // السبلاش"): the mandatory update check above no longer
+                    // gates the splash→app hand-off — the person reaches
+                    // the real app immediately once `isReady` flips, and
+                    // this gate appears ON TOP of it as its own overlay,
+                    // only if (and whenever) the background check actually
+                    // confirms a newer versionCode. Drawn as a sibling of
+                    // AnimatedContent rather than nested inside its `ready`
+                    // branch, the same reasoning as the admin PIN dialog /
+                    // notification dialogs further down this file — it has
+                    // to be able to appear over whichever screen the person
+                    // is already on.
+                    forceUpdateManifest?.let { manifest ->
+                        com.shopmanager.app.ui.update.ForceUpdateScreen(
+                            manifest = manifest,
+                            currentVersion = com.shopmanager.app.data.updates.AppVersionInfo.current(applicationContext)
+                        )
                     }
                 }
             }
