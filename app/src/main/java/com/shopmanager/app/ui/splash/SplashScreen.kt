@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -74,11 +75,34 @@ import androidx.compose.ui.unit.sp
 fun AppSplashScreen(modifier: Modifier = Modifier) {
     var settled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { settled = true }
-    val entrance by animateFloatAsState(
+
+    // REDESIGN ("حسّن الـ splash بتصميم جميل"): was one flat fade+scale on
+    // everything at once. Still a single one-shot entrance (nothing loops
+    // or recomposes once settled — same rule as before), but now staggered
+    // into three beats instead of one, which is what actually reads as
+    // "designed" rather than "faded in": the mark leads (a touch of
+    // overshoot-free scale so it feels like it has weight), the wordmark
+    // follows a beat later sliding up gently as it fades, and the credit
+    // line settles last and slowest — the same lead/follow ordering
+    // Claude's own splash and app-open animations use. All three still
+    // share [MotionSpecs.claudeEasing], so it stays one cohesive motion,
+    // just sequenced.
+    val markEntrance by animateFloatAsState(
         targetValue = if (settled) 1f else 0f,
-        animationSpec = tween(380, easing = MotionSpecs.claudeEasing),
-        label = "splashEntrance"
+        animationSpec = tween(420, delayMillis = 0, easing = MotionSpecs.claudeEasing),
+        label = "splashMark"
     )
+    val textEntrance by animateFloatAsState(
+        targetValue = if (settled) 1f else 0f,
+        animationSpec = tween(460, delayMillis = 90, easing = MotionSpecs.claudeEasing),
+        label = "splashText"
+    )
+    val creditEntrance by animateFloatAsState(
+        targetValue = if (settled) 1f else 0f,
+        animationSpec = tween(420, delayMillis = 220, easing = MotionSpecs.claudeEasing),
+        label = "splashCredit"
+    )
+
 
     // REDESIGN ("صمم الالوان بتصميم ChatGPT"): unified with
     // ui/theme/Color.kt's ChatGPT-palette tokens (ClaudeBgDark1/Light1,
@@ -104,15 +128,33 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
             .background(splashBackground),
         contentAlignment = Alignment.Center
     ) {
+        // REDESIGN: a very soft, static radial glow in the accent color
+        // sitting behind the mark — gives the mark some depth/warmth
+        // instead of sitting flat on a completely bare background, the
+        // same quiet-depth cue Claude's own splash uses. One-shot fade
+        // with everything else, no shimmer/pulse/loop.
+        Canvas(
+            Modifier
+                .size(220.dp)
+                .alpha(markEntrance * 0.5f)
+        ) {
+            drawCircle(
+                brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                    colors = listOf(markAccent.copy(alpha = 0.16f), markAccent.copy(alpha = 0f))
+                ),
+                radius = size.minDimension / 2f
+            )
+        }
+
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .padding(horizontal = 32.dp)
-                .alpha(entrance)
-                .scale(0.94f + entrance * 0.06f)
+            modifier = Modifier.padding(horizontal = 32.dp)
         ) {
             MortarAndPestleMark(
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier
+                    .size(40.dp)
+                    .alpha(markEntrance)
+                    .scale(0.8f + markEntrance * 0.2f),
                 color = markAccent,
                 cutoutColor = splashBackground
             )
@@ -125,15 +167,19 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
                 fontFamily = FontFamily.Serif,
                 fontWeight = FontWeight.Normal,
                 style = MaterialTheme.typography.headlineMedium.copy(fontSize = 34.sp, letterSpacing = 0.2.sp),
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .alpha(textEntrance)
+                    .graphicsLayerTranslateUp(textEntrance)
             )
         }
 
         // FEATURE: نص الاعتماد بالأسفل "SEMO STUDIO" بنفس أسلوب
         // "ANTHROPIC" تحت شعار Claude — نص صغير مسافته بين الحروف واسعة،
         // بلا خلفية أو خط فاصل، بلون رمادي مطفي بدل الأبيض الشفاف (عشان
-        // يبين صح فوق الخلفية الغامقة الجديدة)، ثابت بالكامل (يتبع فقط
-        // نفس `entrance` العام لهذه الشاشة).
+        // يبين صح فوق الخلفية الغامقة الجديدة). آخر شيء يستقر، وأبطأ نبضة
+        // من الاثنين فوق — نفس ترتيب "القائد يدخل، الباقي يلحقه" اللي
+        // شاشات فتح التطبيقات الكبيرة تعتمده.
         Text(
             "SEMO STUDIO",
             color = creditGrey,
@@ -143,10 +189,24 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
-                .alpha(entrance)
+                .alpha(creditEntrance)
         )
     }
 }
+
+/**
+ * Tiny helper so the wordmark can settle in from a few dp below its resting
+ * spot instead of just fading in place — reads as "arriving", not "appearing".
+ * Kept as a graphicsLayer (single composited layer, no extra measure/layout
+ * pass) rather than an offset modifier so it costs nothing beyond the plain
+ * alpha fade it replaces.
+ */
+private fun Modifier.graphicsLayerTranslateUp(progress: Float): Modifier =
+    this.then(
+        Modifier.graphicsLayer {
+            translationY = (1f - progress) * 10.dp.toPx()
+        }
+    )
 
 /**
  * The flat mortar-and-pestle glyph — same silhouette as the app icon (see
