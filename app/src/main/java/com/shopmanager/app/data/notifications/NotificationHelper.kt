@@ -34,7 +34,9 @@ object NotificationHelper {
     private const val CHANNEL_DEBTS = "debts_channel"
     private const val CHANNEL_NOTES = "notes_channel"
     private const val CHANNEL_REALTIME = "realtime_sync_channel"
+    private const val CHANNEL_UPDATE_DOWNLOAD = "update_download_channel"
     const val NOTIF_ID_REALTIME = 1800
+    const val NOTIF_ID_UPDATE_DOWNLOAD = 1801
     private const val NOTIF_ID_SHOPPING_LIST = 1001
     private const val NOTIF_ID_DEBT = 1002
     private const val NOTIF_ID_PAID_BASE = 2000
@@ -123,6 +125,20 @@ object NotificationHelper {
                 enableLights(false)
             }
             manager.createNotificationChannel(realtimeChannel)
+
+            // قناة إشعار خدمة تحميل التحديث ([UpdateDownloadService]): أهمية
+            // منخفضة (يظهر بالشريط لكن بلا صوت/اهتزاز/ظهور فوقي) — شريط تقدم
+            // بسيط يثبت أن التحميل مستمر بالخلفية، وليس تنبيهاً يستدعي الانتباه.
+            val updateChannel = NotificationChannel(
+                CHANNEL_UPDATE_DOWNLOAD, "تحميل تحديثات التطبيق", NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "شريط تقدم تحميل تحديث التطبيق الجاري في الخلفية"
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                enableLights(false)
+            }
+            manager.createNotificationChannel(updateChannel)
         }
     }
 
@@ -581,6 +597,39 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+            .setOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setContentIntent(contentIntent)
+            .build()
+    }
+
+    /**
+     * الإشعار الدائم المطلوب لخدمة [com.shopmanager.app.data.updates.UpdateDownloadService]
+     * أثناء تحميل تحديث التطبيق — شريط تقدم حقيقي (setProgress) بدل نص ثابت،
+     * يتحدّث كل ما تغيّرت النسبة. الضغط عليه يفتح التطبيق.
+     */
+    fun buildUpdateDownloadNotification(
+        context: Context,
+        percent: Int,
+        versionName: String = ""
+    ): android.app.Notification {
+        val openApp = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val contentIntent = PendingIntent.getActivity(
+            context, NOTIF_ID_UPDATE_DOWNLOAD, openApp,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val title = if (versionName.isNotBlank()) "جارٍ تحميل التحديث $versionName" else "جارٍ تحميل التحديث"
+        return NotificationCompat.Builder(context, CHANNEL_UPDATE_DOWNLOAD)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle(title)
+            .setContentText("$percent%")
+            .setProgress(100, percent, false)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
