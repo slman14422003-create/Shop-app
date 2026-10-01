@@ -81,6 +81,11 @@ val ClaudeM3OnErrorContainerLight = Color(0xFF5C160F)
 val ClaudeM3SurfaceContainerLight = Color(0xFFF7F7F8)
 val ClaudeM3SurfaceContainerHighLight = Color(0xFFECECF1)
 
+// Light-mode fill of settings-style rows/cards. Was pure white (same as the
+// page background), which made every row/card invisible in light mode; a very
+// light neutral gray keeps the flat, borderless look while staying visible.
+val ClaudeRowFillLight = Color(0xFFF3F3F5)
+
 val ClaudeM3PrimaryContainerDark = Color(0xFF1C3D6B)
 val ClaudeM3OnPrimaryContainerDark = Color(0xFFCFE2FE)
 val ClaudeM3SecondaryContainerDark = Color(0xFF2A2A2A)

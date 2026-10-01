@@ -78,7 +78,7 @@ internal fun claudeLightScheme(): ColorScheme = lightColorScheme(
     surfaceContainerLowest = ClaudeCardSoftLight,
     surfaceContainerLow = ClaudeBgLight2,
     surfaceContainer = ClaudeM3SurfaceContainerLight,
-    surfaceContainerHigh = ClaudeCardLight,
+    surfaceContainerHigh = ClaudeRowFillLight,
     surfaceContainerHighest = ClaudeM3SurfaceContainerHighLight,
     // COMPLETENESS FIX: lightColorScheme()/darkColorScheme() fall back to
     // Material3's own default seed (a purple baseline) for any role left
