@@ -49,7 +49,7 @@ object UpdateChecker {
     // its response) is transparently rewritten to go through it instead;
     // nothing else in the app (ApkDownloader, SettingsScreen, the admin
     // panel) needs to know or care that the proxy exists.
-    private const val PROXY_BASE_URL = ""
+    private const val PROXY_BASE_URL = "https://shapappupdates.slman14422003.workers.dev"
 
     /** Hosts this file will route through [PROXY_BASE_URL] when it's set
      * — everything GitHub-related the update flow ever touches: the
