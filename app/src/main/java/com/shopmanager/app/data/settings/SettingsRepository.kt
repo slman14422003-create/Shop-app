@@ -44,7 +44,12 @@ class SettingsRepository(context: Context) {
     fun pinLockRemainingSeconds(): Long = pinThrottle.lockRemainingSeconds()
 
     var themeMode: AppThemeMode
-        get() = AppThemeMode.valueOf(prefs.getString(KEY_THEME, AppThemeMode.SYSTEM.name)!!)
+        // BUG FIX: valueOf() threw IllegalArgumentException (app crash on
+        // launch) if the stored string wasn't a current enum name; fall back
+        // to SYSTEM like performanceMode below already does.
+        get() = runCatching {
+            AppThemeMode.valueOf(prefs.getString(KEY_THEME, AppThemeMode.SYSTEM.name) ?: AppThemeMode.SYSTEM.name)
+        }.getOrDefault(AppThemeMode.SYSTEM)
         set(value) = prefs.edit().putString(KEY_THEME, value.name).apply()
 
     /** Currency label shown across the app (money amounts, share text, notifications). */
@@ -121,6 +126,12 @@ class SettingsRepository(context: Context) {
 
     val hasPin: Boolean get() = prefs.contains(KEY_PIN_HASH)
 
+    /** "فتح بالبصمة أو الوجه" on the lock screen. On by default; only has any
+     * effect when a PIN exists and the phone has an enrolled biometric. */
+    var biometricEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BIOMETRIC, true)
+        set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC, value).apply()
+
     fun setPin(pin: String) {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         prefs.edit()
@@ -181,6 +192,7 @@ class SettingsRepository(context: Context) {
         private const val KEY_THEME = "theme_mode"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
+        private const val KEY_BIOMETRIC = "biometric_unlock"
         private const val PIN_HASH_ITERATIONS = 12_000
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
