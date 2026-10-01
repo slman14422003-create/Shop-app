@@ -90,6 +90,12 @@ import com.shopmanager.app.data.updates.UpdateManifest
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import com.shopmanager.app.ui.common.AppCard
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppInfoRow
+import com.shopmanager.app.ui.common.AppPillButton
+import com.shopmanager.app.ui.common.AppSheet
+import com.shopmanager.app.ui.common.groupedRowShape
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
@@ -932,106 +938,92 @@ fun SettingsScreen(
         )
     }
 
+    // مربع التحديث: ورقة سفلية بنفس لغة تصميم الإعدادات (صفوف مسطّحة مجمّعة +
+    // أزرار حبّة بعرض كامل) بدل مربع حوار بدائرة أيقونة نابضة. أثناء التنزيل لا
+    // يمكن إغلاقها حتى لا يضيع شريط التقدم.
     pendingUpdate?.let { manifest ->
-        GlassAlertDialog(
-            onDismissRequest = { if (!isDownloadingUpdate) pendingUpdate = null },
-            title = { Text("يتوفر تحديث جديد") },
-            text = {
-                // MODERN UPDATE ICON: this used to also dump manifest.notes —
-                // the raw GitHub release body markdown (## headers, **bold**,
-                // emoji, apk filenames — see UpdateChecker.kt for where it
-                // comes from and release.yml's "Generate changelog" step for
-                // how it's built) — straight into a plain Text(), with no
-                // Markdown renderer to turn those symbols into real
-                // formatting. It just showed the literal markdown source.
-                // Replaced with a single consistent glyph instead: the same
-                // Icons.Outlined.SystemUpdate already used for this section's
-                // own icon and its "تحقق من التحديثات" button above, so the
-                // whole update flow reads as one visual language. A gentle
-                // up/down pulse (plain animateFloatAsState — already used
-                // elsewhere in this file, no new dependency) is what gives it
-                // the "متسق وعصري" feel the download bar sits under.
-                var pulseUp by remember { mutableStateOf(false) }
-                LaunchedEffect(manifest) {
-                    while (true) {
-                        kotlinx.coroutines.delay(650)
-                        pulseUp = !pulseUp
-                    }
-                }
-                val arrowOffset by animateFloatAsState(
-                    targetValue = if (pulseUp) -6f else 0f,
-                    label = "updateArrowOffset"
-                )
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.SystemUpdate,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .size(34.dp)
-                                .offset(y = arrowOffset.dp)
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        "الإصدار ${manifest.versionName} متوفر الآن (نسختك الحالية: ${appVersion.name}).",
-                        textAlign = TextAlign.Center
-                    )
-                    if (isDownloadingUpdate) {
-                        Spacer(Modifier.height(16.dp))
+        AppSheet(
+            title = "تحديث جديد متاح",
+            onDismiss = { pendingUpdate = null },
+            dismissible = !isDownloadingUpdate
+        ) { close ->
+            Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+                AppInfoRow("الإصدار الجديد", manifest.versionName, groupedRowShape(0, 1))
+                AppInfoRow("إصدارك الحالي", appVersion.name, groupedRowShape(1, 1))
+            }
+            if (isDownloadingUpdate) {
+                AppCard {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "جاري التنزيل...",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                "$downloadPercent%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Spacer(Modifier.height(12.dp))
                         LinearProgressIndicator(
                             progress = { downloadPercent / 100f },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
-                                .clip(RoundedCornerShape(50))
+                                .clip(RoundedCornerShape(50)),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
-                        Spacer(Modifier.height(6.dp))
-                        Text("$downloadPercent%", style = MaterialTheme.typography.labelSmall)
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !isDownloadingUpdate,
-                    shape = RectangleShape,
-                    onClick = { startDownload(manifest) }
-                ) { Text("تحميل وتثبيت") }
-            },
-            dismissButton = {
-                TextButton(enabled = !isDownloadingUpdate, shape = RectangleShape, onClick = { pendingUpdate = null }) { Text("لاحقاً") }
             }
-        )
+            AppPillButton(
+                label = if (isDownloadingUpdate) "جاري التنزيل..." else "تحميل وتثبيت",
+                enabled = !isDownloadingUpdate,
+                onClick = { startDownload(manifest) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (!isDownloadingUpdate) {
+                AppPillButton(
+                    label = "لاحقاً",
+                    tonal = true,
+                    onClick = close,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 
     if (needsInstallPermission) {
-        GlassAlertDialog(
-            onDismissRequest = { needsInstallPermission = false },
-            title = { Text("يلزم إذن التثبيت") },
-            text = { Text("لتثبيت التحديث من داخل التطبيق، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد وحاول مجدداً.") },
-            confirmButton = {
-                TextButton(shape = RectangleShape, onClick = {
+        AppSheet(title = "يلزم إذن التثبيت", onDismiss = { needsInstallPermission = false }) { _ ->
+            Text(
+                "لتثبيت التحديث من داخل التطبيق، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد وحاول مجدداً.",
+                modifier = Modifier.padding(horizontal = 6.dp),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            AppPillButton(
+                label = "فتح الإعدادات",
+                onClick = {
                     needsInstallPermission = false
                     context.startActivity(ApkDownloader.unknownSourcesSettingsIntent(context))
-                }) { Text("فتح الإعدادات") }
-            },
-            dismissButton = {
-                TextButton(shape = RectangleShape, onClick = {
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            AppPillButton(
+                label = "حاول التثبيت الآن",
+                tonal = true,
+                onClick = {
                     needsInstallPermission = false
                     downloadedApk?.let { ApkDownloader.install(context, it) }
-                }) { Text("حاول التثبيت الآن") }
-            }
-        )
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 
     // ======================================================================
