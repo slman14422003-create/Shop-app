@@ -78,6 +78,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.shopmanager.app.ui.common.ActionSpec
+import com.shopmanager.app.ui.common.AppActionPill
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -219,15 +223,13 @@ fun DebtsScreen(
                         )
                     },
                     actions = {
-                        ScreenIconButton(
-                            icon = Icons.Default.Search,
-                            contentDescription = "بحث",
-                            onClick = { isSearching = true }
-                        )
-                        ScreenIconButton(
-                            icon = Icons.Default.Share,
-                            contentDescription = "مشاركة",
-                            onClick = { showShareChoice.value = true }
+                        AppActionPill(
+                            height = 42.dp,
+                            container = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            actions = listOf(
+                                ActionSpec(Icons.Default.Search, "بحث") { isSearching = true },
+                                ActionSpec(Icons.Default.Share, "مشاركة") { showShareChoice.value = true }
+                            )
                         )
                     }
                 )
@@ -453,16 +455,18 @@ private fun PersonRow(
                     )
                 }
             }
-            if (person.amount > 0) {
-                ActionIconButton(
-                    icon = Icons.Default.Check,
-                    tint = LocalSemanticColors.current.success,
-                    contentDescription = "تسجيل سداد كامل الدين",
-                    onClick = onMarkPaid
-                )
-                Spacer(Modifier.width(10.dp))
-            }
-            DeleteIconButton(onClick = onDelete, contentDescription = "حذف العميل")
+            Spacer(Modifier.width(8.dp))
+            val semantic = LocalSemanticColors.current
+            AppActionPill(
+                actions = if (person.amount > 0) {
+                    listOf(
+                        ActionSpec(Icons.Default.Check, "تسجيل سداد كامل الدين", semantic.success, onMarkPaid),
+                        ActionSpec(Icons.Default.Close, "حذف العميل", semantic.danger, onDelete)
+                    )
+                } else {
+                    listOf(ActionSpec(Icons.Default.Close, "حذف العميل", semantic.danger, onDelete))
+                }
+            )
         }
     }
 }

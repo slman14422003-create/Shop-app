@@ -75,6 +75,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
+import com.shopmanager.app.ui.common.ActionSpec
+import com.shopmanager.app.ui.common.AppActionPill
+import androidx.compose.material.icons.filled.Close
 
 private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
@@ -152,18 +155,18 @@ fun PersonDetailScreen(
                     )
                 },
                 actions = {
-                    ScreenIconButton(
-                        icon = Icons.Default.Edit,
-                        contentDescription = "تعديل اسم العميل",
-                        onClick = {
-                            editNameText = person.name
-                            showEditNameDialog = true
-                        }
-                    )
-                    ScreenIconButton(
-                        icon = Icons.Default.Delete,
-                        contentDescription = "حذف العميل",
-                        onClick = { showDeletePersonConfirm = true }
+                    AppActionPill(
+                        height = 42.dp,
+                        container = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        actions = listOf(
+                            ActionSpec(Icons.Default.Edit, "تعديل اسم العميل") {
+                                editNameText = person.name
+                                showEditNameDialog = true
+                            },
+                            ActionSpec(Icons.Default.Delete, "حذف العميل", LocalSemanticColors.current.danger) {
+                                showDeletePersonConfirm = true
+                            }
+                        )
                     )
                 }
             )
@@ -568,13 +571,6 @@ private fun DebtRow(
                 .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ActionIconButton(
-                icon = Icons.Default.Check,
-                tint = LocalSemanticColors.current.success,
-                contentDescription = "تسجيل السداد",
-                onClick = onMarkPaid
-            )
-            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     "${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}",
@@ -607,14 +603,14 @@ private fun DebtRow(
                     }
                 }
             }
-            ActionIconButton(
-                icon = Icons.Default.Edit,
-                tint = MaterialTheme.colorScheme.onSurface,
-                contentDescription = "تعديل",
-                onClick = onEdit
+            Spacer(Modifier.width(8.dp))
+            AppActionPill(
+                actions = listOf(
+                    ActionSpec(Icons.Default.Check, "تسجيل السداد", LocalSemanticColors.current.success, onMarkPaid),
+                    ActionSpec(Icons.Default.Edit, "تعديل", null, onEdit),
+                    ActionSpec(Icons.Default.Close, "حذف الدين", LocalSemanticColors.current.danger, onDelete)
+                )
             )
-            Spacer(Modifier.width(10.dp))
-            DeleteIconButton(onClick = onDelete, contentDescription = "حذف الدين")
         }
     }
 }
@@ -686,14 +682,13 @@ private fun LinkedNoteRow(
                     }
                 }
             }
-            ActionIconButton(
-                icon = Icons.Default.Edit,
-                tint = MaterialTheme.colorScheme.onSurface,
-                contentDescription = "تعديل الملاحظة",
-                onClick = onEdit
+            Spacer(Modifier.width(8.dp))
+            AppActionPill(
+                actions = listOf(
+                    ActionSpec(Icons.Default.Edit, "تعديل الملاحظة", null, onEdit),
+                    ActionSpec(Icons.Default.Close, "حذف الملاحظة", LocalSemanticColors.current.danger, onDelete)
+                )
             )
-            Spacer(Modifier.width(10.dp))
-            DeleteIconButton(onClick = onDelete, contentDescription = "حذف الملاحظة")
         }
     }
 }
