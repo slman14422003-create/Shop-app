@@ -354,6 +354,9 @@ class MainActivity : FragmentActivity() {
             // Turning it off never touches the manual "تحقق من التحديثات"
             // button in Settings, only this silent startup check.
             var forceUpdateManifest by remember { mutableStateOf<com.shopmanager.app.data.updates.UpdateManifest?>(null) }
+            // التحديث الاختياري (الحالة الطبيعية): مربع "تحديث الآن / لاحقاً".
+            // شاشة الإجبار أعلاه لا تظهر إلا إذا وُضعت علامة [force] في إصدار GitHub.
+            var optionalUpdateManifest by remember { mutableStateOf<com.shopmanager.app.data.updates.UpdateManifest?>(null) }
 
             // "تفضيل الأداء": loaded once here (not re-read from disk on
             // every recomposition), then kept in sync live when changed in
@@ -508,17 +511,21 @@ class MainActivity : FragmentActivity() {
                             // way; a slow network only delays the mandatory
                             // screen showing up, never the app opening.
                             LaunchedEffect(ready) {
-                                if (settings.forceUpdateEnabled) {
-                                    when (val result = com.shopmanager.app.data.updates.UpdateChecker.check(
-                                        applicationContext,
-                                        settings.updateManifestUrl,
-                                        timeoutMs = com.shopmanager.app.data.updates.UpdateChecker.STARTUP_TIMEOUT_MS
-                                    )) {
-                                        is com.shopmanager.app.data.updates.UpdateCheckResult.UpdateAvailable -> {
+                                when (val result = com.shopmanager.app.data.updates.UpdateChecker.check(
+                                    applicationContext,
+                                    settings.updateManifestUrl,
+                                    timeoutMs = com.shopmanager.app.data.updates.UpdateChecker.STARTUP_TIMEOUT_MS
+                                )) {
+                                    is com.shopmanager.app.data.updates.UpdateCheckResult.UpdateAvailable -> {
+                                        // إجباري فقط إذا طلبه إصدار GitHub (علامة [force]) ولم يُوقف المطوّر
+                                        // الخيار من لوحة المسؤول؛ غير ذلك يظهر مربع اختياري.
+                                        if (result.manifest.force && settings.forceUpdateEnabled) {
                                             forceUpdateManifest = result.manifest
+                                        } else {
+                                            optionalUpdateManifest = result.manifest
                                         }
-                                        else -> Unit // UpToDate or Failed: fail open, see ForceUpdateScreen's doc.
                                     }
+                                    else -> Unit // UpToDate or Failed: fail open.
                                 }
                             }
 
@@ -648,6 +655,15 @@ class MainActivity : FragmentActivity() {
                             manifest = manifest,
                             currentVersion = com.shopmanager.app.data.updates.AppVersionInfo.current(applicationContext)
                         )
+                    }
+                    if (forceUpdateManifest == null) {
+                        optionalUpdateManifest?.let { manifest ->
+                            com.shopmanager.app.ui.update.UpdateAvailableDialog(
+                                manifest = manifest,
+                                currentVersion = com.shopmanager.app.data.updates.AppVersionInfo.current(applicationContext),
+                                onLater = { optionalUpdateManifest = null }
+                            )
+                        }
                     }
                 }
             }
