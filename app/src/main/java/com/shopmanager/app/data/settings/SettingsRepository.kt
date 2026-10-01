@@ -148,13 +148,16 @@ class SettingsRepository(context: Context) {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         prefs.edit()
             .putString(KEY_PIN_SALT, salt.toHex())
-            .putString(KEY_PIN_HASH, hashSalted(pin, salt))
+            .putString(KEY_PIN_HASH, hashSalted(pin, salt, PIN_HASH_ITERATIONS))
+            // عدد الدورات يُحفظ مع الـ hash: يسمح برفعه مستقبلاً دون كسر
+            // الـ PINs المحفوظة، وترقية القديم تلقائيًا عند أول إدخال صحيح.
+            .putInt(KEY_PIN_ITERATIONS, PIN_HASH_ITERATIONS)
             .apply()
         pinThrottle.registerSuccess()
     }
 
     fun clearPin() {
-        prefs.edit().remove(KEY_PIN_HASH).remove(KEY_PIN_SALT).apply()
+        prefs.edit().remove(KEY_PIN_HASH).remove(KEY_PIN_SALT).remove(KEY_PIN_ITERATIONS).apply()
         pinThrottle.registerSuccess()
     }
 
@@ -169,7 +172,17 @@ class SettingsRepository(context: Context) {
         val saltHex = prefs.getString(KEY_PIN_SALT, null)
 
         val correct = if (saltHex != null) {
-            storedHash == hashSalted(pin, saltHex.fromHex())
+            // PINs المحفوظة قبل هذا التعديل ما لها عدد دورات مخزّن = القيمة
+            // القديمة (12,000)، فيتحقق منها بنفس الطريقة ثم تُرقّى أدناه.
+            val iterations = prefs.getInt(KEY_PIN_ITERATIONS, LEGACY_PIN_HASH_ITERATIONS)
+            val computed = hashSalted(pin, saltHex.fromHex(), iterations)
+            // SECURITY: مقارنة بزمن ثابت — == على النصوص تتوقف عند أول حرف
+            // مختلف فيسرّب (نظريًا) كم حرف طابق.
+            val match = MessageDigest.isEqual(computed.toByteArray(), storedHash.toByteArray())
+            // ترقية صامتة إلى عدد الدورات الحالي بعد إدخال صحيح (نملك الـ PIN
+            // الصريح هذه اللحظة فقط؛ لا يمكن ترقيته بأي وقت آخر).
+            if (match && iterations < PIN_HASH_ITERATIONS) setPin(pin)
+            match
         } else {
             // Legacy unsalted-SHA-256 PIN from before this fix. Verify it
             // the old way once, and if it matches, silently upgrade
@@ -184,10 +197,17 @@ class SettingsRepository(context: Context) {
         return correct
     }
 
-    private fun hashSalted(value: String, salt: ByteArray): String {
-        val spec = PBEKeySpec(value.toCharArray(), salt, PIN_HASH_ITERATIONS, 256)
-        val key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec)
-        return key.encoded.toHex()
+    private fun hashSalted(value: String, salt: ByteArray, iterations: Int): String {
+        val chars = value.toCharArray()
+        val spec = PBEKeySpec(chars, salt, iterations, 256)
+        try {
+            val key = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec)
+            return key.encoded.toHex()
+        } finally {
+            // لا نترك الـ PIN الصريح بالذاكرة أطول من اللازم.
+            spec.clearPassword()
+            chars.fill('\u0000')
+        }
     }
 
     private fun legacyHash(value: String): String {
@@ -207,7 +227,12 @@ class SettingsRepository(context: Context) {
         private const val KEY_BIOMETRIC = "biometric_unlock"
         private const val KEY_AUTO_LOCK = "auto_lock_on_leave"
         private const val KEY_SECURE_SCREEN = "secure_screen"
-        private const val PIN_HASH_ITERATIONS = 12_000
+        // 60,000 (كانت 12,000): مضاعفة كلفة التخمين offline 5 مرات، وما زال
+        // التحقق ~100ms أو أقل حتى على الهواتف الضعيفة. الأهم من الرقم نفسه:
+        // الملف الذي يحوي الـ hash صار مستثنى من النسخ الاحتياطي (backup_rules).
+        private const val PIN_HASH_ITERATIONS = 60_000
+        private const val LEGACY_PIN_HASH_ITERATIONS = 12_000
+        private const val KEY_PIN_ITERATIONS = "pin_iterations"
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
         private const val KEY_REALTIME_SYNC = "realtime_sync_enabled"
