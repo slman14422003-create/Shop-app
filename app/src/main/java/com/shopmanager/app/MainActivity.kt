@@ -90,6 +90,7 @@ import com.shopmanager.app.ui.dashboard.DashboardScreen
 import com.shopmanager.app.ui.debts.DebtsScreen
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.debts.PersonDetailScreen
+import com.shopmanager.app.ui.lock.BiometricAuth
 import com.shopmanager.app.ui.lock.LockScreen
 import com.shopmanager.app.ui.materials.MaterialCatalogScreen
 import com.shopmanager.app.ui.materials.MaterialsScreen
@@ -937,7 +938,25 @@ private fun ShopManagerApp(
                 },
                 onOpenAdmin = {
                     drawerScope.launch { drawerState.close() }
-                    showAdminPinDialog = true
+                    // البصمة/الوجه أولاً إن كانت متاحة على الجهاز؛ وإلا (أو عند
+                    // اختيار "كلمة المرور" أو فشل النظام) يظهر مربع كلمة المرور
+                    // القديم بنفس قفل المحاولات.
+                    val bioActivity = BiometricAuth.findActivity(adminContext)
+                    if (bioActivity != null && BiometricAuth.isAvailable(adminContext) && !adminThrottle.isLocked()) {
+                        BiometricAuth.prompt(
+                            activity = bioActivity,
+                            title = "دخول لوحة المطوّر",
+                            subtitle = "أكّد هويتك للمتابعة",
+                            negativeText = "استخدام كلمة المرور",
+                            onSuccess = {
+                                adminThrottle.registerSuccess()
+                                navController.navigate(ROUTE_ADMIN)
+                            },
+                            onFailure = { showAdminPinDialog = true }
+                        )
+                    } else {
+                        showAdminPinDialog = true
+                    }
                 }
             )
         }
