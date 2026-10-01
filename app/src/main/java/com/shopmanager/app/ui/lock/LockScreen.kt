@@ -3,8 +3,12 @@ package com.shopmanager.app.ui.lock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,7 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.withResumed
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +73,50 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
     var error by remember { mutableStateOf(false) }
     var lockRemaining by remember { mutableLongStateOf(settings.pinLockRemainingSeconds()) }
     val isLocked = lockRemaining > 0
+
+    // UI FIX: one shared submit path for both the "دخول" button and the
+    // keyboard's Done key (before, the keyboard had no action at all, so
+    // people had to dismiss it and hunt for the button). A wrong PIN now
+    // also clears the field instead of leaving the old digits to erase.
+    val submit: () -> Unit = {
+        if (!isLocked && pin.length >= 4) {
+            if (settings.verifyPin(pin)) {
+                onUnlocked()
+            } else {
+                error = true
+                pin = ""
+                lockRemaining = settings.pinLockRemainingSeconds()
+            }
+        }
+    }
+
+    // FEATURE ADDED ("فتح بالبصمة/الوجه"): shown only when the person
+    // hasn't turned it off in Settings AND the phone really has an enrolled
+    // fingerprint/face. Prompts once automatically as soon as the screen is
+    // resumed (BiometricPrompt can't run before the Activity is RESUMED, hence
+    // withResumed); after a cancel, the button below re-opens it on demand.
+    val context = LocalContext.current
+    val activity = remember(context) { BiometricAuth.findActivity(context) }
+    val biometricReady = remember(activity) {
+        activity != null && settings.biometricEnabled && BiometricAuth.isAvailable(context)
+    }
+    var biometricBusy by remember { mutableStateOf(false) }
+    val launchBiometric: () -> Unit = launch@{
+        val a = activity ?: return@launch
+        if (biometricBusy) return@launch
+        biometricBusy = true
+        BiometricAuth.prompt(
+            activity = a,
+            title = "فتح إدارة المحل",
+            subtitle = "استخدم بصمتك أو وجهك",
+            negativeText = "استخدام PIN",
+            onSuccess = { biometricBusy = false; onUnlocked() },
+            onFailure = { biometricBusy = false }
+        )
+    }
+    LaunchedEffect(biometricReady) {
+        if (biometricReady) activity?.lifecycle?.withResumed { launchBiometric() }
+    }
 
     // Ticks the visible countdown once a second while locked, and clears
     // itself the moment the lockout actually expires — no manual "try
@@ -120,10 +171,18 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                 )
         )
 
+        // UI FIX: this column used to be a fixed, non-scrolling block — on a
+        // small phone (or landscape) with the keyboard open, adjustResize
+        // shrank the window and the PIN card/button got clipped off-screen.
+        // Now it scrolls and keeps clear of the keyboard and system bars.
         Column(
             Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp),
+                .fillMaxSize()
+                .systemBarsPadding()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Same glow + glass-circle language as the splash logo (see
@@ -177,7 +236,11 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                     onValueChange = { pin = it.filter { c -> c.isDigit() }.take(6); error = false },
                     label = "أدخل رمز PIN",
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = KeyboardType.NumberPassword,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { submit() }),
                     isError = error,
                     enabled = !isLocked,
                     singleLine = true,
@@ -200,21 +263,29 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                 }
                 Spacer(Modifier.height(18.dp))
                 Button(
-                    enabled = !isLocked,
+                    enabled = !isLocked && pin.length >= 4,
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
-                    onClick = {
-                        if (settings.verifyPin(pin)) {
-                            onUnlocked()
-                        } else {
-                            error = true
-                            lockRemaining = settings.pinLockRemainingSeconds()
-                        }
-                    }
+                    onClick = { submit() }
                 ) {
                     Text("دخول", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                }
+                if (biometricReady) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { launchBiometric() },
+                        enabled = !biometricBusy,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("فتح بالبصمة أو الوجه", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
