@@ -122,7 +122,14 @@ fun MaterialEditDialog(
                     modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
                 )
 
-                error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
             }
         },
         confirmButton = {
