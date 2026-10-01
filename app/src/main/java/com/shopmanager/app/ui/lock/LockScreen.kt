@@ -18,7 +18,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.withResumed
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -93,8 +94,8 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
     // FEATURE ADDED ("فتح بالبصمة/الوجه"): shown only when the person
     // hasn't turned it off in Settings AND the phone really has an enrolled
     // fingerprint/face. Prompts once automatically as soon as the screen is
-    // resumed (BiometricPrompt can't run before the Activity is RESUMED, hence
-    // withResumed); after a cancel, the button below re-opens it on demand.
+    // resumed (BiometricPrompt can't run before the Activity is RESUMED);
+    // after a cancel, the button below re-opens it on demand.
     val context = LocalContext.current
     val activity = remember(context) { BiometricAuth.findActivity(context) }
     val biometricReady = remember(activity) {
@@ -114,8 +115,15 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
             onFailure = { biometricBusy = false }
         )
     }
+    // repeatOnLifecycle (not a one-shot): every time the app comes back to
+    // the foreground while still locked (screen turned back on, returned from
+    // another app) the prompt is shown again, so the person never has to
+    // tap anything to unlock with a fingerprint/face.
     LaunchedEffect(biometricReady) {
-        if (biometricReady) activity?.lifecycle?.withResumed { launchBiometric() }
+        val lifecycle = activity?.lifecycle
+        if (biometricReady && lifecycle != null) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { launchBiometric() }
+        }
     }
 
     // Ticks the visible countdown once a second while locked, and clears
