@@ -37,6 +37,24 @@ import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.glassHairlineColor
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Shape
+import com.shopmanager.app.ui.common.AppEmptyState
+import com.shopmanager.app.ui.common.AppFootnote
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppIconCircle
+import com.shopmanager.app.ui.common.AppRowSurface
+import com.shopmanager.app.ui.common.AppScreenPadding
+import com.shopmanager.app.ui.common.AppSearchBar
+import com.shopmanager.app.ui.common.ScreenIconButton
+import com.shopmanager.app.ui.common.ScreenTopBar
+import com.shopmanager.app.ui.common.groupedRowShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 
 /**
  * Standalone screen for picking which shortage to add: pick a name from the
@@ -84,36 +102,15 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
-            TopAppBar(
-                title = { Text("اختر مادة", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    // BUG FIXED: two issues here. (1) Icons.Default.ArrowBack
-                    // always points left, which is backwards for a back
-                    // button in this app's RTL Arabic layout — swapped for
-                    // the AutoMirrored version so it flips to point right,
-                    // matching the reading/navigation direction. (2) the
-                    // button only had `start` padding (space from the
-                    // screen edge) with nothing on the `end` side, so it
-                    // sat glued right up against the title with no room to
-                    // breathe — added `end` padding to match the same fix
-                    // already applied on the Settings screen's back button.
-                    GlassIconButton(
+            ScreenTopBar(
+                title = "اختر مادة",
+                navigation = {
+                    ScreenIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
-                        onClick = onBack,
-                        modifier = Modifier.padding(start = 8.dp, end = 12.dp),
-                        size = 36.dp
+                        onClick = onBack
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = BrandOnGradient,
-                    navigationIconContentColor = BrandOnGradient
-                )
-                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
-                // liquidGlassSurface panel this bar used to sit on — it now
-                // sits flush on the plain background like Home's own header
-                // and Claude's own "Settings" screen.
+                }
             )
         },
         // FIX: adding a new catalog name used to be a permanently-visible
@@ -126,50 +123,43 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 onClick = { showAddDialog = true },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
                 text = { Text("مادة جديدة", fontWeight = FontWeight.SemiBold) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.onSurface,
+                contentColor = MaterialTheme.colorScheme.surface,
+                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
             )
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            Text(
+            AppFootnote(
                 "اضغط على اسم المادة لإدخال الكمية، أو أضف اسمًا جديدًا من الزر بالأسفل",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
             )
 
-            AppTextField(
-                value = search,
-                onValueChange = { search = it },
-                label = "بحث",
+            AppSearchBar(
+                query = search,
+                onQueryChange = { search = it },
+                onClose = { search = "" },
                 placeholder = "بحث بالقائمة...",
-                showLabel = false,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                showBackButton = false,
+                modifier = Modifier.padding(horizontal = AppScreenPadding, vertical = 8.dp)
             )
 
             if (filtered.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.outlineVariant)
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                            if (catalog.isEmpty()) "القائمة فاضية، أضف أول مادة من الزر بالأسفل" else "لا توجد نتائج",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                AppEmptyState(
+                    icon = Icons.Default.Inventory2,
+                    text = if (catalog.isEmpty()) "القائمة فاضية، أضف أول مادة من الزر بالأسفل" else "لا توجد نتائج"
+                )
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = AppScreenPadding, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
-                    items(filtered, key = { it.id }) { item ->
+                    itemsIndexed(filtered, key = { _, catalogItem -> catalogItem.id }) { index, item ->
                         CatalogRow(
                             item = item,
+                            shape = groupedRowShape(index, filtered.lastIndex),
                             onClick = { pickedItem = item },
                             onEdit = { editTarget = item },
                             onDelete = { deleteTarget = item }
@@ -245,58 +235,42 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun CatalogRow(item: MaterialCatalogItem, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun CatalogRow(
+    item: MaterialCatalogItem,
+    shape: Shape,
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     val color = remember(item.name) { avatarColorFor(item.name) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        if (pressed) 0.97f else 1f,
-        animationSpec = MotionSpecs.pressSpring(),
-        label = "catalogRowScale"
-    )
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .scale(scale)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = onClick
-            ),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(40.dp).clip(MaterialTheme.shapes.medium).background(color),
-                contentAlignment = Alignment.Center
-            ) {
+    AppRowSurface(shape = shape, onClick = onClick) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 64.dp)
+                .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIconCircle(color = color, size = 40.dp) {
                 Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(12.dp))
-            Text(item.name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
-            // FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): a separate
-            // pencil button opens the rename dialog — kept apart from
-            // `onClick` (which still picks the item to log a shortage
-            // quantity, this row's main action) so renaming isn't hidden
-            // behind the same tap.
-            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل الاسم") }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف من القائمة") }
+            Text(
+                item.name,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Default.Edit, contentDescription = "تعديل الاسم", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "حذف من القائمة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
 
-/**
- * Focused dialog opened by the floating "+" button, just for typing one new
- * standing-list name. Enter on the keyboard saves too, so adding several
- * names in a row (type, Enter, type, Enter...) doesn't need reaching for
- * the button each time.
- */
 @Composable
 private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var name by remember { mutableStateOf("") }

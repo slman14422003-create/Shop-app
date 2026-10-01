@@ -83,6 +83,32 @@ import kotlinx.coroutines.withContext
 import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 import com.shopmanager.app.ui.theme.LocalSemanticColors
 import com.shopmanager.app.ui.theme.glassHairlineColor
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.compositeOver
+import com.shopmanager.app.ui.common.ActionIconButton
+import com.shopmanager.app.ui.common.AppCard
+import com.shopmanager.app.ui.common.AppEmptyState
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppIconCircle
+import com.shopmanager.app.ui.common.AppPillButton
+import com.shopmanager.app.ui.common.AppRowSurface
+import com.shopmanager.app.ui.common.AppScreenPadding
+import com.shopmanager.app.ui.common.AppSectionTitle
+import com.shopmanager.app.ui.common.ScreenIconButton
+import com.shopmanager.app.ui.common.ScreenTopBar
+import com.shopmanager.app.ui.common.groupedRowShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.graphics.vector.ImageVector
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -246,55 +272,36 @@ fun MaterialsScreen(
                 // `onAddNew` callback MainActivity already wires to the
                 // catalog-picker screen.
                 Column(Modifier.fillMaxSize()) {
-                    Surface(
+                    AppPillButton(
+                        label = "مادة جديدة",
+                        icon = Icons.Default.Add,
                         onClick = onAddNew,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-                        // LIGHT-MODE CONTRAST FIX: this "مادة جديدة" button
-                        // was borderless and nearly invisible in light mode.
-                        border = BorderStroke(1.dp, glassHairlineColor(0.5f))
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("مادة جديدة", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                        }
-                    }
-                    // NEW: sums the fixed catalog price of every shortage
-                    // material currently shown (looked up from state.prices,
-                    // the same map the "الأسعار" tab now edits against the
-                    // catalog — see PricesList below), so the person can see
-                    // the total cost of restocking without leaving this tab.
-                    // Hidden entirely until at least one shown material
-                    // actually has a price set, so an all-unpriced list
-                    // doesn't show a misleading "0".
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = 12.dp)
+                    )
                     val shortageTotal = remember(filtered, state.prices) {
                         filtered.sumOf { state.prices[it.name] ?: 0.0 }
                     }
-                    if (shortageTotal > 0.0) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "إجمالي أسعار النواقص",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "${Formatters.number(shortageTotal)} ${AppSettingsState.currencySymbol}",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
+                    if (state.materials.isNotEmpty()) {
+                        AppSectionTitle(
+                            text = if (shortageTotal > 0.0) {
+                                "إجمالي أسعار النواقص: ${Formatters.number(shortageTotal)} ${AppSettingsState.currencySymbol}"
+                            } else {
+                                "قائمة النواقص (${filtered.size})"
+                            },
+                            modifier = Modifier.padding(horizontal = AppScreenPadding - 8.dp),
+                            trailing = {
+                                TextButton(onClick = { showClearAllConfirm = true }) {
+                                    Text(
+                                        "مسح الكل",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.labelLarge
+                                    )
+                                }
+                            }
+                        )
+                        Spacer(Modifier.height(2.dp))
                     }
                     MaterialsList(
                         materials = filtered,
@@ -415,84 +422,65 @@ private fun MaterialsHeader(
     onSearchQueryChange: (String) -> Unit = {},
     searchFocusRequester: FocusRequester? = null
 ) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            // UNIFIED ON CLAUDE'S DESIGN ("عدل التصميم بشكل جذري ليصبح متل
-            // كلود"): this used to sit on its own boxed liquidGlassSurface
-            // panel with rounded bottom corners — the same "boxed card"
-            // header look DashboardHeader's own note already moved away
-            // from for Home. Removed here too, so every tab now sits
-            // directly on the app's plain background like Claude's own
-            // screens (Home *and* Settings) do — no screen has a separate
-            // toned panel behind its title any more.
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = 20.dp, vertical = 18.dp)
-    ) {
-        // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي يتوسع بواجهة
-        // لحالة اثناء البحث"): tapping the search icon below swaps this
-        // whole title row for a focused search field instead of opening a
-        // second bar or keeping a permanently-visible field elsewhere on
-        // the page — the header itself "becomes" the search UI while
-        // active, then reverts to the normal title + tabs when closed.
+    Column(Modifier.fillMaxWidth()) {
         if (isSearching) {
-            AppSearchBar(
-                query = searchQuery,
-                onQueryChange = onSearchQueryChange,
-                onClose = { onSearchToggle(false); onSearchQueryChange("") },
-                placeholder = if (tab == 0) "بحث عن مادة..." else "بحث عن الأسعار...",
-                focusRequester = searchFocusRequester
-            )
-        } else {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // BUG FIXED ("الأيقونة فوق الكلمة"): the hamburger used to be a
-            // floating overlay from MainActivity, pinned to this exact
-            // top-right (RTL) corner — the same corner the title text
-            // below already occupies — so the two visually collided. It's
-            // now a real leading element in this header's own Row, same
-            // fix as DashboardHeader/DebtsScreen.
-            GradientIconButton(icon = Icons.Default.Menu, contentDescription = "القائمة", onClick = onOpenDrawer)
-            Spacer(Modifier.width(10.dp))
-            Text(
-                "المواد والأسعار",
-                modifier = Modifier.weight(1f),
-                color = BrandOnGradient,
-                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
-                fontWeight = FontWeight.Bold
-            )
-            // "مسح الكل": only shown on the المواد tab, and only once there's
-            // actually something to clear - deletes every material on the
-            // list in one confirmed action (see MaterialsScreen's
-            // showClearAllConfirm dialog / MaterialsViewModel.deleteAllMaterials).
-            //
-            // FIX (icons touching): this used to sit right next to the
-            // share button with only a small fixed Spacer between them,
-            // which read as the two circular buttons glued together. Both
-            // now sit in their own Row with real breathing room
-            // (spacedBy) between them instead of a single thin gap.
-            //
-            // REDESIGN: a search icon now sits in this same row on both
-            // tabs (المواد *and* الأسعار — a real catalog/price list can run
-            // long on either), expanding the header itself into the search
-            // field above instead of either tab keeping its own
-            // permanently-visible field further down the page.
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                GradientIconButton(icon = Icons.Default.Search, contentDescription = "بحث", onClick = { onSearchToggle(true) })
-                if (showClearAll) {
-                    GradientIconButton(icon = Icons.Default.DeleteSweep, contentDescription = "مسح كل المواد", onClick = onClearAll)
-                }
-                GradientIconButton(icon = Icons.Rounded.Share, contentDescription = "مشاركة", onClick = onShare)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .height(64.dp)
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ScreenIconButton(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "إغلاق البحث",
+                    onClick = { onSearchToggle(false); onSearchQueryChange("") }
+                )
+                AppSearchBar(
+                    query = searchQuery,
+                    onQueryChange = onSearchQueryChange,
+                    onClose = { onSearchToggle(false); onSearchQueryChange("") },
+                    placeholder = if (tab == 0) "بحث عن مادة..." else "بحث عن الأسعار...",
+                    focusRequester = searchFocusRequester,
+                    showBackButton = false,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                )
             }
+        } else {
+            ScreenTopBar(
+                title = "المواد والأسعار",
+                reservedIcons = 2,
+                navigation = {
+                    ScreenIconButton(
+                        icon = Icons.Default.Menu,
+                        contentDescription = "القائمة",
+                        onClick = onOpenDrawer
+                    )
+                },
+                actions = {
+                    ScreenIconButton(
+                        icon = Icons.Default.Search,
+                        contentDescription = "بحث",
+                        onClick = { onSearchToggle(true) }
+                    )
+                    ScreenIconButton(
+                        icon = Icons.Rounded.Share,
+                        contentDescription = "مشاركة",
+                        onClick = onShare
+                    )
+                }
+            )
         }
-        Spacer(Modifier.height(16.dp))
-        SegmentedTabs(
-            selectedIndex = tab,
-            options = listOf(
-                SegmentOption("المواد", Icons.Default.Inventory2),
-                SegmentOption("الأسعار", Icons.Default.Sell)
-            ),
-            onSelect = onTabChange
-        )
+        Box(Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = 10.dp)) {
+            SegmentedTabs(
+                selectedIndex = tab,
+                options = listOf(
+                    SegmentOption("المواد", Icons.Default.Inventory2),
+                    SegmentOption("الأسعار", Icons.Default.Sell)
+                ),
+                onSelect = onTabChange
+            )
         }
     }
 }
@@ -521,20 +509,8 @@ private data class SegmentOption(val label: String, val icon: androidx.compose.u
  */
 @Composable
 private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSelect: (Int) -> Unit) {
-    // UNIFIED ON CLAUDE'S DESIGN: this control used to float on top of its
-    // own boxed brand-gradient header panel, which is why its track/thumb
-    // were hardcoded translucent-white overlays (readable against any
-    // colored backdrop) and the selected label read off the brand
-    // gradient's own start color instead of colorScheme.primary. Now that
-    // MaterialsHeader sits directly on the app's plain background like
-    // every other screen, this follows the same theme-aware tokens the
-    // rest of the app already uses for a segmented control (see the
-    // now-removed color-mode picker in SettingsScreen.kt for the same
-    // pattern): a tonal surfaceContainerHigh track, a flat `surface` thumb,
-    // and colorScheme.primary (Claude's own terracotta accent — vivid in
-    // both themes, not the pale primary80-style tone the old comment here
-    // was guarding against) for the selected label.
-    val selectedLabelColor = MaterialTheme.colorScheme.primary
+    // نفس لغة أزرار الإعدادات: مسار مسطّح بتعبئة الصفوف والمؤشر حبّة بلون onSurface.
+    val cs = MaterialTheme.colorScheme
     var trackWidthPx by remember { mutableStateOf(0) }
     val density = androidx.compose.ui.platform.LocalDensity.current
     val segmentWidth = with(density) {
@@ -549,33 +525,20 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
     Box(
         Modifier
             .fillMaxWidth()
-            .height(46.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-            // LIGHT-MODE CONTRAST FIX: invisible against this track's own
-            // white fill in light mode.
-            .border(1.dp, glassHairlineColor(0.5f), RoundedCornerShape(14.dp))
+            .height(52.dp)
+            .clip(CircleShape)
+            .background(cs.surfaceContainerHigh)
             .padding(4.dp)
             .onSizeChanged { trackWidthPx = it.width }
     ) {
-        // The single sliding thumb: one continuous pill that moves under
-        // whichever segment is selected, instead of each Box tinting its
-        // own background independently.
         if (segmentWidth > 0.dp) {
             Box(
                 Modifier
                     .offset(x = thumbOffset)
                     .width(segmentWidth)
                     .fillMaxHeight()
-                    .shadow(elevation = 2.dp, shape = RoundedCornerShape(11.dp), clip = false)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-                    // LIGHT-MODE CONTRAST FIX: the selected-tab thumb had no
-                    // visible edge in light mode, only a faint 2.dp shadow
-                    // to distinguish it from the identically-white track.
-                    .border(1.dp, glassHairlineColor(0.6f), RoundedCornerShape(11.dp))
+                    .clip(CircleShape)
+                    .background(cs.onSurface)
             )
         }
 
@@ -583,7 +546,7 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
             options.forEachIndexed { index, option ->
                 val selected = index == selectedIndex
                 val labelColor by animateColorAsState(
-                    targetValue = if (selected) selectedLabelColor else BrandOnGradient.copy(alpha = 0.9f),
+                    targetValue = if (selected) cs.surface else cs.onSurfaceVariant,
                     animationSpec = MotionSpecs.quickSpring(),
                     label = "segmentLabelColor"
                 )
@@ -591,7 +554,7 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(11.dp))
+                        .clip(CircleShape)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -604,7 +567,7 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
                         option.icon,
                         contentDescription = null,
                         tint = labelColor,
-                        modifier = Modifier.size(17.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -691,10 +654,10 @@ private fun MaterialsList(
         // row-drag removes it from nested scroll entirely, so no drag can
         // ever be mistaken for a pull-to-refresh again.
         userScrollEnabled = draggingId == null,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomClearance),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = bottomClearance),
+        verticalArrangement = Arrangement.spacedBy(AppGroupGap)
     ) {
-        itemsIndexed(orderedItems, key = { _, m -> m.id }) { _, m ->
+        itemsIndexed(orderedItems, key = { _, m -> m.id }) { rowIndex, m ->
             val isDragging = m.id == draggingId
             Box(
                 Modifier
@@ -756,7 +719,7 @@ private fun MaterialsList(
                                     onDrag = { change, delta ->
                                         change.consume()
                                         dragOffset += delta.y
-                                        val gap = 8.dp.toPx()
+                                        val gap = AppGroupGap.toPx()
                                         val myHeight = (itemHeightsPx[m.id] ?: 0).toFloat()
                                         val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
                                         // BUG FIXED (part of the same
@@ -808,6 +771,7 @@ private fun MaterialsList(
             ) {
                 MaterialRow(
                     material = m,
+                    shape = groupedRowShape(rowIndex, orderedItems.lastIndex),
                     onEdit = { onEdit(m) },
                     onDelete = { onDelete(m) },
                     onToggleImportant = { onToggleImportant(m) },
@@ -821,6 +785,7 @@ private fun MaterialsList(
 @Composable
 private fun MaterialRow(
     material: Material,
+    shape: Shape,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onToggleImportant: () -> Unit,
@@ -828,108 +793,73 @@ private fun MaterialRow(
     modifier: Modifier = Modifier
 ) {
     val avatarColor = remember(material.name) { avatarColorFor(material.name) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else if (isDragging) 1.03f else 1f,
+        targetValue = if (isDragging) 1.03f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "materialRowScale"
     )
+    val rowFill = MaterialTheme.colorScheme.surfaceContainerHigh
+    // الصف "المهم جداً" يأخذ لمسة ذهبية خفيفة بدل الإطار الملوّن القديم.
+    val fill = if (material.important) {
+        LocalSemanticColors.current.warning.copy(alpha = 0.14f).compositeOver(rowFill)
+    } else rowFill
 
-    // BUG FIXED: same black-shadow-bar issue as PersonRow in
-    // DebtsScreen.kt — see the comment there. Scale moved off the
-    // ElevatedCard's own modifier chain onto a plain wrapping Box so it
-    // never shares a graphics layer with the card's shadow.
     Box(modifier.fillMaxWidth().scale(scale)) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = interactionSource,
-                indication = LocalIndication.current,
-                onClick = onEdit
-            ),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        // FEATURE ADDED ("نجمة الأهمية"): a starred material gets a subtle
-        // amber border so it also reads as important at a glance, not only
-        // through the filled star icon.
-        // BUG FIXED ("كل الكروت شكلها متل بعض"): this used to be a raw
-        // hardcoded hex (0xFFFFA000) instead of this app's own WarningAmber
-        // (see Color.kt) — cosmetically almost the same shade, but now that
-        // the CLAUDE palette's default warm terracotta theme is actually
-        // rendering (see Theme.kt), that palette's own outlineVariant tone
-        // is itself warm/tan, not neutral grey the way it was under the old
-        // Material default scheme. Against a warm border, the *un*starred
-        // card's border and the starred card's amber border read as nearly
-        // the same color — exactly the "every card looks the same" effect.
-        // BORDERS UNIFIED WHITE ("بدي حدود مربع المادة... يكون لونها
-        // ابيض... بشفافية خفيفة"): the ordinary (un-starred) border now
-        // matches every other card border in the app — a flat white
-        // hairline at a light alpha — instead of the old theme-tinted
-        // outlineVariant token. The starred row keeps its own distinct
-        // amber border untouched: that's a separate semantic signal
-        // ("this one's important"), not the app's general card border, so
-        // it stays the one border color that's still meant to stand out.
-        border = BorderStroke(
-            if (material.important) 1.5.dp else 1.dp,
-            if (material.important) LocalSemanticColors.current.warning.copy(alpha = 0.7f)
-            // LIGHT-MODE CONTRAST FIX: was invisible against this row's
-            // own white surface fill in light mode.
-            else glassHairlineColor(0.4f)
-        ),
-        tonalElevation = 0.dp,
-        shadowElevation = if (isDragging) 6.dp else 0.dp
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            onClick = onEdit,
+            modifier = Modifier.fillMaxWidth(),
+            shape = shape,
+            color = fill,
+            shadowElevation = if (isDragging) 6.dp else 0.dp
         ) {
-            // FEATURE ADDED ("نجمة بجانب كل مادة جديدة... تنقل لأول اشي"):
-            // tapping the star marks/unmarks the material as very
-            // important; marking it also pins it to the top of the list
-            // (see MaterialsViewModel.setImportant).
-            IconButton(onClick = onToggleImportant) {
-                Icon(
-                    if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                    contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
-                    tint = if (material.important) LocalSemanticColors.current.warning else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Box(
-                Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
-                contentAlignment = Alignment.Center
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 68.dp)
+                    .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(material.name, fontWeight = FontWeight.Medium)
-                if (material.notes.isNotBlank()) {
-                    Text(
-                        material.notes,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1
+                IconButton(onClick = onToggleImportant) {
+                    Icon(
+                        if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                        contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
+                        tint = if (material.important) LocalSemanticColors.current.warning else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                AppIconCircle(color = avatarColor, size = 42.dp) {
+                    Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        material.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (material.notes.isNotBlank()) {
+                        Text(
+                            material.notes,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+                com.shopmanager.app.ui.common.PillBadge(
+                    text = material.quantityLabel(),
+                    color = com.shopmanager.app.ui.common.pillColorForQuantity(material.quantity)
+                )
+                Spacer(Modifier.width(8.dp))
+                ActionIconButton(
+                    icon = Icons.Default.Edit,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    contentDescription = "تعديل",
+                    onClick = onEdit
+                )
+                Spacer(Modifier.width(8.dp))
+                DeleteIconButton(onClick = onDelete, contentDescription = "حذف المادة")
             }
-            // REDESIGN (reference screenshot: the shortage list's quantity
-            // shows as a small rounded, color-coded badge instead of a
-            // plain "الكمية المطلوبة: X" text line) — same PillBadge the
-            // dashboard's own shortage-list rows now use, so a material's
-            // quantity reads identically whether it's seen from Home or
-            // from this full list.
-            com.shopmanager.app.ui.common.PillBadge(
-                text = material.quantityLabel(),
-                color = com.shopmanager.app.ui.common.pillColorForQuantity(material.quantity)
-            )
-            Spacer(Modifier.width(4.dp))
-            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "تعديل") }
-            Spacer(Modifier.width(2.dp))
-            DeleteIconButton(onClick = onDelete, contentDescription = "حذف المادة")
         }
-    }
     }
 }
 
@@ -1043,7 +973,7 @@ private fun PricesList(
             prices = prices,
             edited = edited,
             currency = currency,
-            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
+            modifier = Modifier.fillMaxWidth().padding(start = AppScreenPadding, top = 4.dp, end = AppScreenPadding, bottom = 10.dp)
         )
         if (filtered.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -1052,11 +982,12 @@ private fun PricesList(
         } else {
             LazyColumn(
                 Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = bottomClearance),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = bottomClearance),
+                verticalArrangement = Arrangement.spacedBy(AppGroupGap)
             ) {
-                items(filtered, key = { it.id }) { item ->
+                itemsIndexed(filtered, key = { _, catalogItem -> catalogItem.id }) { rowIndex, item ->
                     PriceRow(
+                        shape = groupedRowShape(rowIndex, filtered.lastIndex),
                         item = item,
                         currency = currency,
                         // Kept as a raw `toString()` (not the Arabic-locale
@@ -1127,46 +1058,35 @@ private fun PricesSummaryCard(
     currency: String,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, glassHairlineColor(0.4f))
-    ) {
+    AppCard(modifier = modifier) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Sell, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Sell, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    "المسعّرة: $pricedCount من $totalCount",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "إجمالي قيمة القائمة",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    "إجمالي قيمة القائمة",
-                    style = MaterialTheme.typography.labelSmall,
-                    // LIGHT-MODE CONTRAST FIX: the extra 0.7f alpha on top
-                    // of an already-secondary color pushed this caption
-                    // below readable contrast in light mode (≈2.9:1,
-                    // under the 4.5:1 normal text needs). onSurfaceVariant
-                    // alone is already dimmed appropriately for a caption.
+                    "المسعّرة: $pricedCount من $totalCount",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             Text(
                 "${Formatters.number(totalValue)} $currency",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
     }
@@ -1177,6 +1097,7 @@ private fun PricesSummaryCard(
  * name, and an inline price field with a currency suffix. */
 @Composable
 private fun PriceRow(
+    shape: Shape,
     item: MaterialCatalogItem,
     currency: String,
     value: String,
@@ -1184,32 +1105,15 @@ private fun PriceRow(
     onValueChange: (String) -> Unit
 ) {
     val avatarColor = remember(item.name) { avatarColorFor(item.name) }
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
+    AppRowSurface(shape = shape) {
         Row(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(if (hasPrice) avatarColor else avatarColor.copy(alpha = 0.35f)),
-                contentAlignment = Alignment.Center
+            AppIconCircle(
+                color = if (hasPrice) avatarColor else avatarColor.copy(alpha = 0.35f),
+                size = 40.dp
             ) {
-                // LIGHT-MODE CONTRAST FIX: this icon was always
-                // Color.White, but the un-priced state dims its own
-                // circle to 0.35f alpha — on the resulting pale tint over
-                // a light card, a white icon nearly disappeared. Keeping
-                // the icon at the avatar's full-strength color once the
-                // circle is dimmed gives a "tonal container" pairing
-                // that stays visible in both states/themes.
                 Icon(
                     Icons.Default.Sell,
                     contentDescription = null,
@@ -1217,42 +1121,30 @@ private fun PriceRow(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(Modifier.width(10.dp))
-            // BUG FIXED: a long material name had no line/overflow limit, so
-            // it could wrap to 2+ lines while the price field next to it
-            // stayed a single line — the row's vertical centering then
-            // looked broken/misaligned for exactly the longer names.
-            // Ellipsis keeps every row the same height regardless of name
-            // length.
+            Spacer(Modifier.width(12.dp))
             Text(
                 item.name,
                 modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
             )
             Spacer(Modifier.width(8.dp))
-            // BUG FIXED: swapped the outlined field (border + floating
-            // label breaking the border line — a distinctly Material/
-            // Android pattern) for the same borderless filled treatment as
-            // AppTextField; a trailing currency suffix now sits inside the
-            // field itself so "السعر بالليرة/بالدولار" never needs a
-            // separate caption that would add height and break the row's
-            // vertical centering.
             TextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.width(128.dp),
+                modifier = Modifier.width(132.dp),
                 placeholder = { Text("0", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
                 suffix = { Text(currency, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
                 singleLine = true,
-                shape = MaterialTheme.shapes.small,
+                shape = RoundedCornerShape(14.dp),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.primary
+                    cursorColor = MaterialTheme.colorScheme.onSurface
                 )
             )
         }
@@ -1261,13 +1153,7 @@ private fun PriceRow(
 
 @Composable
 private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(56.dp), tint = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(12.dp))
-            Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
+    AppEmptyState(icon = icon, text = text)
 }
 
 private fun buildMaterialsShareText(materials: List<Material>, prices: Map<String, Double>): String {
