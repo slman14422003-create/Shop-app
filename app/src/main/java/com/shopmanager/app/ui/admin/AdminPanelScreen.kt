@@ -170,9 +170,9 @@ fun AdminPanelScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("التحديث الإجباري عند فتح التطبيق", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                        Text("السماح بالتحديث الإجباري", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                         Text(
-                            "عند التفعيل، تظهر شاشة إجبارية عند بدء التطبيق إن وُجد تحديث أحدث ولا يمكن تجاوزها. عند الإيقاف، يعمل التطبيق بشكل طبيعي بدون أي فحص تلقائي — زر \"تحقق من التحديثات\" اليدوي بالإعدادات يبقى متاحاً دائماً بغض النظر عن هذا الخيار.",
+                            "التحديث اختياري افتراضياً (تحديث الآن / لاحقاً). يصبح إجبارياً فقط إذا وضعت العلامة [force] في وصف الإصدار على GitHub، وبشرط أن يكون هذا الخيار مفعّلاً. عند الإيقاف يُعامَل أي تحديث كاختياري حتى لو وُضعت العلامة.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
