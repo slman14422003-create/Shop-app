@@ -109,6 +109,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.shopmanager.app.ui.common.ActionSpec
+import com.shopmanager.app.ui.common.AppActionPill
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -459,15 +463,13 @@ private fun MaterialsHeader(
                     )
                 },
                 actions = {
-                    ScreenIconButton(
-                        icon = Icons.Default.Search,
-                        contentDescription = "بحث",
-                        onClick = { onSearchToggle(true) }
-                    )
-                    ScreenIconButton(
-                        icon = Icons.Rounded.Share,
-                        contentDescription = "مشاركة",
-                        onClick = onShare
+                    AppActionPill(
+                        height = 42.dp,
+                        container = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        actions = listOf(
+                            ActionSpec(Icons.Default.Search, "بحث") { onSearchToggle(true) },
+                            ActionSpec(Icons.Rounded.Share, "مشاركة") { onShare() }
+                        )
                     )
                 }
             )
@@ -850,14 +852,12 @@ private fun MaterialRow(
                     color = com.shopmanager.app.ui.common.pillColorForQuantity(material.quantity)
                 )
                 Spacer(Modifier.width(8.dp))
-                ActionIconButton(
-                    icon = Icons.Default.Edit,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    contentDescription = "تعديل",
-                    onClick = onEdit
+                AppActionPill(
+                    actions = listOf(
+                        ActionSpec(Icons.Default.Edit, "تعديل", null, onEdit),
+                        ActionSpec(Icons.Default.Close, "حذف المادة", LocalSemanticColors.current.danger, onDelete)
+                    )
                 )
-                Spacer(Modifier.width(8.dp))
-                DeleteIconButton(onClick = onDelete, contentDescription = "حذف المادة")
             }
         }
     }
