@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -32,8 +33,12 @@ import com.shopmanager.app.data.updates.UpdateDownloadPhase
 import com.shopmanager.app.data.updates.UpdateDownloadService
 import com.shopmanager.app.data.updates.UpdateDownloadState
 import com.shopmanager.app.data.updates.UpdateManifest
+import com.shopmanager.app.ui.common.AppCard
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppInfoRow
 import com.shopmanager.app.ui.common.AppPillButton
-import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.AppSheet
+import com.shopmanager.app.ui.common.groupedRowShape
 import java.io.File
 
 /**
@@ -81,78 +86,111 @@ fun UpdateAvailableDialog(
         }
     }
 
-    GlassAlertDialog(
-        onDismissRequest = { if (!isDownloading) onLater() },
-        title = { Text("تحديث جديد متاح", fontWeight = FontWeight.SemiBold) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    AppSheet(
+        title = "تحديث جديد متاح",
+        onDismiss = onLater,
+        dismissible = !isDownloading
+    ) { close ->
+        Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+            AppInfoRow("الإصدار الجديد", manifest.versionName, groupedRowShape(0, 1))
+            AppInfoRow("إصدارك الحالي", currentVersion.name, groupedRowShape(1, 1))
+        }
+
+        val notes = manifest.notes.trim()
+        if (notes.isNotBlank()) {
+            AppCard {
                 Text(
-                    "الإصدار الجديد: ${manifest.versionName}   •   إصدارك الحالي: ${currentVersion.name}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    notes,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .heightIn(max = 160.dp)
+                        .verticalScroll(rememberScrollState())
                 )
-                val notes = manifest.notes.trim()
-                if (notes.isNotBlank()) {
-                    Text(
-                        notes,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier
-                            .heightIn(max = 160.dp)
-                            .verticalScroll(rememberScrollState())
-                    )
-                }
-                if (isDownloading) {
+            }
+        }
+
+        if (isDownloading) {
+            AppCard {
+                Column(Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "جاري التنزيل...",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            "$percent%",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
                     LinearProgressIndicator(
                         progress = { percent / 100f },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp)
-                            .clip(RoundedCornerShape(50))
-                    )
-                    Text("$percent%", style = MaterialTheme.typography.labelSmall)
-                }
-                errorMessage?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                }
-                if (needsInstallPermission) {
-                    Text(
-                        "لإتمام التثبيت، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد إلى هنا.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                            .clip(RoundedCornerShape(50)),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                     )
                 }
             }
-        },
-        confirmButton = {
-            if (needsInstallPermission) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    AppPillButton(
-                        label = "حاول مرة أخرى",
-                        tonal = true,
-                        onClick = {
-                            needsInstallPermission = false
-                            downloadedFile?.let { tryInstall(it) }
-                        }
-                    )
-                    AppPillButton(
-                        label = "فتح الإعدادات",
-                        onClick = { context.startActivity(ApkDownloader.unknownSourcesSettingsIntent(context)) }
-                    )
-                }
-            } else {
+        }
+
+        errorMessage?.let {
+            Text(
+                it,
+                modifier = Modifier.padding(horizontal = 6.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        if (needsInstallPermission) {
+            Text(
+                "لإتمام التثبيت، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد إلى هنا.",
+                modifier = Modifier.padding(horizontal = 6.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            AppPillButton(
+                label = "فتح الإعدادات",
+                onClick = { context.startActivity(ApkDownloader.unknownSourcesSettingsIntent(context)) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            AppPillButton(
+                label = "حاول مرة أخرى",
+                tonal = true,
+                onClick = {
+                    needsInstallPermission = false
+                    downloadedFile?.let { tryInstall(it) }
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            AppPillButton(
+                label = if (isDownloading) "جاري التنزيل..." else "تحديث الآن",
+                enabled = !isDownloading,
+                onClick = {
+                    errorMessage = null
+                    startedHere = true
+                    UpdateDownloadService.start(context, manifest)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (!isDownloading) {
                 AppPillButton(
-                    label = if (isDownloading) "جاري التنزيل..." else "تحديث الآن",
-                    enabled = !isDownloading,
-                    onClick = {
-                        errorMessage = null
-                        startedHere = true
-                        UpdateDownloadService.start(context, manifest)
-                    }
+                    label = "لاحقاً",
+                    tonal = true,
+                    onClick = close,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-        },
-        dismissButton = if (isDownloading) null else {
-            { AppPillButton(label = "لاحقاً", tonal = true, onClick = onLater) }
         }
-    )
+    }
 }
