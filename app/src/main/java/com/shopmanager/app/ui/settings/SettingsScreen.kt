@@ -116,6 +116,11 @@ fun SettingsScreen(
     val settings = remember { SettingsRepository(context) }
     var themeMode by remember { mutableStateOf(settings.themeMode) }
     var hasPin by remember { mutableStateOf(settings.hasPin) }
+    // Re-applies FLAG_SECURE right after the PIN / screenshot toggle changes (see MainActivity.applySecureFlag).
+    val applySecure: () -> Unit = {
+        (com.shopmanager.app.ui.lock.BiometricAuth.findActivity(context) as? com.shopmanager.app.MainActivity)
+            ?.applySecureFlag()
+    }
     var showSetPinDialog by remember { mutableStateOf(false) }
     var currency by remember { mutableStateOf(settings.currencySymbol) }
     var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
@@ -630,7 +635,7 @@ fun SettingsScreen(
                         Text("يحمي فتح التطبيق برمز محلي على هذا الجهاز فقط", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (hasPin) {
-                        TextButton(onClick = { settings.clearPin(); hasPin = false }) { Text("إلغاء") }
+                        TextButton(onClick = { settings.clearPin(); hasPin = false; applySecure() }) { Text("إلغاء") }
                     } else {
                         TextButton(onClick = { showSetPinDialog = true }) { Text("تفعيل") }
                     }
@@ -659,6 +664,51 @@ fun SettingsScreen(
                         Switch(
                             checked = biometricOn,
                             onCheckedChange = { biometricOn = it; settings.biometricEnabled = it }
+                        )
+                    }
+                }
+                // FEATURE ADDED ("قفل عند الخروج"): re-lock every time the app
+                // leaves the screen or the screen turns off.
+                if (hasPin) {
+                    var autoLockOn by remember { mutableStateOf(settings.autoLockOnLeave) }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("القفل عند الخروج")
+                            Text(
+                                "يطلب الرمز أو البصمة كل مرة تخرج من التطبيق أو تُطفئ الشاشة",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = autoLockOn,
+                            onCheckedChange = { autoLockOn = it; settings.autoLockOnLeave = it }
+                        )
+                    }
+                }
+                // FEATURE ADDED (FLAG_SECURE): block screenshots + hide the recents preview.
+                if (hasPin) {
+                    var secureOn by remember { mutableStateOf(settings.secureScreen) }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("منع لقطات الشاشة")
+                            Text(
+                                "يخفي التطبيق في لقطة الشاشة والتسجيل وفي قائمة التطبيقات الأخيرة",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = secureOn,
+                            onCheckedChange = { secureOn = it; settings.secureScreen = it; applySecure() }
                         )
                     }
                 }
@@ -996,6 +1046,7 @@ fun SettingsScreen(
             onConfirm = { pin ->
                 settings.setPin(pin)
                 hasPin = true
+                applySecure()
                 showSetPinDialog = false
             }
         )
