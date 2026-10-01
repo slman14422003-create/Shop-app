@@ -103,7 +103,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
     // Matches the launcher icon's own green (see the doc comment above)
     // instead of the app's unrelated blue brand accent, so the glow reads
     // as radiating from the icon mark itself.
-    val markAccent = if (isDark) com.shopmanager.app.ui.theme.ClaudeAccentGreenDark else com.shopmanager.app.ui.theme.ClaudeAccentGreenLight
+    val markAccent = androidx.compose.ui.graphics.Color(0xFFD97757) // coral of the new launcher icon
     val onDark = if (isDark) com.shopmanager.app.ui.theme.ClaudeTextPrimaryDark else com.shopmanager.app.ui.theme.ClaudeTextPrimaryLight
     val creditGrey = if (isDark) com.shopmanager.app.ui.theme.ClaudeTextSecondaryDark else com.shopmanager.app.ui.theme.ClaudeTextSecondaryLight
 
@@ -149,7 +149,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
             // density, so it's dropped in as-is with a matching corner
             // clip rather than redrawn from scratch.
             Image(
-                painter = painterResource(R.drawable.ic_launcher_foreground),
+                painter = painterResource(R.drawable.ic_splash_mark),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
