@@ -137,15 +137,12 @@ fun AppTextField(
         // Barely-there top lift (5% of the theme's own "ink" color) — same
         // direction as every other glass surface's top highlight, tuned
         // down hard so it reads as depth rather than a visible seam.
-        val fillBrush = Brush.verticalGradient(
-            listOf(lerp(baseFill, MaterialTheme.colorScheme.onSurface, 0.05f), baseFill)
-        )
+        val fillBrush = Brush.verticalGradient(listOf(baseFill, baseFill))
 
         val targetRimColor = when {
             isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.65f)
             focused -> MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-            !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
-            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+            else -> Color.Transparent
         }
         val rimColor by animateColorAsState(
             targetValue = targetRimColor,

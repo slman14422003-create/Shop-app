@@ -84,8 +84,7 @@ fun ActionIconButton(
             .size(36.dp)
             .scale(scale)
             .clip(CircleShape)
-            .background(tint.copy(alpha = 0.22f))
-            .border(1.dp, tint.copy(alpha = 0.35f), CircleShape)
+            .background(tint.copy(alpha = 0.16f))
     ) {
         Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(18.dp))
     }

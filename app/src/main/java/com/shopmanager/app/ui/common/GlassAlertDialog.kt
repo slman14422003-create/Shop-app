@@ -136,26 +136,8 @@ fun GlassAlertDialog(
                         baseBrush = androidx.compose.ui.graphics.Brush.linearGradient(
                             listOf(resolvedContainer, resolvedContainer)
                         ),
-                        elevation = 24.dp,
-                        highlight = false,
-                        // BORDERS UNIFIED WHITE — see GlassCard.kt's
-                        // comment. (Also relies on liquidGlassSurface's
-                        // rimColor now being a nullable "draw or don't",
-                        // not a `== Color.White` sentinel — that old
-                        // check made it impossible to ever pass white
-                        // itself as a real border color.)
-                        //
-                        // LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع
-                        // النهاري"): liquidGlassSurface always re-applies
-                        // its own fixed 0.12f alpha on top of whatever hue
-                        // is passed here, so only the RGB matters — white
-                        // was invisible against this dialog's own white
-                        // `resolvedContainer` fill in light mode.
-                        // `onSurface` resolves to the theme's own ink tone
-                        // (still near-white in dark mode, so that look is
-                        // unchanged) and gives a real hairline in light
-                        // mode too.
-                        rimColor = MaterialTheme.colorScheme.onSurface
+                        elevation = 0.dp,
+                        highlight = false
                     )
             ) {
                 Column {
@@ -219,10 +201,13 @@ fun GlassAlertDialog(
                         DialogButtonCell(
                             Modifier.fillMaxWidth().height(50.dp)
                                 .clip(RoundedCornerShape(50))
-                                .background(Color.White)
+                                .background(MaterialTheme.colorScheme.onSurface)
                         ) {
                             MaterialTheme(
-                                colorScheme = MaterialTheme.colorScheme.copy(primary = Color.Black),
+                                colorScheme = MaterialTheme.colorScheme.copy(
+                                    primary = MaterialTheme.colorScheme.surface,
+                                    onSurface = MaterialTheme.colorScheme.surface
+                                ),
                                 typography = MaterialTheme.typography,
                                 shapes = MaterialTheme.shapes
                             ) {
@@ -238,7 +223,7 @@ fun GlassAlertDialog(
                                     // "إلغاء" button had no fill and, in light
                                     // mode, no visible border either — it was a
                                     // functional but effectively invisible button.
-                                    .border(1.dp, glassHairlineColor(0.5f), RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                             ) {
                                 dismissButton()
                             }

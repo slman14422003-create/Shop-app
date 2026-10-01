@@ -43,7 +43,7 @@ import com.shopmanager.app.ui.theme.glassHairlineColor
 fun GlassCard(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(20.dp),
-    elevation: Dp = 2.dp,
+    elevation: Dp = 0.dp,
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     content: @Composable () -> Unit
 ) {
@@ -69,7 +69,6 @@ fun GlassCard(
             // card in the app lost its edge entirely. [glassHairlineColor]
             // keeps dark mode exactly as it was and swaps to a scaled-down
             // dark hairline only in light mode.
-            .border(1.dp, glassHairlineColor(0.5f), shape)
     ) {
         content()
     }

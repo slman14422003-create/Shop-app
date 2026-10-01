@@ -125,8 +125,9 @@ fun AppDrawerContent(
             Text(
                 "إدارة المحل",
                 style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp)
+                modifier = Modifier.padding(horizontal = 28.dp, vertical = 24.dp)
             )
             drawerNavItems.forEachIndexed { index, item ->
                 DrawerRow(
@@ -175,52 +176,34 @@ private fun DrawerRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // نفس لغة صفوف الإعدادات: أيقونة خطية + عنوان، والمحدد يأخذ تعبئة الصف المسطّحة.
+    val cs = MaterialTheme.colorScheme
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(AppGroupLargeRadius))
+            .background(if (selected) cs.surfaceContainerHigh else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // BUG FIXED (see the itemAccents note above): the badge used to
-        // swap to a *solid* accent fill with a white icon on selection —
-        // fine for a strong color, but unreadable for any accent close to
-        // white (exactly what `primary` was). The icon now always renders
-        // in its own accent color at full opacity, on a softly-tinted
-        // circle of that same accent; only the circle's tint strength
-        // changes with selection (plus the row's own highlighted
-        // background/bold label below). This can never go invisible,
-        // whichever accent a row uses, and every badge — selected or not —
-        // now reads as the same consistent, colorful family.
-        Box(
-            Modifier
-                .size(38.dp)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = if (selected) 0.24f else 0.14f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(19.dp)
-            )
-        }
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = cs.onSurface,
+            modifier = Modifier.size(24.dp)
+        )
         Text(
             label,
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface
+            color = cs.onSurface
         )
     }
 }
 
-/** A single round icon-only badge/button — used for لوحة المسؤول beside
- * الإعدادات, where a full label row would crowd the pinned bottom row. */
 @Composable
 private fun IconBadge(
     icon: ImageVector,
@@ -230,17 +213,17 @@ private fun IconBadge(
 ) {
     Box(
         Modifier
-            .size(42.dp)
+            .size(44.dp)
             .clip(CircleShape)
-            .background(accent.copy(alpha = 0.12f))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             icon,
             contentDescription = contentDescription,
-            tint = accent,
-            modifier = Modifier.size(20.dp)
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(22.dp)
         )
     }
 }

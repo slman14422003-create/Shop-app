@@ -79,9 +79,9 @@ fun AppSearchBar(
         Box(
             Modifier
                 .weight(1f)
-                .height(46.dp)
+                .height(48.dp)
                 .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(horizontal = 14.dp)
         ) {
             Row(

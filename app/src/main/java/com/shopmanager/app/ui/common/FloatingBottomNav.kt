@@ -117,14 +117,10 @@ private fun GlassSnackbar(data: SnackbarData) {
 
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        // LIGHT-MODE CONTRAST FIX: was invisible against this snackbar's
-        // own white surfaceContainerHigh fill in light mode.
-        border = BorderStroke(1.dp, glassHairlineColor(0.4f)),
-        shadowElevation = 6.dp
+        shadowElevation = 0.dp
     ) {
         Row(
             Modifier.padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
