@@ -228,7 +228,8 @@ object UpdateChecker {
             versionCode = versionCode,
             versionName = json.optString("versionName", ""),
             apkUrl = apkUrl,
-            notes = json.optString("notes", "")
+            notes = json.optString("notes", ""),
+            force = json.optBoolean("force", false)
         )
     }
 
@@ -264,13 +265,19 @@ object UpdateChecker {
             }
         }
         val finalApkUrl = apkUrl ?: return null
+        val body = json.optString("body", "")
+        // التحديث الإجباري يُفعَّل من GitHub فقط: علامة [force] أو [إجباري] في وصف الإصدار.
+        val isForced = FORCE_MARKER.containsMatchIn(body)
         return UpdateManifest(
             versionCode = versionCode,
             versionName = tagName,
             apkUrl = githubProxied(finalApkUrl),
-            notes = json.optString("body", "")
+            notes = body.replace(FORCE_MARKER, "").trim(),
+            force = isForced
         )
     }
+
+    private val FORCE_MARKER = Regex("""\[\s*(force|إجباري|اجباري)\s*]""", RegexOption.IGNORE_CASE)
 
     /** Cheap "is the update endpoint reachable at all" probe for the admin
      * panel — same request, but callers only care about the boolean. */

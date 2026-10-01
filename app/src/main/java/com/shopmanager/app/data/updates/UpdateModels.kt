@@ -24,7 +24,11 @@ data class UpdateManifest(
     val versionCode: Long,
     val versionName: String,
     val apkUrl: String,
-    val notes: String
+    val notes: String,
+    /** التحديث إجباري فقط إذا طلبتَ ذلك من GitHub: ضع العلامة [force] (أو [إجباري])
+     * في وصف الإصدار (Release notes)، أو "force": true في ملف JSON المخصص.
+     * بدون العلامة يظهر مربع "تحديث الآن / لاحقاً" الاختياري. */
+    val force: Boolean = false
 )
 
 /** The current app's own version, read from PackageManager rather than
