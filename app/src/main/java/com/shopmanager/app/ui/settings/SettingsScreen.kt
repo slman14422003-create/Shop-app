@@ -635,6 +635,33 @@ fun SettingsScreen(
                         TextButton(onClick = { showSetPinDialog = true }) { Text("تفعيل") }
                     }
                 }
+                // FEATURE ADDED: biometric shortcut — only offered once a PIN
+                // exists (the lock screen itself only exists then) and the
+                // phone really has an enrolled fingerprint/face.
+                val biometricAvailable = remember(hasPin) {
+                    hasPin && com.shopmanager.app.ui.lock.BiometricAuth.isAvailable(context)
+                }
+                if (biometricAvailable) {
+                    var biometricOn by remember { mutableStateOf(settings.biometricEnabled) }
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("فتح بالبصمة أو الوجه")
+                            Text(
+                                "بديل أسرع عن كتابة الـ PIN، ويبقى الـ PIN متاحاً دائماً",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = biometricOn,
+                            onCheckedChange = { biometricOn = it; settings.biometricEnabled = it }
+                        )
+                    }
+                }
             }
 
             // المزامنة — new section: real connectivity + last successful
