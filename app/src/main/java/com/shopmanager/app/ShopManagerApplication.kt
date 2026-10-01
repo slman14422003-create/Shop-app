@@ -1,6 +1,8 @@
 package com.shopmanager.app
 
 import android.app.Application
+import android.os.StrictMode
+import android.util.Log
 import androidx.work.Configuration
 
 /**
@@ -16,6 +18,46 @@ import androidx.work.Configuration
  * main thread during startup.
  */
 class ShopManagerApplication : Application(), Configuration.Provider {
+
+    // PERF/السلاسة: WorkManager بسجلّه الافتراضي (INFO) يكتب سطر لوج لكل
+    // job يبدأ/ينتهي. بنسخة release ما له فايدة (Log.i أصلاً محذوف بـ R8 هناك
+    // لكن بناء الرسالة نفسه يتم)، فنرفع المستوى لـ ERROR هناك ونبقيه INFO
+    // بنسخة debug للتشخيص.
     override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder().build()
+        get() = Configuration.Builder()
+            .setMinimumLoggingLevel(if (BuildConfig.DEBUG) Log.INFO else Log.ERROR)
+            .build()
+
+    override fun onCreate() {
+        super.onCreate()
+        if (BuildConfig.DEBUG) enableStrictMode()
+    }
+
+    /**
+     * أداة اكتشاف التقطيع (jank): بنسخة debug فقط، يطبع في logcat (فلتر
+     * "StrictMode") أي قراءة/كتابة ملف أو شبكة على الخيط الرئيسي، وأي
+     * Closeable أو Cursor تُرك مفتوحًا — وهي أكثر أسباب التقطيع والتسريب
+     * شيوعًا. penaltyLog فقط (بدون crash أو dialog) فلا يغيّر سلوك التطبيق،
+     * ولا يشتغل أصلاً بنسخة release.
+     */
+    private fun enableStrictMode() {
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder()
+                .detectDiskReads()
+                .detectDiskWrites()
+                .detectNetwork()
+                .detectCustomSlowCalls()
+                .penaltyLog()
+                .build()
+        )
+        StrictMode.setVmPolicy(
+            StrictMode.VmPolicy.Builder()
+                .detectLeakedClosableObjects()
+                .detectLeakedSqlLiteObjects()
+                .detectActivityLeaks()
+                .detectCleartextNetwork()
+                .penaltyLog()
+                .build()
+        )
+    }
 }
