@@ -42,6 +42,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 
 // ============================================================================
 // لغة التصميم الموحّدة (مأخوذة من شاشة الإعدادات الجديدة):
@@ -163,7 +167,7 @@ fun ScreenTopBar(
     }
 }
 
-/** زر أيقونة عادي للشريط العلوي (بلا دائرة خلفه، مثل شاشة الإعدادات). */
+/** زر أيقونة دائري للشريط العلوي (رجوع/قائمة) بتعبئة صفوف التطبيق. */
 @Composable
 fun ScreenIconButton(
     icon: ImageVector,
@@ -172,8 +176,75 @@ fun ScreenIconButton(
     modifier: Modifier = Modifier,
     tint: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    IconButton(onClick = onClick, modifier = modifier) {
-        Icon(icon, contentDescription = contentDescription, tint = tint)
+    Box(
+        modifier
+            .padding(horizontal = 4.dp)
+            .size(42.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(22.dp))
+    }
+}
+
+/** وصف زر داخل [AppActionPill]. */
+class ActionSpec(
+    val icon: ImageVector,
+    val contentDescription: String,
+    val tint: Color? = null,
+    val onClick: () -> Unit
+)
+
+/**
+ * كبسولة أزرار موحّدة: عدة أزرار أيقونة داخل حبّة واحدة بفواصل رفيعة، فلا يمكن أن
+ * تتلامس أو تتداخل الدوائر. تُستعمل في الشريط العلوي (بحث/مشاركة) وفي صفوف القوائم
+ * (تم/تعديل/حذف). مع زر واحد تصير دائرة.
+ */
+@Composable
+fun AppActionPill(
+    actions: List<ActionSpec>,
+    modifier: Modifier = Modifier,
+    height: Dp = 40.dp,
+    container: Color = MaterialTheme.colorScheme.surfaceContainerHighest
+) {
+    val haptics = LocalHapticFeedback.current
+    val divider = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
+    Row(
+        modifier
+            .height(height)
+            .clip(CircleShape)
+            .background(container),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        actions.forEachIndexed { index, action ->
+            if (index > 0) {
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .height(height * 0.45f)
+                        .background(divider)
+                )
+            }
+            Box(
+                Modifier
+                    .width(if (actions.size == 1) height else 46.dp)
+                    .fillMaxHeight()
+                    .clickable(role = Role.Button) {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        action.onClick()
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    action.icon,
+                    contentDescription = action.contentDescription,
+                    tint = action.tint ?: MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
     }
 }
 
