@@ -112,6 +112,8 @@ import com.shopmanager.app.ui.theme.AppThemeMode
 import com.shopmanager.app.ui.theme.SetSystemBarsColor
 import com.shopmanager.app.ui.theme.ShopManagerTheme
 import com.shopmanager.app.ui.theme.rememberIsDarkTheme
+import com.shopmanager.app.data.performance.LocalRefreshRateHz
+import com.shopmanager.app.data.performance.RefreshRatePolicy
 
 
 // FIX: Home/Debts/Materials/Notes all live as pages of one HorizontalPager
@@ -267,7 +269,11 @@ class MainActivity : FragmentActivity() {
         var composeSplashAttached by mutableStateOf(false)
         splashScreen.setKeepOnScreenCondition { !composeSplashAttached }
 
-        requestSmoothestRefreshRate()
+        // معدل التحديث يُطبَّق حسب وضع الأداء داخل setContent (LaunchedEffect على performanceTier)،
+        // ونتابع تغيّره الفعلي لتضبط الحركات سرعتها على 60Hz مقابل 90Hz+.
+        refreshHz = currentDisplayHz()
+        getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.registerDisplayListener(displayListener, null)
 
         // "حسن عمل التطبيق في الخلفية بشكل مخفي": one silent, at-most-once
         // system prompt so BackgroundSyncWorker/NoteReminderWorker keep
@@ -366,6 +372,8 @@ class MainActivity : FragmentActivity() {
             val performanceTier by remember {
                 derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference) }
             }
+            // الأداء القوي → ~90Hz، الاقتصادي → 60Hz؛ يُعاد التطبيق فور تغيّر الوضع من الإعدادات.
+            LaunchedEffect(performanceTier) { applyRefreshRate(performanceTier) }
             // FEATURE ADDED ("إعادة فحص أداء الجهاز" in Settings → الأداء):
             // DevicePerformance.resetCachedTier existed already but had no
             // caller — wiring it up needs both steps done together (clear
@@ -529,7 +537,10 @@ class MainActivity : FragmentActivity() {
                                 }
                             }
 
-                            CompositionLocalProvider(LocalPerformanceTier provides performanceTier) {
+                            CompositionLocalProvider(
+                                LocalPerformanceTier provides performanceTier,
+                                LocalRefreshRateHz provides refreshHz
+                            ) {
                                 // Load the persisted currency symbol into the
                                 // app-wide holder once, so every screen
                                 // (dashboard, debts, materials, notifications)
@@ -675,6 +686,8 @@ class MainActivity : FragmentActivity() {
         // الخدمة الأمامية (إن وُجدت) تحتفظ بمالكها الخاص فتبقى المستمعات حيّة؛
         // وإلا نغلقها بعد أن يغادر المستخدم التطبيق فعلاً (لا عند تدوير الشاشة).
         if (isFinishing) NotificationSync.onAppClosed()
+        getSystemService(android.hardware.display.DisplayManager::class.java)
+            ?.unregisterDisplayListener(displayListener)
         super.onDestroy()
     }
 
@@ -692,27 +705,30 @@ class MainActivity : FragmentActivity() {
         pendingNotificationAction = NotificationAction.from(intent)
     }
 
-    /**
-     * "معدل تحديث الشاشة" fix: without this, Android is free to run the
-     * activity's window at a lower refresh rate than the display actually
-     * supports (commonly defaulting to 60Hz even on a 90/120Hz phone for
-     * apps that never state a preference), which makes swipes/animations
-     * look less smooth than the hardware is capable of. This asks for the
-     * highest refresh rate the *current* display reports. On a display
-     * that only supports 60Hz (most entry-level phones, including the
-     * Redmi A10), every mode has the same refresh rate, so this is a
-     * harmless no-op there — it only changes anything on hardware that
-     * actually has a faster mode to give.
-     */
-    private fun requestSmoothestRefreshRate() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        @Suppress("DEPRECATION")
-        val display = windowManager.defaultDisplay ?: return
-        val bestMode = display.supportedModes.maxByOrNull { it.refreshRate } ?: return
-        window.attributes = window.attributes.apply {
-            preferredDisplayModeId = bestMode.modeId
+    /** معدل تحديث الشاشة الفعلي الآن؛ حالة Compose حتى تتفاعل الحركات مع تغيّره. */
+    private var refreshHz by androidx.compose.runtime.mutableFloatStateOf(60f)
+
+    private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+        override fun onDisplayRemoved(displayId: Int) = Unit
+        override fun onDisplayChanged(displayId: Int) {
+            refreshHz = currentDisplayHz()
         }
     }
+
+    @Suppress("DEPRECATION")
+    private fun currentDisplayHz(): Float = windowManager.defaultDisplay?.refreshRate?.takeIf { it > 0f } ?: 60f
+
+    /**
+     * الأداء القوي → أقرب وضع إلى 90Hz، الاقتصادي → 60Hz (انظر [RefreshRatePolicy]).
+     * على شاشة 60Hz فقط لا يتغير شيء هنا، والإحساس "كأنها 90" يأتي من MotionSpecs.
+     */
+    @Suppress("DEPRECATION")
+    private fun applyRefreshRate(tier: PerformanceTier) {
+        RefreshRatePolicy.apply(window, windowManager.defaultDisplay, tier)
+        refreshHz = currentDisplayHz()
+    }
+
 }
 
 @OptIn(ExperimentalFoundationApi::class)
