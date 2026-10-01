@@ -24,3 +24,19 @@
     volatile <fields>;
 }
 -dontwarn kotlinx.coroutines.**
+
+# ── أمان + أداء (إضافة) ──────────────────────────────────────────────────────
+# إزالة استدعاءات Log.v/d/i من نسخة release بالكامل: (1) أي نص تصحيح بيطبع
+# أسماء زبائن أو مبالغ أو أخطاء داخلية ما بيوصل لـ logcat جهاز المستخدم، و(2)
+# أقل عمل وقت التشغيل بالمسارات الساخنة (قوائم/مزامنة). Log.w/e بتضل لأنها
+# بتفيد بتشخيص الأعطال الحقيقية.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}
+
+# تتبّع الأعطال: اسم الملف + رقم السطر بالـ stack trace (مع mapping.txt اللي
+# بيرفعه release.yml كـ artifact بتقدر تفك التشفير بالكامل).
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

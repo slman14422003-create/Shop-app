@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -37,10 +38,48 @@ plugins {
 // explicitly (the standard pattern used everywhere else for this exact
 // keystore-loading snippet) sidesteps the shadowing entirely.
 val keystorePropertiesFile = rootProject.file("keystore/keystore.properties.local")
-val hasReleaseKeystore = keystorePropertiesFile.exists()
 val keystoreProperties = Properties().apply {
-    if (hasReleaseKeystore) load(keystorePropertiesFile.inputStream())
+    if (keystorePropertiesFile.exists()) keystorePropertiesFile.inputStream().use { load(it) }
 }
+
+// SIGNING (CI + محلي): مصدران لمفتاح التوقيع بالترتيب:
+//  1) متغيرات بيئة يمررها release.yml من GitHub Secrets (SIGNING_STORE_FILE,
+//     SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, SIGNING_KEY_PASSWORD) — هيك
+//     مفتاح الإصدار ما بيتخزن بالمستودع أبدًا، وكل إصدار CI بيطلع بنفس التوقيع
+//     (بدونه كان كل تشغيل يولّد مفتاح debug جديد ويفشل التحديث من داخل التطبيق).
+//  2) keystore/keystore.properties.local على جهازك (ما بينرفع للمستودع).
+// BUG FIX: الشرط القديم كان يكتفي بوجود ملف properties حتى لو ملف .jks نفسه
+// غير موجود، فيفشل assembleRelease بـ "Keystore file not found". الآن لازم
+// يوجد الملف الفعلي، وإلا يرجع للتوقيع الافتراضي (debug) بدون ما ينكسر البناء.
+class ReleaseSigning(
+    val storeFile: File,
+    val storePassword: String,
+    val keyAlias: String,
+    val keyPassword: String
+)
+
+fun envOrNull(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
+
+val releaseSigning: ReleaseSigning? = run {
+    val envFile = envOrNull("SIGNING_STORE_FILE")?.let { File(it) }
+    val envStorePw = envOrNull("SIGNING_STORE_PASSWORD")
+    val envAlias = envOrNull("SIGNING_KEY_ALIAS")
+    val envKeyPw = envOrNull("SIGNING_KEY_PASSWORD")
+    if (envFile != null && envFile.isFile && envStorePw != null && envAlias != null && envKeyPw != null) {
+        return@run ReleaseSigning(envFile, envStorePw, envAlias, envKeyPw)
+    }
+    val localName = keystoreProperties.getProperty("STORE_FILE")
+    val localFile = localName?.let { rootProject.file("keystore/$it") }
+    val localStorePw = keystoreProperties.getProperty("STORE_PASSWORD")
+    val localAlias = keystoreProperties.getProperty("KEY_ALIAS")
+    val localKeyPw = keystoreProperties.getProperty("KEY_PASSWORD")
+    if (localFile != null && localFile.isFile && localStorePw != null && localAlias != null && localKeyPw != null) {
+        ReleaseSigning(localFile, localStorePw, localAlias, localKeyPw)
+    } else {
+        null
+    }
+}
+val hasReleaseKeystore = releaseSigning != null
 
 android {
     namespace = "com.shopmanager.app"
@@ -109,12 +148,12 @@ android {
     }
 
     signingConfigs {
-        if (hasReleaseKeystore) {
+        releaseSigning?.let { info ->
             create("release") {
-                storeFile = rootProject.file("keystore/${keystoreProperties.getProperty("STORE_FILE")}")
-                storePassword = keystoreProperties.getProperty("STORE_PASSWORD")
-                keyAlias = keystoreProperties.getProperty("KEY_ALIAS")
-                keyPassword = keystoreProperties.getProperty("KEY_PASSWORD")
+                storeFile = info.storeFile
+                storePassword = info.storePassword
+                keyAlias = info.keyAlias
+                keyPassword = info.keyPassword
             }
         }
     }
@@ -177,6 +216,21 @@ android {
     // BUILD FIX comment there. The old android.kotlinOptions{} DSL that
     // used to sit here is a hard compile error as of this Kotlin version.
 
+    // PERF (وقت البناء): assembleRelease كان يشغّل lintVitalRelease تلقائيًا قبل
+    // التجميع، وrelease.yml أصلاً يشغّل lintRelease كاملًا بخطوة مستقلة غير
+    // مانعة — فالفحص المزدوج كان يضيف دقائق بلا فائدة.
+    lint {
+        checkReleaseBuilds = false
+    }
+
+    // PERF (حجم APK): مكتبات AndroidX/Firebase/Material تشحن ترجمات لعشرات
+    // اللغات. الواجهة نفسها عربية/إنجليزية، فبنحتفظ بهدول بس — النصوص
+    // الداخلية للمكتبات بلغات ثانية بترجع للإنجليزي (الافتراضي) بدل ما تنحشر
+    // بالـ APK.
+    androidResources {
+        localeFilters += listOf("ar", "en")
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -199,7 +253,17 @@ android {
 
     packaging {
         resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            // PERF (حجم APK): ملفات وصفية للبناء/التصحيح ما لها أي دور وقت
+            // التشغيل — DebugProbesKt.bin خاص بأدوات تصحيح الـ coroutines،
+            // وبقية الملفات تراخيص/قوائم تبعيات مكررة.
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/INDEX.LIST",
+                "/META-INF/*.version",
+                "/DebugProbesKt.bin",
+                "/kotlin-tooling-metadata.json"
+            )
         }
         // BUILD FIX: "Unable to strip the following libraries, packaging
         // them as they are: libandroidx.graphics.path.so" — this is AGP
