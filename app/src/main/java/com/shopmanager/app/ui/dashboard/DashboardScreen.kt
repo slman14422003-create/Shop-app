@@ -51,6 +51,19 @@ import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import com.shopmanager.app.ui.common.AppCard
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppRowSurface
+import com.shopmanager.app.ui.common.AppScreenPadding
+import com.shopmanager.app.ui.common.AppSectionGap
+import com.shopmanager.app.ui.common.groupedTileShape
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 
 private data class ActivityRow(
     val icon: ImageVector,
@@ -174,7 +187,7 @@ fun DashboardScreen(
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 32.dp + LocalFloatingBottomNavHeight.current),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(AppSectionGap)
         ) {
             item {
                 DashboardHeader(onOpenDrawer = onOpenDrawer)
@@ -264,7 +277,7 @@ fun DashboardScreen(
                                 )
                             }
                             if (index != shortages.lastIndex) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
                             }
                         }
                     }
@@ -351,8 +364,8 @@ fun DashboardScreen(
                                 )
                                 Text(
                                     "${nf.format(p.amount)} ${AppSettingsState.currencySymbol}",
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.primary
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -484,17 +497,19 @@ private fun DashboardHeader(
 @Composable
 private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        Modifier.fillMaxWidth().padding(horizontal = AppScreenPadding),
+        horizontalArrangement = Arrangement.spacedBy(AppGroupGap)
     ) {
         QuickActionButton(
             modifier = Modifier.weight(1f),
+            shape = groupedTileShape(0, 1),
             icon = Icons.Default.PersonAdd,
             label = "عميل جديد",
             onClick = onAddPerson
         )
         QuickActionButton(
             modifier = Modifier.weight(1f),
+            shape = groupedTileShape(1, 1),
             icon = Icons.Default.Inventory2,
             label = "مادة جديدة",
             onClick = onAddMaterial
@@ -502,70 +517,32 @@ private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit) 
     }
 }
 
-// REDESIGN ("جمال + أداء"): QuickActionButton used to be a flat
-// OutlinedButton — same 1dp border regardless of accent, icon and label
-// packed tight with no breathing room, and no depth of its own (it only
-// registered as "a button" from its border). Rebuilt as a self-contained
-// tonal card with its own soft accent-colored icon badge (mirrors
-// StatCard's badge language below, so the two feel like one family) and a
-// two-line layout so the label gets its own row instead of squeezing next
-// to the icon. Still a single `background()` + `border()` — no extra
-// graphicsLayer/blur — so this costs nothing extra on LOW tier versus the
-// old OutlinedButton.
 @Composable
-private fun QuickActionButton(modifier: Modifier = Modifier, icon: ImageVector, label: String, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        if (pressed) 0.97f else 1f,
-        animationSpec = MotionSpecs.pressSpring(),
-        label = "quickActionScale"
-    )
-    val accent = MaterialTheme.colorScheme.primary
-
-    Column(
-        modifier
-            .scale(scale)
-            .clip(MaterialTheme.shapes.large)
-            // REDESIGN ("اعد تصميم الالوان في كل التطبيق"): dropped the
-            // faint accent-tinted border in favor of the same plain
-            // `surfaceContainer` fill StatCard/SectionCard use above — one
-            // borderless card language across the whole home screen.
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(vertical = 14.dp, horizontal = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Box(
-            Modifier.size(38.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center
+private fun QuickActionButton(
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape,
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    AppRowSurface(shape = shape, modifier = modifier, onClick = onClick) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
-        )
     }
 }
 
-// REDESIGN ("اعد ترتيب الشاشة الرئيسية بشكل كامل وجميل مع تصميم جميل"):
-// replaces the old two-StatCard row. Those were two identical flat
-// `surfaceContainer` boxes competing for attention with everything else on
-// the tab, despite being the single most important thing on this screen.
-// HeroStatsCard merges both numbers into one wide, gradient-tinted card
-// (primary → secondary, both at low alpha so text/icons stay legible in
-// both themes) positioned right under the greeting — the first thing the
-// eye lands on. A slim vertical divider (echoes the old accent rule, now
-// shared by both halves) keeps "الديون" and "النواقص" visually paired as
-// one glanceable summary instead of two separate cards.
 @Composable
 private fun HeroStatsCard(
     totalDebt: Double,
@@ -578,82 +555,45 @@ private fun HeroStatsCard(
     nf: NumberFormat
 ) {
     val secondary = MaterialTheme.colorScheme.secondary
-    // REDESIGN ("بدي تصميم جميل اجمل من هيك"): this card's tint used to come
-    // from `primary`/`secondary`, both of which Palette.kt intentionally
-    // points at the neutral near-black/near-white text tone — so the "warm
-    // gradient" here actually rendered as a flat gray wash with no color at
-    // all, on the single most prominent card on the whole dashboard. Swapped
-    // to the same success/warning semantic accents the two stat icons below
-    // already use, so the card's own background echoes the colors of the
-    // numbers sitting on top of it instead of contradicting them, and a
-    // faint shadow lifts it off the page instead of sitting perfectly flush.
-    val heroStart = LocalSemanticColors.current.success
-    val heroEnd = if (hasShortages) marketAccent else LocalSemanticColors.current.warning
-    Surface(
-        modifier = Modifier
+    // بطاقتان مسطّحتان متلاصقتان (زوايا كبيرة على الأطراف فقط) بدل البطاقة المتدرّجة العائمة.
+    Row(
+        Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .liquidGlassSurface(
-                shape = MaterialTheme.shapes.extraLarge,
-                baseBrush = androidx.compose.ui.graphics.Brush.linearGradient(
-                    listOf(heroStart.copy(alpha = 0.20f), heroEnd.copy(alpha = 0.12f))
-                ),
-                elevation = 6.dp,
-                highlight = false
-            ),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = Color.Transparent
+            .padding(horizontal = AppScreenPadding)
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(AppGroupGap)
     ) {
-        Box(
-            Modifier
-                .padding(18.dp)
-        ) {
-            // IntrinsicSize.Min: lets the thin divider below use
-            // fillMaxHeight() to match the two HeroStat columns' own
-            // content height, instead of the unbounded height a LazyColumn
-            // item would otherwise hand this Row.
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-                HeroStat(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.AttachMoney,
-                    // REDESIGN (reference screenshot: the debts total's
-                    // icon circle reads a distinct green, not the same
-                    // neutral tone as the rest of the card's chrome) — the
-                    // semantic "success" accent already used for a settled
-                    // debt/paid check elsewhere in the app.
-                    accentColor = LocalSemanticColors.current.success,
-                    title = "إجمالي الديون",
-                    valueContent = {
-                        AnimatedCounterText(
-                            targetValue = totalDebt,
-                            format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
-                            animate = !debtsLoading
-                        )
-                    },
-                    subtitle = "$totalPersons عميل"
-                )
-                Box(
-                    Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .padding(vertical = 4.dp)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                )
-                HeroStat(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Default.Inventory2,
-                    accentColor = if (hasShortages) marketAccent else secondary,
-                    title = "قائمة النواقص",
-                    valueContent = {
-                        AnimatedCounterText(
-                            targetValue = shortagesCount.toDouble(),
-                            format = { it.toInt().toString() },
-                            animate = !materialsLoading
-                        )
-                    },
-                    subtitle = if (hasShortages) "بانتظار الشراء" else "لا يوجد نواقص"
-                )
-            }
+        AppRowSurface(shape = groupedTileShape(0, 1), modifier = Modifier.weight(1f).fillMaxHeight()) {
+            HeroStat(
+                modifier = Modifier.padding(16.dp),
+                icon = Icons.Default.AttachMoney,
+                accentColor = LocalSemanticColors.current.success,
+                title = "إجمالي الديون",
+                valueContent = {
+                    AnimatedCounterText(
+                        targetValue = totalDebt,
+                        format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
+                        animate = !debtsLoading
+                    )
+                },
+                subtitle = "$totalPersons عميل"
+            )
+        }
+        AppRowSurface(shape = groupedTileShape(1, 1), modifier = Modifier.weight(1f).fillMaxHeight()) {
+            HeroStat(
+                modifier = Modifier.padding(16.dp),
+                icon = Icons.Default.Inventory2,
+                accentColor = if (hasShortages) marketAccent else secondary,
+                title = "قائمة النواقص",
+                valueContent = {
+                    AnimatedCounterText(
+                        targetValue = shortagesCount.toDouble(),
+                        format = { it.toInt().toString() },
+                        animate = !materialsLoading
+                    )
+                },
+                subtitle = if (hasShortages) "بانتظار الشراء" else "لا يوجد نواقص"
+            )
         }
     }
 }
@@ -701,27 +641,29 @@ private fun HeroStat(
 @Composable
 private fun SectionCard(
     title: String,
-    color: Color = MaterialTheme.colorScheme.primary,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
     icon: ImageVector? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (icon != null) {
-                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                }
-                Text(title, style = MaterialTheme.typography.titleSmall, color = color)
+    Column(Modifier.fillMaxWidth().padding(horizontal = AppScreenPadding)) {
+        Row(
+            Modifier.padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
             }
-            Spacer(Modifier.height(8.dp))
-            content()
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        AppCard {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), content = content)
         }
     }
 }
