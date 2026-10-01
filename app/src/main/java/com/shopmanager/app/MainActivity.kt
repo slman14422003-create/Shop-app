@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -25,6 +26,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -178,6 +180,49 @@ class MainActivity : FragmentActivity() {
     // later Intent onNewIntent hands us.
     private var pendingNotificationAction by mutableStateOf<NotificationAction?>(null)
 
+    // True once the app has left the screen (home / app switch / screen off)
+    // while a PIN is set — see onStop below and the lock overlay in setContent.
+    private var lockedByLeave by mutableStateOf(false)
+    private val lockSettings by lazy { SettingsRepository(applicationContext) }
+
+    /**
+     * onStop fires both when the person leaves the app and when the screen
+     * turns off, which are exactly the two moments that should re-lock it.
+     * (It also fires when another full-screen activity opens on top — e.g. the
+     * share sheet or APK installer — so returning from those asks again too;
+     * "القفل عند الخروج" in Settings turns this behavior off.)
+     */
+    /**
+     * FEATURE ADDED (FLAG_SECURE): while a PIN is set (and "منع لقطات الشاشة"
+     * is on in Settings) the window is marked secure — screenshots and screen
+     * recording show black, and the app's thumbnail in the recent-apps list is
+     * blank, so shop debts/prices can't leak from there. Re-evaluated on every
+     * resume and called by SettingsScreen right after the PIN/toggle changes.
+     */
+    fun applySecureFlag() {
+        val secure = lockSettings.hasPin && lockSettings.secureScreen
+        if (secure) {
+            window.setFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SECURE,
+                android.view.WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applySecureFlag()
+    }
+
+    override fun onStop() {
+        if (!isFinishing && lockSettings.hasPin && lockSettings.autoLockOnLeave) {
+            lockedByLeave = true
+        }
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // PERF FIX (startup jitter): installSplashScreen() must run before
         // super.onCreate(). It puts a static app icon on a flat brand-color
@@ -186,6 +231,8 @@ class MainActivity : FragmentActivity() {
         // still busy underneath.
         val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+        // Must be set before the first frame so even the splash/lock never lands in a screenshot.
+        applySecureFlag()
 
         // "زجاجي بالكامل" (full glass, edge-to-edge): let this Activity's
         // window draw behind both system bars instead of the OS reserving
@@ -540,7 +587,7 @@ class MainActivity : FragmentActivity() {
                                     }
                                 ) { isUnlocked ->
                                     if (!isUnlocked) {
-                                        LockScreen(settings = settings, onUnlocked = { unlocked = true })
+                                        LockScreen(settings = settings, onUnlocked = { unlocked = true; lockedByLeave = false })
                                     } else {
                                         ShopManagerApp(
                                             settings = settings,
@@ -549,6 +596,34 @@ class MainActivity : FragmentActivity() {
                                             onRecheckDevicePerformance = onRecheckDevicePerformance,
                                             pendingNotificationAction = pendingNotificationAction,
                                             onConsumeNotificationAction = { pendingNotificationAction = null }
+                                        )
+                                    }
+                                }
+
+                                // FEATURE ADDED ("عند الخروج او اغلاق الشاشة يطلب البصمة كل مرة"):
+                                // onStop() below raises [lockedByLeave]; this overlay then
+                                // covers the already-open app with the lock screen. It is an
+                                // overlay (not a swap) on purpose: ShopManagerApp stays composed
+                                // underneath, so after unlocking the person lands exactly where
+                                // they were (same tab / same open screen) instead of at the
+                                // dashboard. Touches and Back are swallowed so nothing under it
+                                // can be reached.
+                                if (lockedByLeave && unlocked) {
+                                    BackHandler { moveTaskToBack(true) }
+                                    Box(
+                                        Modifier
+                                            .fillMaxSize()
+                                            .pointerInput(Unit) {
+                                                awaitPointerEventScope {
+                                                    while (true) {
+                                                        awaitPointerEvent().changes.forEach { it.consume() }
+                                                    }
+                                                }
+                                            }
+                                    ) {
+                                        LockScreen(
+                                            settings = settings,
+                                            onUnlocked = { lockedByLeave = false }
                                         )
                                     }
                                 }
