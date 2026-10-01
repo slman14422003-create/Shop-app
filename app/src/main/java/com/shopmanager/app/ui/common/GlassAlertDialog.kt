@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.shopmanager.app.ui.theme.glassHairlineColor
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -141,7 +142,7 @@ fun GlassAlertDialog(
                     )
             ) {
                 Column {
-                    Column(Modifier.padding(horizontal = 24.dp, vertical = 22.dp)) {
+                    Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 20.dp)) {
                         icon?.let {
                             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                                 CompositionLocalProvider(LocalContentColor provides resolvedTitleColor) { it() }
@@ -153,14 +154,18 @@ fun GlassAlertDialog(
                                 contentAlignment = Alignment.CenterStart
                             ) {
                                 ProvideTextStyle(
-                                    MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+                                    MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 24.sp,
+                                        lineHeight = 30.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
                                 ) {
                                     CompositionLocalProvider(LocalContentColor provides resolvedTitleColor) { it() }
                                 }
                             }
                         }
                         text?.let {
-                            Box(Modifier.fillMaxWidth().padding(top = if (title != null) 10.dp else 0.dp)) {
+                            Box(Modifier.fillMaxWidth().padding(top = if (title != null) 16.dp else 0.dp)) {
                                 ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
                                     CompositionLocalProvider(LocalContentColor provides resolvedTextColor) { it() }
                                 }
@@ -178,7 +183,7 @@ fun GlassAlertDialog(
                     // matches the reference: primary action on top,
                     // dismiss/cancel below it.
                     Column(
-                        Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 22.dp),
+                        Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
                         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
                     ) {
                         // REDESIGN ("ازرار الحفظ لونها ابيض"): the confirm/save
@@ -199,7 +204,7 @@ fun GlassAlertDialog(
                         // green "تم السداد" success label) still wins, since
                         // an explicit color always overrides the ambient one.
                         DialogButtonCell(
-                            Modifier.fillMaxWidth().height(50.dp)
+                            Modifier.fillMaxWidth().height(52.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(MaterialTheme.colorScheme.onSurface)
                         ) {
@@ -216,7 +221,7 @@ fun GlassAlertDialog(
                         }
                         if (dismissButton != null) {
                             DialogButtonCell(
-                                Modifier.fillMaxWidth().height(50.dp)
+                                Modifier.fillMaxWidth().height(52.dp)
                                     .clip(RoundedCornerShape(50))
                                     // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
                                     // LIGHT-MODE CONTRAST FIX: this outline-only
@@ -225,7 +230,10 @@ fun GlassAlertDialog(
                                     // functional but effectively invisible button.
                                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                             ) {
-                                dismissButton()
+                                // نفس نصّ الزر الثانوي (tonal) في AppPillButton: لون onSurface.
+                                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+                                    dismissButton()
+                                }
                             }
                         }
                     }
