@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.debts
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -16,9 +18,11 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.groupedRowShape
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,28 +76,43 @@ fun PersonEditDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (initial == null) "عميل جديد" else "تعديل العميل") },
         text = {
+            // حقول النموذج مجمّعة كصفوف الإعدادات: متلاصقة بفاصل صغير، الأول فقط
+            // بزوايا علوية كبيرة والأخير فقط بزوايا سفلية كبيرة.
             Column {
-                AppTextField(
-                    value = name, onValueChange = { name = it }, enabled = !isSaving,
-                    label = "اسم العميل", modifier = Modifier.fillMaxWidth()
-                )
-                AppTextField(
-                    value = amount, onValueChange = { amount = it }, enabled = !isSaving,
-                    label = if (initial == null) "الدين الأولي (${AppSettingsState.currencySymbol})" else "المبلغ (${AppSettingsState.currencySymbol})",
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                )
-                AppTextField(
-                    value = date, onValueChange = { date = it }, enabled = !isSaving,
-                    label = "التاريخ (yyyy-MM-dd)", modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                )
-                AppTextField(
-                    value = note, onValueChange = { note = it }, enabled = !isSaving,
-                    label = "ملاحظة (اختياري)",
-                    singleLine = false, minLines = 1, maxLines = 3,
-                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
-                )
-                error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
+                Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+                    AppTextField(
+                        value = name, onValueChange = { name = it }, enabled = !isSaving,
+                        label = "اسم العميل", modifier = Modifier.fillMaxWidth(),
+                        shape = groupedRowShape(0, 3)
+                    )
+                    AppTextField(
+                        value = amount, onValueChange = { amount = it }, enabled = !isSaving,
+                        label = if (initial == null) "الدين الأولي (${AppSettingsState.currencySymbol})" else "المبلغ (${AppSettingsState.currencySymbol})",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = groupedRowShape(1, 3)
+                    )
+                    AppTextField(
+                        value = date, onValueChange = { date = it }, enabled = !isSaving,
+                        label = "التاريخ (yyyy-MM-dd)", modifier = Modifier.fillMaxWidth(),
+                        shape = groupedRowShape(2, 3)
+                    )
+                    AppTextField(
+                        value = note, onValueChange = { note = it }, enabled = !isSaving,
+                        label = "ملاحظة (اختياري)",
+                        singleLine = false, minLines = 1, maxLines = 3,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = groupedRowShape(3, 3)
+                    )
+                }
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                    )
+                }
             }
         },
         confirmButton = {
