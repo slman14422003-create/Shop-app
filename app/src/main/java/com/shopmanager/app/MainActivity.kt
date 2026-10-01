@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -169,7 +169,7 @@ private const val SPLASH_MIN_DISPLAY_LOW_MS = 650L
 // so nothing in the app still reads as borrowed from iOS.
 private val claudeStandardEasing = MotionSpecs.claudeEasing
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     // Class-level (not inside setContent) so onNewIntent below - fired when
     // the app is already running and a *second* notification is tapped -
     // can update it too. A local `remember { mutableStateOf(...) }` created
