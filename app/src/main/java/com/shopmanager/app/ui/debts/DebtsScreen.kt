@@ -60,6 +60,24 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.style.TextOverflow
+import com.shopmanager.app.ui.common.AppEmptyState
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppIconCircle
+import com.shopmanager.app.ui.common.AppPillButton
+import com.shopmanager.app.ui.common.AppRowSurface
+import com.shopmanager.app.ui.common.AppScreenPadding
+import com.shopmanager.app.ui.common.AppStat
+import com.shopmanager.app.ui.common.AppStatsStrip
+import com.shopmanager.app.ui.common.ScreenIconButton
+import com.shopmanager.app.ui.common.ScreenTopBar
+import com.shopmanager.app.ui.common.groupedRowShape
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -164,65 +182,56 @@ fun DebtsScreen(
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
-            TopAppBar(
-                // REDESIGN: title/navigationIcon/actions all branch on
-                // `isSearching` so the same bar reads as either the normal
-                // "الديون" header or a focused search field — no second bar,
-                // no layout jump, just the one bar's content swapping.
-                title = {
-                    if (isSearching) {
-                        AppSearchBar(
-                            query = search.value,
-                            onQueryChange = { search.value = it },
-                            onClose = { isSearching = false; search.value = "" },
-                            placeholder = "بحث عن عميل...",
-                            focusRequester = searchFocusRequester,
-                            showBackButton = false
+            if (isSearching) {
+                // البحث يحلّ محل الشريط كله: رجوع + حقل بحث على شكل حبّة.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .height(64.dp)
+                        .padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ScreenIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "إغلاق البحث",
+                        onClick = { isSearching = false; search.value = "" }
+                    )
+                    AppSearchBar(
+                        query = search.value,
+                        onQueryChange = { search.value = it },
+                        onClose = { isSearching = false; search.value = "" },
+                        placeholder = "بحث عن عميل...",
+                        focusRequester = searchFocusRequester,
+                        showBackButton = false,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp)
+                    )
+                }
+            } else {
+                ScreenTopBar(
+                    title = "الديون",
+                    reservedIcons = 2,
+                    navigation = {
+                        ScreenIconButton(
+                            icon = Icons.Default.Menu,
+                            contentDescription = "القائمة",
+                            onClick = onOpenDrawer
                         )
-                    } else {
-                        Text("الديون", style = MaterialTheme.typography.titleLarge)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    navigationIconContentColor = BrandOnGradient,
-                    titleContentColor = BrandOnGradient,
-                    actionIconContentColor = BrandOnGradient
-                ),
-                navigationIcon = {
-                    if (isSearching) {
-                        IconButton(onClick = { isSearching = false; search.value = "" }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "إغلاق البحث")
-                        }
-                    } else {
-                        IconButton(onClick = onOpenDrawer) {
-                            Icon(Icons.Default.Menu, contentDescription = "القائمة")
-                        }
-                    }
-                },
-                actions = {
-                    if (isSearching) {
-                        // The clear glyph now lives inside AppSearchBar's own
-                        // pill (see `title` above), so there's nothing left
-                        // to draw in the actions slot while searching.
-                    } else {
-                        GlassIconButton(
+                    },
+                    actions = {
+                        ScreenIconButton(
                             icon = Icons.Default.Search,
                             contentDescription = "بحث",
-                            onClick = { isSearching = true },
-                            modifier = Modifier.padding(end = 4.dp),
-                            size = 36.dp
+                            onClick = { isSearching = true }
                         )
-                        GlassIconButton(
+                        ScreenIconButton(
                             icon = Icons.Default.Share,
                             contentDescription = "مشاركة",
-                            onClick = { showShareChoice.value = true },
-                            modifier = Modifier.padding(end = 8.dp),
-                            size = 36.dp
+                            onClick = { showShareChoice.value = true }
                         )
                     }
-                }
-            )
+                )
+            }
         },
         // The "عميل جديد" FAB used to live here on its own, but that action
         // now lives as the shared quick-add "+" beside the bottom nav pill
@@ -245,26 +254,14 @@ fun DebtsScreen(
             // common action on this screen (adding a customer) has a clear,
             // full-width target right under the stats instead of only being
             // reachable from the small floating "+" beside the nav pill.
-            Surface(
+            AppPillButton(
+                label = "عميل جديد",
+                icon = Icons.Default.Add,
                 onClick = { showAddDialog.value = true },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-                // LIGHT-MODE CONTRAST FIX: this "عميل جديد" button was
-                // borderless and nearly invisible in light mode.
-                border = BorderStroke(1.dp, glassHairlineColor(0.5f))
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 14.dp),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("عميل جديد", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                }
-            }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = AppScreenPadding, end = AppScreenPadding, bottom = 12.dp)
+            )
 
             // PERF: same remember-keyed fix as the materials tabs — skip
             // re-filtering the whole person list unless `search` or
@@ -287,14 +284,15 @@ fun DebtsScreen(
                     // row in the list scrolls fully clear of both instead
                     // of stopping underneath either one.
                     contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 4.dp,
+                        start = AppScreenPadding, end = AppScreenPadding, top = 4.dp,
                         bottom = listBottomClearance
                     ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
                     itemsIndexed(filtered, key = { _, person -> person.id }) { index, person ->
                         PersonRow(
                             person,
+                            groupedRowShape(index, filtered.lastIndex),
                             Modifier
                                 .animateItem(
                                     fadeInSpec = null,
@@ -391,167 +389,58 @@ fun DebtsScreen(
 
 @Composable
 private fun StatsRow(persons: Int, debts: Int, amount: Double) {
-    // iOS 26 REDESIGN: flat surface + hairline border instead of a
-    // drop-shadowed ElevatedCard — matches Dashboard/Settings' cards now.
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            // ANIMATION: these three used to snap straight to the new
-            // number the instant a person/debt was added or removed. Now
-            // they count up/down to it (same AnimatedCounterText already
-            // used for the dashboard totals), so adding a customer or a
-            // debt here visibly reflects in the header instead of just
-            // silently changing.
-            StatItem("عملاء", persons.toDouble()) { "%.0f".format(it) }
-            VerticalDivider()
-            StatItem("ديون", debts.toDouble()) { "%.0f".format(it) }
-            VerticalDivider()
-            StatItem("الإجمالي (${AppSettingsState.currencySymbol})", amount) { Formatters.number(it) }
-        }
-    }
-}
-
-@Composable
-private fun VerticalDivider() {
-    Box(
-        Modifier
-            .height(36.dp)
-            .width(1.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant)
+    AppStatsStrip(
+        stats = listOf(
+            AppStat("عملاء", persons.toDouble()) { "%.0f".format(it) },
+            AppStat("ديون", debts.toDouble()) { "%.0f".format(it) },
+            AppStat("الإجمالي (${AppSettingsState.currencySymbol})", amount) { Formatters.number(it) }
+        ),
+        modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 10.dp)
     )
 }
 
 @Composable
-private fun StatItem(label: String, value: Double, format: (Double) -> String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        androidx.compose.runtime.CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.primary
-        ) {
-            com.shopmanager.app.ui.common.AnimatedCounterText(
-                targetValue = value,
-                format = format,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall)
-    }
-}
-
-@Composable
 private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                icon, contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = MaterialTheme.colorScheme.outlineVariant
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
+    AppEmptyState(icon = icon, text = text)
 }
 
 @Composable
 private fun PersonRow(
     person: Person,
+    shape: Shape,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onMarkPaid: () -> Unit
 ) {
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed = interactionSource.collectIsPressedAsState().value
-    val scaleState = androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = MotionSpecs.pressSpring(),
-        label = "personRowScale"
-    )
-    val scale = scaleState.value
-
-    // BUG FIXED (solid black bar under the row's action icons): the press
-    // scale used to be applied directly on the same modifier chain as the
-    // card's own elevation/shadow. On some GPUs (notably budget devices —
-    // exactly the low-end phones this app already tiers for, see
-    // DevicePerformance) scaling a composable that is *also* casting a
-    // shadow in the same layer makes the shadow rasterize as a flat black
-    // rectangle instead of a soft blur — visible as a hard black strip
-    // sitting under the row, right where the check/delete/chevron icons
-    // are. Moving `.scale()` onto a plain outer Box, so it never shares a
-    // graphics layer with the card's own shadow, fixes this everywhere it
-    // happens without giving up the press animation. iOS 26 REDESIGN also
-    // drops the shadow itself (shadowElevation = 0.dp below) in favour of
-    // a flat surface + hairline border, so this is now belt-and-braces
-    // rather than the only thing preventing the bug.
-    Box(modifier.fillMaxWidth().scale(scale)) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = interactionSource,
-                indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = onClick
-            ),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
+    // صف مسطّح متلاصق مع جيرانه (نفس لغة صفوف الإعدادات): بلا حدود ولا ظل.
+    AppRowSurface(shape = shape, modifier = modifier, onClick = onClick) {
         Row(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 68.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier.size(44.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(person.name.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold)
+            AppIconCircle(color = avatarColor, size = 44.dp) {
+                Text(
+                    person.name.firstOrNull()?.uppercase() ?: "?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                // BUG FIXED: an unbounded name could wrap to 2 lines and
-                // push the row taller than its avatar/action buttons,
-                // breaking the row's vertical alignment for that one
-                // customer only (every other row stayed single-line height).
                 Text(
                     person.name,
+                    style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis
                 )
-                // UI: a paid-off customer (amount == 0) used to show the
-                // same "٠ ل.س" as everyone else — reads as if something
-                // failed to load rather than "settled". A short, muted
-                // "no debt" label makes a zero balance immediately legible
-                // as a good state, in the same green used for the "paid"
-                // check button elsewhere on this row.
                 if (person.amount > 0) {
-                    // REDESIGN ("تصميم بشكل اجمل" + "الوان الثيمات بدها
-                    // تحسين وتباين"): the owed amount used to be a plain
-                    // low-contrast onSurfaceVariant line, identical in
-                    // weight to every other muted label on the row — the
-                    // single most important number on this list read no
-                    // differently than a footnote. Now a small rounded,
-                    // colored badge (same PillBadge language المواد
-                    // already uses for its own quantities) so it stands
-                    // out at a glance and pairs the two lists' visual
-                    // vocabulary.
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(4.dp))
                     com.shopmanager.app.ui.common.PillBadge(
                         text = "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
                         color = LocalSemanticColors.current.danger
@@ -559,24 +448,11 @@ private fun PersonRow(
                 } else {
                     Text(
                         "لا يوجد دين حالياً",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = LocalSemanticColors.current.success
                     )
                 }
             }
-            // Mark-as-paid: same shared circular action button as every
-            // other check/edit/delete affordance in the app (see
-            // ActionIconButton) so it's pixel-identical to the delete "×"
-            // right next to it instead of a couple dp larger with no press
-            // feedback. Settles the person's whole balance in one tap and
-            // fires the same "paid" notification. Only shown when there's
-            // actually something to settle.
-            //
-            // FIX: 10dp read as touching/merged on-device once the two
-            // 36dp filled circles sat next to each other — their soft
-            // tinted backgrounds made the row look like one blob instead
-            // of two distinct buttons. Widened to a gap that reads
-            // unmistakably as two separate actions.
             if (person.amount > 0) {
                 ActionIconButton(
                     icon = Icons.Default.Check,
@@ -584,16 +460,10 @@ private fun PersonRow(
                     contentDescription = "تسجيل سداد كامل الدين",
                     onClick = onMarkPaid
                 )
-                Spacer(Modifier.width(16.dp))
+                Spacer(Modifier.width(10.dp))
             }
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف العميل")
-            Spacer(Modifier.width(10.dp))
-            Icon(
-                Icons.Default.ChevronLeft, contentDescription = null,
-                tint = MaterialTheme.colorScheme.outlineVariant
-            )
         }
-    }
     }
 }
 

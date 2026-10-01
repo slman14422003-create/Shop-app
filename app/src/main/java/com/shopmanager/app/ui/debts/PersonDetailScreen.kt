@@ -52,6 +52,29 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.sp
+import com.shopmanager.app.ui.common.AppCard
+import com.shopmanager.app.ui.common.AppFootnote
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppGroupLargeRadius
+import com.shopmanager.app.ui.common.AppIconCircle
+import com.shopmanager.app.ui.common.AppPillButton
+import com.shopmanager.app.ui.common.AppRowSurface
+import com.shopmanager.app.ui.common.AppScreenPadding
+import com.shopmanager.app.ui.common.AppSectionGap
+import com.shopmanager.app.ui.common.AppSectionTitle
+import com.shopmanager.app.ui.common.ScreenIconButton
+import com.shopmanager.app.ui.common.ScreenTopBar
+import com.shopmanager.app.ui.common.groupedRowShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 
 private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
@@ -118,89 +141,38 @@ fun PersonDetailScreen(
         contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        person.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    // BUG FIXED (السهم والاسم فايتين ببعض / back button
-                    // glued to the title): only `start` padding (space from
-                    // the screen edge) was set here — nothing separated the
-                    // button from the title text sitting right after it in
-                    // the navigation-icon slot, so the person's name ended
-                    // up crammed against the button. `end` padding opens a
-                    // real gap before the title, matching the same fix
-                    // already applied on Settings/MaterialCatalog's back
-                    // buttons.
-                    GlassIconButton(
+            ScreenTopBar(
+                title = person.name,
+                reservedIcons = 2,
+                navigation = {
+                    ScreenIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
-                        onClick = onBack,
-                        modifier = Modifier.padding(start = 8.dp, end = 12.dp),
-                        size = 36.dp
+                        onClick = onBack
                     )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = BrandOnGradient,
-                    navigationIconContentColor = BrandOnGradient,
-                    actionIconContentColor = BrandOnGradient
-                ),
-                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
-                // liquidGlassSurface panel (and the flat-brush seam-matching
-                // hack it needed against PersonHeader below) — both now sit
-                // flush on the plain background like every other screen.
                 actions = {
-                    // BUG FIXED (الزرين فايتين ببعض / overlapping icons):
-                    // each button previously carried its own `padding(end
-                    // = ...)`, which pads OUTSIDE that button's own box —
-                    // it doesn't reserve any space from its *neighbor*.
-                    // TopAppBar's actions slot is a Row that measures each
-                    // child at its natural (unconstrained) width and packs
-                    // them back-to-back with zero gap of its own, so with
-                    // two icon buttons sitting side by side here, only
-                    // 4.dp of the intended gap actually separated the two
-                    // circles — nowhere near enough once IconButton's own
-                    // ~48.dp minimum touch target (larger than the visible
-                    // 36.dp circle drawn inside it) is added in, which is
-                    // exactly what visually crowded/overlapped in the
-                    // screenshot. A Row with `spacedBy` inserts a real gap
-                    // *between* children instead of relying on each
-                    // child's own outside padding to add up correctly.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        GlassIconButton(
-                            icon = Icons.Default.Edit,
-                            contentDescription = "تعديل اسم العميل",
-                            onClick = {
-                                editNameText = person.name
-                                showEditNameDialog = true
-                            },
-                            size = 36.dp
-                        )
-                        GlassIconButton(
-                            icon = Icons.Default.Delete,
-                            contentDescription = "حذف العميل",
-                            onClick = { showDeletePersonConfirm = true },
-                            size = 36.dp
-                        )
-                    }
+                    ScreenIconButton(
+                        icon = Icons.Default.Edit,
+                        contentDescription = "تعديل اسم العميل",
+                        onClick = {
+                            editNameText = person.name
+                            showEditNameDialog = true
+                        }
+                    )
+                    ScreenIconButton(
+                        icon = Icons.Default.Delete,
+                        contentDescription = "حذف العميل",
+                        onClick = { showDeletePersonConfirm = true }
+                    )
                 }
             )
         }
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(AppGroupGap)
         ) {
             item {
                 PersonHeader(
@@ -211,6 +183,8 @@ fun PersonDetailScreen(
                     nf = nf
                 )
             }
+
+            item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
 
             item {
                 AddDebtCard(
@@ -235,28 +209,30 @@ fun PersonDetailScreen(
                 )
             }
 
-            item {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("سجل الديون", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                }
-            }
+            item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
+
+            item { AppSectionTitle("سجل الديون") }
+
+            item { Spacer(Modifier.height(4.dp)) }
 
             if (debts.isEmpty()) {
                 item {
-                    Box(Modifier.fillMaxWidth().padding(top = 24.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    AppRowSurface(shape = RoundedCornerShape(AppGroupLargeRadius)) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(
                                 Icons.Default.PriceCheck, contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.outlineVariant
+                                modifier = Modifier.size(24.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(Modifier.height(8.dp))
-                            Text("لا يوجد ديون مسجلة", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.width(16.dp))
+                            Text(
+                                "لا يوجد ديون مسجلة",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -265,6 +241,7 @@ fun PersonDetailScreen(
                     DebtRow(
                         debt = debt,
                         nf = nf,
+                        shape = groupedRowShape(index, debts.lastIndex),
                         onEdit = {
                             editingDebt = debt
                             amount = debt.amount.toString()
@@ -278,45 +255,33 @@ fun PersonDetailScreen(
                 }
             }
 
-            // "ترابط بين الديون والملاحظات": قسم منفصل يعرض أي ملاحظة هامة
-            // مربوطة بهذا العميل تحديدًا - قبل هالإضافة كانت هالعلاقة اتجاه
-            // وحيد بس (من الملاحظة تقدر تفتح صفحة العميل)، هلق تقدر كمان
-            // تشوف/تضيف/تعدل ملاحظات هذا العميل من صفحته مباشرة.
+            item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
+
             item {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Notes, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        "ملاحظات مرتبطة",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    ActionIconButton(
-                        icon = Icons.Default.Add,
-                        tint = MaterialTheme.colorScheme.primary,
-                        contentDescription = "إضافة ملاحظة لهذا العميل",
-                        onClick = { showAddLinkedNote = true }
-                    )
-                }
+                AppSectionTitle(
+                    text = "ملاحظات مرتبطة",
+                    trailing = {
+                        ActionIconButton(
+                            icon = Icons.Default.Add,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            contentDescription = "إضافة ملاحظة لهذا العميل",
+                            onClick = { showAddLinkedNote = true }
+                        )
+                    }
+                )
             }
+
+            item { Spacer(Modifier.height(4.dp)) }
 
             if (linkedNotes.isEmpty()) {
                 item {
-                    Text(
-                        "لا توجد ملاحظات مرتبطة بهذا العميل بعد",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                    AppFootnote("لا توجد ملاحظات مرتبطة بهذا العميل بعد")
                 }
             } else {
-                items(linkedNotes, key = { "linkedNote_${it.id}" }) { linkedNote ->
+                itemsIndexed(linkedNotes, key = { _, n -> "linkedNote_${n.id}" }) { index, linkedNote ->
                     LinkedNoteRow(
                         note = linkedNote,
+                        shape = groupedRowShape(index, linkedNotes.lastIndex),
                         onToggleDone = { notesViewModel.setDone(linkedNote, !linkedNote.isDone) },
                         onEdit = { editingLinkedNote = linkedNote },
                         onDelete = { deleteNoteTarget = linkedNote }
@@ -477,41 +442,44 @@ fun PersonDetailScreen(
 
 @Composable
 private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsCount: Int, nf: NumberFormat) {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            // UNIFIED ON CLAUDE'S DESIGN: this used to be a second
-            // liquidGlassSurface panel matched flush against the TopAppBar's
-            // own (via `topFlush` + a shared flat brush) so the two read as
-            // one continuous glass slab. Both panels are gone now — this
-            // sits directly on the plain background like the rest of the
-            // screen, so there's no seam left to match in the first place.
-            .padding(20.dp)
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                // BUG FIXED (الأفاتار طالعة صندوق رمادي باهت): `avatarColor`
-                // كان بيوصل كباراميتر لهاد الـ Composable بس ما حدا يستخدمه -
-                // الصندوق كان دايماً أبيض شفاف بغض النظر عن اسم العميل، عكس
-                // نفس الأفاتار الملوّن اللي العميل ياخده بقائمة الديون
-                // (PersonRow بـ DebtsScreen.kt). هيك صار شكلها هون مختلف عن
-                // باقي التطبيق - بالضبط الصندوق الرمادي الباهت المحاط
-                // بالدائرة الحمرا بالسكرين شوت.
-                Modifier.size(52.dp).clip(MaterialTheme.shapes.medium).background(avatarColor),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(name.firstOrNull()?.uppercase() ?: "?", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+    // بطاقة الملخص بنفس شكل بطاقة الحساب في الإعدادات: مسطّحة وزواياها كبيرة.
+    AppCard {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIconCircle(color = avatarColor, size = 52.dp) {
+                Text(
+                    name.firstOrNull()?.uppercase() ?: "?",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge
+                )
             }
-            Spacer(Modifier.width(14.dp))
-            Column {
-                Text("إجمالي الديون", color = BrandOnGradient.copy(alpha = 0.85f), style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "إجمالي الديون",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge
+                )
                 Text(
                     "${nf.format(total)} ${AppSettingsState.currencySymbol}",
-                    color = BrandOnGradient,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.SemiBold
                 )
-                Text("$debtsCount عملية دين مسجلة", color = BrandOnGradient.copy(alpha = 0.75f), style = MaterialTheme.typography.labelSmall)
+            }
+            Spacer(Modifier.width(12.dp))
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.onSurface) {
+                Text(
+                    "$debtsCount عملية",
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.surface
+                )
             }
         }
     }
@@ -532,11 +500,11 @@ private fun AddDebtCard(
 ) {
     // طلب "دمج نمط الـ Glassmorphism": نفس البطاقة، بستايل الزجاج الموحّد
     // (GlassCard) بدل الـ Surface المسطحة - راجع الشرح الكامل بـ GlassCard.kt.
-    GlassCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    AppCard {
         Column(Modifier.padding(16.dp)) {
             Text(
                 if (isEditing) "تعديل الدين" else "إضافة دين جديد",
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.height(10.dp))
@@ -567,14 +535,15 @@ private fun AddDebtCard(
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(10.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppPillButton(
+                    label = if (isEditing) "حفظ التعديل" else "إضافة الدين",
+                    onClick = onSubmit,
+                    modifier = Modifier.weight(1f)
+                )
                 if (isEditing) {
-                    TextButton(onClick = onCancelEdit) { Text("إلغاء") }
-                    Spacer(Modifier.width(4.dp))
-                }
-                Button(onClick = onSubmit, shape = MaterialTheme.shapes.medium) {
-                    Text(if (isEditing) "حفظ التعديل" else "إضافة الدين")
+                    AppPillButton(label = "إلغاء", onClick = onCancelEdit, tonal = true)
                 }
             }
         }
@@ -582,29 +551,42 @@ private fun AddDebtCard(
 }
 
 @Composable
-private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: () -> Unit, onMarkPaid: () -> Unit, modifier: Modifier = Modifier) {
-    GlassCard(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+private fun DebtRow(
+    debt: Debt,
+    nf: NumberFormat,
+    shape: Shape,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onMarkPaid: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AppRowSurface(shape = shape, modifier = modifier) {
         Row(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 64.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Mark-as-paid: shared circular action button (see
-            // ActionIconButton) — tapping it asks for confirmation, then
-            // removes the debt and fires a "paid" notification.
             ActionIconButton(
                 icon = Icons.Default.Check,
                 tint = LocalSemanticColors.current.success,
                 contentDescription = "تسجيل السداد",
                 onClick = onMarkPaid
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     "${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}",
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                Text(debt.date, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    debt.date,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (debt.note.isNotBlank()) {
                     Row(
                         Modifier.padding(top = 2.dp),
@@ -612,48 +594,26 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
                     ) {
                         Icon(
                             Icons.Default.Notes, contentDescription = null,
-                            modifier = Modifier.size(13.dp).padding(top = 2.dp),
-                            // LIGHT-MODE CONTRAST FIX ("اصلح تباين الوضع
-                            // النهاري"): `outline` is ≈2.5:1 against a white
-                            // card — well under the 3:1 UI-component floor,
-                            // and far under the 4.5:1 text needs at this
-                            // labelSmall size. onSurfaceVariant (used for
-                            // debt.date right above, ≈5.6:1) is the color
-                            // this app already uses for this exact kind of
-                            // secondary text.
+                            modifier = Modifier.size(14.dp).padding(top = 2.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.width(4.dp))
                         Text(
                             debt.note,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2
                         )
                     }
                 }
             }
-            // FIX: these two used to be bare default IconButtons sitting
-            // directly next to each other with no gap, so their 48dp touch
-            // targets ran into one another and made mis-taps easy. They
-            // also didn't match the circular, tinted affordance used for
-            // every other action in the app (the check button right above,
-            // and DeleteIconButton on the person list and materials list) —
-            // so this row looked like it belonged to a different screen.
-            // Edit now shares the exact same ActionIconButton (info-blue
-            // tint) as the check button above and the delete "×" next to
-            // it, so all three are pixel-identical in size and animation.
-            // Gap widened to 16dp (see the matching fix on the person
-            // list's check/delete pair) — two same-style filled circles
-            // sitting only 10dp apart still read as one merged shape on
-            // device.
             ActionIconButton(
                 icon = Icons.Default.Edit,
-                tint = LocalSemanticColors.current.info,
+                tint = MaterialTheme.colorScheme.onSurface,
                 contentDescription = "تعديل",
                 onClick = onEdit
             )
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(10.dp))
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف الدين")
         }
     }
@@ -669,13 +629,14 @@ private fun DebtRow(debt: Debt, nf: NumberFormat, onEdit: () -> Unit, onDelete: 
 @Composable
 private fun LinkedNoteRow(
     note: ImportantNote,
+    shape: Shape,
     onToggleDone: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    GlassCard(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    AppRowSurface(shape = shape) {
         Row(
-            Modifier.fillMaxWidth().padding(12.dp),
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             ActionIconButton(
@@ -727,11 +688,11 @@ private fun LinkedNoteRow(
             }
             ActionIconButton(
                 icon = Icons.Default.Edit,
-                tint = LocalSemanticColors.current.info,
+                tint = MaterialTheme.colorScheme.onSurface,
                 contentDescription = "تعديل الملاحظة",
                 onClick = onEdit
             )
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(10.dp))
             DeleteIconButton(onClick = onDelete, contentDescription = "حذف الملاحظة")
         }
     }
