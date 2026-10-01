@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
+import com.shopmanager.app.data.performance.LocalRefreshRateHz
 
 /**
  * Single place that turns "تفضيل الأداء" (Settings → الأداء) into the
@@ -46,12 +47,20 @@ object MotionSpecs {
     @Composable
     private fun isLowTier(): Boolean = LocalPerformanceTier.current == PerformanceTier.LOW
 
+    /** شاشة 60Hz: نرفع صلابة النوابض ونقصّر المدد ~20% فتصل الحركة لهدفها بإطارات أقل
+     * ويبدو التطبيق أسرع استجابة ("كأنه 90Hz")؛ على 90Hz+ تبقى الأزمنة الأنعم الأصلية. */
+    @Composable
+    private fun snap(): Float = if (LocalRefreshRateHz.current < 80f) 1.3f else 1f
+
+    @Composable
+    fun durationScale(): Float = if (LocalRefreshRateHz.current < 80f) 0.8f else 1f
+
     /** Button/row press scale-down feedback, and any other quick single-value
      * spring (color/dp highlight, etc.) that should track the same feel. */
     @Composable
     fun <T> quickSpring(): FiniteAnimationSpec<T> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 2.2f
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 2.2f * snap()
     )
 
     /** Button/row press scale-down feedback. */
@@ -62,14 +71,14 @@ object MotionSpecs {
     @Composable
     fun reorderSpring(): FiniteAnimationSpec<IntOffset> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 1.6f
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 1.6f * snap()
     )
 
     /** expandVertically/shrinkVertically size animation. */
     @Composable
     fun expandSpring(): FiniteAnimationSpec<IntSize> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * snap()
     )
 
     /**
@@ -83,13 +92,13 @@ object MotionSpecs {
         tween(durationMillis = fadeMillis(), easing = claudeEasing)
 
     @Composable
-    fun expandMillis(): Int = if (isLowTier()) 90 else 200
+    fun expandMillis(): Int = if (isLowTier()) 90 else (200 * durationScale()).toInt()
 
     @Composable
-    fun collapseMillis(): Int = if (isLowTier()) 70 else 160
+    fun collapseMillis(): Int = if (isLowTier()) 70 else (160 * durationScale()).toInt()
 
     @Composable
-    fun fadeMillis(): Int = if (isLowTier()) 60 else 140
+    fun fadeMillis(): Int = if (isLowTier()) 60 else (140 * durationScale()).toInt()
 
     /**
      * "Pop in" for anything that appears on top of existing content
@@ -101,7 +110,7 @@ object MotionSpecs {
     @Composable
     fun popInSpring(): FiniteAnimationSpec<Float> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium * snap()
     )
 
     /**
@@ -112,7 +121,7 @@ object MotionSpecs {
     @Composable
     fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium
+        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium * snap()
     )
 
     /**
@@ -123,5 +132,5 @@ object MotionSpecs {
      */
     @Composable
     fun contentTween(): FiniteAnimationSpec<Float> =
-        tween(durationMillis = if (isLowTier()) 90 else 220, easing = claudeEasing)
+        tween(durationMillis = if (isLowTier()) 90 else (220 * durationScale()).toInt(), easing = claudeEasing)
 }

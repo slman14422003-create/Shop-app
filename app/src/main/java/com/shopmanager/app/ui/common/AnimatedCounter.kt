@@ -74,6 +74,7 @@ fun AnimatedCounterText(
     var endValue by remember { mutableStateOf(targetValue) }
     var hasRevealedOnce by remember { mutableStateOf(false) }
     val currentFormat by rememberUpdatedState(format)
+    val durationScale = MotionSpecs.durationScale()
 
     LaunchedEffect(targetValue, animate) {
         if (!animate || !hasRevealedOnce || isLowTier) {
@@ -89,7 +90,7 @@ fun AnimatedCounterText(
             progress.snapTo(0f)
             progress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 380, easing = MotionSpecs.claudeEasing)
+                animationSpec = tween(durationMillis = (380 * durationScale).toInt(), easing = MotionSpecs.claudeEasing)
             )
         }
     }

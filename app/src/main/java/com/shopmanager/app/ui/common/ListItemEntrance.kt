@@ -66,13 +66,14 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
     // يجعل الشرط أدناه ثابتاً ولا يقطع الحركة حين نكتب played = true.
     val shouldAnimate = remember { !played.value && index <= MAX_ANIMATED_INDEX }
     val progress = remember { Animatable(if (shouldAnimate) 0f else 1f) }
+    val durationScale = MotionSpecs.durationScale()
 
     if (shouldAnimate) {
         LaunchedEffect(Unit) {
             played.value = true
-            val staggerMs = (index.coerceAtMost(8)) * 28L
+            val staggerMs = ((index.coerceAtMost(8)) * 28L * durationScale).toLong()
             if (staggerMs > 0) delay(staggerMs)
-            progress.animateTo(1f, animationSpec = tween(320, easing = MotionSpecs.claudeEasing))
+            progress.animateTo(1f, animationSpec = tween((320 * durationScale).toInt(), easing = MotionSpecs.claudeEasing))
         }
     }
     return this.graphicsLayer {
