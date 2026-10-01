@@ -105,7 +105,8 @@ fun NoteEditScreen(
     var reminderEnabled by remember { mutableStateOf((initial?.reminderAt ?: 0L) > 0L) }
     val initialCal = remember {
         Calendar.getInstance().apply {
-            if ((initial?.reminderAt ?: 0L) > 0L) timeInMillis = initial!!.reminderAt
+            val savedReminder = initial?.reminderAt ?: 0L
+            if (savedReminder > 0L) timeInMillis = savedReminder
             else add(Calendar.HOUR_OF_DAY, 1)
         }
     }
@@ -168,8 +169,13 @@ fun NoteEditScreen(
                 Column(
                     Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
+                        // KEYBOARD FIX: innerPadding (which carries the IME
+                        // inset) used to sit INSIDE the scroll, so the scroll
+                        // viewport still spanned the whole window and the
+                        // keyboard covered the lower fields. Outside the
+                        // scroll, the viewport itself ends above the keyboard.
                         .padding(innerPadding)
+                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
                     AppTextField(
