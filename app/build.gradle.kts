@@ -271,6 +271,12 @@ dependencies {
     // never a debug run.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.activity:activity-compose:1.13.0")
+    // FEATURE ADDED (فتح القفل بالبصمة/الوجه): BiometricPrompt needs a
+    // FragmentActivity (MainActivity now extends it). fragment-ktx is pinned
+    // explicitly because biometric 1.1.0 would otherwise pull an old fragment
+    // 1.2.x that predates the activity 1.13 line used here.
+    implementation("androidx.fragment:fragment-ktx:1.8.9")
+    implementation("androidx.biometric:biometric:1.1.0")
     // BUILD UPDATE: previously pinned to 2.10.0 because lifecycle 2.11.0's
     // AAR metadata requires compileSdk 37 + AGP 9.1.0+, which this project
     // didn't have yet. Now that compileSdk is 37 and AGP is 9.4.0 (see
