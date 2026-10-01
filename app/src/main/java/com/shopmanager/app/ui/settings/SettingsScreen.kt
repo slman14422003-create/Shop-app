@@ -27,19 +27,34 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.SettingsBackupRestore
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Backup
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.UploadFile
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.CleaningServices
+import androidx.compose.material.icons.outlined.SettingsBrightness
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.repeatOnLifecycle
+import com.shopmanager.app.data.cache.AppCacheManager
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -176,7 +191,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     val debtsRepoForBackup = remember { DebtsRepository() }
     val materialsRepoForBackup = remember { MaterialsRepository() }
-    var backups by remember { mutableStateOf(BackupManager.listBackups(context)) }
+    var backups by remember { mutableStateOf(emptyList<BackupManager.BackupInfo>()) }
     var pendingRestore by remember { mutableStateOf<BackupManager.BackupInfo?>(null) }
     var isRestoring by remember { mutableStateOf(false) }
     var restoreStatus by remember { mutableStateOf<String?>(null) }
@@ -322,11 +337,19 @@ fun SettingsScreen(
     // button doing nothing at all. A light poll while this screen is open
     // picks up that same already-correct signal on a timer instead of
     // waiting for an error to flip first.
-    LaunchedEffect(Unit) {
-        while (true) {
-            kotlinx.coroutines.delay(2000)
-            val fresh = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
-            if (fresh != lastSyncedAt) lastSyncedAt = fresh
+    LaunchedEffect(lifecycleOwner) {
+        // PERF (سلاسة/بطارية): كانت حلقة الفحص تعمل كل ثانيتين طالما الشاشة
+        // مركّبة — حتى والتطبيق في الخلفية. الآن تعمل فقط والشاشة ظاهرة فعلاً
+        // (STARTED) وتتوقف تلقائياً عند الخروج، وقراءة الـ SharedPreferences
+        // تتم على IO بدل الخيط الرئيسي.
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                kotlinx.coroutines.delay(2000)
+                val fresh = withContext(Dispatchers.IO) {
+                    com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
+                }
+                if (fresh != lastSyncedAt) lastSyncedAt = fresh
+            }
         }
     }
 
@@ -369,172 +392,193 @@ fun SettingsScreen(
         }
     }
 
+    // ======================================================================
+    // حالة الواجهة الجديدة (أوراق الاختيار، الكاش، مفاتيح الحماية).
+    // مفاتيح الحماية كانت معرّفة داخل أقسامها الشرطية القديمة؛ رُفعت هنا لأن
+    // الصفوف الآن تُبنى داخل SettingsGroup.
+    // ======================================================================
+    var showThemeSheet by remember { mutableStateOf(false) }
+    var showPerformanceSheet by remember { mutableStateOf(false) }
+    var showAboutSheet by remember { mutableStateOf(false) }
+    var cacheSizeBytes by remember { mutableStateOf<Long?>(null) }
+    var isClearingCache by remember { mutableStateOf(false) }
+    var cacheStatus by remember { mutableStateOf<String?>(null) }
+    var biometricOn by remember { mutableStateOf(settings.biometricEnabled) }
+    var autoLockOn by remember { mutableStateOf(settings.autoLockOnLeave) }
+    var secureOn by remember { mutableStateOf(settings.secureScreen) }
+    val biometricAvailable = remember(hasPin) {
+        hasPin && com.shopmanager.app.ui.lock.BiometricAuth.isAvailable(context)
+    }
+
+    // PERF (سلاسة): قراءة ملفات النسخ الاحتياطي (تحليل JSON كامل) وحساب حجم
+    // الكاش وتنظيف الملفات القديمة كلها عمليات قرص — كانت تتم على الخيط الرئيسي
+    // أثناء أول رسم للشاشة (وهو ما يسبب تقطيعاً عند فتح الإعدادات). الآن تعمل
+    // في الخلفية وتظهر نتائجها فور جاهزيتها.
+    LaunchedEffect(Unit) {
+        backups = withContext(Dispatchers.IO) { BackupManager.listBackups(context) }
+    }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) { AppCacheManager.pruneStale(context) }
+        cacheSizeBytes = withContext(Dispatchers.IO) { AppCacheManager.sizeBytes(context) }
+    }
+
+    val themeLabel = when (themeMode) {
+        AppThemeMode.SYSTEM -> "حسب النظام"
+        AppThemeMode.LIGHT -> "فاتح"
+        AppThemeMode.DARK -> "داكن"
+    }
+    val performanceLabel = when (performanceMode) {
+        PerformanceMode.AUTO -> "تلقائي (حسب الجهاز)"
+        PerformanceMode.HIGH -> "مرتفع (كل التأثيرات)"
+        PerformanceMode.LOW -> "منخفض (أداء أعلى وبطارية أطول)"
+    }
+
+    fun syncNow() {
+        if (isManualSyncing) return
+        isManualSyncing = true
+        scope.launch {
+            val before = lastSyncedAt
+            com.shopmanager.app.data.sync.SyncRetry.forceReconnect()
+            // forceReconnect() يعيد فتح الاتصال فقط؛ ننتظر مهلة قصيرة ليبلغ أحد
+            // المستمعين عن بيانات جديدة قبل إخفاء المؤشر (انظر الإصلاح السابق).
+            var waited = 0L
+            while (waited < 5000) {
+                val fresh = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
+                if (fresh != before) {
+                    lastSyncedAt = fresh
+                    break
+                }
+                kotlinx.coroutines.delay(250)
+                waited += 250
+            }
+            lastSyncedAt = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
+            isManualSyncing = false
+        }
+    }
+
+    fun clearCacheNow() {
+        if (isClearingCache) return
+        isClearingCache = true
+        cacheStatus = null
+        scope.launch {
+            val freed = withContext(Dispatchers.IO) { AppCacheManager.clear(context) }
+            cacheSizeBytes = withContext(Dispatchers.IO) { AppCacheManager.sizeBytes(context) }
+            cacheStatus = if (freed > 0) "تم تحرير ${AppCacheManager.format(freed)} ✅" else "لا يوجد شيء لمسحه"
+            isClearingCache = false
+        }
+    }
+
     Scaffold(
-        // This screen sits outside the main pager (no shared bottom nav
-        // bar of its own), so the outer app Scaffold already reserves the
-        // real bottom/horizontal safe-area space for it one level up, in
-        // NavHost's own padding. Leaving this Scaffold's contentWindowInsets
-        // at its default would apply that same system inset a *second*
-        // time here, pushing content up with an unnecessary empty gap
-        // above the true bottom edge. The TopAppBar below still handles
-        // the status bar inset entirely on its own, independent of this.
+        // الـ Scaffold الخارجي (NavHost) يحجز أصلاً مساحة الحواف السفلية/الجانبية،
+        // فلا نكرر الـ insets هنا؛ الشريط العلوي يعالج حافة شريط الحالة بنفسه.
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
-                title = { Text("الإعدادات", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    GlassIconButton(
-                        icon = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "رجوع",
-                        onClick = onBack,
-                        // BUG FIXED: only `start` padding (space from the
-                        // screen edge) was set here — nothing separated the
-                        // button from the title text sitting right after it
-                        // in the navigation-icon slot, so "الإعدادات" ended
-                        // up glued directly against the button. `end`
-                        // padding is direction-aware, so this opens a real
-                        // gap before the title in this app's forced-RTL
-                        // layout without needing to special-case RTL here.
-                        modifier = Modifier.padding(start = 8.dp, end = 12.dp),
-                        size = 36.dp
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = BrandOnGradient,
-                    navigationIconContentColor = BrandOnGradient
-                )
-                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
-                // liquidGlassSurface panel (rounded bottom corners) this bar
-                // used to sit on — it now sits flush on the plain background
-                // like Home's own header and Claude's own "Settings" screen.
+            SettingsTopBar(
+                title = "الإعدادات",
+                onBack = onBack,
+                onInfo = { showAboutSheet = true }
             )
         }
     ) { padding ->
-        Column(
-            Modifier
+        // REDESIGN + PERF: كانت الشاشة Column داخل verticalScroll تركّب كل
+        // الأقسام (≈ 10 أقسام × AnimatedVisibility تدخل منفصل) دفعة واحدة عند
+        // الفتح. LazyColumn يركّب فقط ما يظهر على الشاشة، وكل مجموعة عنصر
+        // مستقل بمفتاح ثابت فلا تُعاد تركيبتها عند تغيّر حالة مجموعة أخرى.
+        LazyColumn(
+            modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(start = ScreenGap, end = ScreenGap, top = 6.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(ScreenGap)
         ) {
-            // REDESIGN ("شاشة الاعدادات... عدلهم" — matching the reference
-            // screen's own top hero card): opens with a branded card first,
-            // above every grouped option list below it.
-            AppHeroCard(appVersion = appVersion, onOpenHelp = onOpenHelp)
+            // بطاقة الحساب العلوية (اسم التطبيق + شارة الإصدار)
+            item(key = "account", contentType = "card") {
+                SettingsAccountCard(name = "إدارة المحل", badge = "v${appVersion.name}")
+            }
 
-            // تنبيه تلقائي: يظهر فقط إذا تعذر تحميل البيانات من الخادم
-            // (وليس لمجرد أن القائمة فارغة فعليًا) وتوجد نسخة محلية يمكن
-            // العودة إليها. لا يوجد استرجاع صامت تلقائي أبدًا — هذا زر
-            // بلمسة واحدة، ليس عملية تحدث من دون علم صاحب المحل.
-            //
-            // ANIMATION: pops in with a springy scale+fade (MotionSpecs.
-            // popInSpring) instead of just appearing — a sudden "error"
-            // card popping onto the screen instantly reads as jarring;
-            // easing it in makes the same information feel considered
-            // rather than alarming. Fades+shrinks back out the same way
-            // when dismissed or resolved.
-            AnimatedVisibility(
-                visible = (debtsSyncError || materialsSyncError) && backups.isNotEmpty() && !dismissedServerErrorBanner,
-                enter = fadeIn(MotionSpecs.contentTween()) + scaleIn(MotionSpecs.popInSpring(), initialScale = 0.92f) + expandVertically(MotionSpecs.expandSpring()),
-                exit = fadeOut(MotionSpecs.contentTween()) + scaleOut(MotionSpecs.popInSpring(), targetScale = 0.92f) + shrinkVertically(MotionSpecs.expandSpring())
-            ) {
-                // BUG FIXED / RE-UNIFIED (see GlassCard.kt's own note): this
-                // was a raw Material3 ElevatedCard with the platform's own
-                // default tonal-elevation shadow — the one visibly
-                // "un-Claude" card left in the app. GlassCard gives the same
-                // errorContainer tint with the app's own flat-fill +
-                // hairline-border look instead.
-                GlassCard(
-                    Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.large,
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                            Spacer(Modifier.width(8.dp))
+            // بطاقة بحدّ خارجي (مكان "Want more Claude?") — دليل الاستخدام
+            item(key = "guide", contentType = "card") {
+                SettingsPromoCard(
+                    title = "دليل الاستخدام",
+                    description = "تعرّف على كل ميزات التطبيق خطوة بخطوة: الديون والمواد والأسعار والنسخ الاحتياطي.",
+                    buttonLabel = "فتح الدليل",
+                    onClick = onOpenHelp
+                )
+            }
+
+            // تنبيه تلقائي: يظهر فقط إذا تعذر تحميل البيانات من الخادم وتوجد
+            // نسخة محلية يمكن العودة إليها (لا استرجاع صامت أبداً).
+            if ((debtsSyncError || materialsSyncError) && backups.isNotEmpty() && !dismissedServerErrorBanner) {
+                item(key = "serverBanner", contentType = "banner") {
+                    GlassCard(
+                        Modifier
+                            .fillMaxWidth()
+                            .animateItem(
+                                fadeInSpec = MotionSpecs.contentTween(),
+                                placementSpec = MotionSpecs.reorderSpring(),
+                                fadeOutSpec = MotionSpecs.listItemFadeOut()
+                            ),
+                        shape = MaterialTheme.shapes.large,
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "تعذّر الاتصال بالخادم",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
                             Text(
-                                "تعذّر الاتصال بالخادم",
-                                fontWeight = FontWeight.SemiBold,
+                                "يمكنك استعادة آخر نسخة احتياطية محلية (${formatBackupDate(backups.first().createdAt)}) لحين عودة الاتصال.",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "يمكنك استعادة آخر نسخة احتياطية محلية (${formatBackupDate(backups.first().createdAt)}) لحين عودة الاتصال.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Row {
-                            Button(onClick = { pendingRestore = backups.first() }) { Text("استعادة الآن") }
-                            Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = { dismissedServerErrorBanner = true }) { Text("لاحقاً") }
+                            Spacer(Modifier.height(10.dp))
+                            Row {
+                                Button(onClick = { pendingRestore = backups.first() }) { Text("استعادة الآن") }
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = { dismissedServerErrorBanner = true }) { Text("لاحقاً") }
+                            }
                         }
                     }
                 }
             }
 
-            // المظهر (appearance)
-            SettingsSection(title = "المظهر", icon = Icons.Default.Palette) {
-                AppThemeMode.entries.forEach { mode ->
-                    IosOptionRow(
-                        label = when (mode) {
-                            AppThemeMode.SYSTEM -> "حسب النظام"
-                            AppThemeMode.LIGHT -> "فاتح"
-                            AppThemeMode.DARK -> "داكن"
-                        },
-                        selected = themeMode == mode,
-                        onClick = {
-                            themeMode = mode
-                            settings.themeMode = mode
-                            onThemeChanged(mode)
-                        }
+            // عام: وضع الألوان / العملة / الأداء — كل واحد يفتح ورقة اختيار
+            item(key = "general", contentType = "group") {
+                SettingsGroup {
+                    item(
+                        icon = Icons.Outlined.Palette,
+                        title = "وضع الألوان",
+                        subtitle = themeLabel,
+                        onClick = { showThemeSheet = true }
+                    )
+                    item(
+                        icon = Icons.Outlined.AttachMoney,
+                        title = "العملة",
+                        subtitle = "$currency — تظهر في الديون والمواد والمشاركة",
+                        onClick = { showCurrencyDialog = true }
+                    )
+                    item(
+                        icon = Icons.Outlined.Speed,
+                        title = "الأداء",
+                        subtitle = performanceLabel,
+                        onClick = { showPerformanceSheet = true }
                     )
                 }
-                // "شيل الألوان، خليه بس ليلي/نهاري": لا وجود لأي خيار لون
-                // بعد اليوم — فاتح/داكن/حسب النظام فقط. لا حاجة لعرض
-                // ColorModeSection أصلاً بما إنه ما عاد له أي تأثير على
-                // شكل التطبيق (راجع ShopManagerTheme في Theme.kt).
             }
 
-            // العملة (currency) — new feature
-            SettingsSection(title = "العملة", icon = Icons.Default.AttachMoney) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("رمز العملة المستخدم بكل أنحاء التطبيق")
-                        Text(
-                            "يظهر في الديون والمواد والمشاركة والتنبيهات",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    OutlinedButton(onClick = { showCurrencyDialog = true }) { Text(currency) }
-                }
-            }
-
-            // الإشعارات (notifications) — new feature
-            SettingsSection(title = "الإشعارات", icon = Icons.Default.Notifications) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("تنبيهات قائمة النواقص والديون الجديدة")
-                        Text(
-                            "أوقفها إذا كنت لا تريد إشعارات على هذا الجهاز",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
+            // الإشعارات
+            item(key = "notifications", contentType = "group") {
+                SettingsGroup {
+                    switchItem(
+                        icon = Icons.Outlined.Notifications,
+                        title = "الإشعارات",
+                        subtitle = "تنبيهات قائمة النواقص والديون الجديدة على هذا الجهاز",
                         checked = notificationsEnabled,
                         onCheckedChange = {
                             notificationsEnabled = it
@@ -543,170 +587,106 @@ fun SettingsScreen(
                             NotificationSync.apply(context)
                         }
                     )
-                }
-                AnimatedVisibility(
-                    visible = notificationsEnabled,
-                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
-                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically(MotionSpecs.expandSpring())
-                ) {
-                    Column {
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("المزامنة الفورية بالخلفية")
-                                Text(
-                                    "تصلك إشعارات الأجهزة الأخرى لحظة حدوثها حتى والتطبيق مغلق (يظهر إشعار صامت صغير دائم). أوقفها على الهاتف الضعيف ليكتفي بفحص دوري كل 15–30 دقيقة أو أكثر",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                    if (notificationsEnabled) {
+                        switchItem(
+                            icon = Icons.Outlined.NotificationsActive,
+                            title = "المزامنة الفورية بالخلفية",
+                            subtitle = "تصلك إشعارات الأجهزة الأخرى لحظة حدوثها حتى والتطبيق مغلق (إشعار صامت صغير دائم). أوقفها على الهاتف الضعيف ليكتفي بفحص دوري.",
+                            checked = realtimeSyncEnabled,
+                            onCheckedChange = {
+                                realtimeSyncEnabled = it
+                                settings.realtimeSyncEnabled = it
+                                NotificationSync.apply(context)
                             }
-                            Switch(
-                                checked = realtimeSyncEnabled,
-                                onCheckedChange = {
-                                    realtimeSyncEnabled = it
-                                    settings.realtimeSyncEnabled = it
-                                    NotificationSync.apply(context)
-                                }
-                            )
-                        }
+                        )
                     }
                 }
-                AnimatedVisibility(
-                    visible = notificationsEnabled && !systemNotificationsAllowed,
-                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
-                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically(MotionSpecs.expandSpring())
-                ) {
-                    Column {
-                        Spacer(Modifier.height(10.dp))
-                        // Same fix as the server-unreachable banner above —
-                        // GlassCard instead of a raw Material ElevatedCard.
-                        GlassCard(
-                            Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.large,
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        "الإشعارات موقوفة من نظام الجهاز",
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                                Spacer(Modifier.height(6.dp))
+            }
+
+            // تحذير: المفتاح مفعّل لكن النظام يمنع الإشعارات فعلياً
+            if (notificationsEnabled && !systemNotificationsAllowed) {
+                item(key = "notificationsBlocked", contentType = "banner") {
+                    GlassCard(
+                        Modifier
+                            .fillMaxWidth()
+                            .animateItem(
+                                fadeInSpec = MotionSpecs.contentTween(),
+                                placementSpec = MotionSpecs.reorderSpring(),
+                                fadeOutSpec = MotionSpecs.listItemFadeOut()
+                            ),
+                        shape = MaterialTheme.shapes.large,
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(Modifier.width(8.dp))
                                 Text(
-                                    // "اصلح ميزات الاشعارات": distinguishes the
-                                    // all-or-nothing case (app-level toggle off)
-                                    // from a specific channel being disabled —
-                                    // see blockedChannelLabels above.
-                                    if (blockedChannelLabels.isNotEmpty())
-                                        "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع تحديداً هذه الإشعارات: ${blockedChannelLabels.joinToString("، ")} — لن تصلك حتى تُفعّلها من إعدادات إشعارات التطبيق."
-                                    else
-                                        "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع هذا التطبيق تحديداً من إظهار أي إشعار على هذا الجهاز — لن تصلك تنبيهات النواقص أو الديون الجديدة مهما حدث بالتطبيق حتى تُفعّلها من إعدادات الجهاز.",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    "الإشعارات موقوفة من نظام الجهاز",
+                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
-                                Spacer(Modifier.height(10.dp))
-                                Button(onClick = {
-                                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                    context.startActivity(intent)
-                                }) { Text("فتح إعدادات الإشعارات") }
                             }
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                if (blockedChannelLabels.isNotEmpty())
+                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع تحديداً هذه الإشعارات: ${blockedChannelLabels.joinToString("، ")} — لن تصلك حتى تُفعّلها من إعدادات إشعارات التطبيق."
+                                else
+                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع هذا التطبيق تحديداً من إظهار أي إشعار على هذا الجهاز — لن تصلك تنبيهات النواقص أو الديون الجديدة مهما حدث بالتطبيق حتى تُفعّلها من إعدادات الجهاز.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            Button(onClick = {
+                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                context.startActivity(intent)
+                            }) { Text("فتح إعدادات الإشعارات") }
                         }
                     }
                 }
             }
 
-            // الحماية (security / PIN lock) — REORGANIZED ("اعد ترتيب
-            // الشاشة"): moved up next to الإشعارات so the two "protect my
-            // device/data" toggles sit together near the top, ahead of the
-            // more technical المزامنة/الأداء sections below.
-            SettingsSection(title = "الحماية", icon = if (hasPin) Icons.Default.Lock else Icons.Default.LockOpen) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text(if (hasPin) "قفل برمز PIN مفعّل" else "قفل برمز PIN غير مفعّل")
-                        Text("يحمي فتح التطبيق برمز محلي على هذا الجهاز فقط", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (hasPin) {
-                        TextButton(onClick = { settings.clearPin(); hasPin = false; applySecure() }) { Text("إلغاء") }
-                    } else {
-                        TextButton(onClick = { showSetPinDialog = true }) { Text("تفعيل") }
-                    }
-                }
-                // FEATURE ADDED: biometric shortcut — only offered once a PIN
-                // exists (the lock screen itself only exists then) and the
-                // phone really has an enrolled fingerprint/face.
-                val biometricAvailable = remember(hasPin) {
-                    hasPin && com.shopmanager.app.ui.lock.BiometricAuth.isAvailable(context)
-                }
-                if (biometricAvailable) {
-                    var biometricOn by remember { mutableStateOf(settings.biometricEnabled) }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("فتح بالبصمة أو الوجه")
-                            Text(
-                                "بديل أسرع عن كتابة الـ PIN، ويبقى الـ PIN متاحاً دائماً",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+            // الحماية
+            item(key = "security", contentType = "group") {
+                SettingsGroup {
+                    switchItem(
+                        icon = if (hasPin) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                        title = "قفل برمز PIN",
+                        subtitle = if (hasPin) "مفعّل — يحمي فتح التطبيق على هذا الجهاز فقط"
+                        else "غير مفعّل — فعّله لحماية التطبيق برمز محلي",
+                        checked = hasPin,
+                        onCheckedChange = { on ->
+                            if (on) {
+                                showSetPinDialog = true
+                            } else {
+                                settings.clearPin()
+                                hasPin = false
+                                applySecure()
+                            }
                         }
-                        Switch(
+                    )
+                    if (biometricAvailable) {
+                        switchItem(
+                            icon = Icons.Outlined.Fingerprint,
+                            title = "فتح بالبصمة أو الوجه",
+                            subtitle = "بديل أسرع عن كتابة الـ PIN، ويبقى الـ PIN متاحاً دائماً",
                             checked = biometricOn,
                             onCheckedChange = { biometricOn = it; settings.biometricEnabled = it }
                         )
                     }
-                }
-                // FEATURE ADDED ("قفل عند الخروج"): re-lock every time the app
-                // leaves the screen or the screen turns off.
-                if (hasPin) {
-                    var autoLockOn by remember { mutableStateOf(settings.autoLockOnLeave) }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("القفل عند الخروج")
-                            Text(
-                                "يطلب الرمز أو البصمة كل مرة تخرج من التطبيق أو تُطفئ الشاشة",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
+                    if (hasPin) {
+                        switchItem(
+                            icon = Icons.Outlined.Timer,
+                            title = "القفل عند الخروج",
+                            subtitle = "يطلب الرمز أو البصمة كل مرة تخرج من التطبيق أو تُطفئ الشاشة",
                             checked = autoLockOn,
                             onCheckedChange = { autoLockOn = it; settings.autoLockOnLeave = it }
                         )
-                    }
-                }
-                // FEATURE ADDED (FLAG_SECURE): block screenshots + hide the recents preview.
-                if (hasPin) {
-                    var secureOn by remember { mutableStateOf(settings.secureScreen) }
-                    Row(
-                        Modifier.fillMaxWidth().padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("منع لقطات الشاشة")
-                            Text(
-                                "يخفي التطبيق في لقطة الشاشة والتسجيل وفي قائمة التطبيقات الأخيرة",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
+                        switchItem(
+                            icon = Icons.Outlined.VisibilityOff,
+                            title = "منع لقطات الشاشة",
+                            subtitle = "يخفي التطبيق في لقطة الشاشة والتسجيل وفي قائمة التطبيقات الأخيرة",
                             checked = secureOn,
                             onCheckedChange = { secureOn = it; settings.secureScreen = it; applySecure() }
                         )
@@ -714,329 +694,126 @@ fun SettingsScreen(
                 }
             }
 
-            // المزامنة — new section: real connectivity + last successful
-            // sync time + a manual "مزامنة الآن" retry, built on the new
-            // sync helper layer (data/sync/SyncStatus.kt) instead of the
-            // old sync-error banner being the only signal in the whole
-            // screen about sync health.
-            SettingsSection(title = "المزامنة", icon = Icons.Default.CloudDownload) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(if (isOnline) LocalSemanticColors.current.success else MaterialTheme.colorScheme.error)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (isOnline) "متصل" else "غير متصل بالإنترنت", fontWeight = FontWeight.SemiBold)
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    if (lastSyncedAt != null) "آخر مزامنة ناجحة: ${formatBackupDate(lastSyncedAt!!)}"
-                    else "لم تتم أي مزامنة على هذا الجهاز بعد",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = {
-                        isManualSyncing = true
-                        scope.launch {
-                            val before = lastSyncedAt
-                            com.shopmanager.app.data.sync.SyncRetry.forceReconnect()
-                            // BUG FIXED: forceReconnect() only drops/reopens
-                            // the connection - it returns as soon as that
-                            // handshake completes, not once a listener has
-                            // actually received fresh data and called
-                            // SyncStatusStore.recordSuccess(). Reading the
-                            // timestamp immediately after almost always read
-                            // the OLD value, so the button appeared to do
-                            // nothing even when the reconnect genuinely
-                            // worked. Give the listeners a short window to
-                            // report back in before giving up the spinner.
-                            var waited = 0L
-                            while (waited < 5000) {
-                                val fresh = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
-                                if (fresh != before) {
-                                    lastSyncedAt = fresh
-                                    break
-                                }
-                                kotlinx.coroutines.delay(250)
-                                waited += 250
-                            }
-                            lastSyncedAt = com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)
-                            isManualSyncing = false
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isManualSyncing
-                ) {
-                    if (isManualSyncing) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text("جاري إعادة المحاولة...")
-                    } else {
-                        Text("مزامنة الآن")
-                    }
-                }
-            }
-
-            // الأداء (performance) — lets the person override the
-            // automatic per-device detection with an explicit choice, so a
-            // phone that got misclassified (or someone who just prefers a
-            // snappier/more static feel) isn't stuck with it.
-            SettingsSection(title = "الأداء", icon = Icons.Default.Speed) {
-                Text(
-                    "يتحكم بحدّة التأثيرات البصرية (التدرجات اللونية والانميشن). اختر \"تلقائي\" ليقرر التطبيق حسب قوة جهازك.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-                listOf(
-                    PerformanceMode.AUTO to "تلقائي (حسب الجهاز)",
-                    PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
-                    PerformanceMode.LOW to "منخفض (أداء أعلى وبطارية أطول)"
-                ).forEach { (mode, label) ->
-                    IosOptionRow(
-                        label = label,
-                        selected = performanceMode == mode,
-                        onClick = {
-                            performanceMode = mode
-                            settings.performanceMode = mode
-                            onPerformancePreferenceChanged(mode)
-                        }
-                    )
-                }
-                // FEATURE ADDED: DevicePerformance.resetCachedTier already
-                // existed for exactly this ("Not wired to any screen yet"
-                // per its own doc comment) but had no UI hook anywhere —
-                // a device misclassified on its very first launch (e.g.
-                // caught mid-boot, or a borderline RAM/core reading) had
-                // no way to be re-measured short of a full reinstall. This
-                // only matters in "تلقائي" mode — a manual HIGH/LOW choice
-                // already overrides detection outright regardless of what
-                // it says.
-                if (performanceMode == PerformanceMode.AUTO) {
-                    Spacer(Modifier.height(6.dp))
-                    // FEATURE ADDED: shows the raw signals behind the
-                    // detection instead of it being an opaque decision —
-                    // uses DevicePerformance.currentDeviceInfo (fresh
-                    // measurement) so this stays accurate right after
-                    // tapping "إعادة فحص" below, not just on first load.
-                    val deviceInfo = remember(recheckTick) {
-                        com.shopmanager.app.data.performance.DevicePerformance.currentDeviceInfo(context)
-                    }
-                    Text(
-                        "الجهاز الحالي: ${deviceInfo.totalRamMb} MB رام، ${deviceInfo.cores} أنوية" +
-                            (if (deviceInfo.osFlaggedLowRam) " — مصنّف من النظام كجهاز منخفض الموارد" else "") +
-                            // FEATURE ADDED ("اصلاحات للاجهزة اللي فيها معالج
-                            // رسوميات ضعيف"): surfaces the new GPU signal
-                            // alongside RAM/cores so "kind of an OK phone but
-                            // still landed on LOW" isn't a mystery anymore.
-                            (if (deviceInfo.weakGpu) " — معالج رسوميات ضعيف/قديم" else "") +
-                            // IMPROVEMENT ADDED: surfaces the new memoryClass
-                            // signal too, so a device flagged LOW purely by
-                            // its OEM-tuned heap ceiling (fine RAM/cores/GPU
-                            // on paper) isn't a mystery either.
-                            (if (deviceInfo.weakMemoryClass) " — ذاكرة تطبيق محدودة (${deviceInfo.memoryClassMb}MB)" else ""),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    TextButton(onClick = {
-                        onRecheckDevicePerformance()
-                        recheckTick++
-                    }) { Text("إعادة فحص أداء الجهاز") }
-                }
-            }
-
-            // نسخة احتياطية (backup / export) — new feature
-            if (debtsViewModel != null && materialsViewModel != null) {
-                SettingsSection(title = "نسخة احتياطية", icon = Icons.Default.CloudDownload) {
-                    Text(
-                        "أرسل نسخة نصية من كل العملاء والديون والمواد والأسعار لنفسك (واتساب، بريد، ملاحظات...) كنسخة احتياطية سريعة.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Button(
-                        onClick = { showExportShareChoice = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = LocalSemanticColors.current.success)
-                    ) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("تصدير نسخة احتياطية الآن")
-                    }
-
-                    // FEATURE ADDED ("استعادة نسخة تم تصديرها"): the button
-                    // above only ever produces a human-readable text share —
-                    // fine to read, impossible to load back into the app.
-                    // This exports the actual structured JSON snapshot (same
-                    // shape as the automatic on-device one below) to a real
-                    // file the person chooses the location for, which the
-                    // "استعادة من ملف" button further down can then read
-                    // back in — on this phone or a new one.
-                    Spacer(Modifier.height(10.dp))
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "أو صدّر نسخة كاملة كملف (JSON) يمكن استعادتها لاحقًا على هذا الجهاز أو جهاز آخر.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = {
-                            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(java.util.Date())
-                            exportFileLauncher.launch("shop_manager_backup_$stamp.json")
+            // المزامنة
+            item(key = "sync", contentType = "group") {
+                SettingsGroup {
+                    item(
+                        icon = Icons.Outlined.Sync,
+                        title = if (isOnline) "متصل" else "غير متصل بالإنترنت",
+                        subtitle = when {
+                            isManualSyncing -> "جاري إعادة المحاولة..."
+                            else -> lastSyncedAt?.let { "آخر مزامنة ناجحة: ${formatBackupDate(it)} — اضغط للمزامنة الآن" }
+                                ?: "لم تتم أي مزامنة على هذا الجهاز بعد — اضغط للمزامنة الآن"
                         },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isExportingFile
-                    ) {
-                        if (isExportingFile) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text("جارٍ الحفظ...")
-                        } else {
-                            Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("تصدير نسخة كملف (JSON)")
+                        enabled = !isManualSyncing,
+                        onClick = { syncNow() },
+                        trailing = {
+                            if (isManualSyncing) {
+                                SettingsSpinner()
+                            } else {
+                                SettingsStatusDot(
+                                    if (isOnline) LocalSemanticColors.current.success else MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
-                    }
-                    exportFileStatus?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-
-            // النسخ الاحتياطي التلقائي المحلي (silent local backup) — new feature
-            SettingsSection(title = "النسخ الاحتياطي التلقائي", icon = Icons.Default.SettingsBackupRestore) {
-                Text(
-                    "يحتفظ التطبيق دائمًا بآخر نسخة كاملة من بياناتك على هذا الجهاز فقط، تُحدَّث تلقائيًا وبصمت (بدون أي إشعار) بعد كل حفظ جديد — أي نسخة أقدم تُحذف فورًا لأنها لم تعد مطلوبة. لا تُستعاد هذه النسخة إلا من هنا، أو إذا تعذّر الاتصال بالخادم.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(10.dp))
-                if (backups.isEmpty()) {
-                    Text(
-                        "لا توجد نسخة بعد — ستُنشأ تلقائيًا مع أول حفظ.",
-                        style = MaterialTheme.typography.bodySmall
                     )
-                } else {
-                    val backup = backups.first()
-                    Row(
-                        Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                }
+            }
+
+            // النسخ الاحتياطي (تصدير) — يحتاج الـ ViewModels
+            if (debtsViewModel != null && materialsViewModel != null) {
+                item(key = "export", contentType = "group") {
+                    SettingsGroup {
+                        item(
+                            icon = Icons.Outlined.Backup,
+                            title = "تصدير نسخة احتياطية",
+                            subtitle = "نص أو صورة بكل العملاء والديون والمواد والأسعار (واتساب، بريد، ملاحظات...)",
+                            onClick = { showExportShareChoice = true }
+                        )
+                        item(
+                            icon = Icons.Outlined.FileDownload,
+                            title = "تصدير نسخة كملف (JSON)",
+                            subtitle = exportFileStatus
+                                ?: "ملف كامل يمكن استعادته لاحقًا على هذا الجهاز أو جهاز آخر",
+                            enabled = !isExportingFile,
+                            onClick = {
+                                val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(java.util.Date())
+                                exportFileLauncher.launch("shop_manager_backup_$stamp.json")
+                            },
+                            trailing = if (isExportingFile) SpinnerTrailing else null
+                        )
+                    }
+                }
+            }
+
+            // النسخ الاحتياطي التلقائي المحلي + الاستعادة
+            item(key = "restore", contentType = "group") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingsGroup {
+                        item(
+                            icon = Icons.Outlined.Restore,
+                            title = "النسخة التلقائية على الجهاز",
+                            subtitle = backups.firstOrNull()?.let {
+                                "آخر نسخة: ${formatBackupDate(it.createdAt)} — ${it.personsCount} عميل، ${it.materialsCount} مادة · اضغط للاستعادة"
+                            } ?: "لا توجد نسخة بعد — ستُنشأ تلقائيًا مع أول حفظ",
+                            enabled = backups.isNotEmpty() && !isRestoring,
+                            onClick = { backups.firstOrNull()?.let { pendingRestore = it } }
+                        )
+                        item(
+                            icon = Icons.Outlined.UploadFile,
+                            title = "استعادة من ملف",
+                            subtitle = "اختر ملف JSON تم تصديره سابقًا (من هذا الجهاز أو جهاز آخر)",
+                            enabled = !isRestoring,
+                            onClick = { importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
+                        )
+                    }
+                    SettingsFootnote(
+                        "يحتفظ التطبيق دائمًا بآخر نسخة كاملة على هذا الجهاز فقط، وتُحدَّث بصمت بعد كل حفظ جديد. " +
+                            "تُستعاد من هنا أو إذا تعذّر الاتصال بالخادم."
+                    )
+                    AnimatedVisibility(
+                        visible = isRestoring,
+                        enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
+                        exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically(MotionSpecs.expandSpring())
                     ) {
-                        Column {
-                            Text(
-                                "آخر نسخة: ${formatBackupDate(backup.createdAt)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                "${backup.personsCount} عميل، ${backup.materialsCount} مادة",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        OutlinedButton(onClick = { pendingRestore = backup }, enabled = !isRestoring) {
-                            Text("استعادة")
-                        }
+                        LinearProgressIndicator(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp)
+                                .clip(RoundedCornerShape(50))
+                        )
                     }
-                }
-                restoreStatus?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(it, style = MaterialTheme.typography.labelSmall)
-                }
-                AnimatedVisibility(
-                    visible = isRestoring,
-                    enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
-                    exit = fadeOut(MotionSpecs.contentTween()) + shrinkVertically(MotionSpecs.expandSpring())
-                ) {
-                    Column {
-                        Spacer(Modifier.height(8.dp))
-                        LinearProgressIndicator(Modifier.fillMaxWidth())
-                    }
-                }
-
-                // FEATURE ADDED ("استعادة نسخة تم تصديرها"): restores from a
-                // JSON file the person picks (one exported earlier from
-                // "تصدير نسخة كملف" above — on this phone or another one
-                // signed into the same shop), not just the automatic
-                // on-device snapshot above. Shares isRestoring/restoreStatus
-                // with the on-device restore since only one restore ever
-                // runs at a time either way.
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "أو استعد نسخة من ملف JSON تم تصديره سابقًا (من هذا الجهاز أو جهاز آخر).",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = { importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isRestoring
-                ) {
-                    Icon(Icons.Default.SettingsBackupRestore, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("استعادة من ملف")
+                    restoreStatus?.let { SettingsFootnote(it) }
                 }
             }
 
-            // التحديثات (updates) — checks the manifest URL configured
-            // from the hidden developer panel and, if a newer version
-            // exists, downloads + installs the APK from inside the app
-            // itself (no external browser step), same feel as Telegram's
-            // in-chat APK updates.
-            SettingsSection(title = "التحديثات", icon = Icons.Default.SystemUpdate) {
-                Text(
-                    "الإصدار الحالي: ${appVersion.name} (${appVersion.code})",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = { checkForUpdate() },
-                    enabled = !isCheckingUpdate,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (isCheckingUpdate) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                        Spacer(Modifier.width(8.dp))
-                        Text("جارٍ التحقق...")
-                    } else {
-                        Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("تحقق من التحديثات")
-                    }
-                }
-                updateStatusMessage?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // التحديثات + الذاكرة المؤقتة
+            item(key = "app", contentType = "group") {
+                SettingsGroup {
+                    item(
+                        icon = Icons.Outlined.SystemUpdate,
+                        title = "التحديثات",
+                        subtitle = when {
+                            isCheckingUpdate -> "جارٍ التحقق..."
+                            updateStatusMessage != null -> updateStatusMessage
+                            else -> "الإصدار الحالي: ${appVersion.name} (${appVersion.code}) — اضغط للتحقق"
+                        },
+                        enabled = !isCheckingUpdate,
+                        onClick = { checkForUpdate() },
+                        trailing = if (isCheckingUpdate) SpinnerTrailing else null
+                    )
+                    item(
+                        icon = Icons.Outlined.CleaningServices,
+                        title = "مسح الذاكرة المؤقتة",
+                        subtitle = cacheStatus
+                            ?: cacheSizeBytes?.let { "الحجم الحالي: ${AppCacheManager.format(it)} — لا يمسح الديون أو المواد" }
+                            ?: "جارٍ حساب الحجم...",
+                        enabled = !isClearingCache,
+                        onClick = { clearCacheNow() },
+                        trailing = if (isClearingCache) SpinnerTrailing else null
+                    )
                 }
             }
-
-            // حول التطبيق — تم حذف زر "دليل الاستخدام" المكرر من هنا
-            // (BUG FIXED: "دليل المستخدم صار موجود مرتين") — الزر الوحيد
-            // له الآن هو الزر البارز أعلى الشاشة في AppHeroCard؛ هذا القسم
-            // صار مخصصًا فقط للروابط التي لا تظهر في مكان آخر.
-            SettingsSection(title = "حول التطبيق", icon = Icons.Default.Info) {
-                OutlinedButton(onClick = onOpenPrivacyPolicy, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("سياسة الخصوصية")
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -1168,7 +945,7 @@ fun SettingsScreen(
                 // Markdown renderer to turn those symbols into real
                 // formatting. It just showed the literal markdown source.
                 // Replaced with a single consistent glyph instead: the same
-                // Icons.Default.SystemUpdate already used for this section's
+                // Icons.Outlined.SystemUpdate already used for this section's
                 // own icon and its "تحقق من التحديثات" button above, so the
                 // whole update flow reads as one visual language. A gentle
                 // up/down pulse (plain animateFloatAsState — already used
@@ -1197,7 +974,7 @@ fun SettingsScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Default.SystemUpdate,
+                            Icons.Outlined.SystemUpdate,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
@@ -1256,25 +1033,120 @@ fun SettingsScreen(
             }
         )
     }
+
+    // ======================================================================
+    // أوراق الاختيار السفلية (بدل سرد كل الخيارات داخل الصفحة)
+    // ======================================================================
+    if (showThemeSheet) {
+        SettingsSheet(title = "وضع الألوان", onDismiss = { showThemeSheet = false }) { close ->
+            SettingsGroup {
+                AppThemeMode.entries.forEach { mode ->
+                    selectItem(
+                        icon = when (mode) {
+                            AppThemeMode.SYSTEM -> Icons.Outlined.SettingsBrightness
+                            AppThemeMode.LIGHT -> Icons.Outlined.LightMode
+                            AppThemeMode.DARK -> Icons.Outlined.DarkMode
+                        },
+                        title = when (mode) {
+                            AppThemeMode.SYSTEM -> "حسب النظام"
+                            AppThemeMode.LIGHT -> "فاتح"
+                            AppThemeMode.DARK -> "داكن"
+                        },
+                        selected = themeMode == mode,
+                        onClick = {
+                            themeMode = mode
+                            settings.themeMode = mode
+                            onThemeChanged(mode)
+                            close()
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showPerformanceSheet) {
+        SettingsSheet(title = "الأداء", onDismiss = { showPerformanceSheet = false }) { close ->
+            SettingsFootnote(
+                "يتحكم بحدّة التأثيرات البصرية (التدرجات اللونية والانميشن). اختر \"تلقائي\" ليقرر التطبيق حسب قوة جهازك."
+            )
+            SettingsGroup {
+                listOf(
+                    PerformanceMode.AUTO to "تلقائي (حسب الجهاز)",
+                    PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
+                    PerformanceMode.LOW to "منخفض (أداء أعلى وبطارية أطول)"
+                ).forEach { (mode, label) ->
+                    selectItem(
+                        title = label,
+                        selected = performanceMode == mode,
+                        onClick = {
+                            performanceMode = mode
+                            settings.performanceMode = mode
+                            onPerformancePreferenceChanged(mode)
+                            close()
+                        }
+                    )
+                }
+            }
+            // إعادة الفحص تعني شيئاً فقط في وضع "تلقائي" (HIGH/LOW يتجاوزان الفحص).
+            if (performanceMode == PerformanceMode.AUTO) {
+                val deviceInfo = remember(recheckTick) {
+                    com.shopmanager.app.data.performance.DevicePerformance.currentDeviceInfo(context)
+                }
+                val deviceText = "الجهاز الحالي: ${deviceInfo.totalRamMb} MB رام، ${deviceInfo.cores} أنوية" +
+                    (if (deviceInfo.osFlaggedLowRam) " — مصنّف من النظام كجهاز منخفض الموارد" else "") +
+                    (if (deviceInfo.weakGpu) " — معالج رسوميات ضعيف/قديم" else "") +
+                    (if (deviceInfo.weakMemoryClass) " — ذاكرة تطبيق محدودة (${deviceInfo.memoryClassMb}MB)" else "")
+                SettingsGroup {
+                    item(
+                        icon = Icons.Outlined.Refresh,
+                        title = "إعادة فحص أداء الجهاز",
+                        subtitle = deviceText,
+                        onClick = {
+                            onRecheckDevicePerformance()
+                            recheckTick++
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (showAboutSheet) {
+        SettingsSheet(title = "حول التطبيق", onDismiss = { showAboutSheet = false }) { _ ->
+            Column(Modifier.padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "إدارة المحل",
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    "تطبيق واحد لإدارة الديون والمواد والأسعار، مبني خصيصًا لمحلك ويعمل حتى بدون اتصال دائم بالإنترنت.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "الإصدار ${appVersion.name} (${appVersion.code}) — تطوير سلمان",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            SettingsGroup {
+                item(
+                    icon = Icons.Outlined.PrivacyTip,
+                    title = "سياسة الخصوصية",
+                    onClick = {
+                        showAboutSheet = false
+                        onOpenPrivacyPolicy()
+                    }
+                )
+            }
+        }
+    }
 }
 
 
-/**
- * iOS 26 REDESIGN ("عدل شاشة الاعدادات بتصميم جميل"): the old wrapper drew
- * every group as its own [ElevatedCard] — a raised, shadowed white/dark
- * rectangle with the group's icon+title *inside* it as its own row. Real
- * iOS Settings never puts a shadowed card around each group: it's a flat,
- * borderless "grouped inset list" — a small caps-style gray label floats
- * *above* a plain rounded surface, and that surface has no elevation of
- * its own at all. Kept the exact same signature (title, icon, content)
- * so every one of this screen's ~10 call sites needed zero changes — only
- * how the group itself is drawn changed.
- *
- * The icon now sits inside a small colored rounded-square "badge" before
- * the label, the way iOS Settings badges each group's icon (a colored
- * square rather than a bare tinted glyph) — and the whole group fades +
- * rises in on first composition instead of just snapping into place.
- */
 /**
  * iOS 26 REDESIGN: replaces a plain [RadioButton] + label row with the
  * way iOS itself shows a single-choice list — the whole row is tappable,
@@ -1306,107 +1178,6 @@ private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) 
             exit = fadeOut(MotionSpecs.popInSpring()) + scaleOut(MotionSpecs.popInSpring(), targetScale = 0.6f)
         ) {
             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        }
-    }
-}
-
-// REDESIGN ("شاشة الاعدادات... عدلهم" — matching the reference screen's own
-// top card): the reference opens with a branded card — name, a short
-// description, then one centered full-width pill button — sitting above
-// every grouped option list, not buried as just another list item near the
-// bottom. Same shape here: "إدارة المحل" name/description/version replace
-// the reference's own app name/tagline, and "دليل الاستخدام" (the user's
-// guide) fills the same slot as the reference's own action button. Uses the
-// same borderless `surfaceContainer` card language as SettingsSection below
-// it, just with its own centered layout instead of a left-aligned list.
-@Composable
-private fun AppHeroCard(appVersion: AppVersion, onOpenHelp: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Column(Modifier.padding(20.dp)) {
-            Text(
-                "إدارة المحل",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "تطبيق واحد لإدارة الديون والمواد والأسعار، مبني خصيصًا لمحلك ويعمل حتى بدون اتصال دائم بالإنترنت.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "الإصدار ${appVersion.name} — تطوير سلمان",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(16.dp))
-            Button(
-                onClick = onOpenHelp,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                ),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) {
-                Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("دليل الاستخدام")
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { visible = true }
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring())
-    ) {
-        // Claude-app style: no colored badge box above the group — just a
-        // plain, single-color outline icon in front of a quiet label, the
-        // same weight as the rows inside it, then a softly-rounded flat
-        // card with no border seam (Claude's Settings groups sit directly
-        // on the dark/cream background with only a faint tonal lift, not a
-        // hairline outline).
-        Column(Modifier.fillMaxWidth()) {
-            Row(
-                Modifier.padding(start = 6.dp, bottom = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    title,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Surface(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp
-            ) {
-                Column(Modifier.padding(16.dp), content = content)
-            }
         }
     }
 }
