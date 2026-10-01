@@ -3,268 +3,201 @@ name: Build Android App and Release
 on:
   push:
     branches: [ main ]
+    # لا داعي لبناء + نشر إصدار جديد لتعديل توثيق فقط
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'انشر إصدارًا على Shop-app-updates (عطّلها لتجربة بناء فقط)'
+        type: boolean
+        default: true
 
+# أقل صلاحيات ممكنة على مستوى الـ workflow؛ الـ job وحده يرفع الصلاحية لـ write
+# (مطلوبة فقط لدفع CHANGELOG.md في الخطوة الأخيرة).
 permissions:
-  contents: write
+  contents: read
 
-# CONCURRENCY GUARD: two pushes to main close together used to start two
-# overlapping runs of this same workflow. Both would build fine on their
-# own, but the last two steps (create the release + commit CHANGELOG.md
-# back to this repo) race: whichever run's "git push" lands second fails
-# outright (non-fast-forward — the other run's commit is already there),
-# or worse, both runs try to create/attach assets to the same
-# v1.0.${{ github.run_number }} tag-shaped release at once. Since each run
-# number is unique per run anyway, there's nothing to gain from letting
-# two run back-to-back — cancelling the older, still-in-progress run the
-# moment a newer push comes in for the same branch removes the race
-# entirely instead of just hoping it doesn't happen.
+# التزامن: cancel-in-progress كان يقتل التشغيل الأقدم في منتصف النشر، فيتركك مع
+# إصدار منشور نصفه (APK واحد بدل اثنين) أو CHANGELOG غير مدفوع. الآن التشغيل
+# الجاري يكمل للآخر، وأي تشغيلات تنتظر خلفه يبقى منها الأحدث فقط.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    # SAFETY NET: caps a hung/runaway run (a stuck Gradle daemon, a stalled
-    # network call) instead of letting it sit "in progress" for GitHub's
-    # default 6-hour job ceiling, quietly burning Actions minutes the
-    # whole time. 40 minutes is generous headroom over a normal run of this
-    # workflow (two full assembles + tests + lint on a small single-module
-    # app) while still catching a real hang quickly.
     timeout-minutes: 40
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      # يمنع Gradle من طباعة تلميحات تفاعلية، ويثبّت الترميز
+      GRADLE_OPTS: -Dfile.encoding=UTF-8 -Dorg.gradle.console=plain
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          # DYNAMIC CHANGELOG: the "Generate changelog" step below needs
-          # real commit history to build the release notes from — the
-          # default shallow checkout (depth 1, just the latest commit) has
-          # no history to diff against, so `git log <range>` would always
-          # come back empty. fetch-depth: 0 pulls full history once per
-          # run, which is the only change needed here for that step to see
-          # actual prior commits.
+          # التاريخ الكامل مطلوب لتوليد ملاحظات الإصدار من الـ commits
           fetch-depth: 0
 
-      # JDK: bumped from 21 to 25 — 25 is now the current LTS (released
-      # Sept 2025, successor to 21's LTS line) and 21's own free-updates
-      # window closes this same month (Sept 2026). AGP 9.4.0 + Gradle 9.7.1
-      # + Kotlin 2.4.20 (see build.gradle.kts) all officially support
-      # running on JDK 25, so this is a safe bump with no other version
-      # changes required here.
       - name: Setup JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
           java-version: '25'
 
-      # CI FIX (٢٠٢٦-٠٩-١٤/١٥ - عطل عام مو متعلق بكود التطبيق): جوجل شالت
-      # الحزمة القديمة "tools" نهائيًا من مستودع Android SDK (كانت متروكة/
-      # deprecated من ٢٠١٩، بس ضلت موجودة بالمستودع لهلق). android-actions/
-      # setup-android@v3 بدون أي `with:` كان بيطلب "tools platform-tools"
-      # كقيمة افتراضية ضمنية، فصار سطر sdkmanager الداخلي فيه يفشل بـ
-      # "Failed to find package 'tools'" قبل ما توصل حتى لخطوة gradle -
-      # نفس الخطأ بالضبط صار بنفس الوقت بمشاريع أندرويد كتيرة غير مرتبطة.
-      # الـ build هون أصلاً ما بيحتاج platform-tools (adb/fastboot) ولا
-      # أي أداة من هالحزم - بس gradle assembleDebug/assembleRelease، و
-      # AGP نفسه بينزّل أي platform/build-tools محدد بـ build.gradle.kts
-      # عند الحاجة. packages: '' يوقف التنزيل الافتراضي المكسور بس يضل
-      # يجهز ANDROID_HOME ويوافق على تراخيص الـ SDK (المطلوبين الوحيدين
-      # فعليًا هون).
+      # packages: '' يمنع التنزيل الافتراضي المكسور لحزمة "tools" (انظر تاريخ
+      # الملف) لكن يضل يجهّز ANDROID_HOME ويقبل التراخيص.
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: ''
 
-      # BUILD UPDATE: bumped to match AGP 9.4.0's own minimum-required
-      # Gradle version (see build.gradle.kts / app/build.gradle.kts) — AGP
-      # 9.4.x needs Gradle 9.6.0+ to run at all, so this has to move in
-      # lockstep with the AGP bump, not independently. 9.7.1 is the latest
-      # stable Gradle release, comfortably above that floor.
+      # يطابق الحد الأدنى المطلوب لـ AGP 9.4 (Gradle 9.6.0+). كاش Gradle
+      # والتبعيات يديره هذا الـ action تلقائيًا.
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.7.1'
 
-      # QUALITY GATE (unit tests): fails the whole run if a unit test
-      # actually breaks, same as any real Android CI pipeline — catching a
-      # regression here instead of only after it's already in a published
-      # release. If this module has no unit tests yet, Gradle reports the
-      # task as NO-SOURCE and this step just passes; nothing to configure
-      # either way for that case.
-      - name: Run unit tests
-        run: gradle testDebugUnitTest --no-daemon
+      # ─────────────────────────────────────────────────────────────────────
+      # توقيع الإصدار (إصلاح مهم): بدون مفتاح ثابت كان AGP يولّد مفتاح debug
+      # جديدًا في كل تشغيل على GitHub، فكل APK ينزل بتوقيع مختلف عن اللي قبله
+      # وأندرويد يرفض التحديث فوق النسخة المثبّتة ("App not installed" /
+      # تعارض توقيع). الحل: حط keystore الإصدار الحقيقي كـ Secrets (مرة وحدة):
+      #   RELEASE_KEYSTORE_BASE64  ← base64 -w0 keystore/shopmanager-release.jks
+      #   RELEASE_STORE_PASSWORD
+      #   RELEASE_KEY_ALIAS
+      #   RELEASE_KEY_PASSWORD
+      # إذا ما انحطّوا يكمل البناء كالسابق (مفتاح debug) مع تحذير واضح.
+      # ─────────────────────────────────────────────────────────────────────
+      - name: Restore release keystore (optional)
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p "$RUNNER_TEMP/signing"
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing/release.jks"
+            chmod 600 "$RUNNER_TEMP/signing/release.jks"
+            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/signing/release.jks" >> "$GITHUB_ENV"
+            echo "تم تجهيز مفتاح التوقيع من الـ Secrets."
+          else
+            echo "::warning title=توقيع غير ثابت::RELEASE_KEYSTORE_BASE64 غير معرّف — سيُوقَّع الإصدار بمفتاح debug مؤقت، وتحديث التطبيق من داخله سيفشل بتعارض التوقيع."
+          fi
 
-      # QUALITY CHECK (lint), non-blocking on purpose: `continue-on-error`
-      # means a pre-existing lint finding somewhere in the app can't
-      # suddenly start blocking every push to main / the auto-release this
-      # workflow does — that would turn "add one new lint-flagged line"
-      # into "the app stops shipping updates" with no warning. The report
-      # itself is still generated and uploaded (see the next step) so
-      # findings stay visible without being a hard gate.
+      # بناء واحد لكل المهام (تشغيل Gradle مرة وحدة بدل ٤ مرات، مع إعادة
+      # استخدام الـ daemon والكاش) — الاختبارات أولًا، ثم الـ APKs.
+      - name: Test and build APKs
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: gradle testDebugUnitTest assembleDebug assembleRelease --parallel --build-cache --stacktrace
+
+      # فحص lint غير مانع (continue-on-error) كالسابق، لكنه يعمل بعد البناء
+      # حتى لا يؤخر وصول الـ APK لو علق.
       - name: Run Android Lint (release)
-        id: lint
         continue-on-error: true
-        run: gradle lintRelease --no-daemon
+        run: gradle lintRelease --parallel --build-cache
+
+      - name: Locate APKs and checksums
+        run: |
+          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
+          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          [ -n "$DEBUG_APK" ] && [ -n "$RELEASE_APK" ] || { echo "::error::لم يتم العثور على أحد ملفات APK"; exit 1; }
+          cp "$DEBUG_APK" shop-manager-debug.apk
+          cp "$RELEASE_APK" shop-manager-release.apk
+          sha256sum shop-manager-debug.apk shop-manager-release.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # يطبع بصمة شهادة التوقيع في ملخص التشغيل: قارن بينها وبين الإصدار
+      # السابق — إذا اختلفت فالتحديث من داخل التطبيق لن يعمل.
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1 || true)
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner غير متوفر — تخطي التحقق"
+            exit 0
+          fi
+          {
+            echo "### 🔏 توقيع الإصدار"
+            echo '```'
+            "$APKSIGNER" verify --print-certs shop-manager-release.apk 2>&1 | grep -E "SHA-256|Signer #1 certificate DN" || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          "$APKSIGNER" verify shop-manager-release.apk
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: apks-${{ github.run_number }}
+          path: |
+            shop-manager-debug.apk
+            shop-manager-release.apk
+            SHA256SUMS.txt
+          retention-days: 30
 
       - name: Upload lint report
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: lint-report
           path: app/build/reports/lint-results-release.html
           if-no-files-found: ignore
           retention-days: 30
 
-      # FIX: this used to only ever run `assembleDebug`, so every GitHub
-      # Release only ever shipped the debug build — larger, unshrunk,
-      # unobfuscated, and noticeably slower on entry-level phones (see
-      # app/build.gradle.kts). `assembleRelease` now also runs, signed
-      # with the CI-generated debug key (see build.gradle.kts's signing
-      # comment) so it's a real installable APK, just smaller and faster.
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
-
-      - name: Build release APK
-        run: gradle assembleRelease --no-daemon
-
-      - name: Locate APKs
-        run: |
-          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          cp "$DEBUG_APK" shop-manager-debug.apk
-          cp "$RELEASE_APK" shop-manager-release.apk
-
-      # In addition to the GitHub Release on Shop-app-updates further down
-      # (the one the app's own updater checks), also attach both APKs
-      # directly to THIS workflow run's own artifacts — lets you grab a
-      # build straight from the Actions tab (e.g. a workflow_dispatch test
-      # run you don't want to publish as a public release yet) without
-      # needing a release to exist at all.
-      - name: Upload APK artifacts
-        uses: actions/upload-artifact@v4
+      # ملف mapping الخاص بـ R8 — بدونه ما بتقدر تفك تشفير (deobfuscate) أي
+      # crash قادم من نسخة release.
+      - name: Upload R8 mapping
+        uses: actions/upload-artifact@v7
         with:
-          name: apks-${{ github.run_number }}
-          path: |
-            shop-manager-debug.apk
-            shop-manager-release.apk
-          retention-days: 30
+          name: r8-mapping-${{ github.run_number }}
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: ignore
+          retention-days: 90
 
-      # AUTOMATIC RELEASE NOTES ("بدي ملاحظات الإصدار تلقائيًا تتغير، ما
-      # اضطر اغيّر باللوج كل مرة"): this used to read CHANGELOG.md's own
-      # "## غير منشور" section as the *preferred* source, only falling back
-      # to scanning commit messages when that section was empty — which
-      # meant a release with real, note-worthy commits but a
-      # forgotten/un-updated CHANGELOG.md still needed someone to go edit
-      # that file by hand before every push for the notes to actually
-      # reflect what changed. That manual step is gone now: this always
-      # builds the notes straight from the commit messages since the last
-      # successful push (via `github.event.before`), no file to remember to
-      # touch. `workflow_dispatch` runs (no "before" SHA) and first-ever
-      # pushes (before = all-zeros) fall back to the last 15 commits so the
-      # step never produces an empty changelog.
-      #
-      # BUG FIXED (notes were full of build/CI/debug noise, not features):
-      # this used to dump EVERY commit subject verbatim, including ones
-      # that have nothing to do with what a shop owner actually sees in the
-      # app — "Setup Android SDK", "bump Gradle", "fix release workflow",
-      # "assembleDebug tweak", merge commits, README/gitignore edits — so
-      # the in-app "ما الجديد" dialog read like a build log instead of a
-      # changelog. Two changes fix that at the source instead of just
-      # reformatting the same noise:
-      #   1) `git log --grep` with a blocklist (-v inverts it) drops any
-      #      commit whose subject matches common CI/build/debug/meta
-      #      patterns (ci, workflow, gradle, jdk, keystore, signing,
-      #      proguard/r8, "assemble*", debug/release apk, changelog itself,
-      #      merge, chore, docs-only, README/.gitignore) case-insensitively
-      #      — so only commits that actually describe user-facing behavior
-      #      survive.
-      #   2) The trailing " (%h)" short-hash suffix is dropped from the
-      #      format string — a commit hash means nothing to someone reading
-      #      "what's new" on their phone, it was pure noise.
-      # If everything in the range happens to be internal/build commits,
-      # the filtered log is legitimately empty — falls back to the same
-      # honest generic line as before rather than showing nothing.
-      #
-      # BUG FIXED ("Add files via upload" showed up verbatim as the entire
-      # changelog): the blocklist above only ever matched *technical*
-      # jargon (gradle, keystore, ...) — it had nothing for GitHub's own
-      # auto-generated commit messages, the exact text it writes on your
-      # behalf whenever a file is added/edited/deleted/renamed through the
-      # website's "Add file" button with no custom message typed in
-      # ("Add files via upload", "Update Palette.kt", "Delete old.png",
-      # "Rename a.kt to b.kt", "Initial commit"). None of those describe
-      # what changed for someone using the app, so a release whose only
-      # real commit happened to be a web-UI upload published that exact
-      # placeholder as if it were the changelog. New second grep pass
-      # drops them specifically:
-      #   - the two fixed phrases GitHub always uses verbatim
-      #     ("add files via upload", "initial commit")
-      #   - `Update|Create|Delete <bare-filename.ext>` and `Rename X to Y`
-      #     — but ONLY when the subject is just the verb plus a filename
-      #     (anchored end of line via bash's regex '$'), never a real
-      #     sentence that merely starts the same way, so a genuine commit
-      #     like "Update pricing screen to show totals" still survives —
-      #     that has words after the filename-shaped first token, this
-      #     pattern doesn't match past a single bare filename.
+      # ملاحظات الإصدار تلقائيًا من رسائل الـ commits (بدون ضجيج البناء/CI).
+      # أمان: المُحدِّد العشوائي لـ GITHUB_OUTPUT يمنع commit بعنوان مصمَّم من
+      # إنهاء القيمة مبكرًا وحقن مخرجات أخرى.
       - name: Generate changelog
         id: changelog
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           NOISE_PATTERN='^(ci|chore|docs|build|test|merge)(\(.*\))?:|\b(ci|workflow|github action|gradle|jdk|keystore|signing|proguard|r8|assemble(debug|release)?|debug apk|release apk|changelog|readme|gitignore)\b'
           GITHUB_AUTOMSG_PATTERN='^(add files via upload|initial commit)$|^(update|create|delete) [^ ]+\.[A-Za-z0-9]+$|^rename .+ to .+$'
-          BEFORE_SHA="${{ github.event.before }}"
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
-            RANGE="${BEFORE_SHA}..${{ github.sha }}"
+          if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
+            RANGE="${BEFORE_SHA}..${HEAD_SHA}"
           else
             RANGE="-15"
           fi
           UNRELEASED=$(git log $RANGE --no-merges --pretty=format:'%s' \
             | grep -viE "$NOISE_PATTERN" \
             | grep -viE "$GITHUB_AUTOMSG_PATTERN" \
-            | sed 's/^/- /')
+            | sed 's/^/- /' || true)
           if [ -z "$UNRELEASED" ]; then
             UNRELEASED="- تحسينات وإصلاحات عامة"
           fi
+          DELIM="CHANGELOG_$(openssl rand -hex 12)"
           {
-            echo "notes<<CHANGELOG_EOF"
+            echo "notes<<$DELIM"
             echo "$UNRELEASED"
-            echo "CHANGELOG_EOF"
+            echo "$DELIM"
           } >> "$GITHUB_OUTPUT"
 
-      # CROSS-REPO PUBLISH: this main repo stays PRIVATE (your source code
-      # never has to be public). The Release itself — tag + the .apk
-      # assets — gets created directly on the separate, PUBLIC
-      # "Shop-app-updates" repo instead of here, via softprops/action-gh-
-      # release's `repository` input. Nothing is ever created in THIS
-      # repo anymore; the app's UpdateChecker only ever looks at
-      # Shop-app-updates (see UPDATES_REPO in UpdateChecker.kt), so this
-      # is the one step that actually connects "push to main here" →
-      # "app on people's phones sees a new update".
-      #
-      # Requires one secret set up once, in THIS repo's settings (Settings
-      # → Secrets and variables → Actions → New repository secret):
-      #   Name:  UPDATES_REPO_TOKEN
-      #   Value: a GitHub Personal Access Token that has permission to
-      #          create releases on Shop-app-updates specifically —
-      #          the built-in secrets.GITHUB_TOKEN only ever has
-      #          permission over the repo the workflow is running in, so
-      #          it cannot publish to a different repo on its own.
-      #
-      # BUG FIXED: this used to create the release AND upload both .apk
-      # files in one single step/request. GitHub occasionally hiccups
-      # (returns its own generic "Unicorn" HTML error page instead of a
-      # JSON response) when two sizeable assets get uploaded back-to-back
-      # in the same request right after a release was just created — the
-      # release object itself can take a few seconds to become fully
-      # consistent across GitHub's edge/CDN layer before asset uploads
-      # against it reliably succeed. Split into two steps: the release
-      # is created (with the debug APK, since it's less critical) in the
-      # first step, and — a little later, after the release has had time
-      # to "settle" — the release APK (the one people actually install)
-      # gets uploaded in its own step, targeting the SAME tag so it lands
-      # as a second asset on the same release the first step made.
-      # Splitting this way also means if only ONE of the two ever fails,
-      # you only need to re-run that one step, not rebuild+reupload both.
+      # النشر على مستودع Shop-app-updates العام (يتطلب Secret باسم
+      # UPDATES_REPO_TOKEN). مقسوم لخطوتين لتجنب خطأ "Unicorn" لما يُرفع ملفان
+      # كبيران بنفس الطلب مباشرة بعد إنشاء الإصدار.
       - name: Create GitHub Release on Shop-app-updates (with debug APK)
+        if: github.event_name == 'push' || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
           repository: slman14422003-create/Shop-app-updates
@@ -278,14 +211,19 @@ jobs:
             ---
             📦 **shop-manager-release.apk** ← هاي النسخة المستخدمة تنزّلها عادةً: أصغر حجماً وأسرع بالتشغيل (مضغوطة/محسّنة عبر R8).
             🛠️ **shop-manager-debug.apk** ← نسخة تجريبية أكبر حجماً وأبطأ شوي، للاختبار فقط.
+            🔐 **SHA256SUMS.txt** ← بصمات الملفات للتحقق من سلامتها.
 
-            كلا الملفين موقّعين (بنفس مفتاح CI) وجاهزين للتثبيت المباشر بعد تفعيل "مصادر غير معروفة" على الجهاز.
-          files: shop-manager-debug.apk
+            كلا الملفين موقّعين وجاهزين للتثبيت المباشر بعد تفعيل "مصادر غير معروفة" على الجهاز.
+          files: |
+            shop-manager-debug.apk
+            SHA256SUMS.txt
 
       - name: Wait for release to settle
+        if: github.event_name == 'push' || inputs.publish
         run: sleep 10
 
       - name: Upload release APK to the same release
+        if: github.event_name == 'push' || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
           repository: slman14422003-create/Shop-app-updates
@@ -293,25 +231,36 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           files: shop-manager-release.apk
 
-      # AUTOMATIC CHANGELOG.md ("ما اضطر اغيّر باللوج كل مرة"): CHANGELOG.md
-      # is still kept as a plain browsable history of every release, but
-      # nothing about it is manually maintained anymore — this just appends
-      # the SAME auto-generated notes from the "Generate changelog" step
-      # above under a new dated heading, right after every release.
-      # Committed with [skip ci] so this doesn't re-trigger the workflow on
-      # itself.
+      # تسجيل CHANGELOG.md. أمان: ملاحظات الإصدار تأتي من رسائل commits
+      # (نص غير موثوق)، وكانت تُحقن مباشرة داخل سكربت bash عبر ${{ }} — يعني
+      # commit بعنوان فيه $(...) أو علامة اقتباس كان ينفّذ أوامر بصلاحية كتابة
+      # على المستودع. الآن تمر عبر متغير بيئة فقط، وتُستخدم كنص خام.
+      # ومع التزامن الجديد: نعيد الضبط على آخر main قبل كل محاولة دفع حتى لا
+      # يفشل push بسبب تشغيل سابق دفع قبلنا.
       - name: Record changelog entry
+        if: (github.event_name == 'push' || inputs.publish) && github.ref == 'refs/heads/main'
+        env:
+          NOTES: ${{ steps.changelog.outputs.notes }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          DATE_HEADING="## v1.0.${{ github.run_number }} — $(date +%Y-%m-%d)"
-          {
-            echo "$DATE_HEADING"
-            echo "${{ steps.changelog.outputs.notes }}"
-            echo ""
-            cat CHANGELOG.md 2>/dev/null
-          } > CHANGELOG.md.tmp
-          mv CHANGELOG.md.tmp CHANGELOG.md
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md
-          git commit -m "chore: record changelog for v1.0.${{ github.run_number }} [skip ci]"
-          git push
+          for attempt in 1 2 3 4; do
+            git fetch origin main
+            git reset --hard origin/main
+            {
+              echo "## v1.0.${RUN_NUMBER} — $(date +%Y-%m-%d)"
+              printf '%s\n' "$NOTES"
+              echo ""
+              cat CHANGELOG.md 2>/dev/null || true
+            } > CHANGELOG.md.tmp
+            mv CHANGELOG.md.tmp CHANGELOG.md
+            git add CHANGELOG.md
+            git commit -m "chore: record changelog for v1.0.${RUN_NUMBER} [skip ci]"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "فشل الدفع (المحاولة $attempt) — إعادة المحاولة..."
+            sleep $((attempt * 4))
+          done
+          echo "::warning::تعذّر دفع CHANGELOG.md بعد عدة محاولات (الإصدار نفسه نُشر بنجاح)."
