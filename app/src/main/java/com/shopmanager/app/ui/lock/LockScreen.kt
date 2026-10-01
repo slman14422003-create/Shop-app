@@ -33,6 +33,12 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.LiquidGlassGlow
 import com.shopmanager.app.ui.common.liquidGlassSurface
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import com.shopmanager.app.ui.common.AppGroupLargeRadius
+import com.shopmanager.app.ui.common.AppPillButton
+import androidx.compose.foundation.layout.offset
+import androidx.compose.material3.Icon
 
 /**
  * SECURITY FIX: a 4-6 digit PIN used to have no limit on wrong guesses —
@@ -174,7 +180,7 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                 .size(420.dp)
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f), Color.Transparent)
+                        colors = listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), Color.Transparent)
                     )
                 )
         )
@@ -198,29 +204,22 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
             // instead of the storefront mark — reads as a continuation of
             // the same screen the splash just faded from, not a hand-off
             // to a different design.
-            Box(contentAlignment = Alignment.Center) {
-                LiquidGlassGlow(modifier = Modifier.size(104.dp), color = MaterialTheme.colorScheme.primary)
-                Box(
-                    Modifier
-                        .size(92.dp)
-                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.28f), CircleShape)
-                )
-                Box(
-                    Modifier
-                        .size(84.dp)
-                        .liquidGlassSurface(CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Lock, contentDescription = null, tint = BrandOnGradient, modifier = Modifier.size(38.dp))
-                }
+            Box(
+                Modifier
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(38.dp))
             }
 
             Spacer(Modifier.height(24.dp))
             Text(
                 "إدارة المحل مقفلة",
                 color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center
             )
 
@@ -230,13 +229,8 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .widthIn(max = 360.dp)
-                    .liquidGlassSurface(
-                        shape = MaterialTheme.shapes.large,
-                        baseBrush = Brush.verticalGradient(listOf(cardColor, cardColor)),
-                        elevation = 6.dp,
-                        highlight = false,
-                        rimColor = cardRimColor
-                    )
+                    .clip(RoundedCornerShape(AppGroupLargeRadius))
+                    .background(cardColor)
                     .padding(24.dp)
             ) {
                 AppTextField(
@@ -270,30 +264,22 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
                     )
                 }
                 Spacer(Modifier.height(18.dp))
-                Button(
+                AppPillButton(
+                    label = "دخول",
                     enabled = !isLocked && pin.length >= 4,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    onClick = { submit() }
-                ) {
-                    Text("دخول", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                }
+                    onClick = { submit() },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 if (biometricReady) {
                     Spacer(Modifier.height(10.dp))
-                    OutlinedButton(
-                        onClick = { launchBiometric() },
+                    AppPillButton(
+                        label = "فتح بالبصمة أو الوجه",
+                        icon = Icons.Default.Fingerprint,
                         enabled = !biometricBusy,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Icon(Icons.Default.Fingerprint, contentDescription = null, modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("فتح بالبصمة أو الوجه", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    }
+                        tonal = true,
+                        onClick = { launchBiometric() },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
