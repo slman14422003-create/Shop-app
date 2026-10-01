@@ -50,6 +50,7 @@ import com.shopmanager.app.data.updates.UpdateDownloadPhase
 import com.shopmanager.app.data.updates.UpdateDownloadService
 import com.shopmanager.app.data.updates.UpdateDownloadState
 import com.shopmanager.app.data.updates.UpdateManifest
+import com.shopmanager.app.ui.common.AppPillButton
 import kotlinx.coroutines.delay
 import java.io.File
 
@@ -166,13 +167,13 @@ fun ForceUpdateScreen(
                 Modifier
                     .size(84.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.SystemUpdate,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
                         .size(44.dp)
                         .offset(y = arrowOffset.dp)
@@ -184,7 +185,7 @@ fun ForceUpdateScreen(
             Text(
                 "تحديث ضروري",
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
             )
 
@@ -255,37 +256,28 @@ fun ForceUpdateScreen(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
-                Button(
+                AppPillButton(
+                    label = "فتح الإعدادات",
                     onClick = { context.startActivity(ApkDownloader.unknownSourcesSettingsIntent(context)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 14.dp)
-                ) { Text("فتح الإعدادات") }
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(
+                AppPillButton(
+                    label = "حاول التثبيت مرة أخرى",
+                    tonal = true,
                     onClick = {
                         needsInstallPermission = false
                         downloadedFile?.let { file -> tryInstall(file) }
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 14.dp)
-                ) { Text("حاول التثبيت مرة أخرى") }
+                    modifier = Modifier.fillMaxWidth()
+                )
             } else {
-                Button(
-                    onClick = { startDownload() },
+                AppPillButton(
+                    label = if (isDownloading) "جاري التنزيل..." else "تحديث الآن",
                     enabled = !isDownloading,
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 14.dp)
-                ) {
-                    if (isDownloading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    } else {
-                        Text("تحديث الآن", fontWeight = FontWeight.SemiBold)
-                    }
-                }
+                    onClick = { startDownload() },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             Spacer(Modifier.height(18.dp))
