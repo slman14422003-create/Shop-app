@@ -5,7 +5,9 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -16,9 +18,11 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,8 +34,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialUnit
-import com.shopmanager.app.ui.common.ActionIconButton
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppGroupLargeRadius
+import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
+import com.shopmanager.app.ui.common.groupedRowShape
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.GlassAlertDialog
 
@@ -71,41 +78,51 @@ fun MaterialEditDialog(
         title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
         text = {
             Column {
-                AppTextField(
-                    value = name, onValueChange = { name = it }, enabled = !isSaving,
-                    label = "اسم المادة", modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    "الكمية المطلوبة",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
-                )
-                if (showQuantityStepper) {
-                    QuantityStepper(
-                        value = quantity,
-                        unitLabel = unit.label,
-                        enabled = !isSaving,
-                        onValueChange = { quantity = it.coerceAtLeast(1) }
+                // الاسم + الكمية كمجموعة صفوف متلاصقة (مثل مجموعات الإعدادات).
+                Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+                    AppTextField(
+                        value = name, onValueChange = { name = it }, enabled = !isSaving,
+                        label = "اسم المادة", modifier = Modifier.fillMaxWidth(),
+                        shape = groupedRowShape(0, 1)
                     )
-                } else {
-                    // Quantity is implicitly 1 for a fixed fraction size -
-                    // nothing to step, so this just confirms what will be
-                    // saved instead of showing a stepper with nothing to do.
-                    Text(
-                        unit.label,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    if (showQuantityStepper) {
+                        QuantityStepper(
+                            value = quantity,
+                            unitLabel = unit.label,
+                            enabled = !isSaving,
+                            shape = groupedRowShape(1, 1),
+                            onValueChange = { quantity = it.coerceAtLeast(1) }
+                        )
+                    } else {
+                        // Quantity is implicitly 1 for a fixed fraction size -
+                        // nothing to step, so this just confirms what will be
+                        // saved instead of showing a stepper with nothing to do.
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 64.dp)
+                                .clip(groupedRowShape(1, 1))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "الكمية المطلوبة",
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                unit.label,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
 
-                Text(
-                    "الوحدة",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
-                )
+                AppSectionTitle("الوحدة", Modifier.padding(top = 18.dp, bottom = 8.dp))
                 UnitPicker(
                     selected = unit,
                     enabled = !isSaving,
@@ -119,7 +136,7 @@ fun MaterialEditDialog(
                     value = notes, onValueChange = { notes = it }, enabled = !isSaving,
                     label = "ملاحظة (اختياري)",
                     singleLine = false, minLines = 1, maxLines = 3,
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
                 )
 
                 error?.let {
@@ -127,7 +144,7 @@ fun MaterialEditDialog(
                         it,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = 10.dp, start = 8.dp)
                     )
                 }
             }
@@ -166,72 +183,93 @@ fun MaterialEditDialog(
 }
 
 /**
- * Whole-number [-] value [+] stepper for the required quantity, labeled with
- * the currently-selected unit (e.g. "2 نص كيلو") so it's always clear what's
- * being counted. The number itself can also be tapped and typed directly -
- * non-digit characters are filtered out as they're typed, so there is no
- * path to a decimal value.
+ * عدّاد الكمية (أعداد صحيحة فقط): صفٌّ مسطّح بلغة صفوف الإعدادات، اسم الوحدة
+ * المختارة في البداية (مثل "2 نص كيلو") وأزرار [-] الرقم [+] في النهاية. الرقم
+ * قابل للكتابة المباشرة وتُحذف منه كل الرموز غير الرقمية، فلا طريق لقيمة عشرية.
  *
- * FIX: quantity and unit used to be able to smear together into one string
- * ("1 نص" instead of a clean "1" next to a separately-picked "نص كيلو"). The
- * number field here only ever holds the digits of the quantity; the unit
- * word is a separate, non-editable label next to it (and disappears
- * entirely for [MaterialUnit.NONE], whose label is blank) so the two can
- * never merge into one typed value.
+ * FIX: الكمية والوحدة لا تُدمجان أبداً في نص واحد: الحقل يحمل أرقام الكمية فقط،
+ * واسم الوحدة نص منفصل غير قابل للتعديل (ويختفي لـ [MaterialUnit.NONE] لأن
+ * تسميته فارغة).
  */
 @Composable
-fun QuantityStepper(value: Int, unitLabel: String, enabled: Boolean = true, onValueChange: (Int) -> Unit) {
+fun QuantityStepper(
+    value: Int,
+    unitLabel: String,
+    enabled: Boolean = true,
+    onValueChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(AppGroupLargeRadius)
+) {
+    val cs = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .clip(shape)
+            .background(cs.surfaceContainerHighest)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        ActionIconButton(
-            icon = Icons.Default.Remove,
-            tint = MaterialTheme.colorScheme.primary,
-            contentDescription = "إنقاص",
-            onClick = { if (enabled && value > 1) onValueChange(value - 1) }
+        Text(
+            unitLabel,
+            modifier = Modifier.weight(1f).padding(start = 4.dp),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
+            color = cs.onSurfaceVariant
         )
 
-        // iOS-style borderless stepper field — matches AppTextField's flat
-        // filled treatment (no outline) instead of the Material outlined box,
-        // kept compact/unlabeled since it's a stepper, not a form field.
-        TextField(
+        StepButton(
+            icon = Icons.Default.Remove,
+            contentDescription = "إنقاص",
+            enabled = enabled && value > 1,
+            onClick = { onValueChange(value - 1) }
+        )
+
+        BasicTextField(
             value = value.toString(),
             onValueChange = { raw ->
                 val digitsOnly = raw.filter { it.isDigit() }
                 onValueChange(digitsOnly.toIntOrNull() ?: 0)
             },
-            modifier = Modifier.width(84.dp),
+            modifier = Modifier.width(64.dp),
             enabled = enabled,
             singleLine = true,
-            textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.Center),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            shape = MaterialTheme.shapes.small,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = MaterialTheme.colorScheme.primary
-            )
+            textStyle = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 20.sp,
+                color = cs.onSurface,
+                textAlign = TextAlign.Center
+            ),
+            cursorBrush = SolidColor(cs.onSurface),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
 
-        ActionIconButton(
+        StepButton(
             icon = Icons.Default.Add,
-            tint = MaterialTheme.colorScheme.primary,
             contentDescription = "زيادة",
-            onClick = { if (enabled) onValueChange(value + 1) }
+            enabled = enabled,
+            onClick = { onValueChange(value + 1) }
         )
+    }
+}
 
-        if (unitLabel.isNotBlank()) {
-            Text(
-                unitLabel,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+/** زر دائري صغير للعدّاد: دائرة بلون surface فوق تعبئة الصف، أيقونة بلون onSurface. */
+@Composable
+private fun StepButton(icon: ImageVector, contentDescription: String, enabled: Boolean, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(cs.surface)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = cs.onSurface.copy(alpha = if (enabled) 1f else 0.35f),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
@@ -247,19 +285,10 @@ private val MaterialUnit.pickerLabel: String
     get() = if (this == MaterialUnit.NONE) "بدون" else label
 
 /**
- * Custom pill-style segmented picker for the fixed quantity units of a
- * spice shop (كيلو / نص كيلو / ربع كيلو / لوقية / نص لوقية / ربع لوقية),
- * plus a "بدون" option for shortages that aren't measured by weight at all
- * (e.g. "بيض: 6" - just a plain count). Deliberately not a system
- * Spinner/DropdownMenu or a free-text field - matches the app's own rounded
- * shapes and brand color, with a smoothly animated selection pill.
- *
- * FIX: with the two new نص كيلو / ربع كيلو units this is six weight options,
- * not four - laid out as two rows of three (كيلو-family on top, لوقية-family
- * below) instead of one cramped six-wide row, so every label still has room
- * to breathe on a phone screen. بدون sits on its own row underneath, full
- * width, since it's a different kind of choice ("no unit at all") rather
- * than another weight size.
+ * منتقي الوحدة: حبّات على نمط [com.shopmanager.app.ui.common.AppChip] — المحددة
+ * بلون onSurface ونص surface، وغير المحددة على تعبئة الصفوف. ثلاث حبّات في كل
+ * صف (عائلة الكيلو ثم عائلة اللوقية) و"بدون" وحدها بعرض كامل لأنها نوع مختلف من
+ * الاختيار (لا وحدة أصلاً).
  */
 @Composable
 fun UnitPicker(selected: MaterialUnit, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
@@ -268,17 +297,13 @@ fun UnitPicker(selected: MaterialUnit, enabled: Boolean = true, onSelected: (Mat
         listOf(MaterialUnit.OKE, MaterialUnit.HALF_OKE, MaterialUnit.QUARTER_OKE)
     )
     Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         weightRows.forEach { row ->
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 row.forEach { option ->
                     UnitPill(option = option, isSelected = option == selected, enabled = enabled, onSelected = onSelected, modifier = Modifier.weight(1f))
@@ -291,25 +316,22 @@ fun UnitPicker(selected: MaterialUnit, enabled: Boolean = true, onSelected: (Mat
 
 @Composable
 private fun UnitPill(option: MaterialUnit, isSelected: Boolean, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
     val bgColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+        targetValue = if (isSelected) cs.onSurface else cs.surfaceContainerHighest,
         animationSpec = MotionSpecs.quickSpring(), label = "unitPillBg"
     )
     val textColor by animateColorAsState(
-        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        targetValue = if (isSelected) cs.surface else cs.onSurface,
         animationSpec = MotionSpecs.quickSpring(), label = "unitPillText"
-    )
-    val verticalPad by animateDpAsState(
-        targetValue = if (isSelected) 10.dp else 8.dp,
-        animationSpec = MotionSpecs.quickSpring(), label = "unitPillPad"
     )
 
     Box(
         modifier
-            .clip(RoundedCornerShape(11.dp))
+            .height(46.dp)
+            .clip(CircleShape)
             .background(bgColor)
-            .clickable(enabled = enabled, onClick = { onSelected(option) })
-            .padding(vertical = verticalPad),
+            .clickable(enabled = enabled, role = Role.Button, onClick = { onSelected(option) }),
         contentAlignment = Alignment.Center
     ) {
         Text(

@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
+import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GlassIconButton
@@ -387,30 +388,29 @@ private fun QuantityEntryDialog(
         title = { Text(materialName) },
         text = {
             Column {
-                Text(
-                    "الكمية المطلوبة", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
+                AppSectionTitle("الكمية المطلوبة", Modifier.padding(bottom = 8.dp))
                 QuantityStepper(
                     value = quantity,
                     unitLabel = unit.label,
                     enabled = !isSaving,
                     onValueChange = { quantity = it.coerceAtLeast(1) }
                 )
-                Text(
-                    "الوحدة", style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 6.dp)
-                )
+                AppSectionTitle("الوحدة", Modifier.padding(top = 18.dp, bottom = 8.dp))
                 UnitPicker(selected = unit, enabled = !isSaving, onSelected = { unit = it })
                 AppTextField(
                     value = notes, onValueChange = { notes = it }, enabled = !isSaving,
                     label = "ملاحظة (اختياري)",
                     singleLine = false, minLines = 1, maxLines = 3,
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
                 )
-                error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                    )
+                }
             }
         },
         confirmButton = {
