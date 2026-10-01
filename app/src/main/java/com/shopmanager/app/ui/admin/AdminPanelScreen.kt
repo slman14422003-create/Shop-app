@@ -40,6 +40,16 @@ import com.shopmanager.app.ui.materials.MaterialsViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.compose.foundation.shape.CircleShape
+import com.shopmanager.app.ui.common.AppCard
+import com.shopmanager.app.ui.common.AppPillButton
+import com.shopmanager.app.ui.common.AppScreenPadding
+import com.shopmanager.app.ui.common.AppSectionGap
+import com.shopmanager.app.ui.common.ScreenIconButton
+import com.shopmanager.app.ui.common.ScreenTopBar
+import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 
 /**
  * لوحة المسؤول السرية: reachable only from the small hidden button on the
@@ -115,26 +125,15 @@ fun AdminPanelScreen(
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         topBar = {
-            TopAppBar(
-                title = { Text("لوحة المطوّر", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    GlassIconButton(
+            ScreenTopBar(
+                title = "لوحة المطوّر",
+                navigation = {
+                    ScreenIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "رجوع",
-                        onClick = onBack,
-                        modifier = Modifier.padding(start = 8.dp, end = 12.dp),
-                        size = 36.dp
+                        onClick = onBack
                     )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = BrandOnGradient,
-                    navigationIconContentColor = BrandOnGradient
-                )
-                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
-                // liquidGlassSurface panel (rounded bottom corners) this bar
-                // used to sit on — it now sits flush on the plain background
-                // like Home's own header and Claude's own "Settings" screen.
+                }
             )
         }
     ) { padding ->
@@ -143,8 +142,8 @@ fun AdminPanelScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(AppSectionGap)
         ) {
             Text(
                 "هذه الشاشة مخصصة لتطوير التطبيق فقط — المستخدم العادي لا يصل إليها.",
@@ -205,16 +204,16 @@ fun AdminPanelScreen(
                 )
                 Spacer(Modifier.height(10.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
+                    AppPillButton(label = "حفظ الرابط", onClick = {
                         settings.updateManifestUrl = manifestUrl
                         savedMessage = "تم الحفظ ✅"
-                    }) { Text("حفظ الرابط") }
-                    OutlinedButton(onClick = {
+                    })
+                    FilledTonalButton(shape = CircleShape, onClick = {
                         settings.resetUpdateManifestUrlToDefault()
                         manifestUrl = settings.updateManifestUrl
                         savedMessage = "تمت إعادة الرابط التلقائي ✅"
                     }) { Text("استخدام الرابط التلقائي") }
-                    OutlinedButton(onClick = { testManifestNow() }, enabled = !isTesting) {
+                    FilledTonalButton(shape = CircleShape, onClick = { testManifestNow() }, enabled = !isTesting) {
                         if (isTesting) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(6.dp))
@@ -224,7 +223,7 @@ fun AdminPanelScreen(
                 }
                 savedMessage?.let {
                     Spacer(Modifier.height(8.dp))
-                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
                 }
                 testResult?.let {
                     Spacer(Modifier.height(8.dp))
@@ -238,7 +237,7 @@ fun AdminPanelScreen(
                 DiagnosticRow("مزامنة المواد", if (materialsSyncError) "❌ يوجد خطأ" else "✅ سليمة")
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = {
+                    FilledTonalButton(shape = CircleShape, onClick = {
                         debtsViewModel?.refresh()
                         materialsViewModel?.refresh()
                     }) { Text("إعادة المزامنة") }
@@ -254,7 +253,7 @@ fun AdminPanelScreen(
                 DiagnosticRow("مستوى الأداء المكتشف", performanceTier.toString())
                 DiagnosticRow("تفضيل الأداء", performanceModeLabel(settings.performanceMode))
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = { clipboard.setText(AnnotatedString(systemInfoText())) }) {
+                FilledTonalButton(shape = CircleShape, onClick = { clipboard.setText(AnnotatedString(systemInfoText())) }) {
                     Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("نسخ معلومات التشخيص")
@@ -269,7 +268,7 @@ fun AdminPanelScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(
+                FilledTonalButton(shape = CircleShape, 
                     enabled = !isClearingCache,
                     onClick = {
                         isClearingCache = true
@@ -319,30 +318,16 @@ private fun DiagnosticRow(label: String, value: String) {
 
 @Composable
 private fun AdminSection(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
-    // iOS 26 REDESIGN: same flat "grouped inset list" treatment as
-    // SettingsSection (see SettingsScreen.kt) — a small badge+label above
-    // a borderless, shadowless rounded surface — so the admin panel reads
-    // as the same design language as the rest of the app instead of a
-    // separate shadowed-card style.
-    // Claude-app style: same flat, borderless grouped-card treatment as
-    // SettingsSection (see SettingsScreen.kt) — plain outline icon, no
-    // colored badge box, softly-rounded seamless card.
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.padding(start = 6.dp, bottom = 6.dp),
+            Modifier.padding(start = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(15.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Surface(
-            Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
-        ) {
+        AppCard {
             Column(Modifier.padding(16.dp), content = content)
         }
     }
