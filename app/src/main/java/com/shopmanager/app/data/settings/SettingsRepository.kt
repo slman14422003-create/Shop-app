@@ -132,6 +132,18 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_BIOMETRIC, true)
         set(value) = prefs.edit().putBoolean(KEY_BIOMETRIC, value).apply()
 
+    /** FEATURE ADDED ("ميزة FLAG_SECURE"): while a PIN is set, block screenshots/screen
+     * recording and hide the app's preview in the recent-apps list. See MainActivity.applySecureFlag. */
+    var secureScreen: Boolean
+        get() = prefs.getBoolean(KEY_SECURE_SCREEN, true)
+        set(value) = prefs.edit().putBoolean(KEY_SECURE_SCREEN, value).apply()
+
+    /** FEATURE ADDED ("يطلب البصمة كل مرة"): re-lock whenever the app leaves the
+     * screen (home, app switch, screen off). On by default; only matters when a PIN exists. */
+    var autoLockOnLeave: Boolean
+        get() = prefs.getBoolean(KEY_AUTO_LOCK, true)
+        set(value) = prefs.edit().putBoolean(KEY_AUTO_LOCK, value).apply()
+
     fun setPin(pin: String) {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         prefs.edit()
@@ -193,6 +205,8 @@ class SettingsRepository(context: Context) {
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
         private const val KEY_BIOMETRIC = "biometric_unlock"
+        private const val KEY_AUTO_LOCK = "auto_lock_on_leave"
+        private const val KEY_SECURE_SCREEN = "secure_screen"
         private const val PIN_HASH_ITERATIONS = 12_000
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
