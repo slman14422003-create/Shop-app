@@ -10,6 +10,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -97,7 +100,23 @@ fun GlassAlertDialog(
         val resolvedTextColor = if (textContentColor.isSpecified()) textContentColor
         else MaterialTheme.colorScheme.onSurfaceVariant
 
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // KEYBOARD FIX ("الكيبورد يضل فوق مربع الادخال"): this overlay used to
+        // be a bare fillMaxSize Box, so when a field inside the dialog took
+        // focus the keyboard simply drew on top of the lower half of the card
+        // (add-material / person / PIN dialogs). imePadding lifts the whole
+        // card above the keyboard (a no-op while the window is already
+        // resized by the system, so it never double-counts), and the scroll
+        // lets a tall card still reach its buttons on a small screen. The
+        // scroll keeps the incoming min height, so the card stays centered
+        // when there's room.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
             Box(
                 modifier
                     .graphicsLayer {

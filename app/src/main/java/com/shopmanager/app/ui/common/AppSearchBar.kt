@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -30,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 
@@ -62,6 +64,9 @@ fun AppSearchBar(
     // false and only wants the pill field itself.
     showBackButton: Boolean = true
 ) {
+    // UI FIX: the keyboard's Search key used to do nothing (onSearch = {}),
+    // leaving the keyboard covering half the results. It now closes it.
+    val keyboard = LocalSoftwareKeyboardController.current
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         if (showBackButton) {
             GradientIconButton(
@@ -104,7 +109,7 @@ fun AppSearchBar(
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {}),
+                        keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                         decorationBox = { inner ->
                             if (query.isEmpty()) {
                                 Text(
@@ -123,8 +128,11 @@ fun AppSearchBar(
                         contentDescription = "مسح",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier
-                            .size(18.dp)
+                            .size(34.dp) // was 18dp — far below a comfortable touch target
+                            .clip(RoundedCornerShape(50))
                             .clickable { onQueryChange("") }
+                            .wrapContentSize()
+                            .size(18.dp)
                     )
                 }
             }
