@@ -40,6 +40,8 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.shopmanager.app.ui.common.ScreenIconButton
+import com.shopmanager.app.ui.common.ScreenTopBar
 
 private val dateFormat get() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 private val timeFormat get() = SimpleDateFormat("HH:mm", Locale.US)
@@ -289,35 +291,31 @@ private fun NoteEditScreenContent(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(
-                title = { Text(if (isNew) "ملاحظة جديدة" else "تعديل الملاحظة", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onBack, enabled = !isSaving) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "إلغاء")
-                    }
+            ScreenTopBar(
+                title = if (isNew) "ملاحظة جديدة" else "تعديل الملاحظة",
+                reservedIcons = 1,
+                navigation = {
+                    ScreenIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "إلغاء",
+                        onClick = { if (!isSaving) onBack() }
+                    )
                 },
                 actions = {
                     if (isSaving) {
                         CircularProgressIndicator(
                             modifier = Modifier.padding(end = 16.dp).size(20.dp),
-                            strokeWidth = 2.dp
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     } else {
-                        IconButton(onClick = onSave, enabled = !isSaving) {
-                            Icon(Icons.Default.Check, contentDescription = "حفظ")
-                        }
+                        ScreenIconButton(
+                            icon = Icons.Default.Check,
+                            contentDescription = "حفظ",
+                            onClick = onSave
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = BrandOnGradient,
-                    navigationIconContentColor = BrandOnGradient,
-                    actionIconContentColor = BrandOnGradient
-                )
-                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
-                // liquidGlassSurface panel (rounded bottom corners) this bar
-                // used to sit on — it now sits flush on the plain background
-                // like Home's own header and Claude's own "Settings" screen.
+                }
             )
         }
     ) { padding -> content(padding) }
@@ -328,16 +326,16 @@ private fun LinkTypeRow(linkType: NoteLinkType, linkedName: String, enabled: Boo
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         when (linkType) {
-            NoteLinkType.PERSON -> Icon(Icons.Default.AttachMoney, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            NoteLinkType.MATERIAL -> Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            NoteLinkType.PERSON -> Icon(Icons.Default.AttachMoney, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+            NoteLinkType.MATERIAL -> Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
             NoteLinkType.NONE -> {}
         }
         Text(

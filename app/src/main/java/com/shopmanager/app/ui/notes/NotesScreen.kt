@@ -54,6 +54,25 @@ import com.shopmanager.app.ui.theme.LocalSemanticColors
 import com.shopmanager.app.ui.theme.glassHairlineColor
 import java.text.SimpleDateFormat
 import java.util.Locale
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
+import com.shopmanager.app.ui.common.AppChip
+import com.shopmanager.app.ui.common.AppEmptyState
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.AppScreenPadding
+import com.shopmanager.app.ui.common.AppSearchBar
+import com.shopmanager.app.ui.common.AppStat
+import com.shopmanager.app.ui.common.AppStatsStrip
+import com.shopmanager.app.ui.common.ScreenIconButton
+import com.shopmanager.app.ui.common.ScreenTopBar
+import com.shopmanager.app.ui.common.groupedRowShape
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.graphics.vector.ImageVector
 
 private enum class NoteFilter(val label: String) {
     ALL("الكل"), DEBTS("الديون"), MATERIALS("المواد"), GENERAL("عام"), DONE("منجزة")
@@ -155,27 +174,14 @@ fun NotesScreen(
         containerColor = Color.Transparent,
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
-            TopAppBar(
-                title = { Text("ملاحظات هامة", style = MaterialTheme.typography.titleLarge) },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    navigationIconContentColor = BrandOnGradient,
-                    titleContentColor = BrandOnGradient,
-                    actionIconContentColor = BrandOnGradient
-                ),
-                // UNIFIED ON CLAUDE'S DESIGN: removed the old boxed
-                // liquidGlassSurface panel (rounded bottom corners) this bar
-                // used to sit on — it now sits flush on the plain background
-                // like Home's own header and every Claude screen.
-                // BUG FIXED ("الأيقونة فوق الكلمة"): same fix as
-                // DebtsScreen/DashboardScreen/MaterialsScreen — the
-                // hamburger is this bar's own `navigationIcon` now, not a
-                // floating overlay from MainActivity sitting on top of the
-                // title in the same corner.
-                navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "القائمة")
-                    }
+            ScreenTopBar(
+                title = "ملاحظات هامة",
+                navigation = {
+                    ScreenIconButton(
+                        icon = Icons.Default.Menu,
+                        contentDescription = "القائمة",
+                        onClick = onOpenDrawer
+                    )
                 }
             )
         }
@@ -201,41 +207,27 @@ fun NotesScreen(
             // الكبسولي المستخدم بشاشة الديون (DebtsScreen) - بحث بالعنوان
             // أو المحتوى أو اسم الجهة المرتبطة، مع رقاقات الفلترة تحته
             // بالضبط متل قبل.
-            OutlinedTextField(
-                value = search.value,
-                onValueChange = { search.value = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("بحث في الملاحظات...") },
-                leadingIcon = { Icon(Icons.Default.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                trailingIcon = {
-                    if (search.value.isNotEmpty()) {
-                        IconButton(onClick = { search.value = "" }) {
-                            Icon(Icons.Default.Clear, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(50),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
-                )
+            AppSearchBar(
+                query = search.value,
+                onQueryChange = { search.value = it },
+                onClose = { search.value = "" },
+                placeholder = "بحث في الملاحظات...",
+                showBackButton = false,
+                modifier = Modifier.padding(horizontal = AppScreenPadding, vertical = 8.dp)
             )
 
             Row(
                 Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = AppScreenPadding, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 NoteFilter.entries.forEach { f ->
-                    FilterChip(
+                    AppChip(
+                        label = f.label,
                         selected = filter == f,
-                        onClick = { filter = f },
-                        label = { Text(f.label) }
+                        onClick = { filter = f }
                     )
                 }
             }
@@ -257,14 +249,15 @@ fun NotesScreen(
                 LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 4.dp,
+                        start = AppScreenPadding, end = AppScreenPadding, top = 4.dp,
                         bottom = listBottomClearance
                     ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
                     itemsIndexed(filtered, key = { _, note -> note.id }) { index, note ->
                         NoteRow(
                             note = note,
+                            shape = groupedRowShape(index, filtered.lastIndex),
                             modifier = Modifier
                                 .animateItem(
                                     fadeInSpec = null,
@@ -347,78 +340,26 @@ fun NotesScreen(
 // language with Debts instead of a plainer, unfinished-looking exception.
 @Composable
 private fun NotesStatsRow(total: Int, active: Int, pinned: Int) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-        border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            StatItem("الملاحظات", total)
-            NotesVerticalDivider()
-            StatItem("نشطة", active)
-            NotesVerticalDivider()
-            StatItem("مثبتة", pinned)
-        }
-    }
-}
-
-@Composable
-private fun StatItem(label: String, value: Int) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        androidx.compose.runtime.CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides MaterialTheme.colorScheme.primary
-        ) {
-            AnimatedCounterText(
-                targetValue = value.toDouble(),
-                format = { "%.0f".format(it) },
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall)
-    }
-}
-
-@Composable
-private fun NotesVerticalDivider() {
-    Box(
-        Modifier
-            .height(36.dp)
-            .width(1.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant)
+    AppStatsStrip(
+        stats = listOf(
+            AppStat("الملاحظات", total.toDouble()) { "%.0f".format(it) },
+            AppStat("نشطة", active.toDouble()) { "%.0f".format(it) },
+            AppStat("مثبتة", pinned.toDouble()) { "%.0f".format(it) }
+        ),
+        modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 6.dp)
     )
 }
 
-// Same look as DebtsScreen's private EmptyState: 56dp outline-tinted icon,
-// 12dp gap, bodyMedium onSurfaceVariant text - one shared "nothing here"
-// read across every tab instead of each screen inventing its own spacing.
 @Composable
 private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                icon, contentDescription = null,
-                modifier = Modifier.size(56.dp),
-                tint = MaterialTheme.colorScheme.outlineVariant
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
+    AppEmptyState(icon = icon, text = text)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NoteRow(
     note: ImportantNote,
+    shape: Shape,
     modifier: Modifier = Modifier,
     onToggleDone: () -> Unit,
     onTogglePinned: () -> Unit,
@@ -426,93 +367,81 @@ private fun NoteRow(
     onDelete: () -> Unit,
     onOpenLink: () -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    // Same press-scale spring as PersonRow/MaterialRow, and kept on a
-    // separate outer Box from the card's own shadow for the same reason
-    // documented on PersonRow (scaling a shadow-casting layer can
-    // rasterize as a solid block on some low-end GPUs) - belt-and-braces
-    // here too even though shadowElevation is already 0.
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.98f else 1f,
-        animationSpec = MotionSpecs.pressSpring(),
-        label = "noteRowScale"
-    )
-
-    Box(modifier.fillMaxWidth().scale(scale)) {
-        Surface(
-            modifier = Modifier
+    // صف مسطّح متلاصق (نفس لغة صفوف الإعدادات). الضغط للتعديل، والضغط المطوّل للتثبيت.
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .combinedClickable(
+                onClick = onEdit,
+                onLongClick = onTogglePinned
+            ),
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            Modifier
                 .fillMaxWidth()
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = androidx.compose.foundation.LocalIndication.current,
-                    onClick = onEdit,
-                    onLongClick = onTogglePinned
-                ),
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surface,
-            // BORDERS UNIFIED WHITE — see GlassCard.kt's comment.
-            border = BorderStroke(1.dp, glassHairlineColor(0.5f)),
-            tonalElevation = 0.dp,
-            shadowElevation = 0.dp
+                .heightIn(min = 68.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
-                ActionIconButton(
-                    icon = if (note.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                    tint = if (note.isDone) LocalSemanticColors.current.success else MaterialTheme.colorScheme.onSurfaceVariant,
-                    contentDescription = "تم",
-                    onClick = onToggleDone
-                )
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (note.isPinned) {
-                            Icon(Icons.Default.PushPin, contentDescription = "مثبتة", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
+            ActionIconButton(
+                icon = if (note.isDone) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                tint = if (note.isDone) LocalSemanticColors.current.success else MaterialTheme.colorScheme.onSurfaceVariant,
+                contentDescription = "تم",
+                onClick = onToggleDone
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (note.isPinned) {
+                        Icon(
+                            Icons.Default.PushPin,
+                            contentDescription = "مثبتة",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(
+                        note.title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Medium,
+                        textDecoration = if (note.isDone) TextDecoration.LineThrough else null,
+                        color = if (note.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (note.content.isNotBlank()) {
+                    Text(
+                        note.content,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 3
+                    )
+                }
+                if (note.reminderAt > 0 || note.linkType != NoteLinkType.NONE) {
+                    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        if (note.reminderAt > 0) {
+                            InfoChip(
+                                icon = Icons.Default.Schedule,
+                                text = remember(note.reminderAt) {
+                                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(note.reminderAt))
+                                }
+                            )
                         }
-                        Text(
-                            note.title,
-                            fontWeight = FontWeight.Medium,
-                            textDecoration = if (note.isDone) TextDecoration.LineThrough else null,
-                            color = if (note.isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    if (note.content.isNotBlank()) {
-                        Text(
-                            note.content,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3
-                        )
-                    }
-                    if (note.reminderAt > 0 || note.linkType != NoteLinkType.NONE) {
-                        Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            if (note.reminderAt > 0) {
-                                InfoChip(
-                                    icon = Icons.Default.Schedule,
-                                    text = remember(note.reminderAt) {
-                                        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(note.reminderAt))
-                                    }
-                                )
-                            }
-                            if (note.linkType != NoteLinkType.NONE && note.linkedName.isNotBlank()) {
-                                InfoChip(
-                                    icon = if (note.linkType == NoteLinkType.PERSON) Icons.Default.AttachMoney else Icons.Default.Inventory2,
-                                    text = note.linkedName,
-                                    onClick = onOpenLink
-                                )
-                            }
+                        if (note.linkType != NoteLinkType.NONE && note.linkedName.isNotBlank()) {
+                            InfoChip(
+                                icon = if (note.linkType == NoteLinkType.PERSON) Icons.Default.AttachMoney else Icons.Default.Inventory2,
+                                text = note.linkedName,
+                                onClick = onOpenLink
+                            )
                         }
                     }
                 }
-                Spacer(Modifier.width(4.dp))
-                DeleteIconButton(onClick = onDelete, contentDescription = "حذف الملاحظة")
-                Spacer(Modifier.width(10.dp))
-                Icon(
-                    Icons.Default.ChevronLeft, contentDescription = null,
-                    tint = MaterialTheme.colorScheme.outlineVariant
-                )
             }
+            Spacer(Modifier.width(8.dp))
+            DeleteIconButton(onClick = onDelete, contentDescription = "حذف الملاحظة")
         }
     }
 }
@@ -525,8 +454,8 @@ private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text
             .let { if (onClick != null) it.combinedClickable(onClick = onClick, onLongClick = {}) else it },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+        Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(3.dp))
-        Text(text, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
