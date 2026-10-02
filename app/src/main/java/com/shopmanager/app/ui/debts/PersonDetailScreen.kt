@@ -7,7 +7,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -44,6 +47,7 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.PhoneUtils
 import com.shopmanager.app.ui.common.GlassCard
 import com.shopmanager.app.ui.notes.NoteEditScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
@@ -124,6 +128,9 @@ fun PersonDetailScreen(
     // that specific customer's page.
     var showEditNameDialog by remember { mutableStateOf(false) }
     var editNameText by remember { mutableStateOf("") }
+    var editPhoneText by remember { mutableStateOf("") }
+    var editPhoneError by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     var isSavingName by remember { mutableStateOf(false) }
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
@@ -159,8 +166,10 @@ fun PersonDetailScreen(
                         height = 42.dp,
                         container = MaterialTheme.colorScheme.surfaceContainerHigh,
                         actions = listOf(
-                            ActionSpec(Icons.Default.Edit, "تعديل اسم العميل") {
+                            ActionSpec(Icons.Default.Edit, "تعديل بيانات العميل") {
                                 editNameText = person.name
+                                editPhoneText = person.phone
+                                editPhoneError = false
                                 showEditNameDialog = true
                             },
                             ActionSpec(Icons.Default.Delete, "حذف العميل", LocalSemanticColors.current.danger) {
@@ -183,7 +192,11 @@ fun PersonDetailScreen(
                     avatarColor = avatarColor,
                     total = total,
                     debtsCount = debts.size,
-                    nf = nf
+                    nf = nf,
+                    phone = person.phone,
+                    onCall = { PhoneUtils.call(context, person.phone) },
+                    onWhatsApp = { PhoneUtils.whatsApp(context, person.phone) },
+                    onSms = { PhoneUtils.sms(context, person.phone) }
                 )
             }
 
@@ -346,14 +359,37 @@ fun PersonDetailScreen(
         GlassAlertDialog(
             onDismissRequest = { if (!isSavingName) showEditNameDialog = false },
             icon = { Icon(Icons.Default.Edit, contentDescription = null, tint = LocalSemanticColors.current.info) },
-            title = { Text("تعديل اسم العميل") },
+            title = { Text("تعديل بيانات العميل") },
             text = {
-                AppTextField(
-                    value = editNameText,
-                    onValueChange = { editNameText = it },
-                    label = "اسم العميل",
-                    enabled = !isSavingName
-                )
+                Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+                        AppTextField(
+                            value = editNameText,
+                            onValueChange = { editNameText = it },
+                            label = "اسم العميل",
+                            enabled = !isSavingName,
+                            shape = groupedRowShape(0, 1)
+                        )
+                        AppTextField(
+                            value = editPhoneText,
+                            onValueChange = { editPhoneText = it; editPhoneError = false },
+                            label = "رقم الهاتف (اختياري)",
+                            placeholder = "09xxxxxxxx",
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            enabled = !isSavingName,
+                            isError = editPhoneError,
+                            shape = groupedRowShape(1, 1)
+                        )
+                    }
+                    if (editPhoneError) {
+                        Text(
+                            "رقم الهاتف غير صحيح",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(
@@ -361,13 +397,16 @@ fun PersonDetailScreen(
                     shape = RectangleShape,
                     onClick = {
                         val newName = editNameText.trim()
-                        if (newName.isNotEmpty() && newName != person.name) {
+                        val newPhone = editPhoneText.trim()
+                        if (!PhoneUtils.isValidOrBlank(newPhone)) {
+                            editPhoneError = true
+                        } else if (newName.isNotEmpty() && (newName != person.name || newPhone != person.phone)) {
                             isSavingName = true
-                            // Only the name changes here — amount/date are
+                            // Only the name/phone change here — amount/date are
                             // passed through unchanged (updatePerson writes
-                            // all three together), so this can't silently
+                            // them together), so this can't silently
                             // clobber the customer's existing balance/date.
-                            viewModel.savePerson(person.id, newName, person.amount, person.date) { success ->
+                            viewModel.savePerson(person.id, newName, person.amount, person.date, phone = newPhone) { success ->
                                 isSavingName = false
                                 if (success) showEditNameDialog = false
                             }
@@ -444,9 +483,20 @@ fun PersonDetailScreen(
 }
 
 @Composable
-private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsCount: Int, nf: NumberFormat) {
+private fun PersonHeader(
+    name: String,
+    avatarColor: Color,
+    total: Double,
+    debtsCount: Int,
+    nf: NumberFormat,
+    phone: String = "",
+    onCall: () -> Unit = {},
+    onWhatsApp: () -> Unit = {},
+    onSms: () -> Unit = {}
+) {
     // بطاقة الملخص بنفس شكل بطاقة الحساب في الإعدادات: مسطّحة وزواياها كبيرة.
     AppCard {
+        Column {
         Row(
             Modifier
                 .fillMaxWidth()
@@ -484,6 +534,54 @@ private fun PersonHeader(name: String, avatarColor: Color, total: Double, debtsC
                     color = MaterialTheme.colorScheme.surface
                 )
             }
+        }
+        // رقم العميل (اختياري): يظهر مع أزرار تواصل سريعة فقط إن كان محفوظاً.
+        if (phone.isNotBlank()) {
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+            )
+            Text(
+                "\u200E$phone",
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ContactActionButton(Modifier.weight(1f), Icons.Default.Call, "اتصال", MaterialTheme.colorScheme.onSurface, onCall)
+                ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Chat, "واتساب", LocalSemanticColors.current.success, onWhatsApp)
+                ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Send, "رسالة", LocalSemanticColors.current.info, onSms)
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun ContactActionButton(
+    modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }

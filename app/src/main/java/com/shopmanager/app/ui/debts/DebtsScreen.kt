@@ -318,9 +318,9 @@ fun DebtsScreen(
             initial = null,
             isSaving = isSaving.value,
             onDismiss = { if (!isSaving.value) showAddDialog.value = false },
-            onSave = { name, amount, date, note ->
+            onSave = { name, amount, date, note, phone ->
                 isSaving.value = true
-                viewModel.savePerson(null, name, amount, date, note) { success ->
+                viewModel.savePerson(null, name, amount, date, note, phone) { success ->
                     isSaving.value = false
                     if (success) showAddDialog.value = false
                 }

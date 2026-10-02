@@ -22,6 +22,7 @@ import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.PhoneUtils
 import com.shopmanager.app.ui.common.groupedRowShape
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -64,12 +65,13 @@ fun PersonEditDialog(
     initial: Person?,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (name: String, amount: Double, date: String, note: String) -> Unit
+    onSave: (name: String, amount: Double, date: String, note: String, phone: String) -> Unit
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var amount by remember { mutableStateOf(initial?.amount?.toString() ?: "") }
     var date by remember { mutableStateOf(initial?.date?.ifBlank { today() } ?: today()) }
     var note by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf(initial?.phone ?: "") }
     var error by remember { mutableStateOf<String?>(null) }
 
     GlassAlertDialog(
@@ -83,26 +85,35 @@ fun PersonEditDialog(
                     AppTextField(
                         value = name, onValueChange = { name = it }, enabled = !isSaving,
                         label = "اسم العميل", modifier = Modifier.fillMaxWidth(),
-                        shape = groupedRowShape(0, 3)
+                        shape = groupedRowShape(0, 4)
+                    )
+                    // رقم العميل — اختياري، للاتصال/واتساب/رسالة من صفحة العميل.
+                    AppTextField(
+                        value = phone, onValueChange = { phone = it }, enabled = !isSaving,
+                        label = "رقم الهاتف (اختياري)",
+                        placeholder = "09xxxxxxxx",
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = groupedRowShape(1, 4)
                     )
                     AppTextField(
                         value = amount, onValueChange = { amount = it }, enabled = !isSaving,
                         label = if (initial == null) "الدين الأولي (${AppSettingsState.currencySymbol})" else "المبلغ (${AppSettingsState.currencySymbol})",
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = groupedRowShape(1, 3)
+                        shape = groupedRowShape(2, 4)
                     )
                     AppTextField(
                         value = date, onValueChange = { date = it }, enabled = !isSaving,
                         label = "التاريخ (yyyy-MM-dd)", modifier = Modifier.fillMaxWidth(),
-                        shape = groupedRowShape(2, 3)
+                        shape = groupedRowShape(3, 4)
                     )
                     AppTextField(
                         value = note, onValueChange = { note = it }, enabled = !isSaving,
                         label = "ملاحظة (اختياري)",
                         singleLine = false, minLines = 1, maxLines = 3,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = groupedRowShape(3, 3)
+                        shape = groupedRowShape(4, 4)
                     )
                 }
                 error?.let {
@@ -123,9 +134,10 @@ fun PersonEditDialog(
                     val amountValue = amount.trim().toDoubleOrNull()
                     when {
                         name.isBlank() -> error = "الرجاء إدخال اسم العميل"
+                        !PhoneUtils.isValidOrBlank(phone) -> error = "رقم الهاتف غير صحيح"
                         amountValue == null || amountValue < 0 -> error = "الرجاء إدخال مبلغ صحيح"
                         date.isBlank() -> error = "الرجاء اختيار التاريخ"
-                        else -> { error = null; onSave(name.trim(), amountValue, date, note.trim()) }
+                        else -> { error = null; onSave(name.trim(), amountValue, date, note.trim(), phone.trim()) }
                     }
                 }
             ) {

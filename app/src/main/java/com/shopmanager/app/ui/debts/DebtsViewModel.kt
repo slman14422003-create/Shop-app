@@ -174,7 +174,8 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearMessage() { _message.value = null }
 
-    fun savePerson(existingId: String?, name: String, amount: Double, date: String, note: String = "", onDone: (Boolean) -> Unit) {
+    /** [phone]: رقم العميل (اختياري). null عند التعديل = لا تغيّر الرقم المحفوظ. */
+    fun savePerson(existingId: String?, name: String, amount: Double, date: String, note: String = "", phone: String? = null, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
                 if (existingId == null) {
@@ -213,11 +214,11 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     // synchronous-registration fix as above, via onIdAssigned
                     // instead of the returned value (which only settles once
                     // the whole batch is durably committed).
-                    repo.addPerson(name, amount, date, note) { id -> markCreatedHere(id) }
+                    repo.addPerson(name, amount, date, note, phone ?: "") { id -> markCreatedHere(id) }
                     _message.value = "تم إضافة \"$name\""
                     InstantBackupWorker.requestNow(getApplication())
                 } else {
-                    repo.updatePerson(existingId, name, amount, date)
+                    repo.updatePerson(existingId, name, amount, date, phone)
                     _message.value = "تم تعديل العميل"
                     InstantBackupWorker.requestNow(getApplication())
                 }
