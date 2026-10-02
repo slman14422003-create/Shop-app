@@ -349,6 +349,10 @@ dependencies {
     // stable release.
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.11.0")
+    // collectAsStateWithLifecycle(): stops collecting UI state (and, through
+    // WhileSubscribed, the Firestore listeners behind it) while the app is in
+    // the background, instead of keeping every screen's flows hot.
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.navigation:navigation-compose:2.10.2")
 
     // BUILD UPDATE: latest stable Compose BOM as of this update — brings in
