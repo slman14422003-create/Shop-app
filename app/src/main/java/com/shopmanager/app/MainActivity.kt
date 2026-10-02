@@ -83,6 +83,7 @@ import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.data.performance.resolvePerformanceTier
+import com.shopmanager.app.data.security.AdminPasswordRepository
 import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.admin.AdminPanelScreen
@@ -148,11 +149,10 @@ private const val ROUTE_SETTINGS = "settings"
 // لوحة المسؤول is reachable from the drawer regardless of which tab is
 // open, exactly like الإعدادات already is.
 private const val ROUTE_ADMIN = "adminPanel"
-// SECURITY: fixed 4-digit developer password gating لوحة المسؤول, distinct
-// from the user-chosen app-lock PIN in Settings. Attempts are throttled via
-// the shared PinAttemptThrottle (see AdminPinDialog below) so this can't be
-// brute-forced directly from the dialog's keypad.
-private const val ADMIN_PANEL_PASSWORD = "1442"
+// SECURITY: كلمة مرور لوحة المسؤول لم تعد مكتوبة بالكود — محفوظة في Firebase فقط
+// (Firestore ← config ← admin ← password)، وتُغيَّر وتُقرأ من Firebase Console.
+// راجع AdminPasswordRepository. المحاولات تبقى مُقيَّدة عبر PinAttemptThrottle
+// (انظر AdminPinDialog تحت) فلا يمكن تخمينها من لوحة المفاتيح.
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
 private const val ROUTE_HELP = "help"
 private const val ROUTE_PRIVACY = "privacy"
@@ -1179,7 +1179,8 @@ private fun ShopManagerApp(
                 AdminPanelScreen(
                     onBack = { navController.popBackStack() },
                     debtsViewModel = debtsViewModel,
-                    materialsViewModel = materialsViewModel
+                    materialsViewModel = materialsViewModel,
+                    notesViewModel = notesViewModel
                 )
             }
             composable(ROUTE_HELP) {
@@ -1307,17 +1308,22 @@ private fun ShopManagerApp(
         AdminPinDialog(
             throttle = adminThrottle,
             onDismiss = { showAdminPinDialog = false },
-            onSubmit = { entered ->
+            onVerify = { entered ->
                 if (adminThrottle.isLocked()) {
-                    false
-                } else if (entered == ADMIN_PANEL_PASSWORD) {
-                    adminThrottle.registerSuccess()
-                    showAdminPinDialog = false
-                    navController.navigate(ROUTE_ADMIN)
-                    true
+                    AdminPasswordRepository.Outcome.Denied
                 } else {
-                    adminThrottle.registerFailure()
-                    false
+                    val outcome = AdminPasswordRepository.verify(entered)
+                    when (outcome) {
+                        is AdminPasswordRepository.Outcome.Granted -> {
+                            adminThrottle.registerSuccess()
+                            showAdminPinDialog = false
+                            navController.navigate(ROUTE_ADMIN)
+                        }
+                        is AdminPasswordRepository.Outcome.Denied -> adminThrottle.registerFailure()
+                        // NotConfigured / Unavailable: ليست محاولة خاطئة — لا تُحتسب ضد المطوّر.
+                        else -> Unit
+                    }
+                    outcome
                 }
             }
         )
@@ -1380,18 +1386,20 @@ private fun navigateTopLevel(navController: androidx.navigation.NavController, r
 // drawer next to الإعدادات instead of on Home's own header — see
 // showAdminPinDialog/adminThrottle above and AppDrawerContent's
 // onOpenAdmin. Behavior is unchanged from before: same fixed password
-// (ADMIN_PANEL_PASSWORD) and the same shared PinAttemptThrottle lockout,
+// (now verified against Firebase, see AdminPasswordRepository) and the same shared PinAttemptThrottle lockout,
 // just triggered from a different place now.
 @Composable
 private fun AdminPinDialog(
     throttle: PinAttemptThrottle,
     onDismiss: () -> Unit,
-    onSubmit: (String) -> Boolean
+    onVerify: suspend (String) -> AdminPasswordRepository.Outcome
 ) {
     var pin by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
     var lockRemaining by remember { mutableLongStateOf(throttle.lockRemainingSeconds()) }
     val isLocked = lockRemaining > 0
+    val verifyScope = rememberCoroutineScope()
 
     LaunchedEffect(isLocked) {
         while (lockRemaining > 0) {
@@ -1400,23 +1408,41 @@ private fun AdminPinDialog(
         }
     }
 
+    fun submit() {
+        if (checking || isLocked || pin.isEmpty()) return
+        checking = true
+        message = null
+        verifyScope.launch {
+            val outcome = onVerify(pin)
+            checking = false
+            lockRemaining = throttle.lockRemainingSeconds()
+            message = when (outcome) {
+                is AdminPasswordRepository.Outcome.Granted -> null
+                is AdminPasswordRepository.Outcome.Denied -> "كلمة المرور غير صحيحة"
+                is AdminPasswordRepository.Outcome.NotConfigured ->
+                    "كلمة المرور غير معيّنة في Firebase (config ← admin ← password)"
+                is AdminPasswordRepository.Outcome.Unavailable -> outcome.reason
+            }
+        }
+    }
+
     GlassAlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!checking) onDismiss() },
         title = { Text("دخول لوحة المطوّر") },
         text = {
             Column {
                 AppTextField(
                     value = pin,
-                    onValueChange = { pin = it.filter { c -> c.isDigit() }.take(8); error = false },
+                    onValueChange = { pin = it.take(40); message = null },
                     label = "كلمة المرور",
                     singleLine = true,
-                    enabled = !isLocked,
+                    enabled = !isLocked && !checking,
                     visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Password
                     ),
                     modifier = Modifier.fillMaxWidth(),
-                    isError = error
+                    isError = message != null
                 )
                 if (isLocked) {
                     Spacer(Modifier.height(6.dp))
@@ -1425,10 +1451,10 @@ private fun AdminPinDialog(
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.labelSmall
                     )
-                } else if (error) {
+                } else if (message != null) {
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "كلمة المرور غير صحيحة",
+                        message ?: "",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.labelSmall
                     )
@@ -1436,13 +1462,18 @@ private fun AdminPinDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = !isLocked, shape = RectangleShape, onClick = {
-                if (!onSubmit(pin)) {
-                    error = true
-                    lockRemaining = throttle.lockRemainingSeconds()
+            TextButton(enabled = !isLocked && !checking && pin.isNotEmpty(), shape = RectangleShape, onClick = { submit() }) {
+                if (checking) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = androidx.compose.material3.LocalContentColor.current
+                    )
+                } else {
+                    Text("دخول")
                 }
-            }) { Text("دخول") }
+            }
         },
-        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
+        dismissButton = { TextButton(enabled = !checking, shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
 }
