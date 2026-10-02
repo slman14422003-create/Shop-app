@@ -23,13 +23,13 @@ val ClaudeBgDark1 = Color(0xFF000000)
 val ClaudeBgDark2 = Color(0xFF0D0D0D)
 val ClaudeBgDark3 = Color(0xFF171717)
 
-// Brand accent — ChatGPT's link/highlight blue (used for the small brand
+// Brand accent — orange (was blue; switched back per "برتقالي مو أزرق") (used for the small brand
 // mark, splash and notification icon only; ordinary buttons/switches stay
 // neutral black/white via primary below, same as the reference app).
-val ClaudeOrangeLight = Color(0xFF2F80ED)
-val ClaudeOrangeDark = Color(0xFF5B9DF9)
-val ClaudePrimaryDarkVariant = Color(0xFF1C64C7)
-val ClaudePrimaryDarkVariantOnDark = Color(0xFF8FBBFC)
+val ClaudeOrangeLight = Color(0xFFC96442)
+val ClaudeOrangeDark = Color(0xFFD97757)
+val ClaudePrimaryDarkVariant = Color(0xFFA94E2E)
+val ClaudePrimaryDarkVariantOnDark = Color(0xFFE8906F)
 
 // Neutral secondary accent (settings icons, secondary chips).
 val ClaudeSecondaryLight = Color(0xFF6E6E80)
@@ -69,8 +69,8 @@ val ClaudeAccentGreenDark = Color(0xFF19C37D)
 val ClaudeAccentGoldDark = Color(0xFFE0AC4F)
 
 // Material3 role fills, derived from the same neutral/blue ChatGPT ladder.
-val ClaudeM3PrimaryContainerLight = Color(0xFFD6E6FD)
-val ClaudeM3OnPrimaryContainerLight = Color(0xFF0B3E8F)
+val ClaudeM3PrimaryContainerLight = Color(0xFFF6DDD3)
+val ClaudeM3OnPrimaryContainerLight = Color(0xFF5A2615)
 val ClaudeM3SecondaryContainerLight = Color(0xFFECECF1)
 val ClaudeM3OnSecondaryContainerLight = Color(0xFF2D2D35)
 val ClaudeM3TertiaryContainerLight = Color(0xFFF2E4C0)
@@ -86,8 +86,8 @@ val ClaudeM3SurfaceContainerHighLight = Color(0xFFECECF1)
 // light neutral gray keeps the flat, borderless look while staying visible.
 val ClaudeRowFillLight = Color(0xFFF3F3F5)
 
-val ClaudeM3PrimaryContainerDark = Color(0xFF1C3D6B)
-val ClaudeM3OnPrimaryContainerDark = Color(0xFFCFE2FE)
+val ClaudeM3PrimaryContainerDark = Color(0xFF4A2618)
+val ClaudeM3OnPrimaryContainerDark = Color(0xFFF8D9CC)
 val ClaudeM3SecondaryContainerDark = Color(0xFF2A2A2A)
 val ClaudeM3OnSecondaryContainerDark = Color(0xFFE4E4E4)
 val ClaudeM3TertiaryContainerDark = Color(0xFF473A1C)
@@ -111,11 +111,11 @@ val ClaudeM3SurfaceContainerHighDark = Color(0xFF232323)
 // top.
 // ============================================================================
 val AvatarPalette = listOf(
-    Color(0xFF2F80ED), // ChatGPT blue (brand)
+    Color(0xFFC96442), // brand orange
     Color(0xFF10A37F), // ChatGPT green
     Color(0xFFB5811B), // gold / amber
     Color(0xFF7E7BB0), // dusty lavender-slate
-    Color(0xFF1C64C7), // deep blue
+    Color(0xFFA94E2E), // deep orange
     Color(0xFF3E8E8E), // muted teal
     Color(0xFF8B6F47), // warm clay
     Color(0xFFD93025), // signal red
