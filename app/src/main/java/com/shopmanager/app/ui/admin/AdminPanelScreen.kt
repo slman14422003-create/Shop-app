@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.admin
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
@@ -48,7 +49,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -140,14 +140,14 @@ fun AdminPanelScreen(
     var cacheClearedMessage by remember { mutableStateOf<String?>(null) }
     var copiedMessage by remember { mutableStateOf<String?>(null) }
 
-    val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
-    val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
-    val notesSyncError = notesViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
+    val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsStateWithLifecycle(initialValue = false)?.value ?: false
+    val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsStateWithLifecycle(initialValue = false)?.value ?: false
+    val notesSyncError = notesViewModel?.hasSyncError?.collectAsStateWithLifecycle(initialValue = false)?.value ?: false
 
     // أعداد البيانات الحية (من نفس حالات الشاشات، بلا أي قراءة إضافية من Firebase).
-    val debtsState = debtsViewModel?.uiState?.collectAsState()?.value
-    val materialsState = materialsViewModel?.uiState?.collectAsState()?.value
-    val notesState = notesViewModel?.uiState?.collectAsState()?.value
+    val debtsState = debtsViewModel?.uiState?.collectAsStateWithLifecycle()?.value
+    val materialsState = materialsViewModel?.uiState?.collectAsStateWithLifecycle()?.value
+    val notesState = notesViewModel?.uiState?.collectAsStateWithLifecycle()?.value
 
     // أدوات المطوّر
     var isProbingFirebase by remember { mutableStateOf(false) }
