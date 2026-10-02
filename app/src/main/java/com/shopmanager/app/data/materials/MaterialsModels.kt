@@ -110,3 +110,39 @@ fun Material.quantityLabel(): String = when {
     quantity == 1.0 -> unit
     else -> "${quantity.formatQuantity()} $unit"
 }
+
+/**
+ * عدّاد الأوزان لقائمة النواقص (يظهر بطاقةً أعلى قائمة المواد): مجموع ما يلزم
+ * شراؤه مقسّماً حسب نوع الوحدة بلا أي تحويل مُخمَّن بين العائلتين —
+ *  - [kilos]: عائلة الكيلو (كيلو = 1، نص كيلو = 0.5، ربع كيلو = 0.25) × الكمية.
+ *  - [okes]: عائلة اللوقية (لوقية = 1، نص لوقية = 0.5، ربع لوقية = 0.25) × الكمية.
+ *  - [pieces]: المواد بلا وحدة (مثل "بيض: 6") تُجمع كعدد.
+ * [count] عدد المواد (الصفوف) المحسوبة.
+ */
+data class MaterialsWeightSummary(
+    val kilos: Double = 0.0,
+    val okes: Double = 0.0,
+    val pieces: Double = 0.0,
+    val count: Int = 0
+) {
+    val hasAnything: Boolean get() = kilos > 0.0 || okes > 0.0 || pieces > 0.0
+}
+
+fun List<Material>.weightSummary(): MaterialsWeightSummary {
+    var kilos = 0.0
+    var okes = 0.0
+    var pieces = 0.0
+    for (m in this) {
+        val q = m.quantity
+        when (MaterialUnit.fromLabel(m.unit)) {
+            MaterialUnit.KG -> kilos += q
+            MaterialUnit.HALF_KG -> kilos += q * 0.5
+            MaterialUnit.QUARTER_KG -> kilos += q * 0.25
+            MaterialUnit.OKE -> okes += q
+            MaterialUnit.HALF_OKE -> okes += q * 0.5
+            MaterialUnit.QUARTER_OKE -> okes += q * 0.25
+            MaterialUnit.NONE -> pieces += q
+        }
+    }
+    return MaterialsWeightSummary(kilos = kilos, okes = okes, pieces = pieces, count = size)
+}
