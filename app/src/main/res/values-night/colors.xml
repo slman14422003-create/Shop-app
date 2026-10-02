@@ -12,7 +12,7 @@
   matching ClaudeOrangeDark), replacing the old dark-mode coral #D97757.
 -->
 <resources>
-    <color name="brand_claude_primary">#5B9DF9</color>
+    <color name="brand_claude_primary">#D97757</color>
     <color name="brand_claude_secondary">#A6A6B2</color>
 
     <color name="success_green">#19C37D</color>
@@ -25,8 +25,8 @@
     <color name="background_light">#000000</color>
     <color name="surface_variant_light">#2B2B2B</color>
 
-    <color name="ripple_brand">#265B9DF9</color>
-    <color name="edge_glow_brand">#5B9DF9</color>
+    <color name="ripple_brand">#26D97757</color>
+    <color name="edge_glow_brand">#D97757</color>
 
     <!-- Splash follows system theme — pure black in dark mode, matching
          ClaudeBgDark1. -->
