@@ -291,7 +291,8 @@ fun AppPillButton(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-    tonal: Boolean = false
+    tonal: Boolean = false,
+    height: Dp = 52.dp
 ) {
     val cs = MaterialTheme.colorScheme
     Button(
@@ -304,14 +305,14 @@ fun AppPillButton(
             disabledContainerColor = cs.onSurface.copy(alpha = 0.12f),
             disabledContentColor = cs.onSurface.copy(alpha = 0.38f)
         ),
-        contentPadding = PaddingValues(horizontal = 24.dp),
-        modifier = modifier.height(52.dp)
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 0.dp),
+        modifier = modifier.height(height)
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(if (height < 48.dp) 18.dp else 20.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(label, style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp))
+        Text(label, style = MaterialTheme.typography.titleSmall.copy(fontSize = if (height < 48.dp) 15.sp else 16.sp))
     }
 }
 
@@ -401,7 +402,7 @@ data class AppStat(
 
 /** شريط إحصاءات: بلاطات مسطّحة متلاصقة أفقياً بنفس منطق زوايا مجموعة الإعدادات. */
 @Composable
-fun AppStatsStrip(stats: List<AppStat>, modifier: Modifier = Modifier) {
+fun AppStatsStrip(stats: List<AppStat>, modifier: Modifier = Modifier, compact: Boolean = false) {
     Row(
         modifier
             .fillMaxWidth()
@@ -417,7 +418,7 @@ fun AppStatsStrip(stats: List<AppStat>, modifier: Modifier = Modifier) {
                 color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 Column(
-                    Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
+                    Modifier.padding(horizontal = 8.dp, vertical = if (compact) 9.dp else 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -427,11 +428,11 @@ fun AppStatsStrip(stats: List<AppStat>, modifier: Modifier = Modifier) {
                         AnimatedCounterText(
                             targetValue = stat.value,
                             format = stat.format,
-                            style = MaterialTheme.typography.titleLarge,
+                            style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-                    Spacer(Modifier.height(2.dp))
+                    Spacer(Modifier.height(if (compact) 0.dp else 2.dp))
                     Text(
                         stat.label,
                         style = MaterialTheme.typography.labelMedium,
