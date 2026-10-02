@@ -70,6 +70,7 @@ import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.updates.AppVersionInfo
+import com.shopmanager.app.data.updates.RemoteUpdateConfig
 import com.shopmanager.app.data.updates.UpdateCheckResult
 import com.shopmanager.app.data.updates.UpdateChecker
 import com.shopmanager.app.ui.common.AppFootnote
@@ -125,6 +126,12 @@ fun AdminPanelScreen(
 
     var manifestUrl by remember { mutableStateOf(settings.updateManifestUrl) }
     var forceUpdateEnabled by remember { mutableStateOf(settings.forceUpdateEnabled) }
+    // مفتاح "التحديث الاختياري" العام المخزّن في Firebase (null = جارِ التحميل).
+    var optionalUpdateEnabled by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) {
+        RemoteUpdateConfig.read(context).onSuccess { optionalUpdateEnabled = it }
+            .onFailure { optionalUpdateEnabled = true }
+    }
     var savedMessage by remember { mutableStateOf<String?>(null) }
     var isTesting by remember { mutableStateOf(false) }
     // (نجح؟، النص) — اللون يتبع النتيجة بدل الاعتماد على رموز إيموجي.
@@ -268,6 +275,31 @@ fun AdminPanelScreen(
                                 forceUpdateEnabled = it
                                 settings.forceUpdateEnabled = it
                                 savedMessage = if (it) "تم تفعيل التحديث الإجباري" else "تم إيقاف التحديث الإجباري"
+                            }
+                        )
+                    },
+                    { shape ->
+                        SwitchRow(
+                            shape = shape,
+                            title = "إظهار التحديث الاختياري للجميع",
+                            subtitle = "مرتبط بـ Firebase: عند الإيقاف لا يظهر مربع \"تحديث الآن / لاحقاً\" عند فتح التطبيق لدى كل المستخدمين وليس جهازك فقط. " +
+                                "زر \"تحقق من التحديثات\" في الإعدادات والتحديث الإجباري لا يتأثران.",
+                            checked = optionalUpdateEnabled ?: true,
+                            onCheckedChange = { wanted ->
+                                val previous = optionalUpdateEnabled
+                                if (previous != null) {
+                                    optionalUpdateEnabled = wanted
+                                    scope.launch {
+                                        RemoteUpdateConfig.write(context, wanted)
+                                            .onSuccess {
+                                                savedMessage = if (wanted) "تم تفعيل التحديث الاختياري للجميع" else "تم إيقاف التحديث الاختياري للجميع"
+                                            }
+                                            .onFailure {
+                                                optionalUpdateEnabled = previous
+                                                savedMessage = "تعذر الحفظ على Firebase — تأكد من الاتصال وقواعد الأمان (${it.message ?: "خطأ"})"
+                                            }
+                                    }
+                                }
                             }
                         )
                     },
