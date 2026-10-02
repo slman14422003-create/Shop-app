@@ -530,7 +530,11 @@ class MainActivity : FragmentActivity() {
                                         // الخيار من لوحة المسؤول؛ غير ذلك يظهر مربع اختياري.
                                         if (result.manifest.force && settings.forceUpdateEnabled) {
                                             forceUpdateManifest = result.manifest
-                                        } else {
+                                        } else if (com.shopmanager.app.data.updates.RemoteUpdateConfig
+                                                .isOptionalUpdateEnabled(applicationContext)
+                                        ) {
+                                            // مفتاح عام من Firebase (لوحة المسؤول): إيقافه يخفي
+                                            // هذا المربع عند كل المستخدمين، لا جهازك وحده.
                                             optionalUpdateManifest = result.manifest
                                         }
                                     }
