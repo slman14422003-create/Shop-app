@@ -279,6 +279,36 @@ object UpdateChecker {
 
     private val FORCE_MARKER = Regex("""\[\s*(force|إجباري|اجباري)\s*]""", RegexOption.IGNORE_CASE)
 
+    /** اختبار سريع لوكيل Cloudflare من لوحة المطوّر: GET /health ويقيس الزمن.
+     * (نجح؟، نص النتيجة) — لا يمسّ GitHub ولا يحتاج Release منشوراً. */
+    suspend fun pingProxy(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        if (PROXY_BASE_URL.isBlank()) {
+            return@withContext false to "لم يتم ضبط رابط الوكيل في UpdateChecker.PROXY_BASE_URL"
+        }
+        val start = System.currentTimeMillis()
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL("${PROXY_BASE_URL.trimEnd('/')}/health").openConnection() as HttpURLConnection).apply {
+                connectTimeout = TIMEOUT_MS
+                readTimeout = TIMEOUT_MS
+                requestMethod = "GET"
+                setRequestProperty("Cache-Control", "no-cache")
+            }
+            val status = connection.responseCode
+            val ms = System.currentTimeMillis() - start
+            if (status in 200..299) true to "الوكيل شغّال — استجاب خلال ${ms}ms"
+            else false to "الوكيل أعاد رمز الحالة $status"
+        } catch (e: java.net.UnknownHostException) {
+            false to "تعذر الوصول للوكيل — تحقق من الاتصال بالإنترنت"
+        } catch (e: java.net.SocketTimeoutException) {
+            false to "انتهت مهلة الاتصال بالوكيل"
+        } catch (e: Exception) {
+            false to (e.message ?: "خطأ غير متوقع")
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
     /** Cheap "is the update endpoint reachable at all" probe for the admin
      * panel — same request, but callers only care about the boolean. */
     suspend fun canReach(manifestUrl: String): Boolean = withContext(Dispatchers.IO) {
