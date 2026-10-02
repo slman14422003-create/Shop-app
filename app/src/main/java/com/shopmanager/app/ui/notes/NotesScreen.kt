@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.notes
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -109,8 +110,8 @@ fun NotesScreen(
     onAddNoteRequestHandled: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
-    val state = viewModel.uiState.collectAsState().value
-    val message = viewModel.message.collectAsState().value
+    val state = viewModel.uiState.collectAsStateWithLifecycle().value
+    val message = viewModel.message.collectAsStateWithLifecycle().value
     val snackbarHost = remember { SnackbarHostState() }
 
     var showEditDialog by remember { mutableStateOf(false) }
