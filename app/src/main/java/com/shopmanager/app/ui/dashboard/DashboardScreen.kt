@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.dashboard
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -110,10 +111,10 @@ fun DashboardScreen(
     onNavigateToMaterials: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
-    val debtsState by debtsViewModel.uiState.collectAsState()
-    val materialsState by materialsViewModel.uiState.collectAsState()
-    val debtsRefreshing by debtsViewModel.isRefreshing.collectAsState()
-    val materialsRefreshing by materialsViewModel.isRefreshing.collectAsState()
+    val debtsState by debtsViewModel.uiState.collectAsStateWithLifecycle()
+    val materialsState by materialsViewModel.uiState.collectAsStateWithLifecycle()
+    val debtsRefreshing by debtsViewModel.isRefreshing.collectAsStateWithLifecycle()
+    val materialsRefreshing by materialsViewModel.isRefreshing.collectAsStateWithLifecycle()
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
     val df = remember { SimpleDateFormat("d MMM، h:mm a", Locale("ar")) }
