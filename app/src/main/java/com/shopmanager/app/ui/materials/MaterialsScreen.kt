@@ -5,6 +5,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalIndication
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
@@ -63,7 +65,11 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
+import com.shopmanager.app.data.materials.MaterialsWeightSummary
 import com.shopmanager.app.data.materials.quantityLabel
+import com.shopmanager.app.data.materials.weightSummary
+import com.shopmanager.app.ui.common.AnimatedCounterText
+import androidx.compose.animation.animateContentSize
 import com.shopmanager.app.ui.common.AppSearchBar
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.DeleteIconButton
@@ -286,6 +292,18 @@ fun MaterialsScreen(
                     )
                     val shortageTotal = remember(filtered, state.prices) {
                         filtered.sumOf { state.prices[it.name] ?: 0.0 }
+                    }
+                    // عدّاد الأوزان (كيلو / لوقية / بالعدد) — يتبع القائمة المعروضة
+                    // (يتغيّر مع البحث) ويُحسب مرة لكل تغيّر فعلي في القائمة.
+                    val weightSummary = remember(filtered) { filtered.weightSummary() }
+                    if (weightSummary.hasAnything) {
+                        MaterialsWeightCard(
+                            summary = weightSummary,
+                            animate = !state.isLoading,
+                            modifier = Modifier
+                                .padding(horizontal = AppScreenPadding)
+                                .padding(bottom = 12.dp)
+                        )
                     }
                     if (state.materials.isNotEmpty()) {
                         AppSectionTitle(
@@ -659,7 +677,12 @@ private fun MaterialsList(
         contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = bottomClearance),
         verticalArrangement = Arrangement.spacedBy(AppGroupGap)
     ) {
-        itemsIndexed(orderedItems, key = { _, m -> m.id }) { rowIndex, m ->
+        itemsIndexed(
+            orderedItems,
+            key = { _, m -> m.id },
+            // PERF: كل الصفوف من نوع واحد — يسمح لـ Compose بإعادة استخدام تركيبها بين الصفوف.
+            contentType = { _, _ -> "materialRow" }
+        ) { rowIndex, m ->
             val isDragging = m.id == draggingId
             Box(
                 Modifier
@@ -671,7 +694,8 @@ private fun MaterialsList(
                     // already tracks the finger exactly) isn't fought by a
                     // second, competing placement animation.
                     .then(if (!isDragging) Modifier.animateItem(
-                        fadeInSpec = null,
+                        // السلاسة: المادة المضافة حديثاً تظهر بتلاشٍ قصير بدل القفز المفاجئ.
+                        fadeInSpec = tween(durationMillis = MotionSpecs.fadeMillis(), easing = MotionSpecs.claudeEasing),
                         placementSpec = MotionSpecs.reorderSpring(),
                         fadeOutSpec = MotionSpecs.listItemFadeOut()
                     ) else Modifier)
@@ -1165,5 +1189,96 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
         sb.append("\n")
     }
     sb.append("\nالإجمالي: ${materials.size} مادة")
+    val w = materials.weightSummary()
+    if (w.hasAnything) {
+        val parts = buildList {
+            if (w.kilos > 0.0) add("${Formatters.number(w.kilos)} كيلو")
+            if (w.okes > 0.0) add("${Formatters.number(w.okes)} لوقية")
+            if (w.pieces > 0.0) add("${Formatters.number(w.pieces)} بالعدد")
+        }
+        sb.append("\nالأوزان: ${parts.joinToString(" + ")}")
+    }
     return sb.toString()
+}
+
+/**
+ * عدّاد الأوزان: بطاقة مسطّحة بنفس لغة بطاقة "إجمالي قيمة القائمة" في تبويب الأسعار —
+ * أيقونة ميزان + عنوان وعدد المواد، وتحتها شريط خلايا متساوية العرض (كيلو | لوقية | بالعدد)
+ * لا تظهر منها إلا ما فيها قيمة. الأرقام تعدّ تصاعدياً بـ [AnimatedCounterText]
+ * (نفس منحنى Claude، ودون حركة على الأجهزة الضعيفة)، والبطاقة تتمدّد/تنكمش بسلاسة
+ * عند ظهور خلية أو اختفائها.
+ */
+@Composable
+private fun MaterialsWeightCard(
+    summary: MaterialsWeightSummary,
+    animate: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    val cells = remember(summary) {
+        buildList {
+            if (summary.kilos > 0.0) add(summary.kilos to "كيلو")
+            if (summary.okes > 0.0) add(summary.okes to "لوقية")
+            if (summary.pieces > 0.0) add(summary.pieces to "بالعدد")
+        }
+    }
+    if (cells.isEmpty()) return
+
+    AppCard(modifier = modifier.animateContentSize(animationSpec = MotionSpecs.expandSpring())) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(42.dp).clip(CircleShape).background(cs.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Scale, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "إجمالي الأوزان المطلوبة",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = cs.onSurface
+                    )
+                    Text(
+                        "${summary.count} مادة في القائمة",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = cs.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(cs.surfaceContainerHighest)
+                    .padding(vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                cells.forEachIndexed { index, (value, label) ->
+                    if (index > 0) {
+                        Box(Modifier.width(1.dp).height(34.dp).background(cs.outlineVariant))
+                    }
+                    Column(
+                        Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        AnimatedCounterText(
+                            targetValue = value,
+                            format = { Formatters.number(it) },
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                            fontWeight = FontWeight.SemiBold,
+                            animate = animate
+                        )
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = cs.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
