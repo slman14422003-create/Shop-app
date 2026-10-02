@@ -6,7 +6,7 @@
          ui/theme/Color.kt's ClaudeOrangeLight — ChatGPT's own link/highlight
          blue, replacing the old terracotta #C96442, so pre-Compose chrome
          (splash, window background, ripple) matches Compose's actual accent. -->
-    <color name="brand_claude_primary">#2F80ED</color>
+    <color name="brand_claude_primary">#C96442</color>
     <color name="brand_claude_secondary">#6E6E80</color>
 
     <!-- Semantic — mirrors Color.kt's ClaudeAccentGreenLight/GoldLight/
@@ -28,8 +28,8 @@
 
     <!-- Ripple / touch-feedback tint and scroll edge-glow color, tied to
          the same exact blue as ClaudeOrangeLight. -->
-    <color name="ripple_brand">#1F2F80ED</color>
-    <color name="edge_glow_brand">#2F80ED</color>
+    <color name="ripple_brand">#1FC96442</color>
+    <color name="edge_glow_brand">#C96442</color>
 
     <!-- Splash follows system light/dark theme (white here, pure black in
          values-night/colors.xml). -->
