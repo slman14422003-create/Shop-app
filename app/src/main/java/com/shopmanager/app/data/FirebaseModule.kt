@@ -39,22 +39,37 @@ object FirebaseModule {
     @Synchronized
     fun init(context: Context) {
         if (initialized) return
-        initialized = true
 
-        val options = FirebaseOptions.Builder()
-            .setApiKey("AIzaSyAa0vKXHkoiA-odIKucgKXDLMqsbwhdMXw")
-            .setApplicationId("1:583934573941:web:e5ba92706635f06945e73c")
-            .setProjectId("shop-app-6d35e")
-            .setStorageBucket("shop-app-6d35e.firebasestorage.app")
-            .setGcmSenderId("583934573941") // messagingSenderId
-            .build()
-
-        val app = FirebaseApp.initializeApp(context, options, APP_NAME)
+        // STABILITY FIX: `initialized` used to flip to true BEFORE the
+        // FirebaseApp was actually built. If initializeApp() threw even
+        // once (low memory, a transient provider error), every later call
+        // returned early and the first database access then crashed with
+        // "FirebaseApp with name shopApp doesn't exist" until the process
+        // was killed. It now flips only after a fully successful init,
+        // and an app instance that already exists is simply reused.
+        val app = try {
+            FirebaseApp.getInstance(APP_NAME)
+        } catch (_: IllegalStateException) {
+            val options = FirebaseOptions.Builder()
+                .setApiKey("AIzaSyAa0vKXHkoiA-odIKucgKXDLMqsbwhdMXw")
+                .setApplicationId("1:583934573941:web:e5ba92706635f06945e73c")
+                .setProjectId("shop-app-6d35e")
+                .setStorageBucket("shop-app-6d35e.firebasestorage.app")
+                .setGcmSenderId("583934573941") // messagingSenderId
+                .build()
+            FirebaseApp.initializeApp(context.applicationContext, options, APP_NAME)
+        }
 
         // Configure the persistent cache exactly once for this app instance
         // (still guarding against the old "enableIndexedDbPersistence called
-        // twice" bug class from the original web version).
-        configureFirestore(FirebaseFirestore.getInstance(app))
+        // twice" bug class from the original web version). Settings can only
+        // be changed before the first use of the instance, so a failure here
+        // (already used) must not undo the successful app init above.
+        try {
+            configureFirestore(FirebaseFirestore.getInstance(app))
+        } catch (_: IllegalStateException) {
+        }
+        initialized = true
     }
 
     private fun configureFirestore(db: FirebaseFirestore) {
