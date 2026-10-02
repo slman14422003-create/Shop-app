@@ -47,7 +47,8 @@ class DebtsRepository {
                         name = doc.getString("name") ?: "",
                         amount = doc.getDouble("amount") ?: 0.0,
                         date = doc.getString("date") ?: "",
-                        createdAt = doc.getLong("createdAt") ?: 0L
+                        createdAt = doc.getLong("createdAt") ?: 0L,
+                        phone = doc.getString("phone") ?: ""
                     )
                 } ?: emptyList()
                 trySend(persons)
@@ -163,6 +164,7 @@ class DebtsRepository {
         amount: Double,
         date: String,
         note: String = "",
+        phone: String = "",
         onIdAssigned: (String) -> Unit = {}
     ): String? = withTimeout(WRITE_TIMEOUT_MS) {
         val personRef = db.collection("persons").document()
@@ -173,6 +175,7 @@ class DebtsRepository {
                 "name" to name,
                 "amount" to amount,
                 "date" to date,
+                "phone" to phone,
                 "createdAt" to System.currentTimeMillis()
             )
         )
@@ -206,8 +209,10 @@ class DebtsRepository {
         debtId
     }
 
-    suspend fun updatePerson(id: String, name: String, amount: Double, date: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        val data = mapOf("name" to name, "amount" to amount, "date" to date)
+    /** [phone] = null يترك الرقم المحفوظ كما هو (لا يمسحه)؛ نص فارغ يمسحه فعلاً. */
+    suspend fun updatePerson(id: String, name: String, amount: Double, date: String, phone: String? = null) = withTimeout(WRITE_TIMEOUT_MS) {
+        val data = mutableMapOf<String, Any>("name" to name, "amount" to amount, "date" to date)
+        if (phone != null) data["phone"] = phone
         db.collection("persons").document(id).update(data).await()
         Unit
     }
@@ -312,7 +317,8 @@ class DebtsRepository {
                 name = doc.getString("name") ?: "",
                 amount = doc.getDouble("amount") ?: 0.0,
                 date = doc.getString("date") ?: "",
-                createdAt = doc.getLong("createdAt") ?: 0L
+                createdAt = doc.getLong("createdAt") ?: 0L,
+                phone = doc.getString("phone") ?: ""
             )
         }
         val debts = debtsSnap.documents.map { it.toDebt() }
@@ -343,7 +349,8 @@ class DebtsRepository {
 
         val personWrites = persons.filter { it.id.isNotBlank() }.map {
             db.collection("persons").document(it.id) to mapOf(
-                "name" to it.name, "amount" to it.amount, "date" to it.date, "createdAt" to it.createdAt
+                "name" to it.name, "amount" to it.amount, "date" to it.date, "createdAt" to it.createdAt,
+                "phone" to it.phone
             )
         }
         val debtWrites = debts.filter { it.id.isNotBlank() }.map {

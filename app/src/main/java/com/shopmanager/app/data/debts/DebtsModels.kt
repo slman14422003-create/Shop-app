@@ -5,7 +5,9 @@ data class Person(
     val name: String = "",
     val amount: Double = 0.0,
     val date: String = "",
-    val createdAt: Long = 0L
+    val createdAt: Long = 0L,
+    /** رقم هاتف العميل (اختياري) — فارغ إن لم يُدخل. */
+    val phone: String = ""
 )
 
 data class Debt(
