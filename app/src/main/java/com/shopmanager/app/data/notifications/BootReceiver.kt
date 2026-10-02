@@ -15,9 +15,14 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action != Intent.ACTION_BOOT_COMPLETED && action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        val settings = SettingsRepository(context)
-        if (settings.notificationsEnabled && settings.realtimeSyncEnabled) {
-            RealtimeSyncService.start(context)
+        // STABILITY: a receiver that throws at boot/update kills the process
+        // before the person even opens the app - never let that happen.
+        try {
+            val settings = SettingsRepository(context)
+            if (settings.notificationsEnabled && settings.realtimeSyncEnabled) {
+                RealtimeSyncService.start(context)
+            }
+        } catch (_: Exception) {
         }
     }
 }

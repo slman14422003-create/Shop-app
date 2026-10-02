@@ -45,12 +45,48 @@ object RemoteChangeWatcher {
     @Volatile private var pendingDebts: List<DebtRecord>? = null
     @Volatile private var pendingTrusted = false
 
+    // BUG FIXED (الإشعارات الفورية تتوقف وحدها): when a Firestore snapshot
+    // listener reports an error (rules/auth hiccup, backend restart) it is
+    // TERMINATED - it never delivers another event. The handlers above just
+    // returned on error, so from then on no notification could arrive until
+    // the process happened to restart, while the foreground service kept
+    // showing "المزامنة الفورية مفعّلة". The whole set is now re-registered
+    // after a short delay (baselines live on disk, so anything that changed
+    // meanwhile is still detected and notified once).
+    private const val RESTART_DELAY_MS = 30_000L
+    private val retryHandler by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+    private var retryPending = false
+    private var appContext: Context? = null
+
+    @Synchronized
+    private fun scheduleRestart() {
+        if (retryPending || owners.isEmpty()) return
+        retryPending = true
+        retryHandler.postDelayed({ restart() }, RESTART_DELAY_MS)
+    }
+
+    @Synchronized
+    private fun restart() {
+        retryPending = false
+        val ctx = appContext ?: return
+        val owner = owners.firstOrNull() ?: return
+        for (registration in registrations) {
+            try {
+                registration.remove()
+            } catch (_: Exception) {
+            }
+        }
+        registrations = emptyList()
+        acquire(ctx, owner)
+    }
+
     @Synchronized
     fun acquire(context: Context, owner: String) {
         owners.add(owner)
         if (registrations.isNotEmpty()) return
 
         val ctx = context.applicationContext
+        appContext = ctx
         FirebaseModule.init(ctx)
         NotificationHelper.ensureChannels(ctx)
         settings = SettingsRepository(ctx)
@@ -66,25 +102,41 @@ object RemoteChangeWatcher {
             // العملاء مرتين والتطبيق مفتوح.
             db.collection("persons").orderBy("createdAt", Query.Direction.DESCENDING)
                 .addSnapshotListener(executor) { snap, err ->
-                if (err != null || snap == null) return@addSnapshotListener
+                if (err != null) {
+                    scheduleRestart()
+                    return@addSnapshotListener
+                }
+                if (snap == null) return@addSnapshotListener
                 safely { handlePersons(ctx, snap) }
             }
         )
         list.add(
             db.collection("debts").addSnapshotListener(executor) { snap, err ->
-                if (err != null || snap == null) return@addSnapshotListener
+                if (err != null) {
+                    scheduleRestart()
+                    return@addSnapshotListener
+                }
+                if (snap == null) return@addSnapshotListener
                 safely { handleDebts(ctx, snap) }
             }
         )
         list.add(
             FirebaseModule.materialsDb.collection("spices_final_v12").addSnapshotListener(executor) { snap, err ->
-                if (err != null || snap == null) return@addSnapshotListener
+                if (err != null) {
+                    scheduleRestart()
+                    return@addSnapshotListener
+                }
+                if (snap == null) return@addSnapshotListener
                 safely { handleMaterials(ctx, snap) }
             }
         )
         list.add(
             FirebaseModule.notesDb.collection("important_notes").addSnapshotListener(executor) { snap, err ->
-                if (err != null || snap == null) return@addSnapshotListener
+                if (err != null) {
+                    scheduleRestart()
+                    return@addSnapshotListener
+                }
+                if (snap == null) return@addSnapshotListener
                 safely { handleNotes(ctx, snap) }
             }
         )
@@ -95,6 +147,8 @@ object RemoteChangeWatcher {
     fun release(owner: String) {
         owners.remove(owner)
         if (owners.isNotEmpty()) return
+        retryHandler.removeCallbacksAndMessages(null)
+        retryPending = false
         for (registration in registrations) {
             try {
                 registration.remove()

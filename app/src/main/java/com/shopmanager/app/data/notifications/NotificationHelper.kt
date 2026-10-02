@@ -16,6 +16,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.shopmanager.app.MainActivity
+import com.shopmanager.app.data.settings.SettingsRepository
+import java.io.File
 import com.shopmanager.app.ui.common.avatarColorFor
 
 /**
@@ -39,11 +41,18 @@ object NotificationHelper {
     const val NOTIF_ID_UPDATE_DOWNLOAD = 1801
     private const val NOTIF_ID_SHOPPING_LIST = 1001
     private const val NOTIF_ID_DEBT = 1002
-    private const val NOTIF_ID_PAID_BASE = 2000
-    private const val NOTIF_ID_NEW_DEBT_BASE = 3000
-    private const val NOTIF_ID_NOTE_BASE = 4000
-    private const val NOTIF_ID_NEW_NOTE_BASE = 5000
-    private const val NOTIF_ID_NOTE_DONE_BASE = 6000
+    // BUG FIXED (إشعارات تمسح بعضها): every id below is `BASE + (hash & 0xFFF)`,
+    // i.e. a window of 4096 ids - but the bases were only 1000 apart, so the
+    // windows overlapped. A "debt paid" notification could land on the exact
+    // same id as a "new debt" or a note reminder and silently REPLACE it
+    // before it was ever seen. Bases are now 10000 apart, so each kind owns
+    // its own non-overlapping window (and none touches the fixed ids above).
+    const val NOTIF_ID_UPDATE_READY = 1802
+    private const val NOTIF_ID_PAID_BASE = 20000
+    private const val NOTIF_ID_NEW_DEBT_BASE = 30000
+    private const val NOTIF_ID_NOTE_BASE = 40000
+    private const val NOTIF_ID_NEW_NOTE_BASE = 50000
+    private const val NOTIF_ID_NOTE_DONE_BASE = 60000
 
     // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
     // *group*, with a silent summary notification posted alongside the
@@ -141,6 +150,32 @@ object NotificationHelper {
             manager.createNotificationChannel(updateChannel)
         }
     }
+
+    /**
+     * PRIVACY (ترابط مع قفل التطبيق): debt names/amounts and note text used to
+     * show in full on the lock screen even when the app itself is PIN-locked.
+     * When a PIN is set, the lock screen now shows only a generic title and
+     * the full text appears once the phone is unlocked.
+     */
+    private fun lockScreenPrivacy(context: Context, channelId: String, publicTitle: String) =
+        NotificationCompat.Extender { builder ->
+            val hasPin = try {
+                SettingsRepository(context.applicationContext).hasPin
+            } catch (_: Exception) {
+                false
+            }
+            if (hasPin) {
+                builder.setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+                builder.setPublicVersion(
+                    NotificationCompat.Builder(context, channelId)
+                        .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+                        .setColor(BRAND_COLOR)
+                        .setContentTitle(publicTitle)
+                        .build()
+                )
+            }
+            builder
+        }
 
     private fun hasPermission(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
@@ -270,7 +305,6 @@ object NotificationHelper {
         // and crash the app, instead of just silently skipping the reminder
         // the way every other notification type in this file already does.
         if (!hasPermission(context)) return
-        if (!hasPermission(context)) return
         val id = NOTIF_ID_NOTE_BASE + (noteId.hashCode() and 0xFFF)
         val body = content.ifBlank { "تذكير بملاحظة هامة" }
         val snoozeIntent = Intent(context, NotificationActionReceiver::class.java).apply {
@@ -291,6 +325,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, title)))
+            .extend(lockScreenPrivacy(context, CHANNEL_NOTES, "ملاحظات هامة"))
             // "كفاءة أعلى": تأجيل التذكير ساعة كاملة دون فتح التطبيق —
             // يُنفَّذ مباشرة عبر NotificationActionReceiver.
             .addAction(0, "تأجيل ساعة", buildActionIntent(context, id, snoozeIntent))
@@ -354,6 +389,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
+            .extend(lockScreenPrivacy(context, CHANNEL_NOTES, "ملاحظات هامة"))
             .build()
 
         // LINT FIX (MissingPermission) — see the first occurrence of this
@@ -399,6 +435,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
+            .extend(lockScreenPrivacy(context, CHANNEL_NOTES, "ملاحظات هامة"))
             .build()
 
         // LINT FIX (MissingPermission) — see the first occurrence of this
@@ -483,6 +520,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NewDebt(personName, amount, currencySymbol)))
+            .extend(lockScreenPrivacy(context, CHANNEL_DEBTS, "تنبيهات الديون"))
 
         // FEATURE ADDED ("تحسينات بالإشعارات"): زر "تسديد" مباشر من شريط
         // الإشعار — نفس فكرة "تم الشراء" على قائمة النواقص و"تأجيل ساعة"
@@ -499,7 +537,14 @@ object NotificationHelper {
                 putExtra(NotificationActionReceiver.EXTRA_CURRENCY, currencySymbol)
                 putExtra(NotificationActionReceiver.EXTRA_NOTIF_ID, id)
             }
-            builder.addAction(0, "تسديد", buildActionIntent(context, id, payIntent))
+            // SECURITY: settling a debt is a money action - on a locked phone
+            // it now asks the person to unlock first instead of running
+            // straight from the lock-screen notification.
+            builder.addAction(
+                NotificationCompat.Action.Builder(0, "تسديد", buildActionIntent(context, id, payIntent))
+                    .setAuthenticationRequired(true)
+                    .build()
+            )
         }
 
         // LINT FIX (MissingPermission) — see the first occurrence of this
@@ -534,6 +579,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.DebtPaid(personName, amount, currencySymbol)))
+            .extend(lockScreenPrivacy(context, CHANNEL_DEBTS, "تنبيهات الديون"))
             .build()
 
         // LINT FIX (MissingPermission) — see the first occurrence of this
@@ -565,6 +611,20 @@ object NotificationHelper {
             .setStyle(NotificationCompat.InboxStyle().setSummaryText("إدارة المحل"))
             .setGroup(GROUP_DEBTS)
             .setGroupSummary(true)
+            // BUG FIXED: the summary lives on the HIGH-importance debts channel and
+            // is re-posted with every debt notification, so it used to beep/pop up
+            // a second time for each one. Only the child notifications may alert.
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERTS_CHILDREN)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    context, NOTIF_ID_DEBTS_SUMMARY,
+                    Intent(context, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
@@ -572,6 +632,56 @@ object NotificationHelper {
         // pattern above (showNoteReminderNotification) for why.
         try {
             NotificationManagerCompat.from(context).notify(NOTIF_ID_DEBTS_SUMMARY, summary)
+        } catch (e: SecurityException) {
+            // Permission revoked between the check above and this call — skip.
+        }
+    }
+
+    /**
+     * ترابط التحديثات بالإشعارات: التحميل يتم بالخلفية ([UpdateDownloadService])،
+     * لكن لو خرج الشخص من التطبيق أثناءه لم يكن يصله أي شيء عند انتهائه ولا
+     * يبدأ التثبيت (مربع التحديث كان قد اختفى). الآن يصل إشعار "تم تحميل
+     * التحديث" ولمسه يفتح المثبّت مباشرة (أو شاشة "السماح من هذا المصدر" إن
+     * لم تكن مفعّلة). يُلغى تلقائياً عند بدء التثبيت من داخل التطبيق
+     * ([com.shopmanager.app.data.updates.ApkDownloader.install]).
+     */
+    fun showUpdateReadyNotification(context: Context, file: File, versionName: String = "") {
+        if (!hasPermission(context)) return
+        val tapIntent: Intent = try {
+            if (com.shopmanager.app.data.updates.ApkDownloader.canInstallPackages(context)) {
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context, "${context.packageName}.fileprovider", file
+                )
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+            } else {
+                com.shopmanager.app.data.updates.ApkDownloader.unknownSourcesSettingsIntent(context)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        } catch (_: Exception) {
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+        }
+        val pending = PendingIntent.getActivity(
+            context, NOTIF_ID_UPDATE_READY, tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val text = if (versionName.isNotBlank()) "اضغط لتثبيت الإصدار $versionName" else "اضغط لتثبيت التحديث"
+        val notification = NotificationCompat.Builder(context, CHANNEL_UPDATE_DOWNLOAD)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle("تم تحميل التحديث")
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIF_ID_UPDATE_READY, notification)
         } catch (e: SecurityException) {
             // Permission revoked between the check above and this call — skip.
         }

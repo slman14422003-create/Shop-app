@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
 import com.shopmanager.app.data.FirebaseModule
+import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.notes.NotesRepository
 import kotlinx.coroutines.CoroutineScope
@@ -37,11 +38,21 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                when (intent.action) {
-                    ACTION_SNOOZE_NOTE -> handleSnoozeNote(context, intent)
-                    ACTION_DISMISS_SHOPPING -> NotificationHelper.cancelShoppingListNotification(context)
-                    ACTION_MARK_DEBT_PAID -> handleMarkDebtPaid(context, intent)
+                // STABILITY: goAsync() only grants ~10s before the system
+                // flags the receiver as ANR, but the Firestore writes below
+                // can each wait up to 15s on a bad connection. Cap the whole
+                // action well inside that budget; on timeout the notification
+                // stays visible so the person can retry.
+                kotlinx.coroutines.withTimeoutOrNull(8_000L) {
+                    when (intent.action) {
+                        ACTION_SNOOZE_NOTE -> handleSnoozeNote(context, intent)
+                        ACTION_DISMISS_SHOPPING -> NotificationHelper.cancelShoppingListNotification(context)
+                        ACTION_MARK_DEBT_PAID -> handleMarkDebtPaid(context, intent)
+                        else -> Unit
+                    }
                 }
+            } catch (e: Exception) {
+                // never let an uncaught exception kill the process from a receiver
             } finally {
                 pendingResult.finish()
             }
@@ -90,6 +101,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
         try {
             FirebaseModule.init(context)
             DebtsRepository().markDebtAsPaid(debtId)
+            // ترابط بالنسخ الاحتياطي: السداد من الإشعار (والتطبيق مغلق) لا يمرّ
+            // بأي ViewModel، فلم يكن يطلب نسخة احتياطية محلية كبقية التغييرات.
+            runCatching { InstantBackupWorker.requestNow(context) }
             if (notifId != -1) NotificationManagerCompat.from(context).cancel(notifId)
             NotificationHelper.showDebtPaidNotification(context, personName, amount, currency, debtId)
         } catch (_: Exception) {

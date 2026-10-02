@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.shopmanager.app.data.FirebaseModule
+import com.shopmanager.app.data.settings.SettingsRepository
 import java.util.concurrent.TimeUnit
 
 /**
@@ -38,6 +39,10 @@ class NoteReminderWorker(appContext: Context, params: WorkerParameters) :
         val noteId = inputData.getString(KEY_NOTE_ID) ?: return Result.failure()
         val title = inputData.getString(KEY_TITLE) ?: "تذكير"
         val content = inputData.getString(KEY_CONTENT) ?: ""
+
+        // ترابط مع مفتاح "الإشعارات" الرئيسي بالإعدادات: كان التذكير يظهر حتى لو
+        // أوقف الشخص الإشعارات من التطبيق، بعكس كل أنواع الإشعارات الأخرى.
+        if (!SettingsRepository(applicationContext).notificationsEnabled) return Result.success()
 
         NotificationHelper.showNoteReminderNotification(applicationContext, noteId, title, content)
         return Result.success()
