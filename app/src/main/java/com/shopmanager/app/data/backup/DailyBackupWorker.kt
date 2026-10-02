@@ -43,8 +43,18 @@ class DailyBackupWorker(appContext: Context, params: WorkerParameters) :
         return try {
             BackupManager.performBackup(applicationContext, DebtsRepository(), MaterialsRepository(), BackupKind.DAILY)
             Result.success()
+        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+            // A network timeout (withTimeout inside the repositories) is a
+            // real failure, not WorkManager cancelling us - retry a few times.
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // PERF/STABILITY: genuine cancellation must propagate; it used to
+            // be swallowed into Result.retry() by the broad catch below.
+            throw e
         } catch (e: Exception) {
-            Result.retry()
+            // Capped: an endlessly failing backup used to re-run with growing
+            // backoff forever. The next daily period tries again anyway.
+            if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 
