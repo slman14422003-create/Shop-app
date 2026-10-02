@@ -221,6 +221,7 @@ object BackupManager {
 
     private fun Person.toJson() = JSONObject().apply {
         put("id", id); put("name", name); put("amount", amount); put("date", date); put("createdAt", createdAt)
+        put("phone", phone)
     }
 
     private fun Debt.toJson() = JSONObject().apply {
@@ -238,7 +239,8 @@ object BackupManager {
 
     private fun JSONObject.toPerson() = Person(
         id = optString("id"), name = optString("name"), amount = optDouble("amount", 0.0),
-        date = optString("date"), createdAt = optLong("createdAt", 0L)
+        date = optString("date"), createdAt = optLong("createdAt", 0L),
+        phone = optString("phone")
     )
 
     private fun JSONObject.toDebt() = Debt(
