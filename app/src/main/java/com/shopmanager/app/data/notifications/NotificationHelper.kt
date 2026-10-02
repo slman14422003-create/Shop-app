@@ -614,7 +614,7 @@ object NotificationHelper {
             // BUG FIXED: the summary lives on the HIGH-importance debts channel and
             // is re-posted with every debt notification, so it used to beep/pop up
             // a second time for each one. Only the child notifications may alert.
-            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERTS_CHILDREN)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setOnlyAlertOnce(true)
             .setContentIntent(
                 PendingIntent.getActivity(
