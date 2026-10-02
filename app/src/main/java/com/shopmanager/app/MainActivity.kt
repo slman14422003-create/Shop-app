@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -296,40 +297,46 @@ class MainActivity : FragmentActivity() {
         // thread, so it now all runs on a background dispatcher while the
         // splash screen (system, then in-app — see above) covers the UI.
         lifecycleScope.launch(Dispatchers.Default) {
-            FirebaseModule.init(applicationContext)
-            NotificationHelper.ensureChannels(applicationContext)
+            // STABILITY FIX: if any step below threw (Firebase init, channel
+            // setup, a WorkManager scheduling error), the coroutine died
+            // before `isReady = true` and the person was stuck on the splash
+            // forever. Each step is now isolated, and the hand-off to the real
+            // UI always happens in the finally block with a safe default tier.
+            var tier = PerformanceTier.STANDARD
+            try {
+                runCatching { FirebaseModule.init(applicationContext) }
+                runCatching { NotificationHelper.ensureChannels(applicationContext) }
 
-            // "وضع لكل هاتف": classified once (cached after that), then
-            // used below to switch off the heavier visual effects on
-            // entry-level hardware — see DevicePerformance for the
-            // detection signals.
-            val tier = DevicePerformance.detectTier(applicationContext)
+                // "وضع لكل هاتف": classified once (cached after that), then
+                // used below to switch off the heavier visual effects on
+                // entry-level hardware — see DevicePerformance for the
+                // detection signals.
+                tier = runCatching { DevicePerformance.detectTier(applicationContext) }
+                    .getOrDefault(PerformanceTier.STANDARD)
 
-            // Weak/economic devices get a lighter, battery-guarded sync
-            // schedule automatically — see BackgroundSyncWorker.schedule.
-            BackgroundSyncWorker.schedule(applicationContext, tier)
-            // Silent, fully local daily backup — no notification, ever
-            // (see DailyBackupWorker/BackupManager). Scheduled here, off
-            // the main thread, same as BackgroundSyncWorker above.
-            DailyBackupWorker.schedule(applicationContext)
+                // Weak/economic devices get a lighter, battery-guarded sync
+                // schedule automatically — see BackgroundSyncWorker.schedule.
+                runCatching { BackgroundSyncWorker.schedule(applicationContext, tier) }
+                // Silent, fully local daily backup — no notification, ever
+                // (see DailyBackupWorker/BackupManager).
+                runCatching { DailyBackupWorker.schedule(applicationContext) }
 
-            // "الإشعارات لا تأتي في الخلفية": يشغّل مراقب تغييرات الأجهزة الأخرى
-            // (والخدمة الأمامية إذا كانت "المزامنة الفورية" مفعّلة) — مكان واحد
-            // للكشف بدل منطق منفصل لكل شاشة. خارج الخيط الرئيسي، والسبلاش يغطي.
-            NotificationSync.apply(applicationContext)
+                // "الإشعارات لا تأتي في الخلفية": يشغّل مراقب تغييرات الأجهزة الأخرى
+                // (والخدمة الأمامية إذا كانت "المزامنة الفورية" مفعّلة) — مكان واحد
+                // للكشف بدل منطق منفصل لكل شاشة. خارج الخيط الرئيسي، والسبلاش يغطي.
+                runCatching { NotificationSync.apply(applicationContext) }
 
-            // PERF: كان الحد الأدنى للسبلاش ثابتاً 1500ms على كل الأجهزة حتى لو
-            // اكتملت التهيئة قبله بكثير. الآن أقصر (والهاتف الضعيف أقصر أيضاً) —
-            // أنيميشن السبلاش نفسه ~420ms فلا يُقطع.
-            val minSplashMs = if (tier == PerformanceTier.LOW) SPLASH_MIN_DISPLAY_LOW_MS else SPLASH_MIN_DISPLAY_MS
-            val elapsed = System.currentTimeMillis() - splashStartTime
-            if (elapsed < minSplashMs) delay(minSplashMs - elapsed)
-
-            withContext(Dispatchers.Main) {
-                detectedTier = tier
-                isReady = true
+                // PERF: الحد الأدنى للسبلاش أقصر على الهاتف الضعيف؛ أنيميشن
+                // السبلاش نفسه ~420ms فلا يُقطع.
+                val minSplashMs = if (tier == PerformanceTier.LOW) SPLASH_MIN_DISPLAY_LOW_MS else SPLASH_MIN_DISPLAY_MS
+                val elapsed = System.currentTimeMillis() - splashStartTime
+                if (elapsed < minSplashMs) delay(minSplashMs - elapsed)
+            } finally {
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
+                    detectedTier = tier
+                    isReady = true
+                }
             }
-
         }
 
         setContent {
@@ -562,7 +569,15 @@ class MainActivity : FragmentActivity() {
                                     ActivityResultContracts.RequestPermission()
                                 ) { }
                                 LaunchedEffect(Unit) {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    // Only when notifications are switched on in Settings and the
+                                    // permission isn't already granted - it used to fire the system
+                                    // request on every single cold start regardless.
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                        settings.notificationsEnabled &&
+                                        androidx.core.content.ContextCompat.checkSelfPermission(
+                                            this@MainActivity, Manifest.permission.POST_NOTIFICATIONS
+                                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    ) {
                                         notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                     }
                                 }
@@ -1150,8 +1165,8 @@ private fun ShopManagerApp(
                         )
                         else -> NotesScreen(
                             viewModel = notesViewModel,
-                            persons = debtsViewModel.uiState.collectAsState().value.persons,
-                            materials = materialsViewModel.uiState.collectAsState().value.materials,
+                            persons = debtsViewModel.uiState.collectAsStateWithLifecycle().value.persons,
+                            materials = materialsViewModel.uiState.collectAsStateWithLifecycle().value.materials,
                             onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.navigate("personDetail/$personId") },
                             onOpenMaterials = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
                             addNoteRequested = addNoteRequested,
@@ -1164,12 +1179,12 @@ private fun ShopManagerApp(
             composable(ROUTE_MATERIAL_CATALOG) {
                 MaterialCatalogScreen(
                     viewModel = materialsViewModel,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.safePopBackStack() }
                 )
             }
             composable(ROUTE_SETTINGS) {
                 SettingsScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.safePopBackStack() },
                     onThemeChanged = onThemeChanged,
                     onPerformancePreferenceChanged = onPerformancePreferenceChanged,
                     onRecheckDevicePerformance = onRecheckDevicePerformance,
@@ -1181,7 +1196,7 @@ private fun ShopManagerApp(
             }
             composable(ROUTE_ADMIN) {
                 AdminPanelScreen(
-                    onBack = { navController.popBackStack() },
+                    onBack = { navController.safePopBackStack() },
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
                     notesViewModel = notesViewModel
@@ -1191,14 +1206,14 @@ private fun ShopManagerApp(
                 WebViewScreen(
                     url = "file:///android_asset/help.html",
                     title = "دليل الاستخدام",
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.safePopBackStack() }
                 )
             }
             composable(ROUTE_PRIVACY) {
                 WebViewScreen(
                     url = "file:///android_asset/privacy.html",
                     title = "سياسة الخصوصية",
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.safePopBackStack() }
                 )
             }
             composable(
@@ -1206,8 +1221,16 @@ private fun ShopManagerApp(
                 arguments = listOf(navArgument("personId") { type = NavType.StringType })
             ) { entry ->
                 val personId = entry.arguments?.getString("personId")
-                val person = debtsViewModel.uiState.collectAsState().value.persons
-                    .find { it.id == personId }
+                val personsState = debtsViewModel.uiState.collectAsStateWithLifecycle().value
+                val person = personsState.persons.find { it.id == personId }
+                // STABILITY FIX: if this customer disappears while their page
+                // is open (deleted from another device, or an unknown id from
+                // a stale notification) the screen used to render NOTHING - a
+                // blank page. Once the first real data has loaded and the
+                // customer still isn't there, leave the page instead.
+                LaunchedEffect(person == null, personsState.isLoading) {
+                    if (person == null && !personsState.isLoading) navController.safePopBackStack()
+                }
                 if (person != null) {
                     PersonDetailScreen(
                         person = person,
@@ -1218,7 +1241,7 @@ private fun ShopManagerApp(
                         // المعروضة هون تضل نفس البيانات الحية، وإضافة/تعديل
                         // ملاحظة من هالشاشة ينعكس فورًا بتبويب الملاحظات وبالعكس.
                         notesViewModel = notesViewModel,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.safePopBackStack() }
                     )
                 }
             }
@@ -1374,6 +1397,17 @@ private fun ShopManagerApp(
             }
         }
     }
+}
+
+/**
+ * STABILITY FIX: a fast double-tap on a back arrow (or back arrow + system
+ * back together) used to call popBackStack() twice. The second call popped
+ * the start destination (the main pager) off the stack and left the NavHost
+ * empty - a blank screen with no way out but killing the app. This only pops
+ * while there is still a screen below the current one.
+ */
+private fun androidx.navigation.NavController.safePopBackStack() {
+    if (previousBackStackEntry != null) popBackStack()
 }
 
 private fun navigateTopLevel(navController: androidx.navigation.NavController, route: String) {
