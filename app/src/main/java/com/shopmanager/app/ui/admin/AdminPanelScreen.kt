@@ -1,6 +1,11 @@
 package com.shopmanager.app.ui.admin
 
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,11 +25,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,6 +42,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +65,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.security.AdminPasswordRepository
+import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.updates.AppVersionInfo
@@ -70,16 +80,20 @@ import com.shopmanager.app.ui.common.AppScreenPadding
 import com.shopmanager.app.ui.common.AppSectionGap
 import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
+import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.ScreenIconButton
 import com.shopmanager.app.ui.common.ScreenTopBar
 import com.shopmanager.app.ui.common.groupedRowShape
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
+import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.theme.ClaudeOrangeDark
 import com.shopmanager.app.ui.theme.ClaudeOrangeLight
 import com.shopmanager.app.ui.theme.LocalIsDarkTheme
 import com.shopmanager.app.ui.theme.LocalSemanticColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -98,7 +112,8 @@ import java.util.Locale
 fun AdminPanelScreen(
     onBack: () -> Unit,
     debtsViewModel: DebtsViewModel? = null,
-    materialsViewModel: MaterialsViewModel? = null
+    materialsViewModel: MaterialsViewModel? = null,
+    notesViewModel: NotesViewModel? = null
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsRepository(context) }
@@ -120,6 +135,33 @@ fun AdminPanelScreen(
 
     val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
     val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
+    val notesSyncError = notesViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
+
+    // أعداد البيانات الحية (من نفس حالات الشاشات، بلا أي قراءة إضافية من Firebase).
+    val debtsState = debtsViewModel?.uiState?.collectAsState()?.value
+    val materialsState = materialsViewModel?.uiState?.collectAsState()?.value
+    val notesState = notesViewModel?.uiState?.collectAsState()?.value
+
+    // أدوات المطوّر
+    var isProbingFirebase by remember { mutableStateOf(false) }
+    var firebaseProbe by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var isPingingProxy by remember { mutableStateOf(false) }
+    var proxyResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var throttleMessage by remember { mutableStateOf<String?>(null) }
+    var cacheBytes by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(isClearingCache) {
+        if (!isClearingCache) {
+            cacheBytes = withContext(Dispatchers.IO) {
+                context.cacheDir?.walkTopDown()?.filter { it.isFile }?.sumOf { it.length() } ?: 0L
+            }
+        }
+    }
+    val memoryLabel = remember {
+        val rt = Runtime.getRuntime()
+        val usedMb = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
+        val maxMb = rt.maxMemory() / (1024 * 1024)
+        "$usedMb MB من $maxMb MB"
+    }
 
     val lastCheckLabel = remember(settings.lastUpdateCheckAt) {
         val ts = settings.lastUpdateCheckAt
@@ -144,6 +186,29 @@ fun AdminPanelScreen(
         }
     }
 
+    fun probeFirebaseNow() {
+        isProbingFirebase = true
+        firebaseProbe = null
+        scope.launch {
+            val probe = AdminPasswordRepository.probe()
+            firebaseProbe = when {
+                !probe.reachable -> false to "فشل الاتصال بـ Firebase بعد ${probe.latencyMs}ms — ${probe.detail}"
+                !probe.passwordConfigured -> false to "Firebase متصل (${probe.latencyMs}ms) لكن ${probe.detail}"
+                else -> true to "Firebase متصل — استجاب خلال ${probe.latencyMs}ms، ${probe.detail}"
+            }
+            isProbingFirebase = false
+        }
+    }
+
+    fun pingProxyNow() {
+        isPingingProxy = true
+        proxyResult = null
+        scope.launch {
+            proxyResult = UpdateChecker.pingProxy()
+            isPingingProxy = false
+        }
+    }
+
     fun systemInfoText(): String = buildString {
         appendLine("إدارة المحل — معلومات تشخيصية")
         appendLine("الإصدار: ${appVersion.name} (كود ${appVersion.code})")
@@ -154,6 +219,11 @@ fun AdminPanelScreen(
         appendLine("تفضيل الأداء: ${settings.performanceMode}")
         appendLine("مزامنة الديون: ${if (debtsSyncError) "خطأ" else "سليمة"}")
         appendLine("مزامنة المواد: ${if (materialsSyncError) "خطأ" else "سليمة"}")
+        appendLine("مزامنة الملاحظات: ${if (notesSyncError) "خطأ" else "سليمة"}")
+        appendLine("العملاء: ${debtsState?.totalPersons ?: "—"} | سجلات الديون: ${debtsState?.totalDebts ?: "—"}")
+        appendLine("المواد: ${materialsState?.materials?.size ?: "—"} | الأسعار: ${materialsState?.prices?.size ?: "—"}")
+        appendLine("الملاحظات: ${notesState?.notes?.size ?: "—"}")
+        appendLine("ذاكرة التطبيق: $memoryLabel")
         appendLine("رابط التحديثات: ${manifestUrl.ifBlank { "غير معيّن" }}")
     }
 
@@ -250,8 +320,19 @@ fun AdminPanelScreen(
                     )
                 }
 
+                AppPillButton(
+                    label = if (isPingingProxy) "جارٍ اختبار الوكيل..." else "اختبار وكيل Cloudflare",
+                    tonal = true,
+                    enabled = !isPingingProxy,
+                    onClick = { pingProxyNow() },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 savedMessage?.let { StatusLine(it, semantic.success) }
                 testResult?.let { (ok, text) ->
+                    StatusLine(text, if (ok) semantic.success else semantic.danger)
+                }
+                proxyResult?.let { (ok, text) ->
                     StatusLine(text, if (ok) semantic.success else semantic.danger)
                 }
             }
@@ -266,6 +347,9 @@ fun AdminPanelScreen(
                     },
                     { shape ->
                         StatusRow("مزامنة المواد", ok = !materialsSyncError, shape = shape)
+                    },
+                    { shape ->
+                        StatusRow("مزامنة الملاحظات", ok = !notesSyncError, shape = shape)
                     }
                 )
                 AppPillButton(
@@ -276,6 +360,73 @@ fun AdminPanelScreen(
                         materialsViewModel?.refresh()
                     },
                     modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            // ------------------------------------------------------------------
+            // البيانات والاتصال (أدوات المطوّر)
+            // ------------------------------------------------------------------
+            AdminSection(title = "البيانات والاتصال", icon = Icons.Default.Storage) {
+                val dash = "—"
+                val dataRows = listOf(
+                    "العملاء" to (debtsState?.totalPersons?.toString() ?: dash),
+                    "سجلات الديون" to (debtsState?.totalDebts?.toString() ?: dash),
+                    "المواد (النواقص)" to (materialsState?.materials?.size?.toString() ?: dash),
+                    "الأسعار المحفوظة" to (materialsState?.prices?.size?.toString() ?: dash),
+                    "الملاحظات" to (notesState?.notes?.size?.toString() ?: dash)
+                )
+                AdminGroup(
+                    *dataRows.map { (label, value) ->
+                        val row: @Composable (Shape) -> Unit = { shape -> InfoRow(label, value, shape) }
+                        row
+                    }.toTypedArray()
+                )
+                AdminGroup(
+                    { shape ->
+                        ActionRow(
+                            shape = shape,
+                            title = "اختبار اتصال Firebase",
+                            subtitle = "يقيس زمن الاستجابة ويتأكد أن كلمة مرور اللوحة معيّنة في config ← admin.",
+                            busy = isProbingFirebase,
+                            onClick = { probeFirebaseNow() }
+                        )
+                    }
+                )
+                firebaseProbe?.let { (ok, text) ->
+                    StatusLine(text, if (ok) semantic.success else semantic.danger)
+                }
+            }
+
+            // ------------------------------------------------------------------
+            // أدوات المطوّر
+            // ------------------------------------------------------------------
+            AdminSection(title = "أدوات المطوّر", icon = Icons.Default.Build) {
+                AdminGroup(
+                    { shape -> InfoRow("ذاكرة التطبيق (RAM)", memoryLabel, shape) },
+                    { shape ->
+                        InfoRow(
+                            "حجم الذاكرة المؤقتة",
+                            cacheBytes?.let { android.text.format.Formatter.formatShortFileSize(context, it) } ?: "…",
+                            shape
+                        )
+                    },
+                    { shape ->
+                        ActionRow(
+                            shape = shape,
+                            title = "تصفير محاولات دخول اللوحة",
+                            subtitle = "يلغي القفل المؤقت بعد المحاولات الخاطئة لكلمة المرور.",
+                            busy = false,
+                            onClick = {
+                                PinAttemptThrottle(context, "shop_manager_admin_throttle").registerSuccess()
+                                throttleMessage = "تم تصفير المحاولات وإلغاء القفل"
+                            }
+                        )
+                    }
+                )
+                throttleMessage?.let { StatusLine(it, semantic.success) }
+                AppFootnote(
+                    "كلمة مرور اللوحة تُغيَّر من Firebase فقط: Firestore ← config ← admin ← password. " +
+                        "التطبيق لا يكتب في هذا المستند أبداً."
                 )
             }
 
@@ -550,31 +701,39 @@ private fun ActionRow(
     }
 }
 
-/** رسالة حالة صغيرة ببطاقة مسطحة ونقطة ملوّنة (نجاح/فشل). */
+/** رسالة حالة صغيرة ببطاقة مسطحة ونقطة ملوّنة (نجاح/فشل). تظهر بتلاشٍ مع تمدّد
+ * رأسي سلس بدل القفز المفاجئ (لا تُركَّب أصلاً حين لا توجد رسالة فلا مسافات فارغة). */
 @Composable
 private fun StatusLine(text: String, color: Color) {
-    Surface(
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth()
+    val visibleState = remember { MutableTransitionState(false).apply { targetState = true } }
+    AnimatedVisibility(
+        visibleState = visibleState,
+        enter = fadeIn(MotionSpecs.contentTween()) + expandVertically(MotionSpecs.expandSpring()),
+        exit = ExitTransition.None
     ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.Top
+        Surface(
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Box(
-                Modifier
-                    .padding(top = 6.dp)
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(color)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    Modifier
+                        .padding(top = 6.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
         }
     }
 }
