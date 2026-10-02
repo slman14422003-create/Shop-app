@@ -57,6 +57,8 @@ import com.shopmanager.app.ui.common.AppRowSurface
 import com.shopmanager.app.ui.common.AppScreenPadding
 import com.shopmanager.app.ui.common.AppSectionGap
 import com.shopmanager.app.ui.common.groupedTileShape
+import com.shopmanager.app.ui.common.AppGroupLargeRadius
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -128,7 +130,7 @@ fun DashboardScreen(
     // element in the app.
     val marketAccent = LocalSemanticColors.current.warning
     val topDebtors = remember(debtsState.persons) {
-        debtsState.persons.sortedByDescending { it.amount }.take(5)
+        debtsState.persons.filter { it.amount > 0 }.sortedByDescending { it.amount }.take(5)
     }
     val isLoading = debtsState.isLoading || materialsState.isLoading
 
@@ -212,6 +214,7 @@ fun DashboardScreen(
                     materialsLoading = materialsState.isLoading,
                     hasShortages = shortages.isNotEmpty(),
                     marketAccent = marketAccent,
+                    topDebtorName = topDebtors.firstOrNull()?.name,
                     nf = nf
                 )
             }
@@ -227,6 +230,68 @@ fun DashboardScreen(
                 item {
                     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(strokeWidth = 3.dp)
+                    }
+                }
+            }
+
+            // أكبر الديون: صار فوق المشتريات (مرتبط مباشرة ببطاقة الإجمالي)، ومع كل عميل
+            // شريط نسبي يوضّح حجم دينه مقارنةً بأكبر دين.
+            if (topDebtors.isNotEmpty()) {
+                item {
+                    SectionCard(title = "أكبر الديون", icon = Icons.Default.Groups) {
+                        val maxAmount = topDebtors.maxOf { it.amount }.coerceAtLeast(1.0)
+                        topDebtors.forEachIndexed { index, p ->
+                            val barColor = avatarColorFor(p.name)
+                            Column(Modifier.fillMaxWidth().padding(vertical = 9.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        Modifier.size(32.dp).clip(CircleShape).background(barColor),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            p.name.firstOrNull()?.uppercase() ?: "?",
+                                            color = Color.White,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        p.name,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        "${nf.format(p.amount)} ${AppSettingsState.currencySymbol}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Spacer(Modifier.height(7.dp))
+                                Box(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                ) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth((p.amount / maxAmount).toFloat().coerceIn(0.04f, 1f))
+                                            .fillMaxHeight()
+                                            .clip(CircleShape)
+                                            .background(barColor)
+                                    )
+                                }
+                            }
+                            if (index != topDebtors.lastIndex) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+                            }
+                        }
                     }
                 }
             }
@@ -336,43 +401,6 @@ fun DashboardScreen(
                 }
             }
 
-            if (topDebtors.isNotEmpty()) {
-                item {
-                    SectionCard(title = "أكبر الديون", icon = Icons.Default.Groups) {
-                        topDebtors.forEach { p ->
-                            Row(
-                                Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    Modifier.size(28.dp).clip(MaterialTheme.shapes.small).background(avatarColorFor(p.name)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        p.name.firstOrNull()?.uppercase() ?: "?",
-                                        color = Color.White,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    p.name,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    "${nf.format(p.amount)} ${AppSettingsState.currencySymbol}",
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
             if (debtsState.persons.isEmpty() && materialsState.materials.isEmpty() && !debtsState.isLoading && !materialsState.isLoading) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(top = 48.dp, start = 16.dp, end = 16.dp), contentAlignment = Alignment.Center) {
@@ -435,10 +463,13 @@ private fun DashboardHeader(
     // يعكس الوقت الصحيح فورًا كل ما الهيدر يدخل التركيب من جديد (فتح
     // التطبيق من الصفر بعد إغلاقه بالكامل).
     var greeting by remember { mutableStateOf(timeBasedGreeting()) }
+    val dateFormat = remember { SimpleDateFormat("EEEE، d MMMM", Locale("ar")) }
+    var dateText by remember { mutableStateOf(dateFormat.format(Date())) }
     LaunchedEffect(Unit) {
         while (true) {
             kotlinx.coroutines.delay(60_000L)
             greeting = timeBasedGreeting()
+            dateText = dateFormat.format(Date())
         }
     }
     Column(
@@ -462,6 +493,18 @@ private fun DashboardHeader(
                     Icons.Default.Menu,
                     contentDescription = "القائمة",
                     tint = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            // تاريخ اليوم — شارة صغيرة بنفس لون بطاقات التطبيق.
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                Text(
+                    dateText,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
                 )
             }
         }
@@ -498,18 +541,16 @@ private fun DashboardHeader(
 private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = AppScreenPadding),
-        horizontalArrangement = Arrangement.spacedBy(AppGroupGap)
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         QuickActionButton(
             modifier = Modifier.weight(1f),
-            shape = groupedTileShape(0, 1),
             icon = Icons.Default.PersonAdd,
             label = "عميل جديد",
             onClick = onAddPerson
         )
         QuickActionButton(
             modifier = Modifier.weight(1f),
-            shape = groupedTileShape(1, 1),
             icon = Icons.Default.Inventory2,
             label = "مادة جديدة",
             onClick = onAddMaterial
@@ -520,29 +561,38 @@ private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit) 
 @Composable
 private fun QuickActionButton(
     modifier: Modifier = Modifier,
-    shape: androidx.compose.ui.graphics.Shape,
     icon: ImageVector,
     label: String,
     onClick: () -> Unit
 ) {
-    AppRowSurface(shape = shape, modifier = modifier, onClick = onClick) {
+    AppRowSurface(shape = RoundedCornerShape(AppGroupLargeRadius), modifier = modifier, onClick = onClick) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp, vertical = 12.dp),
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(24.dp))
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.width(10.dp))
             Text(
                 label,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
     }
 }
 
+/**
+ * REDESIGN ("اعد تصميم الشاشة الرئيسية"): بطاقتان صغيرتان متساويتان صارتا بطاقة
+ * واحدة كبيرة: إجمالي الديون برقم كبير في الأعلى (أهم رقم بالشاشة)، وتحته
+ * إحصاءان مختصران (النواقص + أكبر عميل مدين) مفصولان بخط رفيع.
+ */
 @Composable
 private fun HeroStatsCard(
     totalDebt: Double,
@@ -552,79 +602,125 @@ private fun HeroStatsCard(
     materialsLoading: Boolean,
     hasShortages: Boolean,
     marketAccent: Color,
+    topDebtorName: String?,
     nf: NumberFormat
 ) {
-    val secondary = MaterialTheme.colorScheme.secondary
-    // بطاقتان مسطّحتان متلاصقتان (زوايا كبيرة على الأطراف فقط) بدل البطاقة المتدرّجة العائمة.
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = AppScreenPadding)
-            .height(IntrinsicSize.Min),
-        horizontalArrangement = Arrangement.spacedBy(AppGroupGap)
-    ) {
-        AppRowSurface(shape = groupedTileShape(0, 1), modifier = Modifier.weight(1f).fillMaxHeight()) {
-            HeroStat(
-                modifier = Modifier.padding(16.dp),
-                icon = Icons.Default.AttachMoney,
-                accentColor = LocalSemanticColors.current.success,
-                title = "إجمالي الديون",
-                valueContent = {
-                    AnimatedCounterText(
-                        targetValue = totalDebt,
-                        format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
-                        animate = !debtsLoading
+    val success = LocalSemanticColors.current.success
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    AppCard(modifier = Modifier.padding(horizontal = AppScreenPadding)) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(38.dp).clip(CircleShape).background(success.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.AttachMoney, contentDescription = null, tint = success, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    "إجمالي الديون",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = onSurfaceVariant
+                )
+                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)) {
+                    Text(
+                        "$totalPersons عميل",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                },
-                subtitle = "$totalPersons عميل"
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            AnimatedCounterText(
+                targetValue = totalDebt,
+                format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
+                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, lineHeight = 40.sp),
+                animate = !debtsLoading
             )
-        }
-        AppRowSurface(shape = groupedTileShape(1, 1), modifier = Modifier.weight(1f).fillMaxHeight()) {
-            HeroStat(
-                modifier = Modifier.padding(16.dp),
-                icon = Icons.Default.Inventory2,
-                accentColor = if (hasShortages) marketAccent else secondary,
-                title = "قائمة النواقص",
-                valueContent = {
-                    AnimatedCounterText(
-                        targetValue = shortagesCount.toDouble(),
-                        format = { it.toInt().toString() },
-                        animate = !materialsLoading
-                    )
-                },
-                subtitle = if (hasShortages) "بانتظار الشراء" else "لا يوجد نواقص"
-            )
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            Spacer(Modifier.height(14.dp))
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+                HeroMiniStat(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Inventory2,
+                    accentColor = if (hasShortages) marketAccent else MaterialTheme.colorScheme.secondary,
+                    title = "قائمة النواقص",
+                    valueContent = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AnimatedCounterText(
+                                targetValue = shortagesCount.toDouble(),
+                                format = { it.toInt().toString() },
+                                style = MaterialTheme.typography.titleMedium,
+                                animate = !materialsLoading
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (hasShortages) "بانتظار الشراء" else "لا يوجد",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = onSurfaceVariant.copy(alpha = 0.85f),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                )
+                Box(
+                    Modifier
+                        .padding(horizontal = 12.dp)
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                )
+                HeroMiniStat(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.Groups,
+                    accentColor = MaterialTheme.colorScheme.primary,
+                    title = "أكبر مدين",
+                    valueContent = {
+                        Text(
+                            topDebtorName ?: "—",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun HeroStat(
+private fun HeroMiniStat(
     modifier: Modifier = Modifier,
     icon: ImageVector,
     accentColor: Color,
     title: String,
-    valueContent: @Composable () -> Unit,
-    subtitle: String
+    valueContent: @Composable () -> Unit
 ) {
-    Column(modifier.padding(horizontal = 4.dp)) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(34.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.18f)),
+            Modifier.size(30.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, tint = accentColor, modifier = Modifier.size(16.dp))
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            title,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
-        Spacer(Modifier.height(4.dp))
-        valueContent()
-        Spacer(Modifier.height(2.dp))
-        Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            valueContent()
+        }
     }
 }
 
