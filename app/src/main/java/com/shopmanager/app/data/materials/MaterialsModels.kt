@@ -146,3 +146,63 @@ fun List<Material>.weightSummary(): MaterialsWeightSummary {
     }
     return MaterialsWeightSummary(kilos = kilos, okes = okes, pieces = pieces, count = size)
 }
+
+
+// ============================================================================
+// حساب أسعار النواقص
+//
+// القاعدة (بدون أي استثناء):
+//   سعر المادة       = سعر الكيلو المُسجَّل لها × وزنها بالكيلو
+//   وزنها بالكيلو    = الكمية × معامل الوحدة (انظر [kgFactor])
+//   إجمالي القائمة   = مجموع (سعر كل مادة × وزنها)
+//
+// المعاملات: كيلو 1 | نص كيلو 0.5 | ربع كيلو 0.25
+//            لوقية = [OKE_IN_KG] | نص لوقية = نصفها | ربع لوقية = ربعها
+// المواد "بالعدد" (بلا وحدة، مثل بيض) تُضرب بالكمية مباشرة (السعر = سعر القطعة).
+// ============================================================================
+
+/**
+ * وزن اللوقية الواحدة بالكيلو. القيمة الحالية 0.05 (أي 50 غرام، الكيلو = 20 لوقية).
+ * إذا كانت اللوقية عندك بوزن مختلف غيّر هذا الرقم فقط — كل الحسابات في التطبيق
+ * (القائمة، التبويب، المشاركة) تقرأ منه.
+ */
+const val OKE_IN_KG: Double = 0.05
+
+/** معامل تحويل وحدة واحدة من هذا النوع إلى كيلو (أو إلى قطعة للمواد بلا وحدة). */
+fun MaterialUnit.kgFactor(): Double = when (this) {
+    MaterialUnit.KG -> 1.0
+    MaterialUnit.HALF_KG -> 0.5
+    MaterialUnit.QUARTER_KG -> 0.25
+    MaterialUnit.OKE -> OKE_IN_KG
+    MaterialUnit.HALF_OKE -> OKE_IN_KG * 0.5
+    MaterialUnit.QUARTER_OKE -> OKE_IN_KG * 0.25
+    MaterialUnit.NONE -> 1.0
+}
+
+/** التقريب لأقرب جزء من مئة حتى لا تتراكم أخطاء الفاصلة العائمة في المجاميع. */
+private fun roundMoney(v: Double): Double = Math.round(v * 100.0) / 100.0
+
+/** الوزن الفعلي لهذا الصف بالكيلو (أو عدد القطع للمواد بلا وحدة). */
+fun Material.weightInKg(): Double = quantity * MaterialUnit.fromLabel(unit).kgFactor()
+
+/** سعر الصف = سعر الكيلو × الوزن. null إذا لم تُسعَّر المادة بعد. */
+fun Material.linePrice(pricePerKg: Double?): Double? =
+    if (pricePerKg == null) null else roundMoney(pricePerKg * weightInKg())
+
+/** سعر المادة من خريطة الأسعار (البحث بالاسم كما هو، ثم بعد قصّ الفراغات). */
+fun Map<String, Double>.priceOf(name: String): Double? = this[name] ?: this[name.trim()]
+
+fun Material.linePrice(prices: Map<String, Double>): Double? = linePrice(prices.priceOf(name))
+
+/** نتيجة تجميع أسعار القائمة: المجموع + عدد المواد التي لا سعر لها (غير داخلة في المجموع). */
+data class MaterialsPriceSummary(val total: Double = 0.0, val unpriced: Int = 0)
+
+fun List<Material>.priceSummary(prices: Map<String, Double>): MaterialsPriceSummary {
+    var total = 0.0
+    var unpriced = 0
+    for (m in this) {
+        val line = m.linePrice(prices)
+        if (line == null) unpriced++ else total += line
+    }
+    return MaterialsPriceSummary(total = roundMoney(total), unpriced = unpriced)
+}
