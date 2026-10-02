@@ -247,8 +247,6 @@ fun DebtsScreen(
             modifier = Modifier.padding(padding)
         ) {
         Column(Modifier.fillMaxSize()) {
-            StatsRow(state.totalPersons, state.totalDebts, state.totalAmount)
-
             // REDESIGN ("زر اضافة عميل جديد يجب ان يكون زر عريض مكان شريط
             // البحث للي شلته"): the permanent search field that used to sit
             // here moved into the top bar itself (see topBar above, toggled
@@ -261,9 +259,10 @@ fun DebtsScreen(
                 label = "عميل جديد",
                 icon = Icons.Default.Add,
                 onClick = { showAddDialog.value = true },
+                height = 44.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = AppScreenPadding, end = AppScreenPadding, bottom = 12.dp)
+                    .padding(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 8.dp)
             )
 
             // PERF: same remember-keyed fix as the materials tabs — skip
@@ -275,6 +274,7 @@ fun DebtsScreen(
             }
 
             if (filtered.isEmpty()) {
+                Box(Modifier.padding(horizontal = AppScreenPadding)) { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
                 EmptyState(
                     icon = if (search.value.isBlank()) Icons.Default.People else Icons.Default.PersonSearch,
                     text = if (search.value.isBlank()) "لا يوجد عملاء بعد\nاضغط \"عميل جديد\" للبدء" else "لا توجد نتائج"
@@ -287,11 +287,13 @@ fun DebtsScreen(
                     // row in the list scrolls fully clear of both instead
                     // of stopping underneath either one.
                     contentPadding = PaddingValues(
-                        start = AppScreenPadding, end = AppScreenPadding, top = 4.dp,
+                        start = AppScreenPadding, end = AppScreenPadding, top = 2.dp,
                         bottom = listBottomClearance
                     ),
                     verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
+                    // الإحصاءات أول عنصر في القائمة: تمرّ مع التمرير فيأخذ العملاء كامل الشاشة.
+                    item(key = "stats") { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
                     itemsIndexed(filtered, key = { _, person -> person.id }) { index, person ->
                         PersonRow(
                             person,
@@ -398,7 +400,8 @@ private fun StatsRow(persons: Int, debts: Int, amount: Double) {
             AppStat("ديون", debts.toDouble()) { "%.0f".format(it) },
             AppStat("الإجمالي (${AppSettingsState.currencySymbol})", amount) { Formatters.number(it) }
         ),
-        modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 10.dp)
+        compact = true,
+        modifier = Modifier.padding(bottom = 8.dp)
     )
 }
 
@@ -422,11 +425,11 @@ private fun PersonRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 68.dp)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .heightIn(min = 60.dp)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AppIconCircle(color = avatarColor, size = 44.dp) {
+            AppIconCircle(color = avatarColor, size = 40.dp) {
                 Text(
                     person.name.firstOrNull()?.uppercase() ?: "?",
                     color = Color.White,
@@ -443,7 +446,7 @@ private fun PersonRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (person.amount > 0) {
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(2.dp))
                     com.shopmanager.app.ui.common.PillBadge(
                         text = "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
                         color = LocalSemanticColors.current.danger
@@ -459,6 +462,7 @@ private fun PersonRow(
             Spacer(Modifier.width(8.dp))
             val semantic = LocalSemanticColors.current
             AppActionPill(
+                height = 36.dp,
                 actions = if (person.amount > 0) {
                     listOf(
                         ActionSpec(Icons.Default.Check, "تسجيل سداد كامل الدين", semantic.success, onMarkPaid),
