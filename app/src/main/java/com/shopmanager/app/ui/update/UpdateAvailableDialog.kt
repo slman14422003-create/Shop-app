@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.update
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,7 +56,7 @@ fun UpdateAvailableDialog(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var needsInstallPermission by remember { mutableStateOf(false) }
     var downloadedFile by remember { mutableStateOf<File?>(null) }
-    val phase by UpdateDownloadState.phase.collectAsState()
+    val phase by UpdateDownloadState.phase.collectAsStateWithLifecycle()
     val isDownloading = phase is UpdateDownloadPhase.InProgress
     val percent = (phase as? UpdateDownloadPhase.InProgress)?.percent ?: 0
 

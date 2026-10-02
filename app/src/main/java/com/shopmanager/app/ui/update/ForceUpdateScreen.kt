@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.update
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
@@ -31,7 +32,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,7 +105,7 @@ fun ForceUpdateScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var needsInstallPermission by remember { mutableStateOf(false) }
     var downloadedFile by remember { mutableStateOf<File?>(null) }
-    val downloadPhase by UpdateDownloadState.phase.collectAsState()
+    val downloadPhase by UpdateDownloadState.phase.collectAsStateWithLifecycle()
     val isDownloading = downloadPhase is UpdateDownloadPhase.InProgress
     val downloadPercent = (downloadPhase as? UpdateDownloadPhase.InProgress)?.percent ?: 0
 
