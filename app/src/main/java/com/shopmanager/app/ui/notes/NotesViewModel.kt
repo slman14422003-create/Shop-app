@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -33,10 +34,18 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
 
+    // نفس فكرة DebtsViewModel/MaterialsViewModel.hasSyncError: يصير true فقط إذا
+    // فشل المستمع الحي فعلاً (لا مجرد قائمة فارغة)، ويرجع false مع أول لقطة سليمة.
+    // تعرضه لوحة المطوّر في "حالة الخادم والمزامنة" بجانب الديون والمواد.
+    private val _hasSyncError = MutableStateFlow(false)
+    val hasSyncError: StateFlow<Boolean> = _hasSyncError
+
     val uiState: StateFlow<NotesUiState> = repo.listenNotes()
         .map { notes -> NotesUiState(notes = notes, isLoading = false) }
+        .onEach { _hasSyncError.value = false }
         .onStart { emit(NotesUiState(isLoading = true)) }
         .catch { e ->
+            _hasSyncError.value = true
             _message.value = "تعذر تحميل الملاحظات: ${e.message ?: "تحقق من الاتصال"}"
             emit(NotesUiState(isLoading = false))
         }
