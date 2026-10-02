@@ -67,8 +67,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsWeightSummary
+import com.shopmanager.app.data.materials.MaterialsPriceSummary
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.materials.weightSummary
+import com.shopmanager.app.data.materials.linePrice
+import com.shopmanager.app.data.materials.priceOf
+import com.shopmanager.app.data.materials.priceSummary
+import androidx.compose.ui.text.input.KeyboardType
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import androidx.compose.animation.animateContentSize
 import com.shopmanager.app.ui.common.AppSearchBar
@@ -95,6 +100,7 @@ import androidx.compose.ui.graphics.compositeOver
 import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppCard
 import com.shopmanager.app.ui.common.AppEmptyState
+import com.shopmanager.app.ui.common.AppFootnote
 import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppIconCircle
 import com.shopmanager.app.ui.common.AppPillButton
@@ -219,14 +225,14 @@ fun MaterialsScreen(
     // down to PricesList instead of PricesList creating its own.
     val editedPrices = remember(catalog) { mutableStateMapOf<String, String>() }
     val pricesChangedCount = editedPrices.count { (name, value) ->
-        val parsed = value.toDoubleOrNull()
+        val parsed = value.toPriceOrNull()
         parsed != null && parsed != state.prices[name]
     }
     LaunchedEffect(tab) { onPricesTabActiveChanged(tab == 1) }
     LaunchedEffect(pricesChangedCount) { onPricesChangedCountChanged(pricesChangedCount) }
     LaunchedEffect(savePricesRequested) {
         if (savePricesRequested) {
-            editedPrices.forEach { (name, value) -> value.toDoubleOrNull()?.let { viewModel.setPrice(name, it) } }
+            editedPrices.forEach { (name, value) -> value.toPriceOrNull()?.let { viewModel.setPrice(name, it) } }
             editedPrices.clear()
             onSavePricesRequestHandled()
         }
@@ -283,52 +289,24 @@ fun MaterialsScreen(
                 // `onAddNew` callback MainActivity already wires to the
                 // catalog-picker screen.
                 Column(Modifier.fillMaxSize()) {
+                    // زر الإضافة نحيف (44dp بدل 52dp)، أما بطاقة الملخّص وعنوان
+                    // القائمة فصارا أول عناصر القائمة نفسها (انظر MaterialsList) فيرتفعان
+                    // مع التمرير وتأخذ المواد كامل الشاشة بدل أن تُدفع للأسفل.
                     AppPillButton(
                         label = "مادة جديدة",
                         icon = Icons.Default.Add,
                         onClick = onAddNew,
+                        height = 44.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = 12.dp)
+                            .padding(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 8.dp)
                     )
-                    val shortageTotal = remember(filtered, state.prices) {
-                        filtered.sumOf { state.prices[it.name] ?: 0.0 }
-                    }
-                    // عدّاد الأوزان (كيلو / لوقية / بالعدد) — يتبع القائمة المعروضة
-                    // (يتغيّر مع البحث) ويُحسب مرة لكل تغيّر فعلي في القائمة.
-                    val weightSummary = remember(filtered) { filtered.weightSummary() }
-                    if (weightSummary.hasAnything) {
-                        MaterialsWeightCard(
-                            summary = weightSummary,
-                            animate = !state.isLoading,
-                            modifier = Modifier
-                                .padding(horizontal = AppScreenPadding)
-                                .padding(bottom = 12.dp)
-                        )
-                    }
-                    if (state.materials.isNotEmpty()) {
-                        AppSectionTitle(
-                            text = if (shortageTotal > 0.0) {
-                                "إجمالي أسعار النواقص: ${Formatters.number(shortageTotal)} ${AppSettingsState.currencySymbol}"
-                            } else {
-                                "قائمة النواقص (${filtered.size})"
-                            },
-                            modifier = Modifier.padding(horizontal = AppScreenPadding - 8.dp),
-                            trailing = {
-                                TextButton(onClick = { showClearAllConfirm = true }) {
-                                    Text(
-                                        "مسح الكل",
-                                        color = MaterialTheme.colorScheme.error,
-                                        style = MaterialTheme.typography.labelLarge
-                                    )
-                                }
-                            }
-                        )
-                        Spacer(Modifier.height(2.dp))
-                    }
                     MaterialsList(
                         materials = filtered,
+                        prices = state.prices,
+                        animateSummary = !state.isLoading,
                         searching = search.isNotBlank(),
+                        onClearAll = { showClearAllConfirm = true },
                         onEdit = { editingMaterial = it },
                         onDelete = { deleteTarget = it },
                         onToggleImportant = { viewModel.setImportant(it, !it.important) },
@@ -336,7 +314,7 @@ fun MaterialsScreen(
                     )
                 }
             } else {
-                PricesList(catalogItems = catalog, prices = state.prices, edited = editedPrices, search = search)
+                PricesList(catalogItems = catalog, materials = state.materials, prices = state.prices, edited = editedPrices, search = search)
             }
         }
         }
@@ -493,7 +471,7 @@ private fun MaterialsHeader(
                 }
             )
         }
-        Box(Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = 10.dp)) {
+        Box(Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = 6.dp)) {
             SegmentedTabs(
                 selectedIndex = tab,
                 options = listOf(
@@ -546,10 +524,10 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
     Box(
         Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(44.dp)
             .clip(CircleShape)
             .background(cs.surfaceContainerHigh)
-            .padding(4.dp)
+            .padding(3.dp)
             .onSizeChanged { trackWidthPx = it.width }
     ) {
         if (segmentWidth > 0.dp) {
@@ -588,13 +566,13 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
                         option.icon,
                         contentDescription = null,
                         tint = labelColor,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         option.label,
                         color = labelColor,
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 15.sp),
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
                     )
                 }
@@ -607,7 +585,10 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
 @Composable
 private fun MaterialsList(
     materials: List<Material>,
+    prices: Map<String, Double>,
+    animateSummary: Boolean,
     searching: Boolean,
+    onClearAll: () -> Unit,
     onEdit: (Material) -> Unit,
     onDelete: (Material) -> Unit,
     onToggleImportant: (Material) -> Unit,
@@ -657,6 +638,10 @@ private fun MaterialsList(
     val itemHeightsPx = remember { mutableStateMapOf<String, Int>() }
     var dragOffset by remember { mutableStateOf(0f) }
 
+    // تُحسب مرة لكل تغيّر فعلي في القائمة المعروضة أو في الأسعار.
+    val weightSummary = remember(materials) { materials.weightSummary() }
+    val priceSummary = remember(materials, prices) { materials.priceSummary(prices) }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         // BUG FIXED ("السحب والافلات... كلشي يخفتي فوقها فما بقدر ارجع
@@ -675,9 +660,34 @@ private fun MaterialsList(
         // row-drag removes it from nested scroll entirely, so no drag can
         // ever be mistaken for a pull-to-refresh again.
         userScrollEnabled = draggingId == null,
-        contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = bottomClearance),
+        contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = bottomClearance),
         verticalArrangement = Arrangement.spacedBy(AppGroupGap)
     ) {
+        // ملخّص القائمة (الأوزان + إجمالي السعر) وعنوانها: أول عنصرين في القائمة
+        // نفسها فيتمرّران معها. يتبعان القائمة المعروضة (يتغيّران مع البحث).
+        item(key = "summary") {
+            MaterialsSummaryCard(
+                weights = weightSummary,
+                prices = priceSummary,
+                animate = animateSummary,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+        }
+        item(key = "listTitle") {
+            AppSectionTitle(
+                text = "قائمة النواقص (${materials.size})",
+                modifier = Modifier.padding(horizontal = 0.dp),
+                trailing = {
+                    TextButton(onClick = onClearAll) {
+                        Text(
+                            "مسح الكل",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                }
+            )
+        }
         itemsIndexed(
             orderedItems,
             key = { _, m -> m.id },
@@ -802,7 +812,8 @@ private fun MaterialsList(
                     onEdit = { onEdit(m) },
                     onDelete = { onDelete(m) },
                     onToggleImportant = { onToggleImportant(m) },
-                    isDragging = isDragging
+                    isDragging = isDragging,
+                    linePrice = m.linePrice(prices)
                 )
             }
         }
@@ -817,6 +828,7 @@ private fun MaterialRow(
     onDelete: () -> Unit,
     onToggleImportant: () -> Unit,
     isDragging: Boolean = false,
+    linePrice: Double? = null,
     modifier: Modifier = Modifier
 ) {
     val avatarColor = remember(material.name) { avatarColorFor(material.name) }
@@ -842,27 +854,37 @@ private fun MaterialRow(
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 68.dp)
-                    .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                    .heightIn(min = 58.dp)
+                    .padding(start = 2.dp, end = 10.dp, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onToggleImportant) {
+                IconButton(onClick = onToggleImportant, modifier = Modifier.size(40.dp)) {
                     Icon(
                         if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
                         contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
                         tint = if (material.important) LocalSemanticColors.current.warning else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                AppIconCircle(color = avatarColor, size = 42.dp) {
-                    Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                AppIconCircle(color = avatarColor, size = 38.dp) {
+                    Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         material.name,
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Medium
                     )
+                    // سعر هذا الصف = سعر الكيلو × الوزن (يظهر فقط إذا كانت المادة مسعّرة).
+                    if (linePrice != null) {
+                        Text(
+                            "${Formatters.number(linePrice)} ${AppSettingsState.currencySymbol}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
                     if (material.notes.isNotBlank()) {
                         Text(
                             material.notes,
@@ -878,6 +900,7 @@ private fun MaterialRow(
                 )
                 Spacer(Modifier.width(8.dp))
                 AppActionPill(
+                    height = 36.dp,
                     actions = listOf(
                         ActionSpec(Icons.Default.Edit, "تعديل", null, onEdit),
                         ActionSpec(Icons.Default.Close, "حذف المادة", LocalSemanticColors.current.danger, onDelete)
@@ -912,93 +935,40 @@ private fun MaterialRow(
 @Composable
 private fun PricesList(
     catalogItems: List<MaterialCatalogItem>,
+    materials: List<Material>,
     prices: Map<String, Double>,
     edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
     search: String
 ) {
-    // FIX: this tab used to price whatever happened to be on the shortage
-    // list (state.materials) — which meant a material's price disappeared
-    // the moment it was bought and removed from the shortage list, and had
-    // to be re-typed from scratch the next time it ran out. Prices now
-    // belong to the shop's fixed catalog (see المواد الثابتة /
-    // MaterialCatalogScreen) instead: a standing list that doesn't change
-    // just because something is or isn't currently a shortage, so a price
-    // set once stays set. The shortage tab (tab 0 above) still shows and
-    // sums these same prices by looking them up by name from `prices`.
-    // NOTE: `edited` is now passed in from MaterialsScreen (see its own
-    // comment) rather than created here, so the externally-triggered save
-    // action can reach the same in-progress buffer this list is writing
-    // into.
-    // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي"): `search` is now
-    // lifted all the way up to MaterialsScreen and driven by the shared
-    // header search field (MaterialsHeader), rather than this tab keeping
-    // its own separate always-visible field — same change already made to
-    // the شورتيج/المواد tab above.
-
     if (catalogItems.isEmpty()) {
         EmptyState(icon = Icons.Default.Inventory2, text = "أضف مواد للقائمة الثابتة أولاً لتسعيرها")
         return
     }
 
     val currency = AppSettingsState.currencySymbol
-    // PERF: same fix as the shortage tab above — skip the rescan unless
-    // `search` or `catalogItems` actually changed, instead of re-filtering
-    // on every keystroke edit to an unrelated price field in the list
-    // below (every `edited[...]` write recomposes this whole composable).
     val filtered = remember(search, catalogItems) {
         if (search.isBlank()) catalogItems
         else catalogItems.filter { it.name.contains(search, ignoreCase = true) }
     }
 
-    // Effective value per item: the in-progress edit if there is one,
-    // otherwise the already-saved price — this is what both the summary
-    // card and the save button below count against, so "احفظ" always
-    // reflects exactly what's on screen right now, unsaved edits included.
-    // NOTE: this closure is still used per-row below (`hasPrice`), where
-    // the `edited[item.name]` read is already scoped to that one row's own
-    // slot in the LazyColumn — cheap, and unrelated to the perf fix below.
-    val effectiveOf: (MaterialCatalogItem) -> Double? = { item ->
-        edited[item.name]?.toDoubleOrNull() ?: prices[item.name]
-    }
+    // صفوف النواقص مجمّعة باسم المادة (مقصوص) لربطها بعنصر الكتالوج نفسه.
+    val shortageByName = remember(materials) { materials.groupBy { it.name.trim() } }
 
-    // "بدل هذا الارتفاع": used to also add the full-width save button's own
-    // height on top of the pill clearance here, which is what left that
-    // tall dead strip below the button in the old layout. The save action
-    // no longer lives in this list at all (see the class doc comment
-    // above), so the list only needs to clear the pill itself now.
-    // BUG FIXED ("آخر صف بيلزق بالشريط"): the flat 16.dp part of that was
-    // noticeably thinner than المواد tab's own 32.dp+ clearance right next
-    // to it (same pill, same screen) — thin enough for the last price row
-    // to sit close enough to the pill's transparent side margins to peek
-    // through instead of clearing it. Matched to the same 32.dp.
+    // إعادة ترتيب: المواد الموجودة حالياً في قائمة النواقص أولاً (هي التي تحتاج سعراً الآن
+    // ويظهر لها حساب الإجمالي)، ثم بقية الكتالوج بترتيبها الأصلي.
+    val inShortage = remember(filtered, shortageByName) { filtered.filter { shortageByName.containsKey(it.name.trim()) } }
+    val others = remember(filtered, shortageByName) { filtered.filter { !shortageByName.containsKey(it.name.trim()) } }
+
     val bottomClearance = LocalFloatingBottomNavHeight.current + 32.dp
     Column(Modifier.fillMaxSize()) {
-        // PERF FIX ("تقطيع" while typing a price): pricedCount/totalValue
-        // used to be computed directly in *this* function with
-        // `remember(catalogItems, prices, edited.toMap())` — `edited` is a
-        // SnapshotStateMap, so `.toMap()` (a) allocates a brand-new full
-        // copy of the whole map on every single recomposition just to use
-        // as a remember key, and worse, (b) makes reading it right here,
-        // inside PricesList's own body, the thing that subscribes
-        // PricesList itself to every change in that map. Since every
-        // keystroke in *any* row's price field is a write into `edited`,
-        // every keystroke was recomposing the whole PricesList function —
-        // including re-running the entire `items(filtered) { ... }` block
-        // below and re-walking every visible row — just to update two
-        // numbers in the summary card. That's the actual cause of the
-        // stutter while entering prices: it scales with catalog size and
-        // showed up on every device, weak or strong, since it's a
-        // per-keystroke cost, not a one-time layout cost.
-        // PricesSummarySection (below) reads `edited` itself, through a
-        // `derivedStateOf`, so the recomposition that a price edit
-        // triggers is scoped to that small summary composable alone —
-        // the LazyColumn and its rows are never touched by it.
+        // PERF: قراءة `edited` معزولة داخل PricesSummarySection فكتابة سعر لا تعيد تركيب القائمة.
         PricesSummarySection(
             catalogItems = catalogItems,
+            materials = materials,
             prices = prices,
             edited = edited,
             currency = currency,
-            modifier = Modifier.fillMaxWidth().padding(start = AppScreenPadding, top = 4.dp, end = AppScreenPadding, bottom = 10.dp)
+            modifier = Modifier.fillMaxWidth().padding(start = AppScreenPadding, top = 2.dp, end = AppScreenPadding, bottom = 6.dp)
         )
         if (filtered.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -1007,24 +977,52 @@ private fun PricesList(
         } else {
             LazyColumn(
                 Modifier.weight(1f),
-                contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = bottomClearance),
+                contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = bottomClearance),
                 verticalArrangement = Arrangement.spacedBy(AppGroupGap)
             ) {
-                itemsIndexed(filtered, key = { _, catalogItem -> catalogItem.id }) { rowIndex, item ->
-                    PriceRow(
-                        shape = groupedRowShape(rowIndex, filtered.lastIndex),
-                        item = item,
-                        currency = currency,
-                        // Kept as a raw `toString()` (not the Arabic-locale
-                        // Formatters.number used for display elsewhere) —
-                        // this is the actual editable field value, and it
-                        // has to stay something `toDoubleOrNull()` can
-                        // parse back on save if the person edits it further
-                        // without clearing it first.
-                        value = edited[item.name] ?: prices[item.name]?.toString() ?: "",
-                        hasPrice = effectiveOf(item) != null,
-                        onValueChange = { edited[item.name] = it }
+                item(key = "priceHint") {
+                    AppFootnote(
+                        "السعر المكتوب هو سعر الكيلو، ويُضرب تلقائياً بوزن المادة في قائمة النواقص (نص كيلو، ربع كيلو، لوقية…)",
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
+                }
+                if (inShortage.isNotEmpty()) {
+                    item(key = "titleShortage") {
+                        AppSectionTitle(text = "في قائمة النواقص (${inShortage.size})", modifier = Modifier.padding(bottom = 2.dp))
+                    }
+                    itemsIndexed(inShortage, key = { _, c -> c.id }) { rowIndex, item ->
+                        val effective = edited[item.name]?.toPriceOrNull() ?: prices.priceOf(item.name)
+                        PriceRow(
+                            shape = groupedRowShape(rowIndex, inShortage.lastIndex),
+                            item = item,
+                            currency = currency,
+                            // قيمة الحقل نص قابل للتحليل مجدداً (بلا ".0" ولا 1.1E7).
+                            value = edited[item.name] ?: prices[item.name]?.toEditText() ?: "",
+                            effectivePrice = effective,
+                            shortageRows = shortageByName[item.name.trim()].orEmpty(),
+                            onValueChange = { edited[item.name] = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '٫' } }
+                        )
+                    }
+                }
+                if (others.isNotEmpty()) {
+                    item(key = "titleOthers") {
+                        AppSectionTitle(
+                            text = if (inShortage.isEmpty()) "القائمة الثابتة (${others.size})" else "بقية القائمة (${others.size})",
+                            modifier = Modifier.padding(top = if (inShortage.isEmpty()) 0.dp else 10.dp, bottom = 2.dp)
+                        )
+                    }
+                    itemsIndexed(others, key = { _, c -> c.id }) { rowIndex, item ->
+                        val effective = edited[item.name]?.toPriceOrNull() ?: prices.priceOf(item.name)
+                        PriceRow(
+                            shape = groupedRowShape(rowIndex, others.lastIndex),
+                            item = item,
+                            currency = currency,
+                            value = edited[item.name] ?: prices[item.name]?.toEditText() ?: "",
+                            effectivePrice = effective,
+                            shortageRows = emptyList(),
+                            onValueChange = { edited[item.name] = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '٫' } }
+                        )
+                    }
                 }
             }
         }
@@ -1032,18 +1030,14 @@ private fun PricesList(
 }
 
 /**
- * PERF FIX wrapper (see the long comment at its call site in [PricesList]):
- * isolates the `edited` SnapshotStateMap read behind a `derivedStateOf` so
- * that typing into a price field only ever recomposes this small
- * composable, never [PricesList] itself (and therefore never its
- * LazyColumn). `derivedStateOf` re-runs its block on every `edited` write,
- * but only actually invalidates *readers* of [pricedCount]/[totalValue]
- * (i.e. just this function) when the computed count/sum genuinely changes
- * — cheap either way, and never touches the row list.
+ * ملخّص تبويب الأسعار (مضغوط): عدد المواد المسعّرة من الكتالوج + إجمالي سعر قائمة النواقص
+ * الحالية (سعر الكيلو × الوزن لكل مادة) محسوباً بالأسعار المكتوبة الآن حتى قبل الحفظ.
+ * قراءة `edited` هنا فقط عبر derivedStateOf حتى لا تُعاد تركيب القائمة مع كل حرف.
  */
 @Composable
 private fun PricesSummarySection(
     catalogItems: List<MaterialCatalogItem>,
+    materials: List<Material>,
     prices: Map<String, Double>,
     edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
     currency: String,
@@ -1051,126 +1045,141 @@ private fun PricesSummarySection(
 ) {
     val pricedCount by remember(catalogItems, prices) {
         derivedStateOf {
-            catalogItems.count { (edited[it.name]?.toDoubleOrNull() ?: prices[it.name]) != null }
+            catalogItems.count { (edited[it.name]?.toPriceOrNull() ?: prices.priceOf(it.name)) != null }
         }
     }
-    val totalValue by remember(catalogItems, prices) {
+    val shortageTotal by remember(materials, prices) {
         derivedStateOf {
-            catalogItems.sumOf { (edited[it.name]?.toDoubleOrNull() ?: prices[it.name]) ?: 0.0 }
+            var total = 0.0
+            for (m in materials) {
+                val price = edited[m.name]?.toPriceOrNull() ?: edited[m.name.trim()]?.toPriceOrNull() ?: prices.priceOf(m.name)
+                total += m.linePrice(price) ?: 0.0
+            }
+            Math.round(total * 100.0) / 100.0
         }
     }
-    PricesSummaryCard(
-        pricedCount = pricedCount,
-        totalCount = catalogItems.size,
-        totalValue = totalValue,
-        currency = currency,
-        modifier = modifier
-    )
+    val cs = MaterialTheme.colorScheme
+    AppCard(modifier = modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("إجمالي أسعار النواقص", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    AnimatedCounterText(
+                        targetValue = shortageTotal,
+                        format = { Formatters.number(it) },
+                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(currency, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
+                }
+            }
+            Box(Modifier.padding(horizontal = 12.dp).width(1.dp).fillMaxHeight().background(cs.outlineVariant))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("المسعّرة", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    "$pricedCount / ${catalogItems.size}",
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
 }
 
 /**
- * Compact totals strip for the الأسعار tab: how many catalog items already
- * have a price set (edits in progress count too — see [PricesSummarySection])
- * and the running total value of the whole catalog at current prices. Uses
- * the same solid card language as the rest of the app (no glass dependency)
- * so it reads correctly in every color mode.
+ * صف كتالوج في تبويب الأسعار: أيقونة، الاسم، (إن كانت المادة في النواقص) سطر الحساب
+ * "كميتها = سعرها"، وحقل سعر الكيلو مضغوط الارتفاع.
  */
-@Composable
-private fun PricesSummaryCard(
-    pricedCount: Int,
-    totalCount: Int,
-    totalValue: Double,
-    currency: String,
-    modifier: Modifier = Modifier
-) {
-    AppCard(modifier = modifier) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier.size(42.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Sell, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
-            }
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "إجمالي قيمة القائمة",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "المسعّرة: $pricedCount من $totalCount",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Text(
-                "${Formatters.number(totalValue)} $currency",
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-    }
-}
-
-/** One catalog row in the priced-list — a colored tag-avatar (dimmed when
- * the item still has no price, at full strength once it does), the item
- * name, and an inline price field with a currency suffix. */
 @Composable
 private fun PriceRow(
     shape: Shape,
     item: MaterialCatalogItem,
     currency: String,
     value: String,
-    hasPrice: Boolean,
+    effectivePrice: Double?,
+    shortageRows: List<Material>,
     onValueChange: (String) -> Unit
 ) {
     val avatarColor = remember(item.name) { avatarColorFor(item.name) }
+    val hasPrice = effectivePrice != null
+    val cs = MaterialTheme.colorScheme
     AppRowSurface(shape = shape) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppIconCircle(
                 color = if (hasPrice) avatarColor else avatarColor.copy(alpha = 0.35f),
-                size = 40.dp
+                size = 36.dp
             ) {
                 Icon(
                     Icons.Default.Sell,
                     contentDescription = null,
                     tint = if (hasPrice) Color.White else avatarColor,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(17.dp)
                 )
             }
-            Spacer(Modifier.width(12.dp))
-            Text(
-                item.name,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    item.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (shortageRows.isNotEmpty()) {
+                    val qty = shortageRows.joinToString(" + ") { it.quantityLabel() }
+                    val total = if (effectivePrice == null) null
+                    else shortageRows.sumOf { it.linePrice(effectivePrice) ?: 0.0 }
+                    Text(
+                        if (total == null) "$qty — بدون سعر" else "$qty = ${Formatters.number(total)} $currency",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = cs.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
             Spacer(Modifier.width(8.dp))
-            TextField(
+            BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.width(132.dp),
-                placeholder = { Text("0", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)) },
-                suffix = { Text(currency, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                modifier = Modifier.width(138.dp),
                 singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    cursorColor = MaterialTheme.colorScheme.onSurface
-                )
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = cs.onSurface, fontWeight = FontWeight.Medium),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                cursorBrush = SolidColor(cs.onSurface),
+                decorationBox = { inner ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(cs.surfaceContainerHighest)
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                            if (value.isEmpty()) {
+                                Text("0", style = MaterialTheme.typography.bodyLarge, color = cs.onSurfaceVariant.copy(alpha = 0.5f))
+                            }
+                            inner()
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Text(currency, style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant)
+                    }
+                }
             )
         }
     }
@@ -1186,7 +1195,8 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
     val sb = StringBuilder("📦 قائمة المواد والأسعار\n\n")
     materials.sortedBy { it.name }.forEach { m ->
         sb.append("• ${m.name}: ${m.quantityLabel()}")
-        prices[m.name]?.let { sb.append(" — ${Formatters.number(it)} $currency") }
+        // سعر الصف = سعر الكيلو × الوزن (لا سعر الكيلو الخام).
+        m.linePrice(prices)?.let { sb.append(" — ${Formatters.number(it)} $currency") }
         sb.append("\n")
     }
     sb.append("\nالإجمالي: ${materials.size} مادة")
@@ -1199,82 +1209,108 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
         }
         sb.append("\nالأوزان: ${parts.joinToString(" + ")}")
     }
+    val ps = materials.priceSummary(prices)
+    if (ps.total > 0.0) {
+        sb.append("\nإجمالي السعر: ${Formatters.number(ps.total)} $currency")
+        if (ps.unpriced > 0) sb.append(" (${ps.unpriced} مادة بلا سعر غير محسوبة)")
+    }
     return sb.toString()
 }
 
 /**
- * عدّاد الأوزان: بطاقة مسطّحة بنفس لغة بطاقة "إجمالي قيمة القائمة" في تبويب الأسعار —
- * أيقونة ميزان + عنوان وعدد المواد، وتحتها شريط خلايا متساوية العرض (كيلو | لوقية | بالعدد)
- * لا تظهر منها إلا ما فيها قيمة. الأرقام تعدّ تصاعدياً بـ [AnimatedCounterText]
- * (نفس منحنى Claude، ودون حركة على الأجهزة الضعيفة)، والبطاقة تتمدّد/تنكمش بسلاسة
- * عند ظهور خلية أو اختفائها.
+ * ملخّص القائمة المضغوط (بطاقة واحدة بسطر واحد بدل بطاقة طويلة):
+ *  - خلية الأوزان: الكيلو / اللوقية / بالعدد (لا يظهر منها إلا ما فيه قيمة)، بلا أي
+ *    تحويل بين العائلتين في العرض.
+ *  - خلية إجمالي السعر: مجموع (سعر الكيلو × الوزن) لكل مادة مسعّرة. وإن وُجدت مواد بلا
+ *    سعر يُذكر عددها تحت الرقم حتى لا يُظنّ أنها داخلة في المجموع.
  */
 @Composable
-private fun MaterialsWeightCard(
-    summary: MaterialsWeightSummary,
+private fun MaterialsSummaryCard(
+    weights: MaterialsWeightSummary,
+    prices: MaterialsPriceSummary,
     animate: Boolean,
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    val cells = remember(summary) {
+    val currency = AppSettingsState.currencySymbol
+    val weightCells = remember(weights) {
         buildList {
-            if (summary.kilos > 0.0) add(summary.kilos to "كيلو")
-            if (summary.okes > 0.0) add(summary.okes to "لوقية")
-            if (summary.pieces > 0.0) add(summary.pieces to "بالعدد")
+            if (weights.kilos > 0.0) add(weights.kilos to "كيلو")
+            if (weights.okes > 0.0) add(weights.okes to "لوقية")
+            if (weights.pieces > 0.0) add(weights.pieces to "بالعدد")
         }
     }
-    if (cells.isEmpty()) return
+    val showWeights = weightCells.isNotEmpty()
+    val showPrice = prices.total > 0.0
+    if (!showWeights && !showPrice) return
 
     AppCard(modifier = modifier.animateContentSize(animationSpec = MotionSpecs.expandSpring())) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(42.dp).clip(CircleShape).background(cs.surfaceContainerHighest),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Scale, contentDescription = null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
-                }
-                Spacer(Modifier.width(14.dp))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (showWeights) {
                 Column(Modifier.weight(1f)) {
-                    Text(
-                        "إجمالي الأوزان المطلوبة",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = cs.onSurface
-                    )
-                    Text(
-                        "${summary.count} مادة في القائمة",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = cs.onSurfaceVariant
-                    )
+                    Text("الأوزان المطلوبة", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                    Spacer(Modifier.height(2.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                        weightCells.forEach { (value, label) ->
+                            Row(verticalAlignment = Alignment.Bottom) {
+                                AnimatedCounterText(
+                                    targetValue = value,
+                                    format = { Formatters.number(it) },
+                                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                                    fontWeight = FontWeight.SemiBold,
+                                    animate = animate
+                                )
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = cs.onSurfaceVariant,
+                                    modifier = Modifier.padding(bottom = 2.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(cs.surfaceContainerHighest)
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                cells.forEachIndexed { index, (value, label) ->
-                    if (index > 0) {
-                        Box(Modifier.width(1.dp).height(34.dp).background(cs.outlineVariant))
-                    }
-                    Column(
-                        Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+            if (showWeights && showPrice) {
+                Box(
+                    Modifier
+                        .padding(horizontal = 12.dp)
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(cs.outlineVariant)
+                )
+            }
+            if (showPrice) {
+                Column(Modifier.weight(1f)) {
+                    Text("إجمالي السعر", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                    Spacer(Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.Bottom) {
                         AnimatedCounterText(
-                            targetValue = value,
+                            targetValue = prices.total,
                             format = { Formatters.number(it) },
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                             fontWeight = FontWeight.SemiBold,
                             animate = animate
                         )
+                        Spacer(Modifier.width(4.dp))
                         Text(
-                            label,
-                            style = MaterialTheme.typography.labelLarge,
+                            currency,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = cs.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
+                    if (prices.unpriced > 0) {
+                        Text(
+                            "${prices.unpriced} بلا سعر (غير محسوبة)",
+                            style = MaterialTheme.typography.labelSmall,
                             color = cs.onSurfaceVariant
                         )
                     }
@@ -1283,3 +1319,25 @@ private fun MaterialsWeightCard(
         }
     }
 }
+
+/** تنظيف رقم السعر المكتوب: أرقام عربية→لاتينية، فاصلة عشرية عربية→نقطة، حذف فواصل الآلاف والمسافات. */
+private fun String.toPriceOrNull(): Double? {
+    val cleaned = buildString {
+        for (c in this@toPriceOrNull) {
+            when (c) {
+                in '٠'..'٩' -> append('0' + (c - '٠'))
+                in '۰'..'۹' -> append('0' + (c - '۰'))
+                '٫' -> append('.')
+                ',', '٬', ' ' -> Unit
+                else -> append(c)
+            }
+        }
+    }
+    val v = cleaned.toDoubleOrNull() ?: return null
+    return if (v.isFinite() && v >= 0.0) v else null
+}
+
+/** نص قابل للتحرير لسعر محفوظ: بلا ".0" ولا صيغة علمية (1.1E7). */
+private fun Double.toEditText(): String =
+    if (this == this.toLong().toDouble()) this.toLong().toString()
+    else java.math.BigDecimal(this).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()

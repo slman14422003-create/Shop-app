@@ -9,6 +9,8 @@ import android.net.Uri
 import android.text.TextPaint
 import androidx.core.content.FileProvider
 import com.shopmanager.app.data.materials.Material
+import com.shopmanager.app.data.materials.linePrice
+import com.shopmanager.app.data.materials.priceSummary
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.Formatters
@@ -115,7 +117,8 @@ object MaterialsReportImage {
                 val rowTop = y
                 canvas.drawText(m.name, WIDTH - PADDING, rowTop + 44f, namePaint)
                 canvas.drawText(m.quantityLabel(), WIDTH - PADDING, rowTop + 82f, qtyPaint)
-                val price = prices[m.name]
+                // سعر الصف = سعر الكيلو × الوزن
+                val price = m.linePrice(prices)
                 if (price != null) {
                     canvas.drawText(
                         "${Formatters.number(price)} ${AppSettingsState.currencySymbol}",
@@ -127,6 +130,14 @@ object MaterialsReportImage {
                     canvas.drawLine(PADDING, y - 14f, WIDTH - PADDING, y - 14f, dividerPaint)
                 }
             }
+        }
+
+        // إجمالي السعر في أسفل الصورة (فقط إن وُجد سعر)
+        val summary = sorted.priceSummary(prices)
+        if (summary.total > 0.0) {
+            val totalPaint = TextPaint(namePaint).apply { textSize = 40f; color = brandColor }
+            val totalText = "إجمالي السعر: ${Formatters.number(summary.total)} ${AppSettingsState.currencySymbol}"
+            canvas.drawText(totalText, WIDTH - PADDING, height - PADDING - 8f, totalPaint)
         }
 
         val dir = File(context.cacheDir, "shared_images").apply { mkdirs() }
