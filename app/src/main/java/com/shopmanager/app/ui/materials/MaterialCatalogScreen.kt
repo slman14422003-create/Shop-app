@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -68,8 +69,8 @@ import androidx.compose.material3.CircularProgressIndicator
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
-    val catalog by viewModel.catalog.collectAsState()
-    val message by viewModel.message.collectAsState()
+    val catalog by viewModel.catalog.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
     var search by remember { mutableStateOf("") }
     var isAddingCatalogItem by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }

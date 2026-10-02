@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
@@ -147,10 +148,10 @@ fun MaterialsScreen(
     onInitialSearchConsumed: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
-    val state by viewModel.uiState.collectAsState()
-    val catalog by viewModel.catalog.collectAsState()
-    val message by viewModel.message.collectAsState()
-    val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val catalog by viewModel.catalog.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     var tab by remember { mutableStateOf(0) }
     var search by remember { mutableStateOf("") }
     // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي يتوسع بواجهة لحالة
