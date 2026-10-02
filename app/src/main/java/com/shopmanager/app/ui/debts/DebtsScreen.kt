@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.debts
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -93,9 +94,9 @@ fun DebtsScreen(
     onAddPersonRequestHandled: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
-    val state = viewModel.uiState.collectAsState().value
-    val message = viewModel.message.collectAsState().value
-    val isRefreshing = viewModel.isRefreshing.collectAsState().value
+    val state = viewModel.uiState.collectAsStateWithLifecycle().value
+    val message = viewModel.message.collectAsStateWithLifecycle().value
+    val isRefreshing = viewModel.isRefreshing.collectAsStateWithLifecycle().value
     val search = remember { mutableStateOf("") }
     // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي يتوسع بواجهة لحالة
     // اثناء البحث"): search used to be a permanently-visible field sitting

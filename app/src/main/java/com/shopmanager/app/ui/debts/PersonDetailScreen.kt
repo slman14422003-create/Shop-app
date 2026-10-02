@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.debts
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -97,8 +98,14 @@ fun PersonDetailScreen(
     // مستمع Firestore خاص فيها وتخرج عن مزامنة مع باقي الشاشة).
     notesViewModel: NotesViewModel = viewModel()
 ) {
-    val debts by viewModel.debtsForPerson(person.id).collectAsState(initial = emptyList())
-    val message by viewModel.message.collectAsState()
+    // PERF FIX: debtsForPerson() builds a brand-new callbackFlow on every call.
+    // Calling it straight inside collectAsState meant a NEW flow instance on
+    // every recomposition (typing in a field, opening a dialog, ...), which
+    // tore down and re-registered this customer's Firestore listener each time -
+    // flicker, extra reads, wasted battery. Cached per customer id now.
+    val debtsFlow = remember(person.id) { viewModel.debtsForPerson(person.id) }
+    val debts by debtsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val message by viewModel.message.collectAsStateWithLifecycle()
     val snackbarHost = remember { SnackbarHostState() }
     var editingDebt by remember { mutableStateOf<Debt?>(null) }
     var amount by remember { mutableStateOf("") }
@@ -109,8 +116,8 @@ fun PersonDetailScreen(
     var payDebtTarget by remember { mutableStateOf<Debt?>(null) }
     // "ملاحظات مرتبطة": كل الملاحظات اللي نوعها PERSON ومربوطة بهذا العميل
     // بالذات - نفس منطق الفلترة اللي NotesScreen يعرضه بتبويب "الديون".
-    val allPersons = viewModel.uiState.collectAsState().value.persons
-    val notesState = notesViewModel.uiState.collectAsState().value
+    val allPersons = viewModel.uiState.collectAsStateWithLifecycle().value.persons
+    val notesState = notesViewModel.uiState.collectAsStateWithLifecycle().value
     val linkedNotes = remember(notesState.notes, person.id) {
         notesState.notes.filter { it.linkType == NoteLinkType.PERSON && it.linkedId == person.id }
     }
