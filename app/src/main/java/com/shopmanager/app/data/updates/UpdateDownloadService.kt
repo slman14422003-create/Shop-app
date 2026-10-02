@@ -54,7 +54,15 @@ class UpdateDownloadService : Service() {
                 UpdateDownloadState.progress(percent)
                 notify(buildNotification(percent, versionName))
             }) {
-                is DownloadState.Done -> UpdateDownloadState.done(result.file)
+                is DownloadState.Done -> {
+                    // Posted BEFORE the state flips to Done: if a dialog is on screen
+                    // it installs immediately and cancels this notification (see
+                    // ApkDownloader.install); the other order could leave it stale.
+                    runCatching {
+                        NotificationHelper.showUpdateReadyNotification(applicationContext, result.file, versionName)
+                    }
+                    UpdateDownloadState.done(result.file)
+                }
                 is DownloadState.Error -> UpdateDownloadState.error(result.message)
                 is DownloadState.InProgress -> Unit
             }

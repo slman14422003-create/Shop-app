@@ -264,5 +264,10 @@ object ApkDownloader {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
         context.startActivity(intent)
+        // Installing from inside the app makes the "تم تحميل التحديث" notification redundant.
+        runCatching {
+            androidx.core.app.NotificationManagerCompat.from(context)
+                .cancel(com.shopmanager.app.data.notifications.NotificationHelper.NOTIF_ID_UPDATE_READY)
+        }
     }
 }
