@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.settings
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
@@ -173,6 +174,13 @@ fun SettingsScreen(
         return NotificationManagerCompat.from(context).areNotificationsEnabled() && blockedChannelLabels.isEmpty()
     }
     var systemNotificationsAllowed by remember { mutableStateOf(checkSystemNotificationsAllowed()) }
+    // ترابط الإعدادات بإذن النظام: تشغيل مفتاح "الإشعارات" كان يكتفي بحفظ
+    // الخيار حتى لو رُفض إذن أندرويد 13+ سابقاً، فيبقى المفتاح "شغّال" بلا أي
+    // إشعار فعلي. الآن يُطلب الإذن عند التشغيل إن لم يكن ممنوحاً، وتُحدَّث
+    // حالة التحذير فور الرد.
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { systemNotificationsAllowed = checkSystemNotificationsAllowed() }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         // Re-check on every resume, not just once — this is exactly how
@@ -258,7 +266,7 @@ fun SettingsScreen(
     var pendingUpdate by remember { mutableStateOf(UpdateDownloadState.activeManifest) }
     var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
     var needsInstallPermission by remember { mutableStateOf(false) }
-    val downloadPhase by UpdateDownloadState.phase.collectAsState()
+    val downloadPhase by UpdateDownloadState.phase.collectAsStateWithLifecycle()
     val isDownloadingUpdate = downloadPhase is UpdateDownloadPhase.InProgress
     val downloadPercent = (downloadPhase as? UpdateDownloadPhase.InProgress)?.percent ?: 0
 
@@ -309,8 +317,8 @@ fun SettingsScreen(
         UpdateDownloadService.start(context, manifest)
     }
 
-    val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
-    val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsState(initial = false)?.value ?: false
+    val debtsSyncError = debtsViewModel?.hasSyncError?.collectAsStateWithLifecycle(initialValue = false)?.value ?: false
+    val materialsSyncError = materialsViewModel?.hasSyncError?.collectAsStateWithLifecycle(initialValue = false)?.value ?: false
     var dismissedServerErrorBanner by remember { mutableStateOf(false) }
 
     // المزامنة: real connectivity + "آخر مزامنة ناجحة" (see data/sync/SyncStatus.kt).
@@ -318,8 +326,10 @@ fun SettingsScreen(
     // first composition instead of assuming "متصل" until the first
     // callback lands, which would otherwise flash the wrong state for a
     // frame on a device that opens this screen while already offline.
-    val isOnline by com.shopmanager.app.data.sync.SyncConnectivityObserver.observe(context)
-        .collectAsState(initial = true)
+    // PERF FIX: observe() returns a new callbackFlow each call - without
+    // remember it re-registered a system NetworkCallback on every recomposition.
+    val connectivityFlow = remember(context) { com.shopmanager.app.data.sync.SyncConnectivityObserver.observe(context) }
+    val isOnline by connectivityFlow.collectAsStateWithLifecycle(initialValue = true)
     var lastSyncedAt by remember { mutableStateOf(com.shopmanager.app.data.sync.SyncStatusStore.lastSyncedAt(context)) }
     var isManualSyncing by remember { mutableStateOf(false) }
     // Re-read the stored timestamp whenever a listener records a fresh
@@ -584,11 +594,18 @@ fun SettingsScreen(
                     switchItem(
                         icon = Icons.Outlined.Notifications,
                         title = "الإشعارات",
-                        subtitle = "تنبيهات قائمة النواقص والديون الجديدة على هذا الجهاز",
+                        subtitle = "تنبيهات الديون وقائمة النواقص والملاحظات وتذكيراتها على هذا الجهاز",
                         checked = notificationsEnabled,
                         onCheckedChange = {
                             notificationsEnabled = it
                             settings.notificationsEnabled = it
+                            if (it && android.os.Build.VERSION.SDK_INT >= 33 &&
+                                androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context, android.Manifest.permission.POST_NOTIFICATIONS
+                                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                            ) {
+                                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            }
                             // يطابق المستمعات والخدمة الأمامية مع الإعداد فوراً.
                             NotificationSync.apply(context)
                         }
