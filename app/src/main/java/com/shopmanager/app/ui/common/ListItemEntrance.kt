@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.LocalRefreshRateHz
 import com.shopmanager.app.data.performance.PerformanceTier
 import kotlinx.coroutines.delay
 
@@ -67,6 +68,9 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
     val shouldAnimate = remember { !played.value && index <= MAX_ANIMATED_INDEX }
     val progress = remember { Animatable(if (shouldAnimate) 0f else 1f) }
     val durationScale = MotionSpecs.durationScale()
+    // الأجهزة القوية (شاشة 90Hz+): حركة أغنى — الصف يكبر قليلاً من 0.96 إلى 1 مع الصعود
+    // والتلاشي. هذا كله داخل graphicsLayer (مرحلة الرسم فقط) فلا تكلفة تركيب إضافية.
+    val richMotion = LocalRefreshRateHz.current >= 80f
 
     if (shouldAnimate) {
         LaunchedEffect(Unit) {
@@ -80,6 +84,11 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
         // القراءة هنا داخل كتلة graphicsLayer (مرحلة الرسم) — لا إعادة تركيب.
         val p = progress.value
         alpha = p
-        translationY = (1f - p) * 16.dp.toPx()
+        translationY = (1f - p) * (if (richMotion) 20.dp else 16.dp).toPx()
+        if (richMotion) {
+            val s = 0.96f + 0.04f * p
+            scaleX = s
+            scaleY = s
+        }
     }
 }

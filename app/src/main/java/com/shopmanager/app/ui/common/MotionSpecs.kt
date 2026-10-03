@@ -131,6 +131,6 @@ object MotionSpecs {
      * shares, so nothing reads as "off-brand" next to it.
      */
     @Composable
-    fun contentTween(): FiniteAnimationSpec<Float> =
+    fun <T> contentTween(): FiniteAnimationSpec<T> =
         tween(durationMillis = if (isLowTier()) 90 else (220 * durationScale()).toInt(), easing = claudeEasing)
 }
