@@ -164,7 +164,9 @@ private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 // in well under 200ms, too quick to register as anything but a flicker.
 // This is the one artificial delay in the whole startup path, just long
 // enough for the splash to actually be seen before it crossfades away.
-private const val SPLASH_MIN_DISPLAY_MS = 1000L
+// PERF FIX: كان الحد الأدنى للهاتف السريع (1000ms) أطول من الهاتف الضعيف (650ms)،
+// أي عكس المطلوب؛ الآن الهاتف السريع يكفيه أنيميشن السبلاش (~420ms) فقط.
+private const val SPLASH_MIN_DISPLAY_MS = 450L
 private const val SPLASH_MIN_DISPLAY_LOW_MS = 650L
 
 // REPLACED WITH CLAUDE.AI-STYLE MOTION: this used to be Apple's own
