@@ -175,6 +175,8 @@ private const val SPLASH_MIN_DISPLAY_LOW_MS = 650L
 // so nothing in the app still reads as borrowed from iOS.
 private val claudeStandardEasing = MotionSpecs.claudeEasing
 
+private const val UI_SCALE = 1.08f
+
 class MainActivity : FragmentActivity() {
     // Class-level (not inside setContent) so onNewIntent below - fired when
     // the app is already running and a *second* notification is tapped -
@@ -413,7 +415,9 @@ class MainActivity : FragmentActivity() {
             val baseDensity = LocalDensity.current
             val clampedDensity = remember(baseDensity) {
                 Density(
-                    density = baseDensity.density,
+                    // تكبير بسيط (8%) لكل العناصر والخطوط في كل الشاشات لأنها كانت
+                    // صغيرة؛ غيّر UI_SCALE إذا بدك أكبر أو أصغر (1.0 = بدون تكبير).
+                    density = baseDensity.density * UI_SCALE,
                     fontScale = baseDensity.fontScale.coerceIn(0.85f, 1.3f)
                 )
             }
