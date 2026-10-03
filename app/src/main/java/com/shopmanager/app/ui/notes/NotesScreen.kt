@@ -255,7 +255,7 @@ fun NotesScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
-                    itemsIndexed(filtered, key = { _, note -> note.id }) { index, note ->
+                    itemsIndexed(filtered, key = { _, note -> note.id }, contentType = { _, _ -> "note" }) { index, note ->
                         NoteRow(
                             note = note,
                             shape = groupedRowShape(index, filtered.lastIndex),
