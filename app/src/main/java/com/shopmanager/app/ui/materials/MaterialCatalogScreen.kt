@@ -36,6 +36,7 @@ import com.shopmanager.app.ui.common.BrandOnGradient
 import com.shopmanager.app.ui.common.GlassIconButton
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.MotionSpecs
+import com.shopmanager.app.ui.common.listItemEntrance
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.glassHairlineColor
@@ -158,14 +159,16 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                     contentPadding = PaddingValues(horizontal = AppScreenPadding, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
-                    itemsIndexed(filtered, key = { _, catalogItem -> catalogItem.id }) { index, item ->
-                        CatalogRow(
-                            item = item,
-                            shape = groupedRowShape(index, filtered.lastIndex),
-                            onClick = { pickedItem = item },
-                            onEdit = { editTarget = item },
-                            onDelete = { deleteTarget = item }
-                        )
+                    itemsIndexed(filtered, key = { _, catalogItem -> catalogItem.id }, contentType = { _, _ -> "catalogItem" }) { index, item ->
+                        Box(Modifier.listItemEntrance(index)) {
+                            CatalogRow(
+                                item = item,
+                                shape = groupedRowShape(index, filtered.lastIndex),
+                                onClick = { pickedItem = item },
+                                onEdit = { editTarget = item },
+                                onDelete = { deleteTarget = item }
+                            )
+                        }
                     }
                     item { Spacer(Modifier.height(88.dp)) }
                 }

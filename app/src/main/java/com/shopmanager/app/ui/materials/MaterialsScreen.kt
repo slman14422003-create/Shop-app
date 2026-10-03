@@ -2,7 +2,15 @@ package com.shopmanager.app.ui.materials
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.unit.IntOffset
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
+import com.shopmanager.app.ui.common.listItemEntrance
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -43,6 +51,7 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -224,12 +233,21 @@ fun MaterialsScreen(
     // buffer to actually perform the save, so it's hoisted here and passed
     // down to PricesList instead of PricesList creating its own.
     val editedPrices = remember(catalog) { mutableStateMapOf<String, String>() }
-    val pricesChangedCount = editedPrices.count { (name, value) ->
-        val parsed = value.toPriceOrNull()
-        parsed != null && parsed != state.prices[name]
+    // PERF FIX (تقطيع أثناء كتابة السعر): كان العدّ يتم هنا مباشرة داخل جسم الشاشة،
+    // فكل حرف يُكتب بأي حقل سعر (كتابة في editedPrices) كان يعيد تركيب الشاشة كلها
+    // (الهيدر + التبويبات + القائمة). الآن القراءة داخل snapshotFlow فقط، فلا يُعاد
+    // تركيب الشاشة إلا إذا تغيّر الرقم فعلاً، ويُبلَّغ به مرة واحدة عند كل تغيّر.
+    val latestPrices by rememberUpdatedState(state.prices)
+    val latestOnChangedCount by rememberUpdatedState(onPricesChangedCountChanged)
+    LaunchedEffect(editedPrices) {
+        snapshotFlow {
+            editedPrices.count { (name, value) ->
+                val parsed = value.toPriceOrNull()
+                parsed != null && parsed != latestPrices[name]
+            }
+        }.distinctUntilChanged().collect { latestOnChangedCount(it) }
     }
     LaunchedEffect(tab) { onPricesTabActiveChanged(tab == 1) }
-    LaunchedEffect(pricesChangedCount) { onPricesChangedCountChanged(pricesChangedCount) }
     LaunchedEffect(savePricesRequested) {
         if (savePricesRequested) {
             val toSave = editedPrices.mapNotNull { (name, value) -> value.toPriceOrNull()?.let { name to it } }.toMap()
@@ -276,7 +294,24 @@ fun MaterialsScreen(
             onRefresh = viewModel::refresh,
             modifier = Modifier.padding(padding)
         ) {
-        Crossfade(targetState = tab, label = "materialsTab") { selectedTab ->
+        // الأجهزة القوية: التبديل بين المواد/الأسعار ينزلق أفقياً بمسافة صغيرة مع تلاشٍ
+        // بدل تلاشٍ فقط؛ الأجهزة الضعيفة تبقى على تلاشٍ سريع جداً بلا انزلاق.
+        val strongDevice = LocalPerformanceTier.current != PerformanceTier.LOW
+        val tabFadeMs = MotionSpecs.contentTween<Float>()
+        AnimatedContent(
+            targetState = tab,
+            transitionSpec = {
+                if (strongDevice) {
+                    val dir = if (targetState > initialState) -1 else 1
+                    (fadeIn(tabFadeMs) + slideInHorizontally(
+                        animationSpec = tween<IntOffset>(260, easing = MotionSpecs.claudeEasing)
+                    ) { full -> dir * full / 10 }) togetherWith fadeOut(tween(120, easing = MotionSpecs.claudeEasing))
+                } else {
+                    fadeIn(tween(90)) togetherWith fadeOut(tween(60))
+                }
+            },
+            label = "materialsTab"
+        ) { selectedTab ->
             if (selectedTab == 0) {
                 // Kept deliberately minimal: just the search field above the
                 // list, and materials below it - no extra banners competing
@@ -714,6 +749,8 @@ private fun MaterialsList(
                     .onSizeChanged { itemHeightsPx[m.id] = it.height }
                     .zIndex(if (isDragging) 1f else 0f)
                     .graphicsLayer { translationY = if (isDragging) dragOffset else 0f }
+                    // حركة دخول لأول ظهور للصف (تُعطَّل تلقائياً على الأجهزة الضعيفة).
+                    .listItemEntrance(rowIndex)
                     .then(
                         if (canReorder) {
                             Modifier.pointerInput(m.id) {
@@ -982,7 +1019,7 @@ private fun PricesList(
                     item(key = "titleShortage") {
                         AppSectionTitle(text = "في قائمة النواقص (${inShortage.size})", modifier = Modifier.padding(bottom = 2.dp))
                     }
-                    itemsIndexed(inShortage, key = { _, c -> c.id }) { rowIndex, item ->
+                    itemsIndexed(inShortage, key = { _, c -> c.id }, contentType = { _, _ -> "priceRow" }) { rowIndex, item ->
                         val effective = edited[item.name]?.toPriceOrNull() ?: prices.priceOf(item.name)
                         PriceRow(
                             shape = groupedRowShape(rowIndex, inShortage.lastIndex),
@@ -1003,7 +1040,7 @@ private fun PricesList(
                             modifier = Modifier.padding(top = if (inShortage.isEmpty()) 0.dp else 10.dp, bottom = 2.dp)
                         )
                     }
-                    itemsIndexed(others, key = { _, c -> c.id }) { rowIndex, item ->
+                    itemsIndexed(others, key = { _, c -> c.id }, contentType = { _, _ -> "priceRow" }) { rowIndex, item ->
                         val effective = edited[item.name]?.toPriceOrNull() ?: prices.priceOf(item.name)
                         PriceRow(
                             shape = groupedRowShape(rowIndex, others.lastIndex),
