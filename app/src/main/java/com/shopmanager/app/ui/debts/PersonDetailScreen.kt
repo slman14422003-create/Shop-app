@@ -260,7 +260,7 @@ fun PersonDetailScreen(
                     }
                 }
             } else {
-                itemsIndexed(debts, key = { _, debt -> debt.id }) { index, debt ->
+                itemsIndexed(debts, key = { _, debt -> debt.id }, contentType = { _, _ -> "debt" }) { index, debt ->
                     DebtRow(
                         debt = debt,
                         nf = nf,
@@ -301,7 +301,7 @@ fun PersonDetailScreen(
                     AppFootnote("لا توجد ملاحظات مرتبطة بهذا العميل بعد")
                 }
             } else {
-                itemsIndexed(linkedNotes, key = { _, n -> "linkedNote_${n.id}" }) { index, linkedNote ->
+                itemsIndexed(linkedNotes, key = { _, n -> "linkedNote_${n.id}" }, contentType = { _, _ -> "linkedNote" }) { index, linkedNote ->
                     LinkedNoteRow(
                         note = linkedNote,
                         shape = groupedRowShape(index, linkedNotes.lastIndex),

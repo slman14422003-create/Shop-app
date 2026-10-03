@@ -294,7 +294,7 @@ fun DebtsScreen(
                 ) {
                     // الإحصاءات أول عنصر في القائمة: تمرّ مع التمرير فيأخذ العملاء كامل الشاشة.
                     item(key = "stats") { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
-                    itemsIndexed(filtered, key = { _, person -> person.id }) { index, person ->
+                    itemsIndexed(filtered, key = { _, person -> person.id }, contentType = { _, _ -> "person" }) { index, person ->
                         PersonRow(
                             person,
                             groupedRowShape(index, filtered.lastIndex),
