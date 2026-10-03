@@ -232,7 +232,8 @@ fun MaterialsScreen(
     LaunchedEffect(pricesChangedCount) { onPricesChangedCountChanged(pricesChangedCount) }
     LaunchedEffect(savePricesRequested) {
         if (savePricesRequested) {
-            editedPrices.forEach { (name, value) -> value.toPriceOrNull()?.let { viewModel.setPrice(name, it) } }
+            val toSave = editedPrices.mapNotNull { (name, value) -> value.toPriceOrNull()?.let { name to it } }.toMap()
+            viewModel.setPrices(toSave)
             editedPrices.clear()
             onSavePricesRequestHandled()
         }
@@ -961,15 +962,6 @@ private fun PricesList(
 
     val bottomClearance = LocalFloatingBottomNavHeight.current + 32.dp
     Column(Modifier.fillMaxSize()) {
-        // PERF: قراءة `edited` معزولة داخل PricesSummarySection فكتابة سعر لا تعيد تركيب القائمة.
-        PricesSummarySection(
-            catalogItems = catalogItems,
-            materials = materials,
-            prices = prices,
-            edited = edited,
-            currency = currency,
-            modifier = Modifier.fillMaxWidth().padding(start = AppScreenPadding, top = 2.dp, end = AppScreenPadding, bottom = 6.dp)
-        )
         if (filtered.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 EmptyState(icon = Icons.Default.SearchOff, text = "لا توجد نتائج")
@@ -1024,72 +1016,6 @@ private fun PricesList(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-/**
- * ملخّص تبويب الأسعار (مضغوط): عدد المواد المسعّرة من الكتالوج + إجمالي سعر قائمة النواقص
- * الحالية (سعر الكيلو × الوزن لكل مادة) محسوباً بالأسعار المكتوبة الآن حتى قبل الحفظ.
- * قراءة `edited` هنا فقط عبر derivedStateOf حتى لا تُعاد تركيب القائمة مع كل حرف.
- */
-@Composable
-private fun PricesSummarySection(
-    catalogItems: List<MaterialCatalogItem>,
-    materials: List<Material>,
-    prices: Map<String, Double>,
-    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
-    currency: String,
-    modifier: Modifier = Modifier
-) {
-    val pricedCount by remember(catalogItems, prices) {
-        derivedStateOf {
-            catalogItems.count { (edited[it.name]?.toPriceOrNull() ?: prices.priceOf(it.name)) != null }
-        }
-    }
-    val shortageTotal by remember(materials, prices) {
-        derivedStateOf {
-            var total = 0.0
-            for (m in materials) {
-                val price = edited[m.name]?.toPriceOrNull() ?: edited[m.name.trim()]?.toPriceOrNull() ?: prices.priceOf(m.name)
-                total += m.linePrice(price) ?: 0.0
-            }
-            Math.round(total * 100.0) / 100.0
-        }
-    }
-    val cs = MaterialTheme.colorScheme
-    AppCard(modifier = modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("إجمالي أسعار النواقص", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.Bottom) {
-                    AnimatedCounterText(
-                        targetValue = shortageTotal,
-                        format = { Formatters.number(it) },
-                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(currency, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, modifier = Modifier.padding(bottom = 2.dp))
-                }
-            }
-            Box(Modifier.padding(horizontal = 12.dp).width(1.dp).fillMaxHeight().background(cs.outlineVariant))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("المسعّرة", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "$pricedCount / ${catalogItems.size}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                    fontWeight = FontWeight.SemiBold
-                )
             }
         }
     }

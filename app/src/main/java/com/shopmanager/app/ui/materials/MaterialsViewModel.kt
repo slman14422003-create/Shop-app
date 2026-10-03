@@ -270,6 +270,20 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    /** حفظ كل الأسعار المعدّلة دفعة واحدة في السحابة مع رسالة واحدة. */
+    fun setPrices(prices: Map<String, Double>) {
+        if (prices.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                repo.setPrices(prices)
+                _message.value = if (prices.size == 1) "تم حفظ السعر" else "تم حفظ ${prices.size} أسعار"
+                InstantBackupWorker.requestNow(getApplication())
+            } catch (e: Exception) {
+                _message.value = "تعذر حفظ الأسعار: ${e.message ?: "تحقق من الاتصال"}"
+            }
+        }
+    }
+
     fun addCatalogItem(name: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
