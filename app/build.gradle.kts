@@ -1,6 +1,5 @@
 import java.io.File
 import java.util.Properties
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 // ⚠️ MANUAL RELEASE NUMBER — bump this by +1 before every single manual
 // build+upload of a new Release APK, and give the matching GitHub Release
@@ -12,7 +11,6 @@ val MANUAL_VERSION_CODE = 1
 
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     // See root build.gradle.kts — required by Kotlin 2.0+ to compile any
     // @Composable code; replaces the old composeOptions{} version pin below.
     id("org.jetbrains.kotlin.plugin.compose")
@@ -212,7 +210,7 @@ android {
     }
 
     // Kotlin's own JVM target (matches JAVA VERSION 25 above) now lives in
-    // the top-level kotlin{} block below this android{} block — see the
+    // AGP 9 built-in Kotlin takes jvmTarget from compileOptions — see the
     // BUILD FIX comment there. The old android.kotlinOptions{} DSL that
     // used to sit here is a hard compile error as of this Kotlin version.
 
@@ -283,19 +281,9 @@ android {
     }
 }
 
-// BUILD FIX: "Using 'jvmTarget: String' is an error. Please migrate to the
-// compilerOptions DSL" (https://kotl.in/u1r8ln) — Kotlin 2.2 deprecated the
-// old android.kotlinOptions{} block that used to sit inside android{}
-// above, and Kotlin 2.3+ turns that deprecation into a hard compile error
-// instead of a warning. kotlin.compilerOptions{} is the replacement: a
-// top-level block (a sibling of android{}, exactly like composeCompiler{}
-// below), using the typed JvmTarget enum instead of a raw string. Set to
-// JVM_25 to match compileOptions' VERSION_25 above.
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_25)
-    }
-}
+// AGP 9 built-in Kotlin: الـ jvmTarget لـ Kotlin يُؤخذ تلقائيًا من
+// compileOptions.targetCompatibility (VERSION_25 أعلاه)، فلا حاجة لكتلة
+// kotlin { compilerOptions { ... } } المنفصلة.
 
 // Config surface for the Kotlin Compose compiler plugin (see plugins{}
 // above) — deliberately empty: strong skipping mode is on by default at
