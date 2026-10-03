@@ -76,7 +76,7 @@ class MaterialsRepository {
                     return@addSnapshotListener
                 }
                 val prices = snapshot?.documents
-                    ?.associate { it.id to (it.getDouble("price") ?: 0.0) }
+                    ?.associate { (it.getString("name") ?: it.id) to (it.getDouble("price") ?: 0.0) }
                     ?: emptyMap()
                 trySend(prices)
             }
@@ -219,8 +219,39 @@ class MaterialsRepository {
         Unit
     }
 
+    /**
+     * BUG FIXED ("Document references must have an even number of segments"):
+     * سعر المادة كان يُحفظ بوثيقة اسمها = اسم المادة، وأسماء مثل
+     * "بذور القرع / اليقطين" فيها "/" فيفهمها Firestore كمسار فرعي ويرفض الحفظ.
+     * الآن معرّف الوثيقة آمن ([priceDocId]) واسم المادة الحقيقي محفوظ داخل
+     * الوثيقة في الحقل "name" (والقراءة تستخدمه، وتعود للمعرّف للوثائق القديمة).
+     */
+    private fun priceDocId(materialName: String): String {
+        val cleaned = materialName.trim()
+            .replace("/", "\u2215")   // ∕ بدل /
+            .replace("\\", "\u2216")   // ∖ بدل \
+            .ifBlank { "_" }
+        val safe = if (cleaned == "." || cleaned == ".." || (cleaned.startsWith("__") && cleaned.endsWith("__"))) "_$cleaned" else cleaned
+        return if (safe.toByteArray().size > 1400) safe.take(400) else safe
+    }
+
+    private fun priceData(materialName: String, price: Double) =
+        mapOf("name" to materialName.trim(), "price" to price)
+
     suspend fun setPrice(materialName: String, price: Double) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(pricesCollection).document(materialName).set(mapOf("price" to price)).await()
+        db.collection(pricesCollection).document(priceDocId(materialName)).set(priceData(materialName, price)).await()
+        Unit
+    }
+
+    /** يحفظ كل الأسعار المعدّلة دفعة واحدة (عملية ذرية على السحابة: إما كلها أو لا شيء). */
+    suspend fun setPrices(prices: Map<String, Double>) = withTimeout(WRITE_TIMEOUT_MS) {
+        prices.entries.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { (name, price) ->
+                batch.set(db.collection(pricesCollection).document(priceDocId(name)), priceData(name, price))
+            }
+            batch.commit().await()
+        }
         Unit
     }
 
@@ -282,7 +313,7 @@ class MaterialsRepository {
                     order = doc.getLong("order") ?: (doc.getLong("timestamp") ?: 0L)
                 )
             }
-            val prices = pricesSnap.documents.associate { it.id to (it.getDouble("price") ?: 0.0) }
+            val prices = pricesSnap.documents.associate { (it.getString("name") ?: it.id) to (it.getDouble("price") ?: 0.0) }
             val catalog = catalogSnap.documents.map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "") }
             Triple(materials, prices, catalog)
         }
@@ -321,7 +352,7 @@ class MaterialsRepository {
             )
         }
         val priceWrites = prices.map { (name, price) ->
-            db.collection(pricesCollection).document(name) to mapOf("price" to price)
+            db.collection(pricesCollection).document(priceDocId(name)) to priceData(name, price)
         }
         val catalogWrites = catalog.filter { it.id.isNotBlank() }.map {
             db.collection(catalogCollection).document(it.id) to mapOf("name" to it.name)
