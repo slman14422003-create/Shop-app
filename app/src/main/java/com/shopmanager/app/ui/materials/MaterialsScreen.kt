@@ -337,7 +337,12 @@ fun MaterialsScreen(
                             .fillMaxWidth()
                             .padding(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 8.dp)
                     )
-                    MaterialsList(
+                    if (state.isLoading && filtered.isEmpty()) {
+                        com.shopmanager.app.ui.common.SkeletonRowList(
+                            kind = com.shopmanager.app.ui.common.SkeletonRowKind.MATERIAL,
+                            count = 7
+                        )
+                    } else MaterialsList(
                         materials = filtered,
                         prices = state.prices,
                         animateSummary = !state.isLoading,
@@ -569,7 +574,7 @@ private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSe
         if (segmentWidth > 0.dp) {
             Box(
                 Modifier
-                    .offset(x = thumbOffset)
+                    .offset { androidx.compose.ui.unit.IntOffset(thumbOffset.roundToPx(), 0) }
                     .width(segmentWidth)
                     .fillMaxHeight()
                     .clip(CircleShape)
@@ -870,7 +875,8 @@ private fun MaterialRow(
     modifier: Modifier = Modifier
 ) {
     val avatarColor = remember(material.name) { avatarColorFor(material.name) }
-    val scale by animateFloatAsState(
+    // LAG FIX: قراءة الـ scale في مرحلة الرسم بدل إعادة تركيب الصف كاملاً في كل إطار.
+    val scale = animateFloatAsState(
         targetValue = if (isDragging) 1.03f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "materialRowScale"
@@ -881,7 +887,7 @@ private fun MaterialRow(
         LocalSemanticColors.current.warning.copy(alpha = 0.14f).compositeOver(rowFill)
     } else rowFill
 
-    Box(modifier.fillMaxWidth().scale(scale)) {
+    Box(modifier.fillMaxWidth().graphicsLayer { scaleX = scale.value; scaleY = scale.value }) {
         Surface(
             onClick = onEdit,
             modifier = Modifier.fillMaxWidth(),

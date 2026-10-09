@@ -61,7 +61,23 @@ import androidx.compose.runtime.staticCompositionLocalOf
  * animations, which is a much cheaper mistake than false negatives (a weak
  * phone getting the full-effects UI and lagging).
  */
-enum class PerformanceTier { LOW, STANDARD }
+enum class PerformanceTier {
+    /** الاقتصادي: بلا أي تأثيرات؛ انتقالات تلاشٍ بسيطة فقط. */
+    LOW,
+
+    /** المتوازن: حركة ناعمة تُرسم كلها في مرحلة الرسم (transform/alpha فقط)
+     * بلا ظلال ولا تكبير/تصغير للشاشة كاملة ولا حلقات لا نهائية — فتبقى سلسة
+     * دون أن تستهلك المعالج الرسومي. */
+    BALANCED,
+
+    /** القوي (HIGH): كل التأثيرات — انتقالات أغنى، ظلال، لمعان تحميل، رموز متحركة. */
+    STANDARD
+}
+
+/** اختصارات مقروءة بدل مقارنات الـ enum المتناثرة في الواجهة. */
+val PerformanceTier.isLow: Boolean get() = this == PerformanceTier.LOW
+val PerformanceTier.isBalanced: Boolean get() = this == PerformanceTier.BALANCED
+val PerformanceTier.isHigh: Boolean get() = this == PerformanceTier.STANDARD
 
 /**
  * "تفضيل الأداء" (Settings → الأداء): lets the person override the
@@ -73,11 +89,13 @@ enum class PerformanceTier { LOW, STANDARD }
  * - HIGH: always run the full-effects UI (gradients, longer transitions,
  *   the counting-up animation), even on a device that auto-detected as
  *   LOW. For someone whose "weak" phone actually handles it fine.
+ * - BALANCED ("متوازن"): smooth, soft motion that costs almost no GPU —
+ *   no shadows, no whole-screen scaling, no endless loops.
  * - LOW: always run the reduced-motion/no-gradient UI, even on a device
  *   that auto-detected as STANDARD. For anyone who simply prefers a
  *   snappier, more static feel or wants to save battery.
  */
-enum class PerformanceMode { AUTO, HIGH, LOW }
+enum class PerformanceMode { AUTO, HIGH, BALANCED, LOW }
 
 /** Combines the auto-detected tier with the user's manual preference —
  * the single place both are resolved into the [PerformanceTier] actually
@@ -86,6 +104,7 @@ fun resolvePerformanceTier(detected: PerformanceTier, mode: PerformanceMode): Pe
     when (mode) {
         PerformanceMode.AUTO -> detected
         PerformanceMode.HIGH -> PerformanceTier.STANDARD
+        PerformanceMode.BALANCED -> PerformanceTier.BALANCED
         PerformanceMode.LOW -> PerformanceTier.LOW
     }
 
@@ -99,7 +118,7 @@ object DevicePerformance {
     // previously-cached device is automatically re-measured on next
     // launch instead of staying pinned to a now-outdated verdict.
     private const val KEY_DETECTION_VERSION = "performance_tier_version"
-    private const val CURRENT_DETECTION_VERSION = 2
+    private const val CURRENT_DETECTION_VERSION = 3
 
     private const val LOW_RAM_THRESHOLD_MB = 3072L
     private const val LOW_CORE_THRESHOLD = 4
@@ -115,6 +134,13 @@ object DevicePerformance {
     // class band (stock AOSP's own low-RAM default is ~48–64MB; a normal
     // modern mid-ranger is 192–256MB+).
     private const val LOW_MEMORY_CLASS_MB = 96
+
+    // الجهاز المتوسط → BALANCED تلقائياً: رام ≤ ~6GB (النظام يُبلغ أقل قليلاً من
+    // الاسمي) أو أقل من 8 أنوية أو سقف heap ≤ 160MB. القوي فقط (8GB+/8 أنوية)
+    // يحصل على كل التأثيرات تلقائياً.
+    private const val BALANCED_RAM_THRESHOLD_MB = 7000L
+    private const val BALANCED_CORE_THRESHOLD = 7
+    private const val BALANCED_MEMORY_CLASS_MB = 160
 
     /** FEATURE ADDED (Settings → الأداء diagnostics): the raw signals
      * [detectTier] measures, exposed on their own so the person can see
@@ -153,10 +179,14 @@ object DevicePerformance {
         val weakMemoryClass = memoryClassMb in 1..LOW_MEMORY_CLASS_MB
         val lowRam = totalRamMb in 1..LOW_RAM_THRESHOLD_MB
         val lowCores = cores in 1..LOW_CORE_THRESHOLD
-        val tier = if (osFlaggedLowRam || weakGpu || weakMemoryClass || (lowRam && lowCores))
-            PerformanceTier.LOW
-        else
-            PerformanceTier.STANDARD
+        val midRange = totalRamMb in 1..BALANCED_RAM_THRESHOLD_MB ||
+            cores in 1..BALANCED_CORE_THRESHOLD ||
+            memoryClassMb in 1..BALANCED_MEMORY_CLASS_MB
+        val tier = when {
+            osFlaggedLowRam || weakGpu || weakMemoryClass || (lowRam && lowCores) -> PerformanceTier.LOW
+            midRange -> PerformanceTier.BALANCED
+            else -> PerformanceTier.STANDARD
+        }
         return DeviceInfo(totalRamMb, cores, osFlaggedLowRam, glEsVersion, weakGpu, memoryClassMb, weakMemoryClass, tier)
     }
 
@@ -173,7 +203,7 @@ object DevicePerformance {
         val cachedVersion = prefs.getInt(KEY_DETECTION_VERSION, -1)
         if (cachedVersion == CURRENT_DETECTION_VERSION) {
             prefs.getString(KEY_TIER, null)?.let { cached ->
-                return runCatching { PerformanceTier.valueOf(cached) }.getOrDefault(PerformanceTier.STANDARD)
+                return runCatching { PerformanceTier.valueOf(cached) }.getOrDefault(PerformanceTier.BALANCED)
             }
         }
 

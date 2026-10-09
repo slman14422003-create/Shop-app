@@ -229,9 +229,8 @@ fun DashboardScreen(
 
             if (isLoading && debtsState.persons.isEmpty() && materialsState.materials.isEmpty()) {
                 item {
-                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(strokeWidth = 3.dp)
-                    }
+                    // هيكل بطاقة بدل الدائرة الدوّارة، بنفس شكل بطاقات اللوحة الرئيسية.
+                    com.shopmanager.app.ui.common.SkeletonCard(lines = 3)
                 }
             }
 

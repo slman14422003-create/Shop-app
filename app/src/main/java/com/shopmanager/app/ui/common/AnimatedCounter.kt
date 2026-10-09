@@ -74,7 +74,7 @@ fun AnimatedCounterText(
     var endValue by remember { mutableStateOf(targetValue) }
     var hasRevealedOnce by remember { mutableStateOf(false) }
     val currentFormat by rememberUpdatedState(format)
-    val durationScale = MotionSpecs.durationScale()
+    val durationScale = MotionSpecs.tierDurationScale()
 
     LaunchedEffect(targetValue, animate) {
         if (!animate || !hasRevealedOnce || isLowTier) {

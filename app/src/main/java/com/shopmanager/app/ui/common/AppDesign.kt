@@ -379,7 +379,7 @@ fun AppEmptyState(icon: ImageVector, text: String, modifier: Modifier = Modifier
                     icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(34.dp).floatingIcon()
                 )
             }
             Spacer(Modifier.height(16.dp))

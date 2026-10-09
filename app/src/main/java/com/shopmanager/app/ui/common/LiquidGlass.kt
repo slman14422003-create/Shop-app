@@ -1,5 +1,7 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,10 +89,12 @@ fun Modifier.liquidGlassSurface(
     // Color — white included — draws one.
     rimColor: Color? = null
 ): Modifier {
-    val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
+    // الظل الحقيقي (blur رسومي لكل إطار) للأداء القوي فقط؛ المتوازن والاقتصادي
+    // يعتمدان على الفصل بالتدرج اللوني + الحد الرفيع بلا أي ظل.
+    val isHighTier = LocalPerformanceTier.current == PerformanceTier.STANDARD
     return this
         .let {
-            if (elevation > 0.dp && !topFlush && !isLowTier) {
+            if (elevation > 0.dp && !topFlush && isHighTier) {
                 it.shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
             } else it
         }
@@ -119,7 +123,9 @@ fun GlassIconButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
+    // LAG FIX: الـ scale يُقرأ داخل graphicsLayer (مرحلة الرسم) بدل Modifier.scale(value)
+    // الذي كان يُعيد تركيب الزر في كل إطار من حركة الضغط.
+    val scale = animateFloatAsState(
         targetValue = if (pressed) 0.90f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonScale"
@@ -158,7 +164,7 @@ fun GlassIconButton(
         interactionSource = interactionSource,
         modifier = modifier
             .size(size)
-            .scale(scale)
+            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
             .clip(CircleShape)
             .background(Brush.linearGradient(listOf(pressTint.copy(alpha = fillAlpha), pressTint.copy(alpha = fillAlpha))))
             .border(

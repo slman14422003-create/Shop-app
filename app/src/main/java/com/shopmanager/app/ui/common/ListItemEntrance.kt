@@ -62,29 +62,31 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     if (isLowTier) return this
 
+    val isHigh = LocalPerformanceTier.current == PerformanceTier.STANDARD
     val played = rememberSaveable { mutableStateOf(false) }
     // تُحسب مرة واحدة عند دخول هذا الصف التركيب (لا تتغير بعدها) — وهذا ما
     // يجعل الشرط أدناه ثابتاً ولا يقطع الحركة حين نكتب played = true.
-    val shouldAnimate = remember { !played.value && index <= MAX_ANIMATED_INDEX }
+    val shouldAnimate = remember { !played.value && index <= (if (isHigh) MAX_ANIMATED_INDEX else 6) }
     val progress = remember { Animatable(if (shouldAnimate) 0f else 1f) }
-    val durationScale = MotionSpecs.durationScale()
+    val durationScale = MotionSpecs.tierDurationScale()
     // الأجهزة القوية (شاشة 90Hz+): حركة أغنى — الصف يكبر قليلاً من 0.96 إلى 1 مع الصعود
     // والتلاشي. هذا كله داخل graphicsLayer (مرحلة الرسم فقط) فلا تكلفة تركيب إضافية.
-    val richMotion = LocalRefreshRateHz.current >= 80f
+    // الحركة الغنية (تكبير 0.96→1) للأداء القوي فقط؛ المتوازن: تلاشٍ + صعود فقط.
+    val richMotion = isHigh && LocalRefreshRateHz.current >= 80f
 
     if (shouldAnimate) {
         LaunchedEffect(Unit) {
             played.value = true
             val staggerMs = ((index.coerceAtMost(8)) * 28L * durationScale).toLong()
             if (staggerMs > 0) delay(staggerMs)
-            progress.animateTo(1f, animationSpec = tween((320 * durationScale).toInt(), easing = MotionSpecs.claudeEasing))
+            progress.animateTo(1f, animationSpec = tween((300 * durationScale).toInt(), easing = MotionSpecs.claudeEasing))
         }
     }
     return this.graphicsLayer {
         // القراءة هنا داخل كتلة graphicsLayer (مرحلة الرسم) — لا إعادة تركيب.
         val p = progress.value
         alpha = p
-        translationY = (1f - p) * (if (richMotion) 20.dp else 16.dp).toPx()
+        translationY = (1f - p) * (if (richMotion) 20.dp else 12.dp).toPx()
         if (richMotion) {
             val s = 0.96f + 0.04f * p
             scaleX = s

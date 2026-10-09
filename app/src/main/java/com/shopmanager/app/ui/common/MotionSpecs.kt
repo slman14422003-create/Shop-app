@@ -35,6 +35,7 @@ import com.shopmanager.app.data.performance.LocalRefreshRateHz
  *   of frames, as close to an instant snap as a spring gets — and every
  *   duration-based effect drops to a fraction of its normal length, so
  *   battery/CPU cost stays minimal without the UI going fully static.
+ * - BALANCED ("المتوازن"): نوابض أصلب قليلاً ومدد أقصر ~15% — ناعمة لكن بعمل رسومي أقل.
  * - STANDARD/HIGH ("وضع الأداء العالي"): quick but perceptible, so a tap,
  *   reorder or expand still visibly responds — just without any bounce.
  */
@@ -46,6 +47,22 @@ object MotionSpecs {
 
     @Composable
     private fun isLowTier(): Boolean = LocalPerformanceTier.current == PerformanceTier.LOW
+
+    @Composable
+    private fun isBalancedTier(): Boolean = LocalPerformanceTier.current == PerformanceTier.BALANCED
+
+    /** المتوازن: نوابض أصلب قليلاً من القوي (تستقر بإطارات أقل = عمل رسومي أقل) لكنها
+     * ما تزال ناعمة، بلا ارتداد. القوي يبقى بالأزمنة الأنعم الأصلية. */
+    @Composable
+    private fun tierStiffness(high: Float, balanced: Float): Float = when {
+        isLowTier() -> Spring.StiffnessHigh
+        isBalancedTier() -> balanced
+        else -> high
+    }
+
+    /** مضروب مدد الـ tween: القوي 1، المتوازن ~0.85 (أقصر قليلاً)، والاقتصادي له قيم ثابتة خاصة. */
+    @Composable
+    fun tierDurationScale(): Float = if (isBalancedTier()) 0.85f * durationScale() else durationScale()
 
     /** شاشة 60Hz: نرفع صلابة النوابض ونقصّر المدد ~20% فتصل الحركة لهدفها بإطارات أقل
      * ويبدو التطبيق أسرع استجابة ("كأنه 90Hz")؛ على 90Hz+ تبقى الأزمنة الأنعم الأصلية. */
@@ -60,7 +77,7 @@ object MotionSpecs {
     @Composable
     fun <T> quickSpring(): FiniteAnimationSpec<T> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 2.2f * snap()
+        stiffness = tierStiffness(Spring.StiffnessMediumLow * 2.2f * snap(), Spring.StiffnessMedium * 1.6f * snap())
     )
 
     /** Button/row press scale-down feedback. */
@@ -71,14 +88,14 @@ object MotionSpecs {
     @Composable
     fun reorderSpring(): FiniteAnimationSpec<IntOffset> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * 1.6f * snap()
+        stiffness = tierStiffness(Spring.StiffnessMediumLow * 1.6f * snap(), Spring.StiffnessMedium * 1.2f * snap())
     )
 
     /** expandVertically/shrinkVertically size animation. */
     @Composable
     fun expandSpring(): FiniteAnimationSpec<IntSize> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMediumLow * snap()
+        stiffness = tierStiffness(Spring.StiffnessMediumLow * snap(), Spring.StiffnessMedium * snap())
     )
 
     /**
@@ -92,13 +109,13 @@ object MotionSpecs {
         tween(durationMillis = fadeMillis(), easing = claudeEasing)
 
     @Composable
-    fun expandMillis(): Int = if (isLowTier()) 90 else (200 * durationScale()).toInt()
+    fun expandMillis(): Int = if (isLowTier()) 90 else (200 * tierDurationScale()).toInt()
 
     @Composable
-    fun collapseMillis(): Int = if (isLowTier()) 70 else (160 * durationScale()).toInt()
+    fun collapseMillis(): Int = if (isLowTier()) 70 else (160 * tierDurationScale()).toInt()
 
     @Composable
-    fun fadeMillis(): Int = if (isLowTier()) 60 else (140 * durationScale()).toInt()
+    fun fadeMillis(): Int = if (isLowTier()) 60 else (140 * tierDurationScale()).toInt()
 
     /**
      * "Pop in" for anything that appears on top of existing content
@@ -110,7 +127,7 @@ object MotionSpecs {
     @Composable
     fun popInSpring(): FiniteAnimationSpec<Float> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium * snap()
+        stiffness = tierStiffness(Spring.StiffnessMedium * snap(), Spring.StiffnessMedium * 1.3f * snap())
     )
 
     /**
@@ -121,7 +138,7 @@ object MotionSpecs {
     @Composable
     fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = if (isLowTier()) Spring.StiffnessHigh else Spring.StiffnessMedium * snap()
+        stiffness = tierStiffness(Spring.StiffnessMedium * snap(), Spring.StiffnessMedium * 1.3f * snap())
     )
 
     /**
@@ -132,5 +149,36 @@ object MotionSpecs {
      */
     @Composable
     fun <T> contentTween(): FiniteAnimationSpec<T> =
-        tween(durationMillis = if (isLowTier()) 90 else (220 * durationScale()).toInt(), easing = claudeEasing)
+        tween(durationMillis = if (isLowTier()) 90 else (220 * tierDurationScale()).toInt(), easing = claudeEasing)
+
+    // ───────────────────────── التنقل بين الشاشات ─────────────────────────
+    // قاعدة المستويات الثلاثة (طلب: "متوازن بحيث الانميشن ما تستهلك الجرافك"):
+    //  - STANDARD (قوي): انزلاق + تصغير الشاشة المغطّاة (94%) — أغنى حركة.
+    //  - BALANCED: انزلاق + تلاشٍ فقط، بدون scale للشاشة كاملة (تصغير شاشة
+    //    كاملة بكل بطاقاتها كل إطار هو أغلى جزء رسومياً)، وبمدة أقصر.
+    //  - LOW: تلاشٍ بسيط قصير جداً فقط (بلا انزلاق ولا scale).
+
+    /** مدة انتقال دفع/سحب الشاشة (ms). */
+    @Composable
+    fun navMillis(): Int = when {
+        isLowTier() -> 110
+        isBalancedTier() -> (260 * durationScale()).toInt()
+        else -> (300 * durationScale()).toInt()
+    }
+
+    /** مدة انتقال التبويبات (الـ pager) بالـ ms؛ 0 = بدون حركة (غير مستعمل حالياً: الاقتصادي يتلاشى). */
+    @Composable
+    fun pagerMillis(): Int = when {
+        isLowTier() -> 0
+        isBalancedTier() -> (240 * durationScale()).toInt()
+        else -> (300 * durationScale()).toInt()
+    }
+
+    /** مدة الانتقال من السبلاش إلى التطبيق. */
+    @Composable
+    fun handoffMillis(): Int = when {
+        isLowTier() -> 90
+        isBalancedTier() -> 220
+        else -> 360
+    }
 }

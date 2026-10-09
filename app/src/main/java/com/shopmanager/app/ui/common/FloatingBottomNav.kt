@@ -1,5 +1,7 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -233,7 +235,8 @@ data class QuickAction(
 fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
+    // LAG FIX: قراءة الـ scale في مرحلة الرسم (graphicsLayer) بدل إعادة التركيب كل إطار.
+    val scale = animateFloatAsState(
         targetValue = if (pressed) 0.90f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "quickActionFabScale"
@@ -251,7 +254,7 @@ fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
     val primary = MaterialTheme.colorScheme.primary
     Box(
         modifier
-            .scale(scale)
+            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
             .liquidGlassSurface(
                 CircleShape,
                 baseBrush = Brush.linearGradient(listOf(primary, primary)),

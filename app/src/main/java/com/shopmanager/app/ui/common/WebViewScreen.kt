@@ -333,7 +333,7 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
 
             if (isLoading && !loadError) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(strokeWidth = 3.dp)
+                    com.shopmanager.app.ui.common.AppSpinner(size = 36.dp)
                 }
             }
 

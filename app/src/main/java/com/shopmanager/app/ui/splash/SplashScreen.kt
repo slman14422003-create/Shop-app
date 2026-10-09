@@ -128,7 +128,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 40.dp)
-                .alpha(creditProgress)
+                .graphicsLayer { alpha = creditProgress }
         ) {
             Text(
                 "SEMO STUDIO",

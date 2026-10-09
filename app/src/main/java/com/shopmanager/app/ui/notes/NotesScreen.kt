@@ -234,9 +234,10 @@ fun NotesScreen(
             }
 
             if (state.isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
+                com.shopmanager.app.ui.common.SkeletonRowList(
+                    kind = com.shopmanager.app.ui.common.SkeletonRowKind.NOTE,
+                    count = 6
+                )
             } else if (filtered.isEmpty()) {
                 EmptyState(
                     icon = if (search.value.isNotBlank()) Icons.Default.Search else Icons.Default.Notes,

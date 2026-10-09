@@ -446,6 +446,7 @@ fun SettingsScreen(
     val performanceLabel = when (performanceMode) {
         PerformanceMode.AUTO -> "تلقائي (حسب الجهاز)"
         PerformanceMode.HIGH -> "مرتفع (كل التأثيرات)"
+        PerformanceMode.BALANCED -> "متوازن (ناعم وخفيف على الجرافيك)"
         PerformanceMode.LOW -> "منخفض (أداء أعلى وبطارية أطول)"
     }
 
@@ -1077,12 +1078,13 @@ fun SettingsScreen(
     if (showPerformanceSheet) {
         SettingsSheet(title = "الأداء", onDismiss = { showPerformanceSheet = false }) { close ->
             SettingsFootnote(
-                "يتحكم بحدّة التأثيرات البصرية (التدرجات اللونية والانميشن). اختر \"تلقائي\" ليقرر التطبيق حسب قوة جهازك."
+                "مرتفع: أنيميشن أكثر وظلال ورموز متحركة. متوازن: حركة ناعمة بلا ظلال ولا تصغير للشاشات فلا يتعب الجرافيك. منخفض: إيقاف التأثيرات والاكتفاء بانتقالات بسيطة. \"تلقائي\" يقرر حسب قوة جهازك."
             )
             SettingsGroup {
                 listOf(
                     PerformanceMode.AUTO to "تلقائي (حسب الجهاز)",
                     PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
+                    PerformanceMode.BALANCED to "متوازن (ناعم وخفيف على الجرافيك)",
                     PerformanceMode.LOW to "منخفض (أداء أعلى وبطارية أطول)"
                 ).forEach { (mode, label) ->
                     selectItem(
@@ -1097,7 +1099,7 @@ fun SettingsScreen(
                     )
                 }
             }
-            // إعادة الفحص تعني شيئاً فقط في وضع "تلقائي" (HIGH/LOW يتجاوزان الفحص).
+            // إعادة الفحص تعني شيئاً فقط في وضع "تلقائي" (HIGH/BALANCED/LOW يتجاوزان الفحص).
             if (performanceMode == PerformanceMode.AUTO) {
                 val deviceInfo = remember(recheckTick) {
                     com.shopmanager.app.data.performance.DevicePerformance.currentDeviceInfo(context)

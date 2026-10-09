@@ -1,5 +1,7 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -39,7 +41,8 @@ fun ActionIconButton(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
+    // LAG FIX: قراءة الـ scale في مرحلة الرسم (graphicsLayer) بدل إعادة التركيب كل إطار.
+    val scale = animateFloatAsState(
         targetValue = if (pressed) 0.9f else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "actionButtonScale"
@@ -49,7 +52,7 @@ fun ActionIconButton(
     Box(
         modifier
             .size(40.dp)
-            .scale(scale)
+            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
             .clickable(

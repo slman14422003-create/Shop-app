@@ -273,7 +273,13 @@ fun DebtsScreen(
                 else state.persons.filter { it.name.contains(search.value, ignoreCase = true) }
             }
 
-            if (filtered.isEmpty()) {
+            if (state.isLoading && filtered.isEmpty()) {
+                // التحميل الأول: هياكل صفوف بدل شاشة فارغة/"لا يوجد عملاء" الوامضة.
+                com.shopmanager.app.ui.common.SkeletonRowList(
+                    kind = com.shopmanager.app.ui.common.SkeletonRowKind.PERSON,
+                    count = 7
+                )
+            } else if (filtered.isEmpty()) {
                 Box(Modifier.padding(horizontal = AppScreenPadding)) { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
                 EmptyState(
                     icon = if (search.value.isBlank()) Icons.Default.People else Icons.Default.PersonSearch,

@@ -262,7 +262,7 @@ class MainActivity : FragmentActivity() {
         pendingNotificationAction = NotificationAction.from(intent)
 
         var isReady by mutableStateOf(false)
-        var detectedTier by mutableStateOf(PerformanceTier.STANDARD)
+        var detectedTier by mutableStateOf(PerformanceTier.BALANCED)
         // Tracks only whether Compose has produced its first frame — NOT
         // whether init is done. The static system splash now only needs to
         // bridge the gap until Compose can draw *something*; from that
@@ -306,7 +306,7 @@ class MainActivity : FragmentActivity() {
             // before `isReady = true` and the person was stuck on the splash
             // forever. Each step is now isolated, and the hand-off to the real
             // UI always happens in the finally block with a safe default tier.
-            var tier = PerformanceTier.STANDARD
+            var tier = PerformanceTier.BALANCED
             try {
                 runCatching { FirebaseModule.init(applicationContext) }
                 runCatching { NotificationHelper.ensureChannels(applicationContext) }
@@ -316,7 +316,7 @@ class MainActivity : FragmentActivity() {
                 // entry-level hardware — see DevicePerformance for the
                 // detection signals.
                 tier = runCatching { DevicePerformance.detectTier(applicationContext) }
-                    .getOrDefault(PerformanceTier.STANDARD)
+                    .getOrDefault(PerformanceTier.BALANCED)
 
                 // Weak/economic devices get a lighter, battery-guarded sync
                 // schedule automatically — see BackgroundSyncWorker.schedule.
@@ -498,6 +498,9 @@ class MainActivity : FragmentActivity() {
                         transitionSpec = {
                             if (isLowTierForHandoff) {
                                 fadeIn(tween(90, easing = claudeStandardEasing)) togetherWith fadeOut(tween(90, easing = claudeStandardEasing))
+                            } else if (performanceTier == PerformanceTier.BALANCED) {
+                                // المتوازن: تلاشٍ ناعم فقط (بلا scale للشاشة كاملة).
+                                fadeIn(tween(220, easing = claudeStandardEasing)) togetherWith fadeOut(tween(160, easing = claudeStandardEasing))
                             } else {
                                 (fadeIn(tween(360, easing = claudeStandardEasing)) +
                                     scaleIn(
@@ -616,6 +619,9 @@ class MainActivity : FragmentActivity() {
                                         if (isLowTierForHandoff) {
                                             fadeIn(tween(90, easing = claudeStandardEasing)) togetherWith
                                                 fadeOut(tween(90, easing = claudeStandardEasing))
+                                        } else if (performanceTier == PerformanceTier.BALANCED) {
+                                            // المتوازن: تلاشٍ ناعم فقط (بلا scale للشاشة كاملة).
+                                            fadeIn(tween(220, easing = claudeStandardEasing)) togetherWith fadeOut(tween(160, easing = claudeStandardEasing))
                                         } else {
                                             (fadeIn(tween(360, easing = claudeStandardEasing)) +
                                                 scaleIn(
@@ -844,8 +850,7 @@ private fun ShopManagerApp(
     // instead of two different ones stitched together.
     val isLowTierForPager = LocalPerformanceTier.current == PerformanceTier.LOW
     val pagerTabAnimationSpec: FiniteAnimationSpec<Float> =
-        if (isLowTierForPager) tween(0)
-        else tween(300, easing = MotionSpecs.claudeEasing)
+        tween(MotionSpecs.pagerMillis().coerceAtLeast(150), easing = MotionSpecs.claudeEasing)
 
     @OptIn(ExperimentalFoundationApi::class)
     fun openPager(page: Int) {
@@ -904,6 +909,7 @@ private fun ShopManagerApp(
     // A10. On LOW tier screens simply swap with no transition at all.
     val performanceTier = LocalPerformanceTier.current
     val isLowTier = performanceTier == PerformanceTier.LOW
+    val isBalancedTier = performanceTier == PerformanceTier.BALANCED
 
     // ROOT FIX ("الشريط العائم خلفيته لسه بيضاء/سوداء"): a Scaffold(bottomBar
     // = ...) was the actual root cause, not a styling detail inside
@@ -997,7 +1003,9 @@ private fun ShopManagerApp(
         // CLAUDE.AI-STYLE MOTION: shares [MotionSpecs.claudeEasing] — the
         // same no-overshoot curve every other transition in the app now
         // uses — instead of a separately-tuned iOS curve.
-        val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(300, easing = MotionSpecs.claudeEasing)
+        val navMs = MotionSpecs.navMillis()
+        val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(navMs, easing = MotionSpecs.claudeEasing)
+        val navFadeSpec: FiniteAnimationSpec<Float> = tween(navMs, easing = MotionSpecs.claudeEasing)
         // REPLACED THE OLD ALPHA-DIM ("الانميشن غير جميل / بدي ياه متكامل
         // وبلا تقطيع"): the covered screen used to dim via fadeOut/fadeIn
         // down to 72% alpha while it translated. Animating the *alpha* of a
@@ -1013,7 +1021,7 @@ private fun ShopManagerApp(
         // slide+scale language as everything else (see MotionSpecs'
         // popInSpring/pressSpring), which is what makes it read as one
         // integrated motion system instead of a one-off for this screen.
-        val pushScaleSpec: FiniteAnimationSpec<Float> = tween(300, easing = MotionSpecs.claudeEasing)
+        val pushScaleSpec: FiniteAnimationSpec<Float> = tween(navMs, easing = MotionSpecs.claudeEasing)
         CompositionLocalProvider(
             LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp
         ) {
@@ -1086,23 +1094,38 @@ private fun ShopManagerApp(
             //    speed and easing match too, not just the direction.
             // PERF: LOW tier still keeps all four at zero cost (`.None`
             // below) — the fastest a screen change can be, unchanged.
+            // ثلاثة مستويات (انظر MotionSpecs.navMillis):
+            //  - LOW: تلاشٍ متقاطع قصير فقط، بلا انزلاق ولا scale.
+            //  - BALANCED: انزلاق (transform فقط) بلا scale ولا تلاشٍ للشاشة المغطّاة
+            //    — طبقة واحدة مسطّحة تتحرك، فلا تُعاد كتابة ظلال/ألوان كل إطار.
+            //  - STANDARD: انزلاق + تصغير الشاشة المغطّاة إلى 94% (أغنى عمق بصري).
             enterTransition = {
-                if (isLowTier) EnterTransition.None
-                else slideInHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
+                when {
+                    isLowTier -> fadeIn(navFadeSpec)
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
+                }
             },
             exitTransition = {
-                if (isLowTier) ExitTransition.None
-                else slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
-                    scaleOut(pushScaleSpec, targetScale = 0.94f)
+                when {
+                    isLowTier -> fadeOut(navFadeSpec)
+                    isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 4 }
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                        scaleOut(pushScaleSpec, targetScale = 0.94f)
+                }
             },
             popEnterTransition = {
-                if (isLowTier) EnterTransition.None
-                else slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
-                    scaleIn(pushScaleSpec, initialScale = 0.94f)
+                when {
+                    isLowTier -> fadeIn(navFadeSpec)
+                    isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 4 }
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                        scaleIn(pushScaleSpec, initialScale = 0.94f)
+                }
             },
             popExitTransition = {
-                if (isLowTier) ExitTransition.None
-                else slideOutHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
+                when {
+                    isLowTier -> fadeOut(navFadeSpec)
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
+                }
             }
         ) {
             composable(ROUTE_MAIN_PAGER) {

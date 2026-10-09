@@ -529,6 +529,7 @@ fun AdminPanelScreen(
 private fun performanceModeLabel(mode: PerformanceMode): String = when (mode) {
     PerformanceMode.AUTO -> "تلقائي"
     PerformanceMode.HIGH -> "مرتفع"
+    PerformanceMode.BALANCED -> "متوازن"
     PerformanceMode.LOW -> "منخفض"
 }
 
