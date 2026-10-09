@@ -222,6 +222,7 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
+        systemMotionLimit = com.shopmanager.app.data.performance.SystemMotion.read(this)
         applySecureFlag()
     }
 
@@ -383,7 +384,7 @@ class MainActivity : FragmentActivity() {
             // pattern as themeMode/onThemeChanged just above.
             var performancePreference by remember { mutableStateOf(settings.performanceMode) }
             val performanceTier by remember {
-                derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference) }
+                derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference, systemMotionLimit) }
             }
             // الأداء القوي → ~90Hz، الاقتصادي → 60Hz؛ يُعاد التطبيق فور تغيّر الوضع من الإعدادات.
             LaunchedEffect(performanceTier) { applyRefreshRate(performanceTier) }
@@ -740,6 +741,8 @@ class MainActivity : FragmentActivity() {
 
     /** معدل تحديث الشاشة الفعلي الآن؛ حالة Compose حتى تتفاعل الحركات مع تغيّره. */
     private var refreshHz by androidx.compose.runtime.mutableFloatStateOf(60f)
+    // قيد الحركة من النظام (إزالة الحركة / توفير الطاقة) — يُحدَّث في onResume.
+    private var systemMotionLimit by androidx.compose.runtime.mutableStateOf(com.shopmanager.app.data.performance.SystemMotionLimit.NONE)
 
     private val displayListener = object : android.hardware.display.DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = Unit
@@ -966,7 +969,7 @@ private fun ShopManagerApp(
                     drawerScope.launch { drawerState.close() }
                 },
                 onOpenSettings = {
-                    navController.navigate(ROUTE_SETTINGS)
+                    navController.safeNavigate(ROUTE_SETTINGS)
                     drawerScope.launch { drawerState.close() }
                 },
                 onOpenAdmin = {
@@ -983,7 +986,7 @@ private fun ShopManagerApp(
                             negativeText = "استخدام كلمة المرور",
                             onSuccess = {
                                 adminThrottle.registerSuccess()
-                                navController.navigate(ROUTE_ADMIN)
+                                navController.safeNavigate(ROUTE_ADMIN)
                             },
                             onFailure = { showAdminPinDialog = true }
                         )
@@ -1192,14 +1195,14 @@ private fun ShopManagerApp(
                         )
                         PAGE_DEBTS -> DebtsScreen(
                             viewModel = debtsViewModel,
-                            onOpenPerson = { personId -> navController.navigate("personDetail/$personId") },
+                            onOpenPerson = { personId -> navController.safeNavigate("personDetail/$personId") },
                             addPersonRequested = addPersonRequested,
                             onAddPersonRequestHandled = { addPersonRequested = false },
                             onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
                         PAGE_MATERIALS -> MaterialsScreen(
                             viewModel = materialsViewModel,
-                            onAddNew = { navController.navigate(ROUTE_MATERIAL_CATALOG) },
+                            onAddNew = { navController.safeNavigate(ROUTE_MATERIAL_CATALOG) },
                             onPricesTabActiveChanged = { materialsPricesTabActive = it },
                             onPricesChangedCountChanged = { pricesChangedCount = it },
                             savePricesRequested = savePricesRequested,
@@ -1212,7 +1215,7 @@ private fun ShopManagerApp(
                             viewModel = notesViewModel,
                             persons = debtsViewModel.uiState.collectAsStateWithLifecycle().value.persons,
                             materials = materialsViewModel.uiState.collectAsStateWithLifecycle().value.materials,
-                            onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.navigate("personDetail/$personId") },
+                            onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.safeNavigate("personDetail/$personId") },
                             onOpenMaterials = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
                             addNoteRequested = addNoteRequested,
                             onAddNoteRequestHandled = { addNoteRequested = false },
@@ -1236,8 +1239,8 @@ private fun ShopManagerApp(
                     onRecheckDevicePerformance = onRecheckDevicePerformance,
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
-                    onOpenHelp = { navController.navigate(ROUTE_HELP) },
-                    onOpenPrivacyPolicy = { navController.navigate(ROUTE_PRIVACY) }
+                    onOpenHelp = { navController.safeNavigate(ROUTE_HELP) },
+                    onOpenPrivacyPolicy = { navController.safeNavigate(ROUTE_PRIVACY) }
                 )
             }
             composable(ROUTE_ADMIN) {
@@ -1390,7 +1393,7 @@ private fun ShopManagerApp(
                         is AdminPasswordRepository.Outcome.Granted -> {
                             adminThrottle.registerSuccess()
                             showAdminPinDialog = false
-                            navController.navigate(ROUTE_ADMIN)
+                            navController.safeNavigate(ROUTE_ADMIN)
                         }
                         is AdminPasswordRepository.Outcome.Denied -> adminThrottle.registerFailure()
                         // NotConfigured / Unavailable: ليست محاولة خاطئة — لا تُحتسب ضد المطوّر.
@@ -1454,6 +1457,21 @@ private fun ShopManagerApp(
  */
 private fun androidx.navigation.NavController.safePopBackStack() {
     if (previousBackStackEntry != null) popBackStack()
+}
+
+// حاجز التنقل المزدوج (مأخوذ من تطبيق الملاحظات: SmoothActivity.isDuplicateNavigation): ضغطتان
+// سريعتان على نفس الصف/الزر كانتا تدفعان الشاشة مرتين فتتراكم نسختان وينقطع الانتقال. الآن تُتجاهل
+// الثانية إن جاءت خلال 550ms لنفس الوجهة أو أثناء تشغيل انتقال سابق (المدخل الحالي ليس RESUMED).
+private var lastNavRoute = ""
+private var lastNavAt = 0L
+private fun androidx.navigation.NavController.safeNavigate(route: String) {
+    val now = android.os.SystemClock.uptimeMillis()
+    if (route == lastNavRoute && now - lastNavAt < 550L) return
+    val state = currentBackStackEntry?.lifecycle?.currentState
+    if (state != null && state != androidx.lifecycle.Lifecycle.State.RESUMED) return
+    lastNavRoute = route
+    lastNavAt = now
+    navigate(route)
 }
 
 private fun navigateTopLevel(navController: androidx.navigation.NavController, route: String) {

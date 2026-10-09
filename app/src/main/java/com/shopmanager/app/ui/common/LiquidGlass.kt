@@ -126,7 +126,7 @@ fun GlassIconButton(
     size: Dp = 40.dp
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
+    val pressed by interactionSource.collectDelayedPressedAsState()
     // LAG FIX: الـ scale يُقرأ داخل graphicsLayer (مرحلة الرسم) بدل Modifier.scale(value)
     // الذي كان يُعيد تركيب الزر في كل إطار من حركة الضغط.
     val scale = animateFloatAsState(

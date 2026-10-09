@@ -7,6 +7,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -73,6 +74,10 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
     // يجعل الشرط أدناه ثابتاً ولا يقطع الحركة حين نكتب played = true.
     val shouldAnimate = remember { !played.value && index <= maxIndex }
     val progress = remember { Animatable(if (shouldAnimate) 0f else 1f) }
+    // تعلّمناها من تطبيق الملاحظات (Motion.enter: LAYER_TYPE_NONE عند انتهاء الحركة): graphicsLayer
+    // يُبقي RenderNode/طبقة لكل صف حتى بعد انتهاء حركته. هنا يُزال المُعدِّل كلياً بعد الانتهاء،
+    // فالصفوف الساكنة (وهي معظم القائمة) تعود بلا أي طبقة رسومية إضافية.
+    var finished by remember { mutableStateOf(!shouldAnimate) }
     val durationMs = when (tier) {
         PerformanceTier.LOW -> 150
         PerformanceTier.BALANCED -> MotionSpecs.balancedSlowMs
@@ -90,8 +95,10 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
             val staggerMs = index.coerceAtMost(8) * staggerStepMs
             if (staggerMs > 0) delay(staggerMs)
             progress.animateTo(1f, animationSpec = tween(durationMs, easing = MotionSpecs.claudeEasing))
+            finished = true
         }
     }
+    if (finished) return this
     return this.graphicsLayer {
         // القراءة هنا داخل كتلة graphicsLayer (مرحلة الرسم) — لا إعادة تركيب.
         val p = progress.value

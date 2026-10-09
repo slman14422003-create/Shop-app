@@ -6,6 +6,7 @@ import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -221,4 +222,33 @@ object MotionSpecs {
         PerformanceTier.BALANCED -> balancedSlowMs
         PerformanceTier.STANDARD -> 360
     }
+}
+
+/**
+ * مأخوذ من تطبيق الملاحظات (Motion.track: PRESS_IN بعد 60ms): أثر الضغط لا يظهر إلا إن بقي
+ * الإصبع 60ms، فبداية تمرير فوق بطاقة لا تُشغّل حركة ضغط ثم تلغيها (عمل رسومي مهدور في أسوأ
+ * لحظة). النقرة السريعة جداً تُظهر الأثر ~90ms كي يُرى. بلا أي مؤقّت إضافي ما دام لا ضغط.
+ */
+@Composable
+fun androidx.compose.foundation.interaction.InteractionSource.collectDelayedPressedAsState(
+    delayMs: Long = 60L
+): androidx.compose.runtime.State<Boolean> {
+    val raw = collectIsPressedAsState()
+    val shown = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val started = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(raw.value) {
+        if (raw.value) {
+            started.value = true
+            kotlinx.coroutines.delay(delayMs)
+            shown.value = true
+        } else {
+            if (started.value && !shown.value) {
+                shown.value = true
+                kotlinx.coroutines.delay(90L)
+            }
+            shown.value = false
+            started.value = false
+        }
+    }
+    return shown
 }

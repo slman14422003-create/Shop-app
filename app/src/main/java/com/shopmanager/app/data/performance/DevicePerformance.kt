@@ -101,13 +101,42 @@ enum class PerformanceMode { AUTO, HIGH, BALANCED, LOW }
 /** Combines the auto-detected tier with the user's manual preference —
  * the single place both are resolved into the [PerformanceTier] actually
  * handed to the UI via [LocalPerformanceTier]. */
-fun resolvePerformanceTier(detected: PerformanceTier, mode: PerformanceMode): PerformanceTier =
-    when (mode) {
+fun resolvePerformanceTier(
+    detected: PerformanceTier,
+    mode: PerformanceMode,
+    limit: SystemMotionLimit = SystemMotionLimit.NONE
+): PerformanceTier {
+    // "إزالة الحركة" في إعدادات النظام (إتاحة الوصول / خيارات المطوّر): تُحترم دائماً وتتفوق
+    // على أي اختيار — كما يفعل تطبيق الملاحظات عبر Motion.enabled().
+    if (limit == SystemMotionLimit.ANIMATIONS_OFF) return PerformanceTier.LOW
+    val base = when (mode) {
         PerformanceMode.AUTO -> detected
         PerformanceMode.HIGH -> PerformanceTier.STANDARD
         PerformanceMode.BALANCED -> PerformanceTier.BALANCED
         PerformanceMode.LOW -> PerformanceTier.LOW
     }
+    // توفير الطاقة: في الوضع التلقائي فقط ننزل من القوي إلى المتوازن (لا نغيّر اختيار المستخدم الصريح).
+    return if (limit == SystemMotionLimit.POWER_SAVE && mode == PerformanceMode.AUTO && base == PerformanceTier.STANDARD)
+        PerformanceTier.BALANCED else base
+}
+
+/** قيود الحركة القادمة من النظام نفسه، تُقرأ عند كل عودة للتطبيق. */
+enum class SystemMotionLimit { NONE, POWER_SAVE, ANIMATIONS_OFF }
+
+object SystemMotion {
+    fun read(c: Context): SystemMotionLimit {
+        val off = runCatching {
+            android.provider.Settings.Global.getFloat(
+                c.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f
+            ) <= 0f
+        }.getOrDefault(false)
+        if (off) return SystemMotionLimit.ANIMATIONS_OFF
+        val save = runCatching {
+            (c.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode
+        }.getOrDefault(false)
+        return if (save) SystemMotionLimit.POWER_SAVE else SystemMotionLimit.NONE
+    }
+}
 
 object DevicePerformance {
     private const val PREFS = "shop_manager_device"

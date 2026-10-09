@@ -40,7 +40,7 @@ fun ActionIconButton(
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
+    val pressed by interactionSource.collectDelayedPressedAsState()
     // LAG FIX: قراءة الـ scale في مرحلة الرسم (graphicsLayer) بدل إعادة التركيب كل إطار.
     val scale = animateFloatAsState(
         targetValue = if (pressed) MotionSpecs.pressScale() else 1f,
