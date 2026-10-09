@@ -130,7 +130,7 @@ fun GlassIconButton(
     // LAG FIX: الـ scale يُقرأ داخل graphicsLayer (مرحلة الرسم) بدل Modifier.scale(value)
     // الذي كان يُعيد تركيب الزر في كل إطار من حركة الضغط.
     val scale = animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
+        targetValue = if (pressed) MotionSpecs.pressScale() else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "glassIconButtonScale"
     )

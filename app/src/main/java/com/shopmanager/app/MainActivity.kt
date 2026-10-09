@@ -50,6 +50,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -758,6 +759,7 @@ class MainActivity : FragmentActivity() {
     @Suppress("DEPRECATION")
     private fun applyRefreshRate(tier: PerformanceTier) {
         RefreshRatePolicy.apply(window, windowManager.defaultDisplay, tier)
+        RefreshRatePolicy.applyFrameRateHint(window, tier)
         refreshHz = currentDisplayHz()
     }
 
@@ -1166,6 +1168,20 @@ private fun ShopManagerApp(
                     userScrollEnabled = false,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
+                    // الأداء القوي فقط: عمق بصري أثناء تبديل التبويب — الصفحة المغادِرة/القادمة
+                    // تصغر قليلاً وتخفت. كله داخل graphicsLayer (مرحلة الرسم)، وعند السكون
+                    // offset = 0 فلا طبقة إضافية. المتوازن والمنخفض: انزلاق خام بلا أي طبقات.
+                    val pageFx = if (performanceTier == PerformanceTier.STANDARD) {
+                        Modifier.graphicsLayer {
+                            val off = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
+                                .let { if (it < 0f) -it else it }.coerceIn(0f, 1f)
+                            val sc = 1f - 0.06f * off
+                            scaleX = sc
+                            scaleY = sc
+                            alpha = 1f - 0.5f * off
+                        }
+                    } else Modifier
+                    Box(pageFx.fillMaxSize()) {
                     when (page) {
                         PAGE_DASHBOARD -> DashboardScreen(
                             debtsViewModel = debtsViewModel,
@@ -1202,6 +1218,7 @@ private fun ShopManagerApp(
                             onAddNoteRequestHandled = { addNoteRequested = false },
                             onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
+                    }
                     }
                 }
             }

@@ -40,6 +40,7 @@ import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
+import com.shopmanager.app.ui.common.sheenSweep
 import com.shopmanager.app.ui.common.MotionSpecs
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -608,7 +609,8 @@ private fun HeroStatsCard(
     val success = LocalSemanticColors.current.success
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     AppCard(modifier = Modifier.padding(horizontal = AppScreenPadding)) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
+        // الأداء القوي: لمعة ضوء ناعمة تمسح البطاقة الرئيسية (sheenSweep لا تفعل شيئاً في غيره).
+        Column(Modifier.sheenSweep().padding(horizontal = 20.dp, vertical = 18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(38.dp).clip(CircleShape).background(success.copy(alpha = 0.18f)),

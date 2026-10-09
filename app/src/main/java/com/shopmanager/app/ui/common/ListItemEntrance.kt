@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.performance.LocalPerformanceTier
-import com.shopmanager.app.data.performance.LocalRefreshRateHz
 import com.shopmanager.app.data.performance.PerformanceTier
 import kotlinx.coroutines.delay
 
@@ -59,38 +58,53 @@ private const val MAX_ANIMATED_INDEX = 12
  */
 @Composable
 fun Modifier.listItemEntrance(index: Int): Modifier {
-    val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
-    if (isLowTier) return this
-
-    val isHigh = LocalPerformanceTier.current == PerformanceTier.STANDARD
+    val tier = LocalPerformanceTier.current
+    // حدود الحركة حسب الوضع:
+    //  - LOW: أول 4 صفوف فقط وتلاشٍ (alpha) فقط بمدة 150ms (6 إطارات @40Hz) — بلا إزاحة ولا تكبير.
+    //  - BALANCED: أول 6 صفوف، تلاشٍ + صعود 10dp، بمدة SLOW الموحّدة وفاصل 24ms.
+    //  - STANDARD: أول 12 صفاً، تلاشٍ + صعود 22dp + تكبير 0.94→1 (حركة غنية).
+    val maxIndex = when (tier) {
+        PerformanceTier.LOW -> 3
+        PerformanceTier.BALANCED -> 6
+        PerformanceTier.STANDARD -> MAX_ANIMATED_INDEX
+    }
     val played = rememberSaveable { mutableStateOf(false) }
     // تُحسب مرة واحدة عند دخول هذا الصف التركيب (لا تتغير بعدها) — وهذا ما
     // يجعل الشرط أدناه ثابتاً ولا يقطع الحركة حين نكتب played = true.
-    val shouldAnimate = remember { !played.value && index <= (if (isHigh) MAX_ANIMATED_INDEX else 6) }
+    val shouldAnimate = remember { !played.value && index <= maxIndex }
     val progress = remember { Animatable(if (shouldAnimate) 0f else 1f) }
-    val durationScale = MotionSpecs.tierDurationScale()
-    // الأجهزة القوية (شاشة 90Hz+): حركة أغنى — الصف يكبر قليلاً من 0.96 إلى 1 مع الصعود
-    // والتلاشي. هذا كله داخل graphicsLayer (مرحلة الرسم فقط) فلا تكلفة تركيب إضافية.
-    // الحركة الغنية (تكبير 0.96→1) للأداء القوي فقط؛ المتوازن: تلاشٍ + صعود فقط.
-    val richMotion = isHigh && LocalRefreshRateHz.current >= 80f
+    val durationMs = when (tier) {
+        PerformanceTier.LOW -> 150
+        PerformanceTier.BALANCED -> MotionSpecs.balancedSlowMs
+        PerformanceTier.STANDARD -> (320 * MotionSpecs.durationScale()).toInt()
+    }
+    val staggerStepMs = when (tier) {
+        PerformanceTier.LOW -> 25L
+        PerformanceTier.BALANCED -> 24L
+        PerformanceTier.STANDARD -> 30L
+    }
 
     if (shouldAnimate) {
         LaunchedEffect(Unit) {
             played.value = true
-            val staggerMs = ((index.coerceAtMost(8)) * 28L * durationScale).toLong()
+            val staggerMs = index.coerceAtMost(8) * staggerStepMs
             if (staggerMs > 0) delay(staggerMs)
-            progress.animateTo(1f, animationSpec = tween((300 * durationScale).toInt(), easing = MotionSpecs.claudeEasing))
+            progress.animateTo(1f, animationSpec = tween(durationMs, easing = MotionSpecs.claudeEasing))
         }
     }
     return this.graphicsLayer {
         // القراءة هنا داخل كتلة graphicsLayer (مرحلة الرسم) — لا إعادة تركيب.
         val p = progress.value
         alpha = p
-        translationY = (1f - p) * (if (richMotion) 20.dp else 12.dp).toPx()
-        if (richMotion) {
-            val s = 0.96f + 0.04f * p
-            scaleX = s
-            scaleY = s
+        when (tier) {
+            PerformanceTier.LOW -> Unit
+            PerformanceTier.BALANCED -> translationY = (1f - p) * 10.dp.toPx()
+            PerformanceTier.STANDARD -> {
+                translationY = (1f - p) * 22.dp.toPx()
+                val sc = 0.94f + 0.06f * p
+                scaleX = sc
+                scaleY = sc
+            }
         }
     }
 }

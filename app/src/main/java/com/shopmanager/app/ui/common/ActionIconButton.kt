@@ -43,7 +43,7 @@ fun ActionIconButton(
     val pressed by interactionSource.collectIsPressedAsState()
     // LAG FIX: قراءة الـ scale في مرحلة الرسم (graphicsLayer) بدل إعادة التركيب كل إطار.
     val scale = animateFloatAsState(
-        targetValue = if (pressed) 0.9f else 1f,
+        targetValue = if (pressed) MotionSpecs.pressScale() else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "actionButtonScale"
     )

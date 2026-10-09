@@ -237,7 +237,7 @@ fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
     val pressed by interactionSource.collectIsPressedAsState()
     // LAG FIX: قراءة الـ scale في مرحلة الرسم (graphicsLayer) بدل إعادة التركيب كل إطار.
     val scale = animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
+        targetValue = if (pressed) MotionSpecs.pressScale() else 1f,
         animationSpec = MotionSpecs.pressSpring(),
         label = "quickActionFabScale"
     )
@@ -255,6 +255,7 @@ fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
     Box(
         modifier
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+            .glowBehind(primary)
             .liquidGlassSurface(
                 CircleShape,
                 baseBrush = Brush.linearGradient(listOf(primary, primary)),

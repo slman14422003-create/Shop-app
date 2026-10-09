@@ -446,8 +446,8 @@ fun SettingsScreen(
     val performanceLabel = when (performanceMode) {
         PerformanceMode.AUTO -> "تلقائي (حسب الجهاز)"
         PerformanceMode.HIGH -> "مرتفع (كل التأثيرات)"
-        PerformanceMode.BALANCED -> "متوازن (ناعم وخفيف على الجرافيك)"
-        PerformanceMode.LOW -> "منخفض (أداء أعلى وبطارية أطول)"
+        PerformanceMode.BALANCED -> "متوازن (ناعم ومنسّق وخفيف على الجرافيك)"
+        PerformanceMode.LOW -> "منخفض (حركات محدودة بسرعة 40Hz للأجهزة القديمة)"
     }
 
     fun syncNow() {
@@ -1084,8 +1084,8 @@ fun SettingsScreen(
                 listOf(
                     PerformanceMode.AUTO to "تلقائي (حسب الجهاز)",
                     PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
-                    PerformanceMode.BALANCED to "متوازن (ناعم وخفيف على الجرافيك)",
-                    PerformanceMode.LOW to "منخفض (أداء أعلى وبطارية أطول)"
+                    PerformanceMode.BALANCED to "متوازن (ناعم ومنسّق وخفيف على الجرافيك)",
+                    PerformanceMode.LOW to "منخفض (حركات محدودة بسرعة 40Hz للأجهزة القديمة)"
                 ).forEach { (mode, label) ->
                     selectItem(
                         title = label,

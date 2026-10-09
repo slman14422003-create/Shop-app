@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -248,8 +249,10 @@ fun AppSpinner(
         animationSpec = infiniteRepeatable(tween(1000, easing = LinearEasing)),
         label = "spokeStep"
     )
+    // derivedStateOf: لا يُبطل الرسم إلا حين يتغير رقم الشعاع (12 مرة/ثانية) بدل كل إطار.
+    val currentSpoke = remember { derivedStateOf { step.value.toInt() % SPOKES } }
     Canvas(modifier.size(size)) {
-        val current = step.value.toInt() % SPOKES
+        val current = currentSpoke.value
         val r = this.size.minDimension / 2f
         val inner = r * 0.48f
         val outer = r * 0.92f

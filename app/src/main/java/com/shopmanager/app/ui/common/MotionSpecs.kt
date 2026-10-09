@@ -4,7 +4,6 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
@@ -73,13 +72,35 @@ object MotionSpecs {
     @Composable
     fun durationScale(): Float = if (LocalRefreshRateHz.current < 80f) 0.8f else 1f
 
+    // ───────────────────────── رموز الزمن الموحّدة ─────────────────────────
+    // المتوازن (تناغم وتناسق): كل حركة فيه تأخذ واحدة فقط من ثلاث مدد — سريعة 120ms
+    // (تفاعل لحظي)، أساسية 180ms (توسيع/تبديل)، بطيئة 240ms (دخول/انتقال) — وبمنحنى
+    // [claudeEasing] نفسه، فتتزامن الحركات وتستقر معاً بإيقاع واحد بدل نوابض مختلفة
+    // المدة. المنخفض: مضاعفات 25ms (إطار واحد @40Hz) كي تتوزع الإطارات بالتساوي على
+    // شاشة 40Hz فلا يظهر تقطّع في التوقيت.
+    const val balancedFastMs = 120
+    const val balancedBaseMs = 180
+    const val balancedSlowMs = 240
+
+    /** حجم الانكماش عند الضغط: أخفّ في الأوضاع الأضعف، أوضح في القوي. */
+    @Composable
+    fun pressScale(): Float = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> 0.95f
+        PerformanceTier.BALANCED -> 0.94f
+        PerformanceTier.STANDARD -> 0.91f
+    }
+
     /** Button/row press scale-down feedback, and any other quick single-value
      * spring (color/dp highlight, etc.) that should track the same feel. */
     @Composable
-    fun <T> quickSpring(): FiniteAnimationSpec<T> = if (isLowTier()) snap<T>() else spring<T>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = tierStiffness(Spring.StiffnessMediumLow * 2.2f * snap(), Spring.StiffnessMedium * 1.6f * snap())
-    )
+    fun <T> quickSpring(): FiniteAnimationSpec<T> = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> tween<T>(100, easing = claudeEasing)
+        PerformanceTier.BALANCED -> tween<T>(balancedFastMs, easing = claudeEasing)
+        PerformanceTier.STANDARD -> spring<T>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow * 2.2f * snap()
+        )
+    }
 
     /** Button/row press scale-down feedback. */
     @Composable
@@ -87,70 +108,88 @@ object MotionSpecs {
 
     /** List-item reorder/insert/remove placement (LazyColumn animateItem's placementSpec). */
     @Composable
-    fun reorderSpring(): FiniteAnimationSpec<IntOffset> = if (isLowTier()) snap<IntOffset>() else spring<IntOffset>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = tierStiffness(Spring.StiffnessMediumLow * 1.6f * snap(), Spring.StiffnessMedium * 1.2f * snap())
-    )
+    fun reorderSpring(): FiniteAnimationSpec<IntOffset> = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> tween<IntOffset>(150, easing = claudeEasing)
+        PerformanceTier.BALANCED -> tween<IntOffset>(balancedSlowMs, easing = claudeEasing)
+        PerformanceTier.STANDARD -> spring<IntOffset>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow * 1.6f * snap()
+        )
+    }
 
     /** expandVertically/shrinkVertically size animation. */
     @Composable
-    fun expandSpring(): FiniteAnimationSpec<IntSize> = if (isLowTier()) snap<IntSize>() else spring<IntSize>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = tierStiffness(Spring.StiffnessMediumLow * snap(), Spring.StiffnessMedium * snap())
-    )
+    fun expandSpring(): FiniteAnimationSpec<IntSize> = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> tween<IntSize>(125, easing = claudeEasing)
+        PerformanceTier.BALANCED -> tween<IntSize>(balancedBaseMs, easing = claudeEasing)
+        PerformanceTier.STANDARD -> spring<IntSize>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow * snap()
+        )
+    }
 
-    /**
-     * تحسين أنيميشن: اختفاء الصف عند حذفه/تسديده (fadeOutSpec في animateItem).
-     * يخفت لحظة بينما تنزلق الباقية إلى مكانها بنفس نابض الترتيب
-     * [reorderSpring] — أقصر بكثير على الأجهزة الضعيفة (60ms) كبقية حركات
-     * هذا الملف، وبمنحنى Claude نفسه [claudeEasing].
-     */
+    /** اختفاء الصف عند حذفه/تسديده (fadeOutSpec في animateItem). */
     @Composable
     fun listItemFadeOut(): FiniteAnimationSpec<Float> =
-        if (isLowTier()) snap<Float>() else tween<Float>(durationMillis = fadeMillis(), easing = claudeEasing)
+        tween<Float>(durationMillis = fadeMillis(), easing = claudeEasing)
 
     @Composable
-    fun expandMillis(): Int = if (isLowTier()) 90 else (200 * tierDurationScale()).toInt()
+    fun expandMillis(): Int = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> 125
+        PerformanceTier.BALANCED -> balancedBaseMs
+        PerformanceTier.STANDARD -> (200 * durationScale()).toInt()
+    }
 
     @Composable
-    fun collapseMillis(): Int = if (isLowTier()) 70 else (160 * tierDurationScale()).toInt()
+    fun collapseMillis(): Int = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> 100
+        PerformanceTier.BALANCED -> balancedFastMs + 20
+        PerformanceTier.STANDARD -> (160 * durationScale()).toInt()
+    }
 
     @Composable
-    fun fadeMillis(): Int = if (isLowTier()) 60 else (140 * tierDurationScale()).toInt()
+    fun fadeMillis(): Int = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> 75
+        PerformanceTier.BALANCED -> balancedFastMs
+        PerformanceTier.STANDARD -> (140 * durationScale()).toInt()
+    }
 
     /**
-     * "Pop in" for anything that appears on top of existing content
-     * without pushing it (dialogs, one-off banners like the server-outage
-     * restore prompt, snackbars). Previously a springy overshoot; now a
-     * flat, no-bounce ease-out — it arrives and settles immediately,
-     * matching how Claude's own modals/toasts appear with no wobble.
+     * "Pop in" لكل ما يظهر فوق المحتوى (حوارات، أزرار عائمة، لافتات).
+     * القوي: نابض بارتداد خفيف جداً (0.72) فيبدو العنصر "حياً"؛ المتوازن: tween بالمدة
+     * الأساسية؛ المنخفض: tween قصير 125ms.
      */
     @Composable
-    fun popInSpring(): FiniteAnimationSpec<Float> = if (isLowTier()) snap<Float>() else spring<Float>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = tierStiffness(Spring.StiffnessMedium * snap(), Spring.StiffnessMedium * 1.3f * snap())
+    fun popInSpring(): FiniteAnimationSpec<Float> = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> tween<Float>(125, easing = claudeEasing)
+        PerformanceTier.BALANCED -> tween<Float>(balancedBaseMs, easing = claudeEasing)
+        PerformanceTier.STANDARD -> spring<Float>(
+            dampingRatio = 0.72f,
+            stiffness = Spring.StiffnessMedium * snap()
+        )
+    }
+
+    /** مؤشر التحديد المنزلق بين التبويبات. */
+    @Composable
+    fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> tween<androidx.compose.ui.unit.Dp>(100, easing = claudeEasing)
+        PerformanceTier.BALANCED -> tween<androidx.compose.ui.unit.Dp>(balancedBaseMs, easing = claudeEasing)
+        PerformanceTier.STANDARD -> spring<androidx.compose.ui.unit.Dp>(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium * snap()
+        )
+    }
+
+    /** Smooth content fade+slide for anything that swaps in place. */
+    @Composable
+    fun <T> contentTween(): FiniteAnimationSpec<T> = tween(
+        durationMillis = when (LocalPerformanceTier.current) {
+            PerformanceTier.LOW -> 100
+            PerformanceTier.BALANCED -> balancedBaseMs
+            PerformanceTier.STANDARD -> (220 * durationScale()).toInt()
+        },
+        easing = claudeEasing
     )
-
-    /**
-     * The floating bottom nav's sliding selection highlight (tab → tab).
-     * A quick, no-bounce ease so the indicator moves to the tapped tab and
-     * stops cleanly instead of wobbling past it.
-     */
-    @Composable
-    fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = if (isLowTier()) snap<androidx.compose.ui.unit.Dp>() else spring<androidx.compose.ui.unit.Dp>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = tierStiffness(Spring.StiffnessMedium * snap(), Spring.StiffnessMedium * 1.3f * snap())
-    )
-
-    /**
-     * Smooth content fade+slide for anything that swaps in place (a
-     * status line changing, a list of local backups loading in) — uses
-     * [claudeEasing], the same curve every other transition in the app now
-     * shares, so nothing reads as "off-brand" next to it.
-     */
-    @Composable
-    fun <T> contentTween(): FiniteAnimationSpec<T> =
-        tween(durationMillis = if (isLowTier()) 90 else (220 * tierDurationScale()).toInt(), easing = claudeEasing)
 
     // ───────────────────────── التنقل بين الشاشات ─────────────────────────
     // قاعدة المستويات الثلاثة (طلب: "متوازن بحيث الانميشن ما تستهلك الجرافك"):
@@ -161,25 +200,25 @@ object MotionSpecs {
 
     /** مدة انتقال دفع/سحب الشاشة (ms). */
     @Composable
-    fun navMillis(): Int = when {
-        isLowTier() -> 110
-        isBalancedTier() -> (260 * durationScale()).toInt()
-        else -> (300 * durationScale()).toInt()
+    fun navMillis(): Int = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> 150
+        PerformanceTier.BALANCED -> balancedSlowMs
+        PerformanceTier.STANDARD -> (300 * durationScale()).toInt()
     }
 
-    /** مدة انتقال التبويبات (الـ pager) بالـ ms؛ 0 = بدون حركة (غير مستعمل حالياً: الاقتصادي يتلاشى). */
+    /** مدة انتقال التبويبات (الـ pager) بالـ ms. */
     @Composable
-    fun pagerMillis(): Int = when {
-        isLowTier() -> 0
-        isBalancedTier() -> (240 * durationScale()).toInt()
-        else -> (300 * durationScale()).toInt()
+    fun pagerMillis(): Int = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> 175
+        PerformanceTier.BALANCED -> balancedSlowMs
+        PerformanceTier.STANDARD -> (320 * durationScale()).toInt()
     }
 
     /** مدة الانتقال من السبلاش إلى التطبيق. */
     @Composable
-    fun handoffMillis(): Int = when {
-        isLowTier() -> 90
-        isBalancedTier() -> 220
-        else -> 360
+    fun handoffMillis(): Int = when (LocalPerformanceTier.current) {
+        PerformanceTier.LOW -> 100
+        PerformanceTier.BALANCED -> balancedSlowMs
+        PerformanceTier.STANDARD -> 360
     }
 }
