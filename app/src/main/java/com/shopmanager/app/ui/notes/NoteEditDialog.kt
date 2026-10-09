@@ -303,9 +303,9 @@ private fun NoteEditScreenContent(
                 },
                 actions = {
                     if (isSaving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(end = 16.dp).size(20.dp),
-                            strokeWidth = 2.dp,
+                        com.shopmanager.app.ui.common.AppSpinner(
+                            modifier = Modifier.padding(end = 16.dp),
+                            size = 20.dp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     } else {

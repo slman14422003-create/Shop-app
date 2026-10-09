@@ -423,7 +423,7 @@ fun PersonDetailScreen(
                     }
                 ) {
                     if (isSavingName) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
                     } else {
                         Text("حفظ")
                     }

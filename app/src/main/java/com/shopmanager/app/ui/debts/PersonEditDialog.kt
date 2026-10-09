@@ -143,7 +143,7 @@ fun PersonEditDialog(
             ) {
                 if (isSaving) {
                     Row {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+                        com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
                         Text("  جارِ الحفظ...")
                     }
                 } else {

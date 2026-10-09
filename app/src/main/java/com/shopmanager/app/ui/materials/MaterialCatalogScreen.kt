@@ -310,7 +310,7 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
                 onClick = { onSave(name.trim()) }
             ) {
                 if (isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
                 } else {
                     Text("إضافة")
                 }
@@ -360,7 +360,7 @@ private fun EditCatalogItemDialog(initialName: String, isSaving: Boolean, onDism
                 onClick = { onSave(name.trim()) }
             ) {
                 if (isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
                 } else {
                     Text("حفظ")
                 }
@@ -431,7 +431,7 @@ private fun QuantityEntryDialog(
                 }
             ) {
                 if (isSaving) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
                 } else {
                     Text("حفظ")
                 }

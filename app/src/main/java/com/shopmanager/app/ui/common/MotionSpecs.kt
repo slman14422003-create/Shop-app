@@ -4,6 +4,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
@@ -31,7 +32,7 @@ import com.shopmanager.app.data.performance.LocalRefreshRateHz
  * [Spring.DampingRatioNoBouncy] — only the stiffness (how quickly it gets
  * there) still varies by call site and by performance tier:
  *
- * - LOW ("الوضع الاقتصادي"): [Spring.StiffnessHigh] — settles in a couple
+ * - LOW ("الوضع الاقتصادي"): بلا نوابض إطلاقاً — كل حركة تفاعلية (ضغط، ترتيب، توسيع) تقفز فوراً [snap]؛ سابقاً [Spring.StiffnessHigh] — settles in a couple
  *   of frames, as close to an instant snap as a spring gets — and every
  *   duration-based effect drops to a fraction of its normal length, so
  *   battery/CPU cost stays minimal without the UI going fully static.
@@ -75,7 +76,7 @@ object MotionSpecs {
     /** Button/row press scale-down feedback, and any other quick single-value
      * spring (color/dp highlight, etc.) that should track the same feel. */
     @Composable
-    fun <T> quickSpring(): FiniteAnimationSpec<T> = spring(
+    fun <T> quickSpring(): FiniteAnimationSpec<T> = if (isLowTier()) snap() else spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
         stiffness = tierStiffness(Spring.StiffnessMediumLow * 2.2f * snap(), Spring.StiffnessMedium * 1.6f * snap())
     )
@@ -86,14 +87,14 @@ object MotionSpecs {
 
     /** List-item reorder/insert/remove placement (LazyColumn animateItem's placementSpec). */
     @Composable
-    fun reorderSpring(): FiniteAnimationSpec<IntOffset> = spring(
+    fun reorderSpring(): FiniteAnimationSpec<IntOffset> = if (isLowTier()) snap() else spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
         stiffness = tierStiffness(Spring.StiffnessMediumLow * 1.6f * snap(), Spring.StiffnessMedium * 1.2f * snap())
     )
 
     /** expandVertically/shrinkVertically size animation. */
     @Composable
-    fun expandSpring(): FiniteAnimationSpec<IntSize> = spring(
+    fun expandSpring(): FiniteAnimationSpec<IntSize> = if (isLowTier()) snap() else spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
         stiffness = tierStiffness(Spring.StiffnessMediumLow * snap(), Spring.StiffnessMedium * snap())
     )
@@ -106,7 +107,7 @@ object MotionSpecs {
      */
     @Composable
     fun listItemFadeOut(): FiniteAnimationSpec<Float> =
-        tween(durationMillis = fadeMillis(), easing = claudeEasing)
+        if (isLowTier()) snap() else tween(durationMillis = fadeMillis(), easing = claudeEasing)
 
     @Composable
     fun expandMillis(): Int = if (isLowTier()) 90 else (200 * tierDurationScale()).toInt()
@@ -125,7 +126,7 @@ object MotionSpecs {
      * matching how Claude's own modals/toasts appear with no wobble.
      */
     @Composable
-    fun popInSpring(): FiniteAnimationSpec<Float> = spring(
+    fun popInSpring(): FiniteAnimationSpec<Float> = if (isLowTier()) snap() else spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
         stiffness = tierStiffness(Spring.StiffnessMedium * snap(), Spring.StiffnessMedium * 1.3f * snap())
     )
@@ -136,7 +137,7 @@ object MotionSpecs {
      * stops cleanly instead of wobbling past it.
      */
     @Composable
-    fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = spring(
+    fun tabIndicatorSpring(): FiniteAnimationSpec<androidx.compose.ui.unit.Dp> = if (isLowTier()) snap() else spring(
         dampingRatio = Spring.DampingRatioNoBouncy,
         stiffness = tierStiffness(Spring.StiffnessMedium * snap(), Spring.StiffnessMedium * 1.3f * snap())
     )

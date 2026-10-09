@@ -273,9 +273,8 @@ internal val SpinnerTrailing: @Composable () -> Unit = { SettingsSpinner() }
 
 @Composable
 internal fun SettingsSpinner() {
-    CircularProgressIndicator(
-        modifier = Modifier.size(20.dp),
-        strokeWidth = 2.dp,
+    com.shopmanager.app.ui.common.AppSpinner(
+        size = 20.dp,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
 }

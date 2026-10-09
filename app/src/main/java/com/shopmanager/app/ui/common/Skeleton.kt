@@ -122,7 +122,10 @@ fun SkeletonBox(
         }
     } else Modifier
 
-    Box(layered.clip(shape).background(base).then(withSheen))
+    Box(
+        if (tier == PerformanceTier.LOW) layered.background(base, shape)
+        else layered.clip(shape).background(base).then(withSheen)
+    )
 }
 
 /** نوع الصف الذي يحاكيه الهيكل، ليطابق شكل الصف الحقيقي في كل شاشة. */

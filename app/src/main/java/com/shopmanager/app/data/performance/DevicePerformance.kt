@@ -2,6 +2,7 @@ package com.shopmanager.app.data.performance
 
 import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
 import androidx.compose.runtime.staticCompositionLocalOf
 
 /**
@@ -118,7 +119,7 @@ object DevicePerformance {
     // previously-cached device is automatically re-measured on next
     // launch instead of staying pinned to a now-outdated verdict.
     private const val KEY_DETECTION_VERSION = "performance_tier_version"
-    private const val CURRENT_DETECTION_VERSION = 3
+    private const val CURRENT_DETECTION_VERSION = 4
 
     private const val LOW_RAM_THRESHOLD_MB = 3072L
     private const val LOW_CORE_THRESHOLD = 4
@@ -182,8 +183,11 @@ object DevicePerformance {
         val midRange = totalRamMb in 1..BALANCED_RAM_THRESHOLD_MB ||
             cores in 1..BALANCED_CORE_THRESHOLD ||
             memoryClassMb in 1..BALANCED_MEMORY_CLASS_MB
+        // الأجهزة القديمة جداً: أندرويد 9 (API 28) أو أقدم، أو رام ≤ 3GB وحدها —
+        // معالجاتها الرسومية وأنظمتها لا تتحمل أي تأثيرات مهما كان عدد أنويتها.
+        val veryOld = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
         val tier = when {
-            osFlaggedLowRam || weakGpu || weakMemoryClass || (lowRam && lowCores) -> PerformanceTier.LOW
+            osFlaggedLowRam || weakGpu || weakMemoryClass || veryOld || lowRam -> PerformanceTier.LOW
             midRange -> PerformanceTier.BALANCED
             else -> PerformanceTier.STANDARD
         }

@@ -92,14 +92,18 @@ fun Modifier.liquidGlassSurface(
     // الظل الحقيقي (blur رسومي لكل إطار) للأداء القوي فقط؛ المتوازن والاقتصادي
     // يعتمدان على الفصل بالتدرج اللوني + الحد الرفيع بلا أي ظل.
     val isHighTier = LocalPerformanceTier.current == PerformanceTier.STANDARD
+    val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     return this
         .let {
             if (elevation > 0.dp && !topFlush && isHighTier) {
                 it.shadow(elevation, shape, clip = false, ambientColor = Color.Black.copy(alpha = 0.25f), spotColor = Color.Black.copy(alpha = 0.35f))
             } else it
         }
-        .clip(shape)
-        .background(baseBrush)
+        .let {
+            // الأجهزة الضعيفة: القصّ بمسار غير مستطيل (clip) مكلف على معالج رسوميات قديم؛
+            // الرسم المباشر بالشكل يعطي نفس النتيجة بلا قصّ.
+            if (isLowTier) it.background(baseBrush, shape) else it.clip(shape).background(baseBrush)
+        }
         .let {
             if (rimColor == null) it
             else it.border(1.dp, rimColor.copy(alpha = 0.12f), shape)
