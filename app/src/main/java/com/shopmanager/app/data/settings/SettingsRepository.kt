@@ -59,10 +59,17 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFICATIONS, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS, value).apply()
 
-    /** صوت إشعار كل نوع (قطرة ماء / صوت النظام / صامت) — يُدار من الإعدادات. */
+    /** صوت إشعار كل نوع (نغمات آيفون-ستايل / نغمة من الجهاز / صامت) — يُدار من الإعدادات. */
     fun soundFor(kind: com.shopmanager.app.data.notifications.NotifKind): com.shopmanager.app.data.notifications.NotifSound =
         com.shopmanager.app.data.notifications.NotifSound.fromKey(prefs.getString("notif_sound_${kind.prefKey}", null))
             ?: kind.defaultSound
+
+    /** نغمة مختارة من الجهاز (تُستعمل عندما يكون الصوت = DEVICE). */
+    fun customSoundUri(kind: com.shopmanager.app.data.notifications.NotifKind): String? =
+        prefs.getString("notif_sound_uri_${kind.prefKey}", null)
+
+    fun setCustomSoundUri(kind: com.shopmanager.app.data.notifications.NotifKind, uri: String?) =
+        prefs.edit().putString("notif_sound_uri_${kind.prefKey}", uri).apply()
 
     fun setSoundFor(
         kind: com.shopmanager.app.data.notifications.NotifKind,

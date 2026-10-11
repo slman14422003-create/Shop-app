@@ -76,7 +76,7 @@ object NotificationHelper {
             // القنوات تُنشأ بمعرّف يحمل مفتاح الصوت المختار (انظر NotificationSounds.channelId)،
             // وتُحذف القنوات القديمة (v1/v2) وقنوات الأصوات غير المختارة حالياً.
             val settingsRepo = SettingsRepository(context.applicationContext)
-            val activeIds = NotifKind.values().map { it.idPrefix + settingsRepo.soundFor(it).key }.toSet()
+            val activeIds = NotifKind.values().map { NotificationSounds.channelId(context, it) }.toSet()
             val legacy = setOf(
                 "low_stock_channel", "debts_channel", "notes_channel",
                 "low_stock_channel_v2", "debts_channel_v2", "notes_channel_v2"
@@ -92,7 +92,7 @@ object NotificationHelper {
             ).apply {
                 description = "تنبيه عند تغيّر قائمة المواد الناقصة"
                 enableLights(true)
-                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.SHOPPING)), NotificationSounds.AUDIO_ATTRS)
+                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.SHOPPING), settingsRepo.customSoundUri(NotifKind.SHOPPING)), NotificationSounds.AUDIO_ATTRS)
             }
 
             // Debt alerts are money-related and time-sensitive (a new debt,
@@ -105,7 +105,7 @@ object NotificationHelper {
             ).apply {
                 description = "تنبيه فوري عند إضافة دين جديد أو تسديده"
                 enableLights(true)
-                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.DEBTS)), NotificationSounds.AUDIO_ATTRS)
+                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.DEBTS), settingsRepo.customSoundUri(NotifKind.DEBTS)), NotificationSounds.AUDIO_ATTRS)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 180, 90, 180)
             }
@@ -121,7 +121,7 @@ object NotificationHelper {
             ).apply {
                 description = "تنبيه عند حلول موعد تذكير لملاحظة هامة"
                 enableLights(true)
-                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.NOTES)), NotificationSounds.AUDIO_ATTRS)
+                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.NOTES), settingsRepo.customSoundUri(NotifKind.NOTES)), NotificationSounds.AUDIO_ATTRS)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 180, 90, 180)
             }

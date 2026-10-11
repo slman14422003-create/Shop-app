@@ -15,16 +15,21 @@ enum class NotifKind(
     val label: String,
     val defaultSound: NotifSound
 ) {
-    SHOPPING("low_stock_channel_s_", "shopping", "قائمة النواقص والمشتريات", NotifSound.DROP_SOFT),
-    DEBTS("debts_channel_s_", "debts", "تنبيهات الديون", NotifSound.DROP_DOUBLE),
-    NOTES("notes_channel_s_", "notes", "تذكيرات الملاحظات الهامة", NotifSound.DROP_CRYSTAL)
+    SHOPPING("low_stock_channel_s_", "shopping", "قائمة النواقص والمشتريات", NotifSound.NOTE),
+    DEBTS("debts_channel_s_", "debts", "تنبيهات الديون", NotifSound.TRITONE),
+    NOTES("notes_channel_s_", "notes", "تذكيرات الملاحظات الهامة", NotifSound.CHIME)
 }
 
-/** الأصوات المتاحة: ثلاث "قطرات ماء" خاصة بالتطبيق + صوت النظام + صامت. */
+/** نغمات بأسلوب الآيفون (مولَّدة أصلياً داخل التطبيق) + نغمات الجهاز + صامت. */
 enum class NotifSound(val key: String, val label: String, val hint: String, val rawRes: Int?) {
-    DROP_SOFT("drop_soft", "قطرة ناعمة", "قطرة واحدة هادئة مع تموّج خفيف", R.raw.water_drop_soft),
-    DROP_DOUBLE("drop_double", "قطرتان", "«بلِب–بلوب» سريعة التمييز", R.raw.water_drop_double),
-    DROP_CRYSTAL("drop_crystal", "قطرات كريستال", "ثلاث قطرات لامعة تنتهي بقطرة أعمق", R.raw.water_drop_crystal),
+    NOTE("note", "نوتة", "نقرة ماريمبا ناعمة", R.raw.tone_note),
+    TRITONE("tritone", "ثلاثي النغمات", "ثلاث نوتات صاعدة سريعة", R.raw.tone_tritone),
+    CHIME("chime", "رنين", "نغمتان زجاجيتان", R.raw.tone_chime),
+    GLASS("glass", "زجاج", "رنة زجاج صافية", R.raw.tone_glass),
+    BELL("bell", "جرس", "جرس هادئ طويل الصدى", R.raw.tone_bell),
+    COMPLETE("complete", "اكتمال", "أربع نوتات صاعدة", R.raw.tone_complete),
+    AURORA("aurora", "أورورا", "أربيجيو حالم", R.raw.tone_aurora),
+    DEVICE("device", "من نغمات الجهاز", "اختر أي نغمة موجودة على هاتفك", null),
     SYSTEM("system", "صوت النظام الافتراضي", "نغمة الإشعارات الافتراضية للجهاز", null),
     SILENT("silent", "بدون صوت", "يظهر الإشعار بصمت (مع الاهتزاز إن وُجد)", null);
 
@@ -44,10 +49,17 @@ object NotificationSounds {
      * صوت قناة الإشعار لا يتغيّر بعد إنشائها (قيد من أندرويد)، لذلك يُضمَّن مفتاح الصوت
      * في معرّف القناة نفسه: تغيير الصوت من الإعدادات = قناة جديدة بالصوت الجديد.
      */
-    fun channelId(context: Context, kind: NotifKind): String =
-        kind.idPrefix + SettingsRepository(context.applicationContext).soundFor(kind).key
+    fun channelId(context: Context, kind: NotifKind): String {
+        val repo = SettingsRepository(context.applicationContext)
+        val sound = repo.soundFor(kind)
+        val suffix = if (sound == NotifSound.DEVICE)
+            "_" + Integer.toHexString((repo.customSoundUri(kind) ?: "").hashCode()) else ""
+        return kind.idPrefix + sound.key + suffix
+    }
 
-    fun soundUri(context: Context, sound: NotifSound): Uri? = when {
+    fun soundUri(context: Context, sound: NotifSound, customUri: String? = null): Uri? = when {
+        sound == NotifSound.DEVICE ->
+            customUri?.let { Uri.parse(it) } ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         sound.rawRes != null -> Uri.parse("android.resource://${context.packageName}/${sound.rawRes}")
         sound == NotifSound.SYSTEM -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         else -> null
@@ -56,7 +68,7 @@ object NotificationSounds {
     private var player: MediaPlayer? = null
 
     /** تشغيل معاينة الصوت داخل الإعدادات. */
-    fun preview(context: Context, sound: NotifSound) {
+    fun preview(context: Context, sound: NotifSound, customUri: String? = null) {
         stopPreview()
         try {
             when {
@@ -71,10 +83,10 @@ object NotificationSounds {
                         start()
                     }
                 }
-                sound == NotifSound.SYSTEM -> {
+                sound == NotifSound.SYSTEM || sound == NotifSound.DEVICE -> {
                     val r = RingtoneManager.getRingtone(
                         context.applicationContext,
-                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                        soundUri(context, sound, customUri)
                     )
                     r?.setAudioAttributes(AUDIO_ATTRS)
                     r?.play()

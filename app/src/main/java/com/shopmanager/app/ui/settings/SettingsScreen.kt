@@ -17,6 +17,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -668,7 +670,7 @@ fun SettingsScreen(
                         }
                     )
                 }
-                SettingsFootnote("أصوات «قطرة الماء» خاصة بهذا التطبيق فقط ولا تغيّر نغمة إشعارات الجهاز.")
+                SettingsFootnote("هذه الأصوات خاصة بهذا التطبيق فقط ولا تغيّر نغمة إشعارات الجهاز. يمكنك أيضاً اختيار أي نغمة موجودة على هاتفك.")
                 }
             }
 
@@ -947,8 +949,10 @@ fun SettingsScreen(
             kind = kind,
             current = notifSounds[kind] ?: kind.defaultSound,
             onDismiss = { NotificationSounds.stopPreview(); soundDialogKind = null },
-            onSelect = { sound ->
+            initialUri = settings.customSoundUri(kind),
+            onSelect = { sound, uri ->
                 NotificationSounds.stopPreview()
+                if (sound == NotifSound.DEVICE) settings.setCustomSoundUri(kind, uri)
                 settings.setSoundFor(kind, sound)
                 notifSounds = notifSounds + (kind to sound)
                 // الصوت مرتبط بمعرّف القناة: إعادة إنشاء القنوات تُفعّل القناة الجديدة وتحذف القديمة.
@@ -1259,34 +1263,58 @@ private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) 
 private fun NotificationSoundDialog(
     kind: NotifKind,
     current: NotifSound,
+    initialUri: String?,
     onDismiss: () -> Unit,
-    onSelect: (NotifSound) -> Unit
+    onSelect: (NotifSound, String?) -> Unit
 ) {
     val context = LocalContext.current
     var picked by remember { mutableStateOf(current) }
+    var pickedUri by remember { mutableStateOf(initialUri) }
+    // منتقي نغمات النظام: يعرض كل نغمات الإشعارات الموجودة على الهاتف (بما فيها أي نغمات مثبّتة).
+    val ringtonePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val uri: Uri? = res.data?.let {
+            if (android.os.Build.VERSION.SDK_INT >= 33)
+                it.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            else @Suppress("DEPRECATION") it.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+        }
+        if (uri != null) {
+            pickedUri = uri.toString()
+            picked = NotifSound.DEVICE
+            NotificationSounds.preview(context, NotifSound.DEVICE, pickedUri)
+        }
+    }
+    fun choose(sound: NotifSound) {
+        picked = sound
+        if (sound == NotifSound.DEVICE) {
+            ringtonePicker.launch(
+                Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_NOTIFICATION)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
+                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
+                    .putExtra(
+                        android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
+                        pickedUri?.let { Uri.parse(it) }
+                    )
+            )
+        } else NotificationSounds.preview(context, sound)
+    }
     DisposableEffect(Unit) { onDispose { NotificationSounds.stopPreview() } }
 
     GlassAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("صوت: ${kind.label}") },
         text = {
-            Column {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 NotifSound.values().forEach { sound ->
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable {
-                                picked = sound
-                                NotificationSounds.preview(context, sound)
-                            }
+                            .clickable { choose(sound) }
                             .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(selected = picked == sound, onClick = {
-                            picked = sound
-                            NotificationSounds.preview(context, sound)
-                        })
+                        RadioButton(selected = picked == sound, onClick = { choose(sound) })
                         Spacer(Modifier.width(4.dp))
                         Column(Modifier.weight(1f)) {
                             Text(
@@ -1299,8 +1327,8 @@ private fun NotificationSoundDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        if (sound != NotifSound.SILENT) {
-                            IconButton(onClick = { NotificationSounds.preview(context, sound) }) {
+                        if (sound != NotifSound.SILENT && (sound != NotifSound.DEVICE || pickedUri != null)) {
+                            IconButton(onClick = { NotificationSounds.preview(context, sound, pickedUri) }) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل")
                             }
                         }
@@ -1309,7 +1337,11 @@ private fun NotificationSoundDialog(
             }
         },
         confirmButton = {
-            TextButton(shape = RectangleShape, onClick = { onSelect(picked) }) { Text("حفظ") }
+            TextButton(
+                shape = RectangleShape,
+                enabled = picked != NotifSound.DEVICE || pickedUri != null,
+                onClick = { onSelect(picked, pickedUri) }
+            ) { Text("حفظ") }
         },
         dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
     )
