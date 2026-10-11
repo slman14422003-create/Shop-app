@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Night-mode overrides — picked up automatically whenever the device is in
+  dark mode, no Kotlin code needed to select this file. They keep the
+  pre-Compose chrome (window background, splash, ripple, edge glow) matching
+  Compose's actual dark surface instead of staying a fixed color regardless
+  of theme. The accent matches ClaudeOrangeDark in ui/theme/Color.kt.
+-->
+<resources>
+    <color name="background_light">#000000</color>
+
+    <color name="ripple_brand">#26D97757</color>
+    <color name="edge_glow_brand">#D97757</color>
+
+    <!-- Splash follows system theme — pure black in dark mode. -->
+    <color name="splash_background">#000000</color>
+</resources>
