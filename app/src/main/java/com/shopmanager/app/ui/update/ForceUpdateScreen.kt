@@ -58,6 +58,7 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.graphicsLayer
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
+import androidx.compose.animation.core.animateFloat
 
 /**
  * FEATURE ADDED ("التحديثات اجبارية ... لا يمكن تجاهلها"): a full-screen,
