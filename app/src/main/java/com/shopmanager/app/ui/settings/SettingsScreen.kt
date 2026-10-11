@@ -21,6 +21,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.AttachMoney
@@ -66,6 +69,9 @@ import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.data.notifications.NotifKind
+import com.shopmanager.app.data.notifications.NotifSound
+import com.shopmanager.app.data.notifications.NotificationSounds
 import com.shopmanager.app.data.updates.ApkDownloader
 import com.shopmanager.app.data.updates.AppVersionInfo
 import com.shopmanager.app.data.updates.UpdateCheckResult
@@ -179,6 +185,26 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     var performanceMode by remember { mutableStateOf(settings.performanceMode) }
+    // مدير أصوات الإشعارات: الصوت المختار لكل نوع + نوع الحوار المفتوح حالياً.
+    var notifSounds by remember { mutableStateOf(NotifKind.values().associateWith { settings.soundFor(it) }) }
+    var soundDialogKind by remember { mutableStateOf<NotifKind?>(null) }
+    // زر "منح الإذن": يطلب إذن أندرويد 13+، وإن رُفض نهائياً (النظام لا يعيد إظهار
+    // النافذة) ننقل المستخدم مباشرة لإعدادات إشعارات التطبيق ليمنحه يدوياً.
+    val permissionRowLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        systemNotificationsAllowed = checkSystemNotificationsAllowed()
+        if (!granted) {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            )
+        }
+    }
+    fun isPostPermissionGranted(): Boolean = android.os.Build.VERSION.SDK_INT < 33 ||
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.POST_NOTIFICATIONS
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     var recheckTick by remember { mutableStateOf(0) }
     var showCurrencyDialog by remember { mutableStateOf(false) }
     var showExportShareChoice by remember { mutableStateOf(false) }
@@ -611,6 +637,41 @@ fun SettingsScreen(
                 }
             }
 
+            // مدير أصوات الإشعارات والأذونات
+            item(key = "notificationSounds", contentType = "group") {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                val postPermissionGranted = systemNotificationsAllowed.let { isPostPermissionGranted() }
+                SettingsGroup {
+                    NotifKind.values().forEach { kind ->
+                        item(
+                            icon = Icons.Outlined.MusicNote,
+                            title = kind.label,
+                            subtitle = "الصوت: ${(notifSounds[kind] ?: kind.defaultSound).label}",
+                            onClick = { soundDialogKind = kind }
+                        )
+                    }
+                    item(
+                        icon = Icons.Outlined.VerifiedUser,
+                        title = "إذن الإشعارات",
+                        subtitle = if (postPermissionGranted && systemNotificationsAllowed)
+                            "ممنوح ✓ — اضغط لإدارة قنوات الإشعارات والاهتزاز في النظام"
+                        else "غير ممنوح — اضغط لمنح الإذن وتفعيل الإشعارات",
+                        onClick = {
+                            if (!postPermissionGranted) {
+                                permissionRowLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                )
+                            }
+                        }
+                    )
+                }
+                SettingsFootnote("أصوات «قطرة الماء» خاصة بهذا التطبيق فقط ولا تغيّر نغمة إشعارات الجهاز.")
+                }
+            }
+
             // تحذير: المفتاح مفعّل لكن النظام يمنع الإشعارات فعلياً
             if (notificationsEnabled && !systemNotificationsAllowed) {
                 item(key = "notificationsBlocked", contentType = "banner") {
@@ -878,6 +939,23 @@ fun SettingsScreen(
                 }) { Text("استعادة") }
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { pendingImportUri = null }) { Text("إلغاء") } }
+        )
+    }
+
+    soundDialogKind?.let { kind ->
+        NotificationSoundDialog(
+            kind = kind,
+            current = notifSounds[kind] ?: kind.defaultSound,
+            onDismiss = { NotificationSounds.stopPreview(); soundDialogKind = null },
+            onSelect = { sound ->
+                NotificationSounds.stopPreview()
+                settings.setSoundFor(kind, sound)
+                notifSounds = notifSounds + (kind to sound)
+                // الصوت مرتبط بمعرّف القناة: إعادة إنشاء القنوات تُفعّل القناة الجديدة وتحذف القديمة.
+                com.shopmanager.app.data.notifications.NotificationHelper.ensureChannels(context)
+                checkSystemNotificationsAllowed()
+                soundDialogKind = null
+            }
         )
     }
 
@@ -1175,6 +1253,66 @@ private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) 
             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
         }
     }
+}
+
+@Composable
+private fun NotificationSoundDialog(
+    kind: NotifKind,
+    current: NotifSound,
+    onDismiss: () -> Unit,
+    onSelect: (NotifSound) -> Unit
+) {
+    val context = LocalContext.current
+    var picked by remember { mutableStateOf(current) }
+    DisposableEffect(Unit) { onDispose { NotificationSounds.stopPreview() } }
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("صوت: ${kind.label}") },
+        text = {
+            Column {
+                NotifSound.values().forEach { sound ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                picked = sound
+                                NotificationSounds.preview(context, sound)
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = picked == sound, onClick = {
+                            picked = sound
+                            NotificationSounds.preview(context, sound)
+                        })
+                        Spacer(Modifier.width(4.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                sound.label,
+                                fontWeight = if (picked == sound) FontWeight.SemiBold else FontWeight.Normal
+                            )
+                            Text(
+                                sound.hint,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (sound != NotifSound.SILENT) {
+                            IconButton(onClick = { NotificationSounds.preview(context, sound) }) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل")
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(shape = RectangleShape, onClick = { onSelect(picked) }) { Text("حفظ") }
+        },
+        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 @Composable

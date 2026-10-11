@@ -32,9 +32,6 @@ import com.shopmanager.app.ui.common.avatarColorFor
  */
 object NotificationHelper {
 
-    private const val CHANNEL_SHOPPING_LIST = "low_stock_channel_v2"
-    private const val CHANNEL_DEBTS = "debts_channel_v2"
-    private const val CHANNEL_NOTES = "notes_channel_v2"
     private const val CHANNEL_REALTIME = "realtime_sync_channel"
     private const val CHANNEL_UPDATE_DOWNLOAD = "update_download_channel"
     const val NOTIF_ID_REALTIME = 1800
@@ -72,31 +69,30 @@ object NotificationHelper {
     // التطبيق بدل الرمادي الافتراضي للنظام (الأيقونة نفسها: ic_stat_notify.xml).
     private val BRAND_COLOR = android.graphics.Color.parseColor("#C96442")
 
-    // أصوات "قطرة الماء" الخاصة بهذا التطبيق فقط (res/raw/*.ogg). صوت القناة لا يتغيّر
-    // بعد إنشائها على الأجهزة المثبَّت عليها التطبيق مسبقاً، لذلك القنوات الثلاث
-    // أخذت معرّفات جديدة (_v2) وتُحذف القديمة أدناه.
-    private fun dropSoundUri(context: Context, resId: Int) =
-        android.net.Uri.parse("android.resource://${context.packageName}/$resId")
-
-    private val DROP_AUDIO_ATTRS = android.media.AudioAttributes.Builder()
-        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
-        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
-        .build()
-
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
 
-            listOf("low_stock_channel", "debts_channel", "notes_channel").forEach {
-                try { manager.deleteNotificationChannel(it) } catch (_: Exception) {}
+            // القنوات تُنشأ بمعرّف يحمل مفتاح الصوت المختار (انظر NotificationSounds.channelId)،
+            // وتُحذف القنوات القديمة (v1/v2) وقنوات الأصوات غير المختارة حالياً.
+            val settingsRepo = SettingsRepository(context.applicationContext)
+            val activeIds = NotifKind.values().map { it.idPrefix + settingsRepo.soundFor(it).key }.toSet()
+            val legacy = setOf(
+                "low_stock_channel", "debts_channel", "notes_channel",
+                "low_stock_channel_v2", "debts_channel_v2", "notes_channel_v2"
+            )
+            manager.notificationChannels.orEmpty().forEach { ch ->
+                val stale = ch.id in legacy ||
+                    (NotifKind.values().any { ch.id.startsWith(it.idPrefix) } && ch.id !in activeIds)
+                if (stale) try { manager.deleteNotificationChannel(ch.id) } catch (_: Exception) {}
             }
 
             val shoppingChannel = NotificationChannel(
-                CHANNEL_SHOPPING_LIST, "قائمة النواقص والمشتريات", NotificationManager.IMPORTANCE_DEFAULT
+                NotificationSounds.channelId(context, NotifKind.SHOPPING), NotifKind.SHOPPING.label, NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "تنبيه عند تغيّر قائمة المواد الناقصة"
                 enableLights(true)
-                setSound(dropSoundUri(context, com.shopmanager.app.R.raw.water_drop_soft), DROP_AUDIO_ATTRS)
+                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.SHOPPING)), NotificationSounds.AUDIO_ATTRS)
             }
 
             // Debt alerts are money-related and time-sensitive (a new debt,
@@ -105,11 +101,11 @@ object NotificationHelper {
             // silently landing in the shade, plus a short distinct
             // vibration pattern so it's recognizable by feel alone.
             val debtsChannel = NotificationChannel(
-                CHANNEL_DEBTS, "تنبيهات الديون", NotificationManager.IMPORTANCE_HIGH
+                NotificationSounds.channelId(context, NotifKind.DEBTS), NotifKind.DEBTS.label, NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "تنبيه فوري عند إضافة دين جديد أو تسديده"
                 enableLights(true)
-                setSound(dropSoundUri(context, com.shopmanager.app.R.raw.water_drop_double), DROP_AUDIO_ATTRS)
+                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.DEBTS)), NotificationSounds.AUDIO_ATTRS)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 180, 90, 180)
             }
@@ -121,11 +117,11 @@ object NotificationHelper {
             // generic shopping-list one) since a person may want reminders
             // to make sound/vibrate distinctly from a shortage-list update.
             val notesChannel = NotificationChannel(
-                CHANNEL_NOTES, "تذكيرات الملاحظات الهامة", NotificationManager.IMPORTANCE_HIGH
+                NotificationSounds.channelId(context, NotifKind.NOTES), NotifKind.NOTES.label, NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "تنبيه عند حلول موعد تذكير لملاحظة هامة"
                 enableLights(true)
-                setSound(dropSoundUri(context, com.shopmanager.app.R.raw.water_drop_crystal), DROP_AUDIO_ATTRS)
+                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.NOTES)), NotificationSounds.AUDIO_ATTRS)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 180, 90, 180)
             }
@@ -211,11 +207,7 @@ object NotificationHelper {
     fun blockedChannelLabels(context: Context): List<String> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return emptyList()
         val manager = context.getSystemService(NotificationManager::class.java) ?: return emptyList()
-        return listOf(
-            CHANNEL_SHOPPING_LIST to "قائمة النواقص والمشتريات",
-            CHANNEL_DEBTS to "تنبيهات الديون",
-            CHANNEL_NOTES to "تذكيرات الملاحظات الهامة"
-        ).filter { (id, _) -> manager.getNotificationChannel(id)?.importance == NotificationManager.IMPORTANCE_NONE }
+        return NotifKind.values().map { NotificationSounds.channelId(context, it) to it.label }.filter { (id, _) -> manager.getNotificationChannel(id)?.importance == NotificationManager.IMPORTANCE_NONE }
             .map { it.second }
     }
 
@@ -324,7 +316,7 @@ object NotificationHelper {
             putExtra(NotificationActionReceiver.EXTRA_NOTE_CONTENT, content)
             putExtra(NotificationActionReceiver.EXTRA_NOTIF_ID, id)
         }
-        val notification = NotificationCompat.Builder(context, CHANNEL_NOTES)
+        val notification = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.NOTES))
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             .setContentTitle("📌 $title")
@@ -335,7 +327,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, title)))
-            .extend(lockScreenPrivacy(context, CHANNEL_NOTES, "ملاحظات هامة"))
+            .extend(lockScreenPrivacy(context, NotificationSounds.channelId(context, NotifKind.NOTES), "ملاحظات هامة"))
             // "كفاءة أعلى": تأجيل التذكير ساعة كاملة دون فتح التطبيق —
             // يُنفَّذ مباشرة عبر NotificationActionReceiver.
             .addAction(0, "تأجيل ساعة", buildActionIntent(context, id, snoozeIntent))
@@ -388,7 +380,7 @@ object NotificationHelper {
         if (!hasPermission(context)) return
         val id = NOTIF_ID_NOTE_DONE_BASE + (noteId.hashCode() and 0xFFF)
         val displayTitle = title.ifBlank { "ملاحظة" }
-        val notification = NotificationCompat.Builder(context, CHANNEL_NOTES)
+        val notification = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.NOTES))
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             .setContentTitle("✅ تم إنجاز ملاحظة")
@@ -399,7 +391,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
-            .extend(lockScreenPrivacy(context, CHANNEL_NOTES, "ملاحظات هامة"))
+            .extend(lockScreenPrivacy(context, NotificationSounds.channelId(context, NotifKind.NOTES), "ملاحظات هامة"))
             .build()
 
         // LINT FIX (MissingPermission) — see the first occurrence of this
@@ -434,7 +426,7 @@ object NotificationHelper {
         val id = NOTIF_ID_NEW_NOTE_BASE + (noteId.hashCode() and 0xFFF)
         val displayTitle = title.ifBlank { "ملاحظة جديدة" }
         val body = content.ifBlank { "أُضيفت ملاحظة جديدة" }
-        val notification = NotificationCompat.Builder(context, CHANNEL_NOTES)
+        val notification = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.NOTES))
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             .setContentTitle("📝 ملاحظة جديدة: $displayTitle")
@@ -445,7 +437,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
-            .extend(lockScreenPrivacy(context, CHANNEL_NOTES, "ملاحظات هامة"))
+            .extend(lockScreenPrivacy(context, NotificationSounds.channelId(context, NotifKind.NOTES), "ملاحظات هامة"))
             .build()
 
         // LINT FIX (MissingPermission) — see the first occurrence of this
@@ -465,7 +457,7 @@ object NotificationHelper {
             action = NotificationActionReceiver.ACTION_DISMISS_SHOPPING
         }
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_SHOPPING_LIST)
+        val notification = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.SHOPPING))
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             .setContentTitle("🛒 قائمة مشتريات: ${shortageNames.size} مادة ناقصة")
@@ -514,7 +506,7 @@ object NotificationHelper {
     fun showNewDebtNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س", debtId: String = "") {
         if (!hasPermission(context)) return
         val id = if (debtId.isEmpty()) NOTIF_ID_DEBT else NOTIF_ID_NEW_DEBT_BASE + (debtId.hashCode() and 0xFFF)
-        val builder = NotificationCompat.Builder(context, CHANNEL_DEBTS)
+        val builder = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.DEBTS))
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             // "صورة رمزية": نفس لون ولون الحرف الأول اللذين يستخدمهما تطبيق
@@ -530,7 +522,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NewDebt(personName, amount, currencySymbol)))
-            .extend(lockScreenPrivacy(context, CHANNEL_DEBTS, "تنبيهات الديون"))
+            .extend(lockScreenPrivacy(context, NotificationSounds.channelId(context, NotifKind.DEBTS), "تنبيهات الديون"))
 
         // FEATURE ADDED ("تحسينات بالإشعارات"): زر "تسديد" مباشر من شريط
         // الإشعار — نفس فكرة "تم الشراء" على قائمة النواقص و"تأجيل ساعة"
@@ -576,7 +568,7 @@ object NotificationHelper {
     fun showDebtPaidNotification(context: Context, personName: String, amount: String, currencySymbol: String = "ل.س", debtId: String = "") {
         if (!hasPermission(context)) return
         val id = NOTIF_ID_PAID_BASE + (debtId.hashCode() and 0xFFF)
-        val notification = NotificationCompat.Builder(context, CHANNEL_DEBTS)
+        val notification = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.DEBTS))
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             .setLargeIcon(buildAvatarBitmap(personName))
@@ -589,7 +581,7 @@ object NotificationHelper {
             .setShowWhen(true)
             .setAutoCancel(true)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.DebtPaid(personName, amount, currencySymbol)))
-            .extend(lockScreenPrivacy(context, CHANNEL_DEBTS, "تنبيهات الديون"))
+            .extend(lockScreenPrivacy(context, NotificationSounds.channelId(context, NotifKind.DEBTS), "تنبيهات الديون"))
             .build()
 
         // LINT FIX (MissingPermission) — see the first occurrence of this
@@ -614,7 +606,7 @@ object NotificationHelper {
      */
     private fun postDebtsGroupSummary(context: Context) {
         if (!hasPermission(context)) return
-        val summary = NotificationCompat.Builder(context, CHANNEL_DEBTS)
+        val summary = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.DEBTS))
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             .setContentTitle("تنبيهات الديون")

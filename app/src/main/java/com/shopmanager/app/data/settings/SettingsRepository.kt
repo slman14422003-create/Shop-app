@@ -59,6 +59,16 @@ class SettingsRepository(context: Context) {
         get() = prefs.getBoolean(KEY_NOTIFICATIONS, true)
         set(value) = prefs.edit().putBoolean(KEY_NOTIFICATIONS, value).apply()
 
+    /** صوت إشعار كل نوع (قطرة ماء / صوت النظام / صامت) — يُدار من الإعدادات. */
+    fun soundFor(kind: com.shopmanager.app.data.notifications.NotifKind): com.shopmanager.app.data.notifications.NotifSound =
+        com.shopmanager.app.data.notifications.NotifSound.fromKey(prefs.getString("notif_sound_${kind.prefKey}", null))
+            ?: kind.defaultSound
+
+    fun setSoundFor(
+        kind: com.shopmanager.app.data.notifications.NotifKind,
+        sound: com.shopmanager.app.data.notifications.NotifSound
+    ) = prefs.edit().putString("notif_sound_${kind.prefKey}", sound.key).apply()
+
     /**
      * "المزامنة الفورية بالخلفية": خدمة أمامية تبقي مستمعات Firestore حيّة والتطبيق
      * مغلق ليصل الإشعار لحظياً (انظر RealtimeSyncService). لكل جهاز اختياره —
