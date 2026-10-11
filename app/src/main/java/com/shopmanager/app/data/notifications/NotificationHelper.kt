@@ -32,9 +32,9 @@ import com.shopmanager.app.ui.common.avatarColorFor
  */
 object NotificationHelper {
 
-    private const val CHANNEL_SHOPPING_LIST = "low_stock_channel"
-    private const val CHANNEL_DEBTS = "debts_channel"
-    private const val CHANNEL_NOTES = "notes_channel"
+    private const val CHANNEL_SHOPPING_LIST = "low_stock_channel_v2"
+    private const val CHANNEL_DEBTS = "debts_channel_v2"
+    private const val CHANNEL_NOTES = "notes_channel_v2"
     private const val CHANNEL_REALTIME = "realtime_sync_channel"
     private const val CHANNEL_UPDATE_DOWNLOAD = "update_download_channel"
     const val NOTIF_ID_REALTIME = 1800
@@ -72,15 +72,31 @@ object NotificationHelper {
     // التطبيق بدل الرمادي الافتراضي للنظام (الأيقونة نفسها: ic_stat_notify.xml).
     private val BRAND_COLOR = android.graphics.Color.parseColor("#C96442")
 
+    // أصوات "قطرة الماء" الخاصة بهذا التطبيق فقط (res/raw/*.ogg). صوت القناة لا يتغيّر
+    // بعد إنشائها على الأجهزة المثبَّت عليها التطبيق مسبقاً، لذلك القنوات الثلاث
+    // أخذت معرّفات جديدة (_v2) وتُحذف القديمة أدناه.
+    private fun dropSoundUri(context: Context, resId: Int) =
+        android.net.Uri.parse("android.resource://${context.packageName}/$resId")
+
+    private val DROP_AUDIO_ATTRS = android.media.AudioAttributes.Builder()
+        .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
+        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+        .build()
+
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
+
+            listOf("low_stock_channel", "debts_channel", "notes_channel").forEach {
+                try { manager.deleteNotificationChannel(it) } catch (_: Exception) {}
+            }
 
             val shoppingChannel = NotificationChannel(
                 CHANNEL_SHOPPING_LIST, "قائمة النواقص والمشتريات", NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "تنبيه عند تغيّر قائمة المواد الناقصة"
                 enableLights(true)
+                setSound(dropSoundUri(context, com.shopmanager.app.R.raw.water_drop_soft), DROP_AUDIO_ATTRS)
             }
 
             // Debt alerts are money-related and time-sensitive (a new debt,
@@ -93,6 +109,7 @@ object NotificationHelper {
             ).apply {
                 description = "تنبيه فوري عند إضافة دين جديد أو تسديده"
                 enableLights(true)
+                setSound(dropSoundUri(context, com.shopmanager.app.R.raw.water_drop_double), DROP_AUDIO_ATTRS)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 180, 90, 180)
             }
@@ -108,6 +125,7 @@ object NotificationHelper {
             ).apply {
                 description = "تنبيه عند حلول موعد تذكير لملاحظة هامة"
                 enableLights(true)
+                setSound(dropSoundUri(context, com.shopmanager.app.R.raw.water_drop_crystal), DROP_AUDIO_ATTRS)
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 180, 90, 180)
             }
