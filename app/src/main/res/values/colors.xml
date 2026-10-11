@@ -1,0 +1,14 @@
+<resources>
+    <!-- ألوان تُرسم قبل تشغيل أي كود Compose (السبلاش، خلفية النافذة، الريبل)
+         فلا يمكنها الرجوع إلى Color.kt؛ لذلك تُكرَّر هنا بالقيم نفسها.
+         اللون الأساسي هو ClaudeOrangeLight في ui/theme/Color.kt. -->
+    <color name="background_light">#FFFFFF</color>
+
+    <!-- Ripple / touch-feedback tint and scroll edge-glow color. -->
+    <color name="ripple_brand">#1FC96442</color>
+    <color name="edge_glow_brand">#C96442</color>
+
+    <!-- Splash follows system light/dark theme (white here, pure black in
+         values-night/colors.xml). -->
+    <color name="splash_background">#FFFFFF</color>
+</resources>
