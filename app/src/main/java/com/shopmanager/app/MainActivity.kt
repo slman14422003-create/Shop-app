@@ -10,6 +10,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -825,7 +827,12 @@ private fun ShopManagerApp(
     @OptIn(ExperimentalFoundationApi::class)
     fun openPager(page: Int) {
         navigateTopLevel(navController, ROUTE_MAIN_PAGER)
-        pagerScope.launch { pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec) }
+        pagerScope.launch {
+            // LOW: تبديل التبويب فوري — انزلاق صفحتين كاملتين (مع تركيب الصفحة الجديدة في أول
+            // إطار) هو أثقل ما في التنقل على المعالج الرسومي القديم.
+            if (isLowTierForPager) pagerState.scrollToPage(page)
+            else pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec)
+        }
     }
 
     // Tapping a notification should land on the screen it's about, not just
@@ -1035,7 +1042,9 @@ private fun ShopManagerApp(
             },
             exitTransition = {
                 when {
-                    isLowTier -> fadeOut(navFadeSpec)
+                    // LOW: طبقة واحدة فقط تتحرك (الشاشة الجديدة تتلاشى فوق القديمة الثابتة)،
+                    // بدل تلاشٍ متقاطع لشاشتين كاملتين = نصف عمل المعالج الرسومي على 40Hz.
+                    isLowTier -> ExitTransition.None
                     isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 4 }
                     else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
                         scaleOut(pushScaleSpec, targetScale = 0.94f)
@@ -1043,7 +1052,7 @@ private fun ShopManagerApp(
             },
             popEnterTransition = {
                 when {
-                    isLowTier -> fadeIn(navFadeSpec)
+                    isLowTier -> EnterTransition.None
                     isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 4 }
                     else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
                         scaleIn(pushScaleSpec, initialScale = 0.94f)

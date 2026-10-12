@@ -12,3 +12,15 @@ HSPLcom/shopmanager/app/ui/theme/**;->**(**)**
 Lcom/shopmanager/app/MainActivity;
 Lcom/shopmanager/app/data/performance/**;
 Lcom/shopmanager/app/ui/common/**;
+HSPLcom/shopmanager/app/ui/notes/**;->**(**)**
+HSPLcom/shopmanager/app/ui/settings/**;->**(**)**
+HSPLcom/shopmanager/app/ui/lock/**;->**(**)**
+HSPLcom/shopmanager/app/data/debts/**;->**(**)**
+HSPLcom/shopmanager/app/data/materials/**;->**(**)**
+HSPLcom/shopmanager/app/data/notes/**;->**(**)**
+HSPLcom/shopmanager/app/data/settings/**;->**(**)**
+Lcom/shopmanager/app/ui/dashboard/**;
+Lcom/shopmanager/app/ui/debts/**;
+Lcom/shopmanager/app/ui/materials/**;
+Lcom/shopmanager/app/ui/notes/**;
+Lcom/shopmanager/app/ui/theme/**;
