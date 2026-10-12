@@ -76,6 +76,7 @@ import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.notifications.NotificationSync
 import com.shopmanager.app.data.performance.DevicePerformance
 import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.FrameJankGuard
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.data.performance.resolvePerformanceTier
@@ -379,6 +380,18 @@ class MainActivity : FragmentActivity() {
             }
             // الأداء القوي → ~90Hz، الاقتصادي → 60Hz؛ يُعاد التطبيق فور تغيّر الوضع من الإعدادات.
             LaunchedEffect(performanceTier) { applyRefreshRate(performanceTier) }
+            // "تلقائي" فقط: إن رُصد تقطع فعلي في الإطارات على هذا الجهاز نزلنا بالمستوى خطوة
+            // (ويُحفظ الحكم). المنخفض لا يحتاج رصداً، والاختيار اليدوي (مرتفع/منخفض) لا يُمَس.
+            androidx.compose.runtime.DisposableEffect(isReady, performancePreference, detectedTier) {
+                val stop = if (isReady && performancePreference == PerformanceMode.AUTO &&
+                    detectedTier != PerformanceTier.LOW
+                ) {
+                    FrameJankGuard.start(refreshHz = { refreshHz }) {
+                        detectedTier = DevicePerformance.downgradeCachedTier(applicationContext)
+                    }
+                } else null
+                onDispose { stop?.invoke() }
+            }
             // FEATURE ADDED ("إعادة فحص أداء الجهاز" in Settings → الأداء):
             // DevicePerformance.resetCachedTier existed already but had no
             // caller — wiring it up needs both steps done together (clear

@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
+import com.shopmanager.app.data.performance.tierAnimateContentSize
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
 import androidx.compose.animation.animateColorAsState
@@ -72,7 +73,6 @@ import com.shopmanager.app.data.materials.priceOf
 import com.shopmanager.app.data.materials.priceSummary
 import androidx.compose.ui.text.input.KeyboardType
 import com.shopmanager.app.ui.common.AnimatedCounterText
-import androidx.compose.animation.animateContentSize
 import com.shopmanager.app.ui.common.AppSearchBar
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.Formatters
@@ -1196,7 +1196,7 @@ private fun MaterialsSummaryCard(
     val showPrice = prices.total > 0.0
     if (!showWeights && !showPrice) return
 
-    AppCard(modifier = modifier.animateContentSize(animationSpec = MotionSpecs.expandSpring())) {
+    AppCard(modifier = modifier.tierAnimateContentSize()) {
         Row(
             Modifier
                 .fillMaxWidth()

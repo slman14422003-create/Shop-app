@@ -456,10 +456,9 @@ fun SettingsScreen(
         AppThemeMode.DARK -> "داكن"
     }
     val performanceLabel = when (performanceMode) {
-        PerformanceMode.AUTO -> "تلقائي (حسب الجهاز)"
+        PerformanceMode.AUTO -> "تلقائي (يضبط نفسه حسب الجهاز)"
         PerformanceMode.HIGH -> "مرتفع (كل التأثيرات)"
-        PerformanceMode.BALANCED -> "متوازن (ناعم ومنسّق وخفيف على الجرافيك)"
-        PerformanceMode.LOW -> "منخفض (حركات محدودة بسرعة 40Hz للأجهزة القديمة)"
+        PerformanceMode.LOW -> "منخفض (بدون تأثيرات، للأجهزة القديمة)"
     }
 
     fun syncNow() {
@@ -1144,14 +1143,13 @@ fun SettingsScreen(
     if (showPerformanceSheet) {
         SettingsSheet(title = "الأداء", onDismiss = { showPerformanceSheet = false }) { close ->
             SettingsFootnote(
-                "مرتفع: أنيميشن أكثر وظلال ورموز متحركة. متوازن: حركة ناعمة بلا ظلال ولا تصغير للشاشات فلا يتعب الجرافيك. منخفض: إيقاف التأثيرات والاكتفاء بانتقالات بسيطة. \"تلقائي\" يقرر حسب قوة جهازك."
+                "مرتفع: أنيميشن أكثر وظلال ورموز متحركة. منخفض: إيقاف التأثيرات والاكتفاء بانتقالات بسيطة. تلقائي: يختار التطبيق وحده ما يناسب جهازك (قوي، متوسط، أو ضعيف)، وينزل بالتأثيرات تلقائياً عند توفير الطاقة أو إذا لاحظ تقطعاً في الحركة."
             )
             SettingsGroup {
                 listOf(
-                    PerformanceMode.AUTO to "تلقائي (حسب الجهاز)",
+                    PerformanceMode.AUTO to "تلقائي (يضبط نفسه حسب الجهاز)",
                     PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
-                    PerformanceMode.BALANCED to "متوازن (ناعم ومنسّق وخفيف على الجرافيك)",
-                    PerformanceMode.LOW to "منخفض (حركات محدودة بسرعة 40Hz للأجهزة القديمة)"
+                    PerformanceMode.LOW to "منخفض (بدون تأثيرات، للأجهزة القديمة)"
                 ).forEach { (mode, label) ->
                     selectItem(
                         title = label,
@@ -1165,7 +1163,7 @@ fun SettingsScreen(
                     )
                 }
             }
-            // إعادة الفحص تعني شيئاً فقط في وضع "تلقائي" (HIGH/BALANCED/LOW يتجاوزان الفحص).
+            // إعادة الفحص تعني شيئاً فقط في وضع "تلقائي" (HIGH/LOW يتجاوزان الفحص).
             if (performanceMode == PerformanceMode.AUTO) {
                 val deviceInfo = remember(recheckTick) {
                     com.shopmanager.app.data.performance.DevicePerformance.currentDeviceInfo(context)

@@ -4,7 +4,9 @@ import android.app.ActivityManager
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
+import android.view.Choreographer
 import android.view.Display
 import android.view.View
 import android.view.Window
@@ -22,6 +24,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -82,14 +85,17 @@ enum class PerformanceTier {
 }
 
 /**
- * "تفضيل الأداء" (الإعدادات ← الأداء): يتيح تجاوز الكشف التلقائي.
+ * "تفضيل الأداء" (الإعدادات ← الأداء): ثلاثة خيارات فقط.
  *
- * - AUTO (الافتراضي): المستوى الذي كشفه [DevicePerformance.detectTier].
- * - HIGH: كل التأثيرات دائماً، حتى لو صُنّف الجهاز LOW تلقائياً.
- * - BALANCED ("متوازن"): حركة ناعمة بلا ظلال ولا تكبير للشاشة كاملة ولا حلقات لا نهائية.
- * - LOW: بلا تأثيرات دائماً، حتى لو صُنّف الجهاز STANDARD (أسرع وأوفر للبطارية).
+ * - AUTO (الافتراضي): يقرر التطبيق وحده. يبدأ من المستوى الذي كشفه [DevicePerformance.detectTier]
+ *   (وهو الذي يختار المتوازن [PerformanceTier.BALANCED] تلقائياً للأجهزة المتوسطة)، وينزل
+ *   خطوة عند توفير الطاقة، وينزل خطوة أخرى إن رصد [FrameJankGuard] تقطعاً حقيقياً في الإطارات.
+ * - HIGH (مرتفع): كل التأثيرات دائماً، حتى لو صُنّف الجهاز LOW تلقائياً.
+ * - LOW (منخفض): بلا تأثيرات دائماً (أسرع وأوفر للبطارية، مناسب للأجهزة القديمة).
+ *
+ * لا يوجد خيار "متوازن" يدوي: المستوى المتوازن صار داخلياً يخص "تلقائي" فقط.
  */
-enum class PerformanceMode { AUTO, HIGH, BALANCED, LOW }
+enum class PerformanceMode { AUTO, HIGH, LOW }
 
 /** قيود الحركة القادمة من النظام نفسه، تُقرأ عند كل عودة للتطبيق. */
 enum class SystemMotionLimit { NONE, POWER_SAVE, ANIMATIONS_OFF }
@@ -105,7 +111,6 @@ fun resolvePerformanceTier(
     val base = when (mode) {
         PerformanceMode.AUTO -> detected
         PerformanceMode.HIGH -> PerformanceTier.STANDARD
-        PerformanceMode.BALANCED -> PerformanceTier.BALANCED
         PerformanceMode.LOW -> PerformanceTier.LOW
     }
     // توفير الطاقة: في الوضع التلقائي فقط ننزل من القوي إلى المتوازن (لا نغيّر اختيار المستخدم الصريح).
@@ -219,6 +224,25 @@ object DevicePerformance {
         return tier
     }
 
+    /** ينزل بالتصنيف المخزَّن خطوة واحدة (STANDARD ← BALANCED ← LOW) حين يرصد [FrameJankGuard]
+     * تقطعاً فعلياً على هذا الجهاز، فيستمر الحكم في التشغيلات التالية. زر "إعادة فحص أداء الجهاز"
+     * يمسحه ويقيس من جديد. يُعيد المستوى الجديد. */
+    fun downgradeCachedTier(context: Context): PerformanceTier {
+        val current = detectTier(context)
+        val lower = when (current) {
+            PerformanceTier.STANDARD -> PerformanceTier.BALANCED
+            PerformanceTier.BALANCED -> PerformanceTier.LOW
+            PerformanceTier.LOW -> PerformanceTier.LOW
+        }
+        if (lower != current) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(KEY_TIER, lower.name)
+                .putInt(KEY_DETECTION_VERSION, CURRENT_DETECTION_VERSION)
+                .apply()
+        }
+        return lower
+    }
+
     /** يمسح التصنيف المخزَّن ليُقاس من جديد عند الاستدعاء التالي لـ [detectTier]
      * (زر "إعادة فحص أداء الجهاز" في الإعدادات). */
     fun resetCachedTier(context: Context) {
@@ -287,6 +311,68 @@ object RefreshRatePolicy {
         } else {
             val target = if (tier == PerformanceTier.LOW) LOW_TARGET_HZ else BALANCED_TARGET_HZ
             modes.minWithOrNull(compareBy<Display.Mode>({ abs(it.refreshRate - target) }, { it.refreshRate }))
+        }
+    }
+}
+
+// ───────────────────────── 4.5) رصد التقطع الفعلي (تلقائي فقط) ─────────────────────────
+
+/**
+ * يقيس زمن الإطارات الحقيقي على هذا الجهاز لأول ~25 ثانية بعد جاهزية التطبيق (يتجاهل أول
+ * إطارات التشغيل وأي فجوة طويلة = خمول/خلفية). إن تجاوز تقطع الإطارات (إطار > 2.5× زمن إطار
+ * الشاشة) نسبة 30% من 150 إطاراً متتالية، يستدعي [onSustainedJank] مرة واحدة ويتوقف.
+ * بعد انتهاء النافذة يزيل نفسه كلياً فلا يبقى أي استدعاء إطارات يعمل في الخلفية.
+ * يجب استدعاؤه من الخيط الرئيسي؛ يُعيد دالة إيقاف.
+ */
+object FrameJankGuard {
+    private const val SAMPLE_WINDOW_MS = 25_000L
+    private const val WARMUP_FRAMES = 45
+    private const val BATCH_FRAMES = 150
+    private const val JANK_FACTOR = 2.5f
+    private const val JANK_RATIO = 0.30f
+    private const val MAX_GAP_NS = 400_000_000L
+
+    fun start(refreshHz: () -> Float, onSustainedJank: () -> Unit): () -> Unit {
+        val choreographer = Choreographer.getInstance()
+        val startedAt = SystemClock.elapsedRealtime()
+        var active = true
+        var lastFrameNs = 0L
+        var seen = 0
+        var total = 0
+        var jank = 0
+        val callback = object : Choreographer.FrameCallback {
+            override fun doFrame(frameTimeNanos: Long) {
+                if (!active) return
+                if (SystemClock.elapsedRealtime() - startedAt > SAMPLE_WINDOW_MS) {
+                    active = false
+                    return
+                }
+                if (lastFrameNs != 0L) {
+                    val delta = frameTimeNanos - lastFrameNs
+                    seen++
+                    if (seen > WARMUP_FRAMES && delta < MAX_GAP_NS) {
+                        val budgetNs = 1_000_000_000f / refreshHz().coerceAtLeast(30f)
+                        total++
+                        if (delta > budgetNs * JANK_FACTOR) jank++
+                        if (total >= BATCH_FRAMES) {
+                            if (jank.toFloat() / total > JANK_RATIO) {
+                                active = false
+                                onSustainedJank()
+                                return
+                            }
+                            total = 0
+                            jank = 0
+                        }
+                    }
+                }
+                lastFrameNs = frameTimeNanos
+                choreographer.postFrameCallback(this)
+            }
+        }
+        choreographer.postFrameCallback(callback)
+        return {
+            active = false
+            choreographer.removeFrameCallback(callback)
         }
     }
 }
@@ -674,3 +760,12 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
         }
     }
 }
+
+/**
+ * بديل animateContentSize يعيد قياس التخطيط في كل إطار، وهو من أغلى الحركات على الأجهزة
+ * القديمة؛ في المستوى LOW يتغير الحجم فوراً بلا حركة، وفي غيره يعمل بمواصفات [MotionSpecs].
+ */
+@Composable
+fun Modifier.tierAnimateContentSize(): Modifier =
+    if (LocalPerformanceTier.current == PerformanceTier.LOW) this
+    else this.animateContentSize(MotionSpecs.expandSpring())

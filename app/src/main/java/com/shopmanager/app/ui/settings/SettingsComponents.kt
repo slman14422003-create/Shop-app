@@ -1,6 +1,5 @@
 package com.shopmanager.app.ui.settings
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -58,7 +57,7 @@ import com.shopmanager.app.ui.theme.ClaudeOrangeDark
 import com.shopmanager.app.ui.theme.ClaudeOrangeLight
 import com.shopmanager.app.ui.theme.LocalIsDarkTheme
 import kotlinx.coroutines.launch
-import com.shopmanager.app.data.performance.MotionSpecs
+import com.shopmanager.app.data.performance.tierAnimateContentSize
 
 // ============================================================================
 // إعادة تصميم شاشة الإعدادات على نمط شاشة Settings في تطبيق Claude:
@@ -145,7 +144,7 @@ internal fun SettingsGroup(
         modifier
             .fillMaxWidth()
             // تغيّر ارتفاع المجموعة (ظهور/اختفاء صف) ينزلق بدل أن يقفز.
-            .animateContentSize(MotionSpecs.expandSpring()),
+            .tierAnimateContentSize(),
         verticalArrangement = Arrangement.spacedBy(GroupItemGap)
     ) {
         val last = entries.lastIndex

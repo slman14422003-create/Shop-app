@@ -89,6 +89,7 @@ class SettingsRepository(context: Context) {
      * (see [PerformanceMode]). Defaults to AUTO so nobody's experience
      * changes unless they open Settings and pick something else. */
     var performanceMode: PerformanceMode
+        // قيمة "BALANCED" المحفوظة من إصدار سابق (لم يعد خياراً يدوياً) أو أي قيمة غير معروفة ← AUTO.
         get() = runCatching {
             PerformanceMode.valueOf(prefs.getString(KEY_PERFORMANCE_MODE, PerformanceMode.AUTO.name)!!)
         }.getOrDefault(PerformanceMode.AUTO)
