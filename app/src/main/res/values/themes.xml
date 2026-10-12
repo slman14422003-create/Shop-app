@@ -43,6 +43,7 @@
              platform default grey, now tied to the brand palette (see
              colors.xml) so even the smallest, most frequent touch
              feedback in the app reads as part of one cohesive design. -->
+        <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
         <item name="android:colorControlHighlight">@color/ripple_brand</item>
         <item name="android:colorEdgeEffect" tools:targetApi="s">@color/edge_glow_brand</item>
     </style>

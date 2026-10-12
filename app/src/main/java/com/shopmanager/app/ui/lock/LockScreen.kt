@@ -155,17 +155,22 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
         // animated. Tinted toward the accent color now instead of plain
         // white, since it's sitting on a neutral background instead of an
         // already-colored one.
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = (-90).dp)
-                .size(420.dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), Color.Transparent)
+        // الهالة الشعاعية (420dp، shader لكل بكسل) للأداء القوي فقط.
+        if (com.shopmanager.app.data.performance.LocalPerformanceTier.current ==
+            com.shopmanager.app.data.performance.PerformanceTier.STANDARD
+        ) {
+            Box(
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-90).dp)
+                    .size(420.dp)
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), Color.Transparent)
+                        )
                     )
-                )
-        )
+            )
+        }
 
         // UI FIX: this column used to be a fixed, non-scrolling block — on a
         // small phone (or landscape) with the keyboard open, adjustResize

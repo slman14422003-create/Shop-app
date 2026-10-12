@@ -221,6 +221,7 @@ class MainActivity : FragmentActivity() {
         super.onStop()
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         // PERF FIX (startup jitter): installSplashScreen() must run before
         // super.onCreate(). It puts a static app icon on a flat brand-color
@@ -549,7 +550,11 @@ class MainActivity : FragmentActivity() {
 
                             CompositionLocalProvider(
                                 LocalPerformanceTier provides performanceTier,
-                                LocalRefreshRateHz provides refreshHz
+                                LocalRefreshRateHz provides refreshHz,
+                                // LOW: بلا تأثير الشدّ/التوهج عند آخر القائمة (shader يُرسم كل إطار أثناء السحب).
+                                androidx.compose.foundation.LocalOverscrollFactory provides
+                                    (if (performanceTier == PerformanceTier.LOW) null
+                                    else androidx.compose.foundation.LocalOverscrollFactory.current)
                             ) {
                                 // Load the persisted currency symbol into the
                                 // app-wide holder once, so every screen

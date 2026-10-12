@@ -130,9 +130,7 @@ fun GlassAlertDialog(
                     .widthIn(max = 460.dp)
                     .liquidGlassSurface(
                         shape = shape,
-                        baseBrush = androidx.compose.ui.graphics.Brush.linearGradient(
-                            listOf(resolvedContainer, resolvedContainer)
-                        ),
+                        baseBrush = androidx.compose.ui.graphics.SolidColor(resolvedContainer),
                         elevation = 0.dp
                     )
             ) {

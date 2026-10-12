@@ -25,6 +25,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,6 +46,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
 
 // ============================================================================
 // لغة التصميم الموحّدة (مأخوذة من شاشة الإعدادات الجديدة):
@@ -77,6 +80,22 @@ fun groupedTileShape(index: Int, lastIndex: Int): Shape {
     return RoundedCornerShape(topStart = start, bottomStart = start, topEnd = end, bottomEnd = end)
 }
 
+/**
+ * LOW: سطح مسطّح بخلفية بشكل مباشر بدل Surface — Surface يقصّ محتواه بمسار مستدير (clip)
+ * وهو مكلف على معالج رسوميات قديم؛ الصفوف هنا لا يتجاوز محتواها الزوايا فالنتيجة واحدة.
+ */
+@Composable
+private fun FlatSurface(
+    shape: Shape,
+    modifier: Modifier,
+    color: Color,
+    content: @Composable () -> Unit
+) {
+    CompositionLocalProvider(LocalContentColor provides contentColorFor(color)) {
+        Box(modifier.background(color, shape), propagateMinConstraints = true) { content() }
+    }
+}
+
 /** صفٌّ مسطّح (قابل للّمس اختيارياً) بنفس تعبئة صفوف الإعدادات. */
 @Composable
 fun AppRowSurface(
@@ -94,6 +113,8 @@ fun AppRowSurface(
             modifier = modifier.fillMaxWidth(),
             content = content
         )
+    } else if (LocalPerformanceTier.current == PerformanceTier.LOW) {
+        FlatSurface(shape, modifier.fillMaxWidth(), color, content)
     } else {
         Surface(
             shape = shape,
@@ -112,12 +133,16 @@ fun AppCard(
     color: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
     content: @Composable () -> Unit
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = shape,
-        color = color,
-        content = content
-    )
+    if (LocalPerformanceTier.current == PerformanceTier.LOW) {
+        FlatSurface(shape, modifier.fillMaxWidth(), color, content)
+    } else {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            color = color,
+            content = content
+        )
+    }
 }
 
 /**

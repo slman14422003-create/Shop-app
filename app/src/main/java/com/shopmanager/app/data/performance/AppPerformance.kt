@@ -748,6 +748,10 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
         // القراءة هنا داخل كتلة graphicsLayer (مرحلة الرسم) — لا إعادة تركيب.
         val p = progress.value
         alpha = p
+        // LOW/BALANCED: بلا طبقة خارج الشاشة (offscreen buffer) لتلاشي الصف — يُطبَّق الشفاف على كل رسمة.
+        if (tier != PerformanceTier.STANDARD) {
+            compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
+        }
         when (tier) {
             PerformanceTier.LOW -> Unit
             PerformanceTier.BALANCED -> translationY = (1f - p) * 10.dp.toPx()

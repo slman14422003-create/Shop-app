@@ -257,7 +257,7 @@ fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
             .glowBehind(primary)
             .liquidGlassSurface(
                 CircleShape,
-                baseBrush = Brush.linearGradient(listOf(primary, primary)),
+                baseBrush = androidx.compose.ui.graphics.SolidColor(primary),
                 elevation = 6.dp
             )
             .clickable(

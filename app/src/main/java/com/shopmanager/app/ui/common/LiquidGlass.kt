@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -152,10 +153,10 @@ fun GlassIconButton(
             .size(size)
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
             .clip(CircleShape)
-            .background(Brush.linearGradient(listOf(pressTint.copy(alpha = fillAlpha), pressTint.copy(alpha = fillAlpha))))
+            .background(SolidColor(pressTint.copy(alpha = fillAlpha)))
             .border(
                 1.dp,
-                Brush.linearGradient(listOf(pressTint.copy(alpha = rimAlpha), pressTint.copy(alpha = rimAlpha))),
+                SolidColor(pressTint.copy(alpha = rimAlpha)),
                 CircleShape
             )
     ) {
