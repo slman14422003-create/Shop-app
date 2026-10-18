@@ -199,7 +199,8 @@ private fun DrawerRow(
     selected: Boolean,
     shape: Shape,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    badge: String? = null
 ) {
     val cs = MaterialTheme.colorScheme
 
