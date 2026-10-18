@@ -32,7 +32,8 @@ import com.shopmanager.app.ui.common.avatarColorFor
  */
 object NotificationHelper {
 
-    private const val CHANNEL_REALTIME = "realtime_sync_channel"
+    private const val CHANNEL_REALTIME = "realtime_sync_hidden_channel"
+    private const val CHANNEL_REALTIME_LEGACY = "realtime_sync_channel"
     private const val CHANNEL_UPDATE_DOWNLOAD = "update_download_channel"
     const val NOTIF_ID_REALTIME = 1800
     const val NOTIF_ID_UPDATE_DOWNLOAD = 1801
@@ -130,14 +131,18 @@ object NotificationHelper {
             // قناة إشعار الخدمة الأمامية الدائم (المزامنة الفورية): أدنى أهمية —
             // بلا صوت ولا اهتزاز ولا ظهور على شاشة القفل، فقط سطر صغير مطوي في
             // الشريط. لازم يوجد إشعار للخدمة الأمامية، وهذا أقل شكل ممكن له.
+            // Foreground-service notification is created blocked (IMPORTANCE_NONE):
+            // the service keeps syncing but nothing shows in the shade or status bar.
+            // The old visible channel is removed so it can't keep being used.
+            runCatching { manager.deleteNotificationChannel(CHANNEL_REALTIME_LEGACY) }
             val realtimeChannel = NotificationChannel(
-                CHANNEL_REALTIME, "المزامنة الفورية", NotificationManager.IMPORTANCE_MIN
+                CHANNEL_REALTIME, "المزامنة الفورية", NotificationManager.IMPORTANCE_NONE
             ).apply {
-                description = "إشعار صامت صغير يبقي التطبيق متصلاً ليصلك كل جديد من الأجهزة الأخرى فوراً"
                 setShowBadge(false)
                 setSound(null, null)
                 enableVibration(false)
                 enableLights(false)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_SECRET
             }
             manager.createNotificationChannel(realtimeChannel)
 
@@ -704,8 +709,7 @@ object NotificationHelper {
         return NotificationCompat.Builder(context, CHANNEL_REALTIME)
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
-            .setContentTitle("المزامنة الفورية مفعّلة")
-            .setContentText("تصلك تنبيهات الديون والمواد والملاحظات لحظة حدوثها")
+            .setContentTitle("المزامنة")
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)

@@ -1,6 +1,15 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -135,6 +144,106 @@ fun AppSearchBar(
                             .size(18.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+
+/**
+ * Always-visible capsule search field: a fully rounded track with a circular
+ * search glyph on the leading edge, a hairline border that brightens on focus
+ * and a circular clear button. Used as the primary search surface of the
+ * list screens.
+ */
+@Composable
+fun AppCapsuleSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    val cs = MaterialTheme.colorScheme
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val low = com.shopmanager.app.data.performance.LocalPerformanceTier.current ==
+        com.shopmanager.app.data.performance.PerformanceTier.LOW
+    val colorSpec = if (low) androidx.compose.animation.core.snap<androidx.compose.ui.graphics.Color>()
+    else androidx.compose.animation.core.tween<androidx.compose.ui.graphics.Color>(150)
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) cs.onSurface.copy(alpha = 0.55f) else cs.onSurface.copy(alpha = 0.08f),
+        animationSpec = colorSpec, label = "capsuleSearchBorder"
+    )
+    val glyphBg by animateColorAsState(
+        targetValue = if (focused) cs.onSurface else cs.surfaceContainerHighest,
+        animationSpec = colorSpec, label = "capsuleSearchGlyphBg"
+    )
+    val glyphTint by animateColorAsState(
+        targetValue = if (focused) cs.surface else cs.onSurfaceVariant,
+        animationSpec = colorSpec, label = "capsuleSearchGlyphTint"
+    )
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(CircleShape)
+            .background(cs.surfaceContainerHigh)
+            .border(BorderStroke(1.2.dp, borderColor), CircleShape)
+            .padding(horizontal = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(38.dp).clip(CircleShape).background(glyphBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Search, contentDescription = null, tint = glyphTint, modifier = Modifier.size(20.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { if (focusRequester != null) it.focusRequester(focusRequester) else it },
+                singleLine = true,
+                interactionSource = interaction,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = cs.onSurface,
+                    fontWeight = FontWeight.Medium
+                ),
+                cursorBrush = SolidColor(cs.onSurface),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+                decorationBox = { inner ->
+                    if (query.isEmpty()) {
+                        Text(
+                            placeholder,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = cs.onSurfaceVariant.copy(alpha = 0.65f)
+                        )
+                    }
+                    inner()
+                }
+            )
+        }
+        if (query.isNotEmpty()) {
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(cs.surfaceContainerHighest)
+                    .clickable { onQueryChange("") },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Clear,
+                    contentDescription = "مسح",
+                    tint = cs.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }

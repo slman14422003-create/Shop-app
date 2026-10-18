@@ -28,6 +28,8 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import com.shopmanager.app.ui.common.AppEmptyState
 import com.shopmanager.app.ui.common.AppFootnote
@@ -35,7 +37,13 @@ import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppIconCircle
 import com.shopmanager.app.ui.common.AppRowSurface
 import com.shopmanager.app.ui.common.AppScreenPadding
-import com.shopmanager.app.ui.common.AppSearchBar
+import com.shopmanager.app.ui.common.AppCapsuleSearchField
+import com.shopmanager.app.ui.common.AppPillButton
+import com.shopmanager.app.ui.common.ActionSpec
+import com.shopmanager.app.ui.common.AppActionPill
+import com.shopmanager.app.ui.common.rememberSmartSearch
+import com.shopmanager.app.ui.theme.LocalSemanticColors
+import androidx.compose.material.icons.filled.Close
 import com.shopmanager.app.ui.common.ScreenIconButton
 import com.shopmanager.app.ui.common.ScreenTopBar
 import com.shopmanager.app.ui.common.groupedRowShape
@@ -77,9 +85,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     // the whole catalog on every unrelated recomposition (dialogs opening,
     // the snackbar message clearing), only on an actual search/catalog
     // change.
-    val filtered = remember(search, catalog) {
-        if (search.isBlank()) catalog else catalog.filter { it.name.contains(search, ignoreCase = true) }
-    }
+    val filtered = rememberSmartSearch(catalog, search) { it.name }
 
     Scaffold(
         // Off-pager screen (no bottom nav bar of its own) — the outer app
@@ -102,38 +108,41 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 }
             )
         },
-        // FIX: adding a new catalog name used to be a permanently-visible
-        // text field + button squeezed in above the list, competing with
-        // search for the top of the screen. It's now a floating "+" button
-        // at the bottom - same pattern as MaterialsScreen's own FAB - that
-        // opens a small, focused dialog just for typing the one new name.
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            Surface(
                 onClick = { showAddDialog = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("مادة جديدة", fontWeight = FontWeight.SemiBold) },
                 shape = CircleShape,
-                containerColor = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.onSurface,
                 contentColor = MaterialTheme.colorScheme.surface,
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 0.dp, pressedElevation = 0.dp)
-            )
+                shadowElevation = 6.dp,
+                modifier = Modifier.height(56.dp)
+            ) {
+                Row(
+                    Modifier.padding(start = 8.dp, end = 22.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text("مادة جديدة", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            AppFootnote(
-                "اضغط على اسم المادة لإدخال الكمية، أو أضف اسمًا جديدًا من الزر بالأسفل",
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
-            )
-
-            AppSearchBar(
+            AppCapsuleSearchField(
                 query = search,
                 onQueryChange = { search = it },
-                onClose = { search = "" },
-                placeholder = "بحث بالقائمة...",
-                showBackButton = false,
-                modifier = Modifier.padding(horizontal = AppScreenPadding, vertical = 8.dp)
+                placeholder = "ابحث عن مادة...",
+                modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 8.dp)
             )
-
             if (filtered.isEmpty()) {
                 AppEmptyState(
                     icon = Icons.Default.Inventory2,
@@ -142,9 +151,15 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = AppScreenPadding, vertical = 4.dp),
+                    contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 104.dp),
                     verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
+                    item(key = "catalogTitle") {
+                        AppSectionTitle(
+                            text = if (search.isBlank()) "اختر مادة (${filtered.size})" else "النتائج (${filtered.size})",
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
                     itemsIndexed(filtered, key = { _, catalogItem -> catalogItem.id }, contentType = { _, _ -> "catalogItem" }) { index, item ->
                         Box(Modifier.listItemEntrance(index)) {
                             CatalogRow(
@@ -156,7 +171,12 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                             )
                         }
                     }
-                    item { Spacer(Modifier.height(88.dp)) }
+                    item(key = "catalogHint") {
+                        AppFootnote(
+                            "اضغط على اسم المادة لإدخال الكمية",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
+                        )
+                    }
                 }
             }
         }
@@ -239,7 +259,7 @@ private fun CatalogRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 64.dp)
-                .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppIconCircle(color = color, size = 40.dp) {
@@ -252,12 +272,14 @@ private fun CatalogRow(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium
             )
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Default.Edit, contentDescription = "تعديل الاسم", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "حذف من القائمة", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            Spacer(Modifier.width(8.dp))
+            AppActionPill(
+                height = 36.dp,
+                actions = listOf(
+                    ActionSpec(Icons.Default.Edit, "تعديل الاسم", null, onEdit),
+                    ActionSpec(Icons.Default.Close, "حذف من القائمة", LocalSemanticColors.current.danger, onDelete)
+                )
+            )
         }
     }
 }

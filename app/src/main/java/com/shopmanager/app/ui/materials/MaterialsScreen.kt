@@ -73,7 +73,9 @@ import com.shopmanager.app.data.materials.priceOf
 import com.shopmanager.app.data.materials.priceSummary
 import androidx.compose.ui.text.input.KeyboardType
 import com.shopmanager.app.ui.common.AnimatedCounterText
-import com.shopmanager.app.ui.common.AppSearchBar
+import com.shopmanager.app.ui.common.AppCapsuleSearchField
+import com.shopmanager.app.ui.common.rememberSmartSearch
+import androidx.activity.compose.BackHandler
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassSnackbarHost
@@ -155,8 +157,6 @@ fun MaterialsScreen(
     // list; it now lives as a small icon button in MaterialsHeader that
     // expands the header's own title row into a focused search field when
     // tapped, instead of taking up its own row on the page at all times.
-    var isSearching by remember { mutableStateOf(false) }
-    val searchFocusRequester = remember { FocusRequester() }
     var editingMaterial by remember { mutableStateOf<Material?>(null) }
     var deleteTarget by remember { mutableStateOf<Material?>(null) }
     var showClearAllConfirm by remember { mutableStateOf(false) }
@@ -190,10 +190,6 @@ fun MaterialsScreen(
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    LaunchedEffect(isSearching) {
-        if (isSearching) searchFocusRequester.requestFocus()
-    }
-
     // PERF: this used to re-run the .filter{} scan over the whole
     // materials list on *every* recomposition of this screen — including
     // ones triggered by completely unrelated state (a dialog opening, the
@@ -201,10 +197,9 @@ fun MaterialsScreen(
     // `state.materials` change. `remember` keyed on the two inputs this
     // computation actually depends on makes it skip that rescan unless
     // one of them genuinely changed.
-    val filtered = remember(search, state.materials) {
-        if (search.isBlank()) state.materials
-        else state.materials.filter { it.name.contains(search, ignoreCase = true) }
-    }
+    val filtered = rememberSmartSearch(state.materials, search) { it.name }
+
+    BackHandler(enabled = tab == 1) { tab = 0 }
 
     // MOVED UP from PricesList: this in-progress price-edits buffer used to
     // live entirely inside PricesList, private to that tab, since only its
@@ -252,16 +247,11 @@ fun MaterialsScreen(
         topBar = {
             MaterialsHeader(
                 tab = tab,
-                onTabChange = { tab = it },
-                showClearAll = tab == 0 && state.materials.isNotEmpty(),
-                onClearAll = { showClearAllConfirm = true },
+                onTogglePrices = { tab = if (tab == 1) 0 else 1 },
                 onShare = { showShareChoice = true },
                 onOpenDrawer = onOpenDrawer,
-                isSearching = isSearching,
-                onSearchToggle = { isSearching = it },
                 searchQuery = search,
-                onSearchQueryChange = { search = it },
-                searchFocusRequester = searchFocusRequester
+                onSearchQueryChange = { search = it }
             )
         }
         // REDESIGN: no `floatingActionButton` slot here anymore — "مادة
@@ -436,172 +426,41 @@ fun MaterialsScreen(
 @Composable
 private fun MaterialsHeader(
     tab: Int,
-    onTabChange: (Int) -> Unit,
-    showClearAll: Boolean,
-    onClearAll: () -> Unit,
+    onTogglePrices: () -> Unit,
     onShare: () -> Unit,
     onOpenDrawer: () -> Unit = {},
-    isSearching: Boolean = false,
-    onSearchToggle: (Boolean) -> Unit = {},
     searchQuery: String = "",
-    onSearchQueryChange: (String) -> Unit = {},
-    searchFocusRequester: FocusRequester? = null
+    onSearchQueryChange: (String) -> Unit = {}
 ) {
     Column(Modifier.fillMaxWidth()) {
-        if (isSearching) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .height(64.dp)
-                    .padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+        ScreenTopBar(
+            title = if (tab == 0) "المواد والأسعار" else "الأسعار",
+            reservedIcons = 2,
+            navigation = {
                 ScreenIconButton(
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "إغلاق البحث",
-                    onClick = { onSearchToggle(false); onSearchQueryChange("") }
+                    icon = Icons.Default.Menu,
+                    contentDescription = "القائمة",
+                    onClick = onOpenDrawer
                 )
-                AppSearchBar(
-                    query = searchQuery,
-                    onQueryChange = onSearchQueryChange,
-                    onClose = { onSearchToggle(false); onSearchQueryChange("") },
-                    placeholder = if (tab == 0) "بحث عن مادة..." else "بحث عن الأسعار...",
-                    focusRequester = searchFocusRequester,
-                    showBackButton = false,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+            },
+            actions = {
+                AppActionPill(
+                    height = 42.dp,
+                    container = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    actions = listOf(
+                        if (tab == 0) ActionSpec(Icons.Default.Sell, "الأسعار") { onTogglePrices() }
+                        else ActionSpec(Icons.Default.Inventory2, "المواد") { onTogglePrices() },
+                        ActionSpec(Icons.Rounded.Share, "مشاركة") { onShare() }
+                    )
                 )
             }
-        } else {
-            ScreenTopBar(
-                title = "المواد والأسعار",
-                reservedIcons = 2,
-                navigation = {
-                    ScreenIconButton(
-                        icon = Icons.Default.Menu,
-                        contentDescription = "القائمة",
-                        onClick = onOpenDrawer
-                    )
-                },
-                actions = {
-                    AppActionPill(
-                        height = 42.dp,
-                        container = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        actions = listOf(
-                            ActionSpec(Icons.Default.Search, "بحث") { onSearchToggle(true) },
-                            ActionSpec(Icons.Rounded.Share, "مشاركة") { onShare() }
-                        )
-                    )
-                }
-            )
-        }
-        Box(Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = 6.dp)) {
-            SegmentedTabs(
-                selectedIndex = tab,
-                options = listOf(
-                    SegmentOption("المواد", Icons.Default.Inventory2),
-                    SegmentOption("الأسعار", Icons.Default.Sell)
-                ),
-                onSelect = onTabChange
-            )
-        }
-    }
-}
-
-private data class SegmentOption(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
-
-/**
- * REDESIGN ("الشريط... أعد تصميمه"): rebuilt on a tighter, more deliberate
- * grid instead of the previous plain label-only pill. Three precise
- * changes from before:
- * 1. Each segment now carries a small leading glyph (📦 for المواد, 🏷 for
- *    الأسعار) so the two tabs are told apart at a glance, not just by
- *    reading the Arabic label — the same icon/label pairing pattern used
- *    for every row lower on this screen (MaterialRow's avatar, the price
- *    row's tag icon).
- * 2. The selected thumb's own size is now driven by real measurement
- *    (`Modifier.onSizeChanged` + `animateDpAsState` for its offset), so it
- *    slides between segments as one continuous pill instead of each
- *    segment independently cross-fading its own background — a small but
- *    real "precision" difference: there is exactly one thumb, always
- *    exactly the width of its segment, always exactly aligned under it.
- * 3. Track/thumb metrics tightened (6.dp track padding, 4.dp icon-label
- *    gap, fixed 46.dp row height) so the control reads as one crisp,
- *    consistently-measured control rather than padding that happened to
- *    look right on one label length.
- */
-@Composable
-private fun SegmentedTabs(selectedIndex: Int, options: List<SegmentOption>, onSelect: (Int) -> Unit) {
-    // نفس لغة أزرار الإعدادات: مسار مسطّح بتعبئة الصفوف والمؤشر حبّة بلون onSurface.
-    val cs = MaterialTheme.colorScheme
-    var trackWidthPx by remember { mutableStateOf(0) }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val segmentWidth = with(density) {
-        if (trackWidthPx == 0) 0.dp else (trackWidthPx / options.size).toDp()
-    }
-    val thumbOffset by animateDpAsState(
-        targetValue = segmentWidth * selectedIndex,
-        animationSpec = MotionSpecs.quickSpring(),
-        label = "segmentThumbOffset"
-    )
-
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clip(CircleShape)
-            .background(cs.surfaceContainerHigh)
-            .padding(3.dp)
-            .onSizeChanged { trackWidthPx = it.width }
-    ) {
-        if (segmentWidth > 0.dp) {
-            Box(
-                Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset(thumbOffset.roundToPx(), 0) }
-                    .width(segmentWidth)
-                    .fillMaxHeight()
-                    .clip(CircleShape)
-                    .background(cs.onSurface)
-            )
-        }
-
-        Row(Modifier.fillMaxSize()) {
-            options.forEachIndexed { index, option ->
-                val selected = index == selectedIndex
-                val labelColor by animateColorAsState(
-                    targetValue = if (selected) cs.surface else cs.onSurfaceVariant,
-                    animationSpec = MotionSpecs.quickSpring(),
-                    label = "segmentLabelColor"
-                )
-                Row(
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = { onSelect(index) }
-                        ),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        option.icon,
-                        contentDescription = null,
-                        tint = labelColor,
-                        modifier = Modifier.size(17.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        option.label,
-                        color = labelColor,
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold
-                    )
-                }
-            }
-        }
+        )
+        AppCapsuleSearchField(
+            query = searchQuery,
+            onQueryChange = onSearchQueryChange,
+            placeholder = if (tab == 0) "ابحث عن مادة..." else "ابحث عن سعر مادة...",
+            modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = 8.dp)
+        )
     }
 }
 
@@ -730,9 +589,11 @@ private fun MaterialsList(
                     // second, competing placement animation.
                     .then(if (!isDragging) Modifier.animateItem(
                         // السلاسة: المادة المضافة حديثاً تظهر بتلاشٍ قصير بدل القفز المفاجئ.
-                        fadeInSpec = tween(durationMillis = MotionSpecs.fadeMillis(), easing = MotionSpecs.claudeEasing),
+                        fadeInSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
+                        else tween(durationMillis = MotionSpecs.fadeMillis(), easing = MotionSpecs.claudeEasing),
                         placementSpec = MotionSpecs.reorderSpring(),
-                        fadeOutSpec = MotionSpecs.listItemFadeOut()
+                        fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
+                        else MotionSpecs.listItemFadeOut()
                     ) else Modifier)
                     .onSizeChanged { itemHeightsPx[m.id] = it.height }
                     .zIndex(if (isDragging) 1f else 0f)
@@ -973,10 +834,7 @@ private fun PricesList(
     }
 
     val currency = AppSettingsState.currencySymbol
-    val filtered = remember(search, catalogItems) {
-        if (search.isBlank()) catalogItems
-        else catalogItems.filter { it.name.contains(search, ignoreCase = true) }
-    }
+    val filtered = rememberSmartSearch(catalogItems, search) { it.name }
 
     // صفوف النواقص مجمّعة باسم المادة (مقصوص) لربطها بعنصر الكتالوج نفسه.
     val shortageByName = remember(materials) { materials.groupBy { it.name.trim() } }

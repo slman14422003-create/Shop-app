@@ -251,10 +251,10 @@ fun DebtsScreen(
             // PERF: same remember-keyed fix as the materials tabs — skip
             // re-filtering the whole person list unless `search` or
             // `state.persons` actually changed.
-            val filtered = remember(search.value, state.persons) {
-                if (search.value.isBlank()) state.persons
-                else state.persons.filter { it.name.contains(search.value, ignoreCase = true) }
-            }
+            // Largest debt first; customers with no debt sink to the bottom.
+            // Stable sort, so equal amounts keep their original order.
+            val sortedPersons = remember(state.persons) { state.persons.sortedByDescending { it.amount } }
+            val filtered = com.shopmanager.app.ui.common.rememberSmartSearch(sortedPersons, search.value) { it.name }
 
             if (state.isLoading && filtered.isEmpty()) {
                 // التحميل الأول: هياكل صفوف بدل شاشة فارغة/"لا يوجد عملاء" الوامضة.
@@ -291,7 +291,9 @@ fun DebtsScreen(
                                 .animateItem(
                                     fadeInSpec = null,
                                     placementSpec = MotionSpecs.reorderSpring(),
-                                    fadeOutSpec = MotionSpecs.listItemFadeOut()
+                                    fadeOutSpec = if (com.shopmanager.app.data.performance.LocalPerformanceTier.current ==
+                                        com.shopmanager.app.data.performance.PerformanceTier.LOW) null
+                                    else MotionSpecs.listItemFadeOut()
                                 )
                                 .listItemEntrance(index),
                             onClick = { onOpenPerson(person.id) },
