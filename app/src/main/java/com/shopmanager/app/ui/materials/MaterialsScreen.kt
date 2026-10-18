@@ -324,7 +324,7 @@ fun MaterialsScreen(
                         onEdit = { editingMaterial = it },
                         onDelete = { deleteTarget = it },
                         onToggleImportant = {
-                            if (!it.important) com.shopmanager.app.data.materials.MissingFinderStore(context).recordImportant(it.name)
+                            if (!it.important) viewModel.recordImportant(it.name)
                             viewModel.setImportant(it, !it.important)
                         },
                         onReordered = { viewModel.reorderMaterials(it.map(Material::id)) }

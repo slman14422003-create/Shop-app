@@ -46,7 +46,11 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 kotlinx.coroutines.withTimeoutOrNull(8_000L) {
                     when (intent.action) {
                         ACTION_SNOOZE_NOTE -> handleSnoozeNote(context, intent)
-                        ACTION_DISMISS_SHOPPING -> NotificationHelper.cancelShoppingListNotification(context)
+                        ACTION_DISMISS_SHOPPING -> {
+                            val notifId = intent.getIntExtra(EXTRA_NOTIF_ID, -1)
+                            if (notifId != -1) NotificationManagerCompat.from(context).cancel(notifId)
+                            else NotificationHelper.cancelShoppingListNotification(context)
+                        }
                         ACTION_MARK_DEBT_PAID -> handleMarkDebtPaid(context, intent)
                         else -> Unit
                     }

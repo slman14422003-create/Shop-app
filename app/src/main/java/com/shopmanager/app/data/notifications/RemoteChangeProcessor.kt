@@ -7,8 +7,9 @@ data class DebtRecord(val id: String, val personId: String, val amount: Double)
 data class MaterialRecord(val id: String, val name: String, val quantity: Double, val unit: String)
 data class NoteRecord(val id: String, val title: String, val content: String)
 
-/** [names] = the current shortage list; [hasExternalChange] = at least one change did NOT come from this device. */
-data class ShoppingDiff(val names: List<String>, val hasExternalChange: Boolean)
+data class MaterialChange(val record: MaterialRecord, val isNew: Boolean)
+
+data class ShoppingDiff(val changed: List<MaterialChange>, val removedIds: List<String>)
 
 /**
  * نقطة واحدة فقط تقرّر "هل يوجد شيء جديد جاء من جهاز آخر؟" — يستخدمها كل من
@@ -107,25 +108,37 @@ object RemoteChangeProcessor {
         for (id in current.keys) if (current[id] != previous[id]) changedIds.add(id)
         for (id in previous.keys) if (!current.containsKey(id)) changedIds.add(id)
 
-        var external = false
+        val byId = HashMap<String, MaterialRecord>(materials.size * 2)
+        for (m in materials) byId[m.id] = m
+
+        val changed = ArrayList<MaterialChange>()
+        val removed = ArrayList<String>()
         for (id in changedIds) {
+            val record = byId[id]
+            if (record == null) {
+                removed.add(id)
+                continue
+            }
             if (!SelfChangeLedger.isMaterialChangeHere(context, id, current[id])) {
-                external = true
-                break
+                changed.add(MaterialChange(record, !previous.containsKey(id)))
             }
         }
-        return ShoppingDiff(materials.map { it.name }.distinct(), external)
+        if (changed.isEmpty() && removed.isEmpty()) return null
+        return ShoppingDiff(changed, removed)
     }
 
-    /** Shared "what to do with a [ShoppingDiff]" so every observer behaves identically. */
+    private const val MAX_INDIVIDUAL_NOTIFICATIONS = 15
+
     fun deliverShoppingDiff(context: Context, diff: ShoppingDiff?, notificationsEnabled: Boolean) {
         if (diff == null) return
-        if (diff.names.isEmpty()) {
-            NotificationHelper.cancelShoppingListNotification(context)
+        for (id in diff.removedIds) NotificationHelper.cancelMaterialNotification(context, id)
+        if (!notificationsEnabled || diff.changed.isEmpty()) return
+        if (diff.changed.size > MAX_INDIVIDUAL_NOTIFICATIONS) {
+            NotificationHelper.showShoppingListNotification(context, diff.changed.map { it.record.name }.distinct())
             return
         }
-        if (diff.hasExternalChange && notificationsEnabled) {
-            NotificationHelper.showShoppingListNotification(context, diff.names)
+        for (change in diff.changed) {
+            NotificationHelper.showMaterialNotification(context, change.record, change.isNew)
         }
     }
 

@@ -16,6 +16,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.shopmanager.app.MainActivity
+import com.shopmanager.app.data.materials.Material
+import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.settings.SettingsRepository
 import java.io.File
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -32,7 +34,8 @@ import com.shopmanager.app.ui.common.avatarColorFor
  */
 object NotificationHelper {
 
-    private const val CHANNEL_REALTIME = "realtime_sync_hidden_channel"
+    private const val CHANNEL_REALTIME = "realtime_sync_silent_channel"
+    private const val CHANNEL_REALTIME_PREVIOUS = "realtime_sync_hidden_channel"
     private const val CHANNEL_REALTIME_LEGACY = "realtime_sync_channel"
     private const val CHANNEL_UPDATE_DOWNLOAD = "update_download_channel"
     const val NOTIF_ID_REALTIME = 1800
@@ -51,6 +54,9 @@ object NotificationHelper {
     private const val NOTIF_ID_NOTE_BASE = 40000
     private const val NOTIF_ID_NEW_NOTE_BASE = 50000
     private const val NOTIF_ID_NOTE_DONE_BASE = 60000
+    private const val NOTIF_ID_MATERIAL_BASE = 70000
+    private const val NOTIF_ID_SHOPPING_SUMMARY = 1901
+    private const val GROUP_SHOPPING = "com.shopmanager.app.GROUP_SHOPPING"
 
     // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
     // *group*, with a silent summary notification posted alongside the
@@ -135,6 +141,9 @@ object NotificationHelper {
             // the service keeps syncing but nothing shows in the shade or status bar.
             // The old visible channel is removed so it can't keep being used.
             runCatching { manager.deleteNotificationChannel(CHANNEL_REALTIME_LEGACY) }
+            if (!RealtimeSyncService.isRunning) {
+                runCatching { manager.deleteNotificationChannel(CHANNEL_REALTIME_PREVIOUS) }
+            }
             val realtimeChannel = NotificationChannel(
                 CHANNEL_REALTIME, "المزامنة الفورية", NotificationManager.IMPORTANCE_NONE
             ).apply {
@@ -485,6 +494,71 @@ object NotificationHelper {
             NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_LIST, notification)
         } catch (e: SecurityException) {
             // Permission revoked between the check above and this call — skip.
+        }
+    }
+
+    private fun materialNotifId(materialId: String): Int =
+        NOTIF_ID_MATERIAL_BASE + (materialId.hashCode() and 0xFFFF)
+
+    fun showMaterialNotification(context: Context, material: MaterialRecord, isNew: Boolean) {
+        if (!hasPermission(context) || material.name.isBlank()) return
+        val id = materialNotifId(material.id)
+        val label = Material(name = material.name, quantity = material.quantity, unit = material.unit).quantityLabel()
+        val dismissIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_DISMISS_SHOPPING
+            putExtra(NotificationActionReceiver.EXTRA_NOTIF_ID, id)
+        }
+        val notification = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.SHOPPING))
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle(if (isNew) "🛒 مادة ناقصة جديدة" else "🛒 تعديل مادة ناقصة")
+            .setContentText("${material.name} • $label")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("${material.name} • $label"))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setShowWhen(true)
+            .setGroup(GROUP_SHOPPING)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setAutoCancel(true)
+            .setContentIntent(buildContentIntent(context, id, NotificationAction.ShoppingList(listOf(material.name))))
+            .addAction(0, "تم الشراء", buildActionIntent(context, id, dismissIntent))
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+            postShoppingGroupSummary(context)
+        } catch (e: SecurityException) {
+        }
+    }
+
+    fun cancelMaterialNotification(context: Context, materialId: String) {
+        NotificationManagerCompat.from(context).cancel(materialNotifId(materialId))
+    }
+
+    private fun postShoppingGroupSummary(context: Context) {
+        val summary = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.SHOPPING))
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle("المواد الناقصة")
+            .setStyle(NotificationCompat.InboxStyle().setSummaryText("إدارة المحل"))
+            .setGroup(GROUP_SHOPPING)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    context, NOTIF_ID_SHOPPING_SUMMARY,
+                    Intent(context, MainActivity::class.java).apply {
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    },
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_SUMMARY, summary)
+        } catch (e: SecurityException) {
         }
     }
 

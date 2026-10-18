@@ -38,8 +38,6 @@ import com.shopmanager.app.ui.common.AppIconCircle
 import com.shopmanager.app.ui.common.AppRowSurface
 import com.shopmanager.app.ui.common.AppScreenPadding
 import com.shopmanager.app.ui.common.AppCapsuleSearchField
-import com.shopmanager.app.data.materials.MissingFinderStore
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.LazyListScope
 import com.shopmanager.app.ui.common.AppPillButton
 import com.shopmanager.app.ui.common.ActionSpec
@@ -79,9 +77,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     // pattern as `pickedItem`/`deleteTarget` above.
     var editTarget by remember { mutableStateOf<MaterialCatalogItem?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
-    val context = LocalContext.current
-    val store = remember { MissingFinderStore(context) }
-    var learnVersion by remember { mutableStateOf(0) }
+    val suggested by viewModel.suggestions.collectAsStateWithLifecycle()
 
     LaunchedEffect(message) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
@@ -92,11 +88,12 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     // the snackbar message clearing), only on an actual search/catalog
     // change.
     val filtered = rememberSmartSearch(catalog, search) { it.name }
-    // Learned suggestions (most often missing first) shown on top while not searching.
-    val suggested = remember(catalog, learnVersion) { store.suggested(catalog) }
     val showSuggested = search.isBlank() && suggested.isNotEmpty()
     val rest = remember(filtered, suggested, showSuggested) {
-        if (showSuggested) { val ids = suggested.map { it.id }.toSet(); filtered.filter { it.id !in ids } } else filtered
+        if (showSuggested) {
+            val ids = suggested.map { it.id }.toSet()
+            filtered.filter { it.id !in ids }
+        } else filtered
     }
 
     Scaffold(
@@ -170,13 +167,13 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                         item(key = "suggestedTitle") {
                             AppSectionTitle(text = "مقترحة لك (${suggested.size})", modifier = Modifier.padding(bottom = 4.dp))
                         }
-                        catalogRows(suggested, "s_", { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
+                        catalogRows(suggested, "s_", true, viewModel, { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
                         if (rest.isNotEmpty()) {
                             item(key = "restTitle") {
                                 AppSectionTitle(text = "كل المواد (${rest.size})", modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
                             }
                         }
-                        catalogRows(rest, "r_", { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
+                        catalogRows(rest, "r_", false, viewModel, { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
                     } else {
                         item(key = "catalogTitle") {
                             AppSectionTitle(
@@ -184,7 +181,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
-                        catalogRows(filtered, "a_", { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
+                        catalogRows(filtered, "a_", false, viewModel, { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
                     }
                     item(key = "catalogHint") {
                         AppFootnote(
@@ -229,8 +226,11 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
 
     pickedItem?.let { item ->
         var isAddingMaterial by remember { mutableStateOf(false) }
+        val learned = remember(item.name) { viewModel.suggestionFor(item.name) }
         QuantityEntryDialog(
             materialName = item.name,
+            initialQuantity = learned?.first ?: 1,
+            initialUnit = learned?.second ?: MaterialUnit.KG,
             isSaving = isAddingMaterial,
             onDismiss = { if (!isAddingMaterial) pickedItem = null },
             onSave = { quantity, unit, notes ->
@@ -241,11 +241,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 isAddingMaterial = true
                 viewModel.addMaterial(item.name, quantity, unit, notes) { success ->
                     isAddingMaterial = false
-                    if (success) {
-                        store.recordAdded(item.name, quantity, unit, false)
-                        learnVersion++
-                        pickedItem = null
-                    }
+                    if (success) pickedItem = null
                 }
             }
         )
@@ -267,6 +263,8 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
 private fun LazyListScope.catalogRows(
     list: List<MaterialCatalogItem>,
     keyPrefix: String,
+    learned: Boolean,
+    viewModel: MaterialsViewModel,
     onPick: (MaterialCatalogItem) -> Unit,
     onEdit: (MaterialCatalogItem) -> Unit,
     onDelete: (MaterialCatalogItem) -> Unit
@@ -275,6 +273,7 @@ private fun LazyListScope.catalogRows(
         Box(Modifier.listItemEntrance(index)) {
             CatalogRow(
                 item = item,
+                hint = if (learned) remember(item.name) { learnedHint(viewModel, item.name) } else null,
                 shape = groupedRowShape(index, list.lastIndex),
                 onClick = { onPick(item) },
                 onEdit = { onEdit(item) },
@@ -284,9 +283,21 @@ private fun LazyListScope.catalogRows(
     }
 }
 
+private fun learnedHint(viewModel: MaterialsViewModel, name: String): String? {
+    val insight = viewModel.insightFor(name) ?: return null
+    if (insight.added == 0) return null
+    val parts = ArrayList<String>(3)
+    parts.add(if (insight.added == 1) "أضفتها مرة" else "أضفتها ${insight.added} مرات")
+    insight.daysSinceLast?.let { parts.add(if (it == 0) "اليوم" else "منذ $it يوم") }
+    val unit = insight.unit.label
+    parts.add(if (unit.isBlank()) "${insight.qty}" else "${insight.qty} $unit")
+    return parts.joinToString(" • ")
+}
+
 @Composable
 private fun CatalogRow(
     item: MaterialCatalogItem,
+    hint: String?,
     shape: Shape,
     onClick: () -> Unit,
     onEdit: () -> Unit,
@@ -305,12 +316,20 @@ private fun CatalogRow(
                 Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(12.dp))
-            Text(
-                item.name,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    item.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                if (hint != null) {
+                    Text(
+                        hint,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Spacer(Modifier.width(8.dp))
             AppActionPill(
                 height = 36.dp,
@@ -420,6 +439,8 @@ private fun EditCatalogItemDialog(initialName: String, isSaving: Boolean, onDism
 @Composable
 private fun QuantityEntryDialog(
     materialName: String,
+    initialQuantity: Int = 1,
+    initialUnit: MaterialUnit = MaterialUnit.KG,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
     onSave: (quantity: Double, unit: String, notes: String) -> Unit
@@ -429,8 +450,8 @@ private fun QuantityEntryDialog(
     // shortage is added from the catalog, so it needed the identical fix:
     // a whole-number stepper instead of a text field that could take
     // "1.5" for a كيلو entry, plus the two new نص كيلو / ربع كيلو units.
-    var quantity by remember { mutableStateOf(1) }
-    var unit by remember { mutableStateOf(MaterialUnit.KG) }
+    var quantity by remember { mutableStateOf(initialQuantity) }
+    var unit by remember { mutableStateOf(initialUnit) }
     var notes by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 

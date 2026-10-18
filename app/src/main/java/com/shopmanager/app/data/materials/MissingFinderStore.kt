@@ -2,7 +2,6 @@ package com.shopmanager.app.data.materials
 
 import android.content.Context
 import com.shopmanager.app.ui.common.ArabicText
-import org.json.JSONArray
 import org.json.JSONObject
 
 data class PendingMaterial(
@@ -13,13 +12,6 @@ data class PendingMaterial(
     val important: Boolean = false
 )
 
-/**
- * Local-only storage for the missing-materials finder:
- *  - a cached copy of the catalog (fetched from Firebase once, refreshed when older than a day)
- *  - lightweight learning stats per material, fed by every add / star action
- *    and used to rank suggestions and pre-fill quantities.
- * Nothing here touches Firebase except through the repository call made by the caller.
- */
 class MissingFinderStore(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences("shop_missing_finder", Context.MODE_PRIVATE)
@@ -33,34 +25,13 @@ class MissingFinderStore(context: Context) {
         val unit: String = MaterialUnit.KG.label
     )
 
-    // ---- catalog cache ----
-
-    fun cachedCatalog(): List<MaterialCatalogItem> {
-        val raw = prefs.getString(KEY_CATALOG, null) ?: return emptyList()
-        return runCatching {
-            val arr = JSONArray(raw)
-            List(arr.length()) { i ->
-                val o = arr.getJSONObject(i)
-                MaterialCatalogItem(id = o.getString("id"), name = o.getString("name"))
-            }
-        }.getOrDefault(emptyList())
-    }
-
-    fun isStale(now: Long = System.currentTimeMillis()): Boolean {
-        val ts = prefs.getLong(KEY_CATALOG_TS, 0L)
-        return ts == 0L || now - ts > DAY_MS || cachedCatalog().isEmpty()
-    }
-
-    fun saveCatalog(items: List<MaterialCatalogItem>) {
-        val arr = JSONArray()
-        items.forEach { arr.put(JSONObject().put("id", it.id).put("name", it.name)) }
-        prefs.edit()
-            .putString(KEY_CATALOG, arr.toString())
-            .putLong(KEY_CATALOG_TS, System.currentTimeMillis())
-            .apply()
-    }
-
-    // ---- learning ----
+    data class Insight(
+        val added: Int,
+        val exists: Int,
+        val daysSinceLast: Int?,
+        val qty: Int,
+        val unit: MaterialUnit
+    )
 
     private fun key(name: String) = ArabicText.normalize(name)
 
@@ -150,7 +121,7 @@ class MissingFinderStore(context: Context) {
     }
 
     /** Only items with a learned score, best first, capped. */
-    fun suggested(items: List<MaterialCatalogItem>, limit: Int = 8): List<MaterialCatalogItem> {
+    fun suggested(items: List<MaterialCatalogItem>, limit: Int = 12): List<MaterialCatalogItem> {
         val stats = readStats()
         val now = System.currentTimeMillis()
         return items.map { it to score(stats[key(it.name)], now) }
@@ -168,9 +139,31 @@ class MissingFinderStore(context: Context) {
         return s.qty to MaterialUnit.fromLabel(s.unit)
     }
 
+    fun insight(name: String): Insight? {
+        val s = readStats()[key(name)] ?: return null
+        if (s.added == 0 && s.exists == 0) return null
+        val days = if (s.lastAdded > 0L) ((System.currentTimeMillis() - s.lastAdded) / DAY_MS).toInt() else null
+        return Insight(s.added, s.exists, days, s.qty, MaterialUnit.fromLabel(s.unit))
+    }
+
+    @Synchronized
+    fun rename(oldName: String, newName: String) {
+        val from = key(oldName)
+        val to = key(newName)
+        if (from == to) return
+        val stats = readStats()
+        val moved = stats.remove(from) ?: return
+        val existing = stats[to]
+        stats[to] = if (existing == null) moved else existing.copy(
+            added = existing.added + moved.added,
+            important = existing.important + moved.important,
+            exists = existing.exists + moved.exists,
+            lastAdded = maxOf(existing.lastAdded, moved.lastAdded)
+        )
+        writeStats(stats)
+    }
+
     private companion object {
-        const val KEY_CATALOG = "catalog_json"
-        const val KEY_CATALOG_TS = "catalog_ts"
         const val KEY_STATS = "stats_json"
         const val DAY_MS = 24L * 60 * 60 * 1000
     }

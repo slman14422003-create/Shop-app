@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
+import com.shopmanager.app.data.materials.MaterialUnit
+import com.shopmanager.app.data.materials.MissingFinderStore
 import com.shopmanager.app.data.materials.PendingMaterial
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.notifications.RemoteChangeProcessor
@@ -103,6 +105,37 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val finderStore = MissingFinderStore(application)
+    private val learnVersion = MutableStateFlow(0)
+
+    val suggestions: StateFlow<List<MaterialCatalogItem>> = combine(catalog, learnVersion) { items, _ ->
+        finderStore.suggested(items)
+    }.flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun rankedCatalog(items: List<MaterialCatalogItem>): List<MaterialCatalogItem> = finderStore.ranked(items)
+
+    fun suggestedNow(items: List<MaterialCatalogItem>): List<MaterialCatalogItem> = finderStore.suggested(items, 60)
+
+    fun suggestionFor(name: String): Pair<Int, MaterialUnit>? = finderStore.suggestion(name)
+
+    fun insightFor(name: String): MissingFinderStore.Insight? = finderStore.insight(name)
+
+    fun recordImportant(name: String) {
+        finderStore.recordImportant(name)
+        learnVersion.value += 1
+    }
+
+    fun recordExists(names: Collection<String>) {
+        finderStore.recordExists(names)
+        learnVersion.value += 1
+    }
+
+    private fun learn(name: String, quantity: Double, unit: String, important: Boolean) {
+        finderStore.recordAdded(name, quantity, unit, important)
+        learnVersion.value += 1
+    }
+
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
     fun clearMessage() { _message.value = null }
@@ -165,6 +198,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 // where the live listener could fire first and notify this
                 // same device about the material it just added.
                 repo.addMaterial(name, quantity, unit, section.value, notes) { id -> markWrittenHere(id, name, quantity, unit) }
+                learn(name, quantity, unit, false)
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)
@@ -174,9 +208,6 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
-
-    suspend fun fetchCatalogOnce(): List<MaterialCatalogItem>? =
-        try { repo.fetchCatalogOnce() } catch (_: Exception) { null }
 
     fun addMaterialsBatch(items: List<PendingMaterial>, onDone: (Int) -> Unit) {
         viewModelScope.launch {
@@ -188,6 +219,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                         markWrittenHere(newId, p.name, p.quantity, p.unit)
                     }
                     if (p.important) repo.setImportant(id, true, baseOrder - ok)
+                    learn(p.name, p.quantity, p.unit, p.important)
                     ok++
                 } catch (e: Exception) {
                     _message.value = "تعذرت إضافة \"${p.name}\": ${e.message ?: "تحقق من الاتصال"}"
@@ -347,6 +379,10 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                     return@launch
                 }
                 repo.updateCatalogItem(id, newName)
+                if (newName != currentName) {
+                    finderStore.rename(currentName, newName)
+                    learnVersion.value += 1
+                }
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)
             } catch (e: Exception) {
