@@ -83,6 +83,15 @@ class MaterialsRepository {
         awaitClose { registration.remove() }
     }
 
+    /** One-shot catalog read (used to refresh the local cache once a day). */
+    suspend fun fetchCatalogOnce(): List<MaterialCatalogItem> =
+        withTimeout(WRITE_TIMEOUT_MS) {
+            db.collection(catalogCollection).get().await().documents
+                .map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "") }
+                .filter { it.name.isNotBlank() }
+                .sortedBy { it.name }
+        }
+
     fun listenCatalog(): Flow<List<MaterialCatalogItem>> = callbackFlow {
         val registration: ListenerRegistration = db.collection(catalogCollection)
             .addSnapshotListener(FirebaseModule.snapshotExecutor) { snapshot, error ->

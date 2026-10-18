@@ -1,6 +1,3 @@
-## v1.0.1115 — 2026-10-18
-- Upload via GitHub Manager
-
 ## v1.0.1114 — 2026-10-12
 - Upload via GitHub Manager
 

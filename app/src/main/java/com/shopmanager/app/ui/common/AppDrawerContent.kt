@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Notes
@@ -82,7 +83,8 @@ fun AppDrawerContent(
     selectedPage: Int,
     onSelectPage: (Int) -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenAdmin: () -> Unit = {}
+    onOpenAdmin: () -> Unit = {},
+    onOpenMissingFinder: () -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
 
@@ -113,6 +115,17 @@ fun AppDrawerContent(
             }
 
             // يدفع الإعدادات/لوحة المسؤول لأسفل القائمة مهما كان عدد الصفوف.
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                DrawerRow(
+                    icon = Icons.Default.AutoAwesome,
+                    label = "إيجاد المواد الناقصة",
+                    selected = false,
+                    shape = RoundedCornerShape(AppGroupLargeRadius),
+                    onClick = onOpenMissingFinder,
+                    badge = "AI"
+                )
+            }
+
             Spacer(Modifier.weight(1f))
 
             Row(
@@ -238,6 +251,16 @@ private fun DrawerRow(
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = cs.onSurface
         )
+        if (badge != null) {
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(cs.onSurface)
+                    .padding(horizontal = 9.dp, vertical = 3.dp)
+            ) {
+                Text(badge, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = cs.surface)
+            }
+        }
         if (selected) {
             Box(
                 Modifier

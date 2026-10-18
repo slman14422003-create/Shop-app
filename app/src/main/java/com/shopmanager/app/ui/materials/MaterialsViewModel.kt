@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
+import com.shopmanager.app.data.materials.PendingMaterial
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.notifications.RemoteChangeProcessor
 import com.shopmanager.app.data.notifications.SelfChangeLedger
@@ -171,6 +172,32 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 _message.value = "تعذرت الإضافة: ${e.message ?: "تحقق من الاتصال"}"
                 onDone(false)
             }
+        }
+    }
+
+    suspend fun fetchCatalogOnce(): List<MaterialCatalogItem>? =
+        try { repo.fetchCatalogOnce() } catch (_: Exception) { null }
+
+    fun addMaterialsBatch(items: List<PendingMaterial>, onDone: (Int) -> Unit) {
+        viewModelScope.launch {
+            var ok = 0
+            val baseOrder = (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
+            for (p in items) {
+                try {
+                    val id = repo.addMaterial(p.name, p.quantity, p.unit, section.value, p.notes) { newId ->
+                        markWrittenHere(newId, p.name, p.quantity, p.unit)
+                    }
+                    if (p.important) repo.setImportant(id, true, baseOrder - ok)
+                    ok++
+                } catch (e: Exception) {
+                    _message.value = "تعذرت إضافة \"${p.name}\": ${e.message ?: "تحقق من الاتصال"}"
+                }
+            }
+            if (ok > 0) {
+                _message.value = "تمت إضافة $ok مادة إلى النواقص"
+                InstantBackupWorker.requestNow(getApplication())
+            }
+            onDone(ok)
         }
     }
 

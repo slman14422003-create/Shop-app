@@ -152,6 +152,7 @@ private const val ROUTE_ADMIN = "adminPanel"
 // راجع AdminPasswordRepository. المحاولات تبقى مُقيَّدة عبر PinAttemptThrottle
 // (انظر AdminPinDialog تحت) فلا يمكن تخمينها من لوحة المفاتيح.
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
+private const val ROUTE_MISSING_FINDER = "missingFinder"
 private const val ROUTE_HELP = "help"
 private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
@@ -949,6 +950,10 @@ private fun ShopManagerApp(
                     navController.safeNavigate(ROUTE_SETTINGS)
                     drawerScope.launch { drawerState.close() }
                 },
+                onOpenMissingFinder = {
+                    navController.safeNavigate(ROUTE_MISSING_FINDER)
+                    drawerScope.launch { drawerState.close() }
+                },
                 onOpenAdmin = {
                     drawerScope.launch { drawerState.close() }
                     // البصمة/الوجه أولاً إن كانت متاحة على الجهاز؛ وإلا (أو عند
@@ -1164,6 +1169,12 @@ private fun ShopManagerApp(
             }
             composable(ROUTE_MATERIAL_CATALOG) {
                 MaterialCatalogScreen(
+                    viewModel = materialsViewModel,
+                    onBack = { navController.safePopBackStack() }
+                )
+            }
+            composable(ROUTE_MISSING_FINDER) {
+                com.shopmanager.app.ui.materials.MissingFinderScreen(
                     viewModel = materialsViewModel,
                     onBack = { navController.safePopBackStack() }
                 )
