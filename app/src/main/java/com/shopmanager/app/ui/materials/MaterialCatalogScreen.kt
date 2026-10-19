@@ -233,13 +233,13 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             initialUnit = learned?.second ?: MaterialUnit.KG,
             isSaving = isAddingMaterial,
             onDismiss = { if (!isAddingMaterial) pickedItem = null },
-            onSave = { quantity, unit, notes ->
+            onSave = { quantity, unit, notes, important ->
                 // Every material added here is, by the nature of this list,
                 // something the shop is short on and needs to buy - so it's
                 // simply added with the quantity needed, no threshold or
                 // stock-level bookkeeping involved.
                 isAddingMaterial = true
-                viewModel.addMaterial(item.name, quantity, unit, notes) { success ->
+                viewModel.addMaterial(item.name, quantity, unit, notes, important) { success ->
                     isAddingMaterial = false
                     if (success) pickedItem = null
                 }
@@ -443,7 +443,7 @@ private fun QuantityEntryDialog(
     initialUnit: MaterialUnit = MaterialUnit.KG,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (quantity: Double, unit: String, notes: String) -> Unit
+    onSave: (quantity: Double, unit: String, notes: String, important: Boolean) -> Unit
 ) {
     // FIX: same free-typed-decimal issue as MaterialEditDialog (see its
     // comment) - this is the dialog actually used every time a new
@@ -453,11 +453,19 @@ private fun QuantityEntryDialog(
     var quantity by remember { mutableStateOf(initialQuantity) }
     var unit by remember { mutableStateOf(initialUnit) }
     var notes by remember { mutableStateOf("") }
+    var important by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     GlassAlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(materialName) },
+        confirmLeading = {
+            com.shopmanager.app.ui.common.ImportantStarButton(
+                checked = important,
+                onCheckedChange = { important = it },
+                enabled = !isSaving
+            )
+        },
         text = {
             Column {
                 AppSectionTitle("الكمية المطلوبة", Modifier.padding(bottom = 8.dp))
@@ -494,7 +502,7 @@ private fun QuantityEntryDialog(
                         error = "أدخل كمية صحيحة"
                     } else {
                         error = null
-                        onSave(quantity.toDouble(), unit.label, notes.trim())
+                        onSave(quantity.toDouble(), unit.label, notes.trim(), important)
                     }
                 }
             ) {

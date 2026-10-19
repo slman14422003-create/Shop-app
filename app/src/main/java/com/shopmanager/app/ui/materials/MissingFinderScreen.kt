@@ -362,14 +362,7 @@ private fun ItemStep(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 if (!asking) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        IconButton(onClick = { important = !important }) {
-                            Icon(
-                                if (important) Icons.Default.Star else Icons.Outlined.StarBorder,
-                                contentDescription = "مهمة",
-                                tint = if (important) Color(0xFFF5B301) else cs.onSurfaceVariant
-                            )
-                        }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         IconButton(onClick = { showNote = !showNote }) {
                             Icon(
                                 Icons.Default.Edit,
@@ -501,6 +494,10 @@ private fun ItemStep(
                     onClick = { asking = true },
                     tonal = true,
                     modifier = Modifier.weight(1f)
+                )
+                com.shopmanager.app.ui.common.ImportantStarButton(
+                    checked = important,
+                    onCheckedChange = { important = it }
                 )
                 AppPillButton(
                     label = "تأكيد",

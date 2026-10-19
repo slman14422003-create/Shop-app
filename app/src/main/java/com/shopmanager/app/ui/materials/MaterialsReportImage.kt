@@ -10,7 +10,7 @@ import android.text.TextPaint
 import androidx.core.content.FileProvider
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.linePrice
-import com.shopmanager.app.data.materials.priceSummary
+import com.shopmanager.app.data.materials.priceBreakdown
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.Formatters
@@ -44,6 +44,7 @@ object MaterialsReportImage {
     private const val ROW_HEIGHT = 104f
     private const val HEADER_HEIGHT = 220f
     private const val FOOTER_HEIGHT = 90f
+    private const val FOOTER_LINE = 56f
 
     fun generate(
         context: Context,
@@ -52,7 +53,10 @@ object MaterialsReportImage {
         brandColor: Int
     ): Uri {
         val sorted = materials.sortedBy { it.name }
-        val height = (HEADER_HEIGHT + sorted.size.coerceAtLeast(1) * ROW_HEIGHT + FOOTER_HEIGHT + PADDING)
+        val breakdown = sorted.priceBreakdown(prices)
+        val hasTotal = breakdown.all.total > 0.0
+        val footerHeight = if (hasTotal) FOOTER_HEIGHT + 2 * FOOTER_LINE else FOOTER_HEIGHT
+        val height = (HEADER_HEIGHT + sorted.size.coerceAtLeast(1) * ROW_HEIGHT + footerHeight + PADDING)
             .toInt()
 
         val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)
@@ -133,11 +137,14 @@ object MaterialsReportImage {
         }
 
         // إجمالي السعر في أسفل الصورة (فقط إن وُجد سعر)
-        val summary = sorted.priceSummary(prices)
-        if (summary.total > 0.0) {
+        if (hasTotal) {
+            val currency = AppSettingsState.currencySymbol
+            val linePaint = TextPaint(namePaint).apply { textSize = 34f; isFakeBoldText = false; color = Color.parseColor("#444444") }
             val totalPaint = TextPaint(namePaint).apply { textSize = 40f; color = brandColor }
-            val totalText = "إجمالي السعر: ${Formatters.number(summary.total)} ${AppSettingsState.currencySymbol}"
-            canvas.drawText(totalText, WIDTH - PADDING, height - PADDING - 8f, totalPaint)
+            val base = height - PADDING - 8f
+            canvas.drawText("إجمالي السعر: ${Formatters.number(breakdown.all.total)} $currency", WIDTH - PADDING, base, totalPaint)
+            canvas.drawText("بقية المواد: ${Formatters.number(breakdown.regular.total)} $currency", WIDTH - PADDING, base - FOOTER_LINE, linePaint)
+            canvas.drawText("★ المواد الهامة: ${Formatters.number(breakdown.important.total)} $currency", WIDTH - PADDING, base - 2 * FOOTER_LINE, linePaint)
         }
 
         val dir = File(context.cacheDir, "shared_images").apply { mkdirs() }

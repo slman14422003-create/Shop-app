@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -71,6 +72,9 @@ import com.shopmanager.app.data.materials.weightSummary
 import com.shopmanager.app.data.materials.linePrice
 import com.shopmanager.app.data.materials.priceOf
 import com.shopmanager.app.data.materials.priceSummary
+import com.shopmanager.app.data.materials.MaterialsPriceBreakdown
+import com.shopmanager.app.data.materials.priceBreakdown
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.input.KeyboardType
 import com.shopmanager.app.ui.common.AnimatedCounterText
 import com.shopmanager.app.ui.common.AppCapsuleSearchField
@@ -343,11 +347,17 @@ fun MaterialsScreen(
             initial = m,
             isSaving = isSavingMaterial,
             onDismiss = { if (!isSavingMaterial) editingMaterial = null },
-            onSave = { name, qty, unit, notes ->
+            onSave = { name, qty, unit, notes, important ->
                 isSavingMaterial = true
                 viewModel.updateMaterial(m.id, name, qty, unit, notes) { success ->
                     isSavingMaterial = false
-                    if (success) editingMaterial = null
+                    if (success) {
+                        if (important != m.important) {
+                            if (important) viewModel.recordImportant(name)
+                            viewModel.setImportant(m, important)
+                        }
+                        editingMaterial = null
+                    }
                 }
             }
         )
@@ -511,12 +521,15 @@ private fun MaterialsList(
     // against the full, unfiltered list, so it's disabled entirely while
     // searching (see `canReorder` below) — dragging a filtered subset
     // would silently scramble the position of every hidden item too.
-    var orderedItems by remember { mutableStateOf(materials) }
+    var listTab by rememberSaveable { mutableStateOf(0) }
+    val importantItems = remember(materials) { materials.filter { it.important } }
+    val visibleItems = if (listTab == 1) importantItems else materials
+    var orderedItems by remember { mutableStateOf(visibleItems) }
     var draggingId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(materials) {
-        if (draggingId == null) orderedItems = materials
+    LaunchedEffect(visibleItems) {
+        if (draggingId == null) orderedItems = visibleItems
     }
-    val canReorder = !searching
+    val canReorder = !searching && listTab == 0
     // Real per-row height in px (row height + the 8.dp spacedBy gap),
     // measured live via onSizeChanged below — used to decide, as the
     // finger moves, when it's dragged far enough past a neighbor to swap
@@ -526,7 +539,7 @@ private fun MaterialsList(
 
     // تُحسب مرة لكل تغيّر فعلي في القائمة المعروضة أو في الأسعار.
     val weightSummary = remember(materials) { materials.weightSummary() }
-    val priceSummary = remember(materials, prices) { materials.priceSummary(prices) }
+    val priceBreakdown = remember(materials, prices) { materials.priceBreakdown(prices) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -554,14 +567,23 @@ private fun MaterialsList(
         item(key = "summary") {
             MaterialsSummaryCard(
                 weights = weightSummary,
-                prices = priceSummary,
+                prices = priceBreakdown,
                 animate = animateSummary,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
         }
+        item(key = "listTabs") {
+            MaterialsTabBar(
+                selected = listTab,
+                importantCount = importantItems.size,
+                allCount = materials.size,
+                onSelect = { listTab = it },
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+        }
         item(key = "listTitle") {
             AppSectionTitle(
-                text = "قائمة النواقص (${materials.size})",
+                text = if (listTab == 1) "المواد الهامة (${visibleItems.size})" else "قائمة النواقص (${materials.size})",
                 modifier = Modifier.padding(horizontal = 0.dp),
                 trailing = {
                     TextButton(onClick = onClearAll) {
@@ -573,6 +595,17 @@ private fun MaterialsList(
                     }
                 }
             )
+        }
+        if (visibleItems.isEmpty()) {
+            item(key = "noImportant") {
+                Text(
+                    "لا توجد مواد هامة\nاضغط على النجمة بجانب أي مادة لتظهر هنا",
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                    textAlign = TextAlign.Center,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         itemsIndexed(
             orderedItems,
@@ -1022,8 +1055,11 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
         }
         sb.append("\nالأوزان: ${parts.joinToString(" + ")}")
     }
-    val ps = materials.priceSummary(prices)
+    val pb = materials.priceBreakdown(prices)
+    val ps = pb.all
     if (ps.total > 0.0) {
+        sb.append("\n⭐ المواد الهامة: ${Formatters.number(pb.important.total)} $currency")
+        sb.append("\nبقية المواد: ${Formatters.number(pb.regular.total)} $currency")
         sb.append("\nإجمالي السعر: ${Formatters.number(ps.total)} $currency")
         if (ps.unpriced > 0) sb.append(" (${ps.unpriced} مادة بلا سعر غير محسوبة)")
     }
@@ -1040,11 +1076,12 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
 @Composable
 private fun MaterialsSummaryCard(
     weights: MaterialsWeightSummary,
-    prices: MaterialsPriceSummary,
+    prices: MaterialsPriceBreakdown,
     animate: Boolean,
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
+    val gold = LocalSemanticColors.current.warning
     val currency = AppSettingsState.currencySymbol
     val weightCells = remember(weights) {
         buildList {
@@ -1054,82 +1091,258 @@ private fun MaterialsSummaryCard(
         }
     }
     val showWeights = weightCells.isNotEmpty()
-    val showPrice = prices.total > 0.0
+    val showPrice = prices.all.total > 0.0
     if (!showWeights && !showPrice) return
 
     AppCard(modifier = modifier.tierAnimateContentSize()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (showWeights) {
-                Column(Modifier.weight(1f)) {
-                    Text("الأوزان المطلوبة", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                    Spacer(Modifier.height(2.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
-                        weightCells.forEach { (value, label) ->
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                AnimatedCounterText(
-                                    targetValue = value,
-                                    format = { Formatters.number(it) },
-                                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                                    fontWeight = FontWeight.SemiBold,
-                                    animate = animate
-                                )
-                                Spacer(Modifier.width(3.dp))
-                                Text(
-                                    label,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = cs.onSurfaceVariant,
-                                    modifier = Modifier.padding(bottom = 2.dp)
-                                )
+        Column(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (showWeights) {
+                    Column(Modifier.weight(1f)) {
+                        Text("الأوزان المطلوبة", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                        Spacer(Modifier.height(2.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                            weightCells.forEach { (value, label) ->
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    AnimatedCounterText(
+                                        targetValue = value,
+                                        format = { Formatters.number(it) },
+                                        style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                                        fontWeight = FontWeight.SemiBold,
+                                        animate = animate
+                                    )
+                                    Spacer(Modifier.width(3.dp))
+                                    Text(
+                                        label,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = cs.onSurfaceVariant,
+                                        modifier = Modifier.padding(bottom = 2.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
-            }
-            if (showWeights && showPrice) {
-                Box(
-                    Modifier
-                        .padding(horizontal = 12.dp)
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(cs.outlineVariant)
-                )
-            }
-            if (showPrice) {
-                Column(Modifier.weight(1f)) {
-                    Text("إجمالي السعر", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                    Spacer(Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        AnimatedCounterText(
-                            targetValue = prices.total,
-                            format = { Formatters.number(it) },
-                            style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                            fontWeight = FontWeight.SemiBold,
-                            animate = animate
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            currency,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = cs.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                    }
-                    if (prices.unpriced > 0) {
-                        Text(
-                            "${prices.unpriced} بلا سعر (غير محسوبة)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = cs.onSurfaceVariant
-                        )
+                if (showWeights && showPrice) {
+                    Box(
+                        Modifier
+                            .padding(horizontal = 12.dp)
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(cs.outlineVariant)
+                    )
+                }
+                if (showPrice) {
+                    Column(Modifier.weight(1f)) {
+                        Text("إجمالي السعر", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+                        Spacer(Modifier.height(2.dp))
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            AnimatedCounterText(
+                                targetValue = prices.all.total,
+                                format = { Formatters.number(it) },
+                                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                                fontWeight = FontWeight.SemiBold,
+                                animate = animate
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                currency,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = cs.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 2.dp)
+                            )
+                        }
+                        if (prices.all.unpriced > 0) {
+                            Text(
+                                "${prices.all.unpriced} بلا سعر (غير محسوبة)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cs.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
+            if (showPrice) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp)
+                        .height(1.dp)
+                        .background(cs.outlineVariant)
+                )
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PriceSplitCell(
+                        label = "المواد الهامة",
+                        total = prices.important.total,
+                        unpriced = prices.important.unpriced,
+                        currency = currency,
+                        animate = animate,
+                        starred = true,
+                        starTint = gold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        Modifier
+                            .padding(horizontal = 12.dp)
+                            .width(1.dp)
+                            .fillMaxHeight()
+                            .background(cs.outlineVariant)
+                    )
+                    PriceSplitCell(
+                        label = "بقية المواد",
+                        total = prices.regular.total,
+                        unpriced = prices.regular.unpriced,
+                        currency = currency,
+                        animate = animate,
+                        starred = false,
+                        starTint = gold,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun PriceSplitCell(
+    label: String,
+    total: Double,
+    unpriced: Int,
+    currency: String,
+    animate: Boolean,
+    starred: Boolean,
+    starTint: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (starred) {
+                Icon(Icons.Filled.Star, contentDescription = null, tint = starTint, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(label, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
+        }
+        Spacer(Modifier.height(2.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            AnimatedCounterText(
+                targetValue = total,
+                format = { Formatters.number(it) },
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
+                fontWeight = FontWeight.SemiBold,
+                animate = animate
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                currency,
+                style = MaterialTheme.typography.labelMedium,
+                color = cs.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 2.dp)
+            )
+        }
+        if (unpriced > 0) {
+            Text(
+                "$unpriced بلا سعر",
+                style = MaterialTheme.typography.labelSmall,
+                color = cs.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun MaterialsTabBar(
+    selected: Int,
+    importantCount: Int,
+    allCount: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    val gold = LocalSemanticColors.current.warning
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(CircleShape)
+            .background(cs.surfaceContainerHigh)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        MaterialsTabButton(
+            label = "مواد هامة ($importantCount)",
+            selected = selected == 1,
+            leadingStar = true,
+            starTint = gold,
+            onClick = { onSelect(1) },
+            modifier = Modifier.weight(1f)
+        )
+        MaterialsTabButton(
+            label = "جميع المواد ($allCount)",
+            selected = selected == 0,
+            leadingStar = false,
+            starTint = gold,
+            onClick = { onSelect(0) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun MaterialsTabButton(
+    label: String,
+    selected: Boolean,
+    leadingStar: Boolean,
+    starTint: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    val bg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) cs.onSurface else androidx.compose.ui.graphics.Color.Transparent,
+        label = "tabBg"
+    )
+    val fg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (selected) cs.surface else cs.onSurfaceVariant,
+        label = "tabFg"
+    )
+    Row(
+        modifier
+            .height(42.dp)
+            .clip(CircleShape)
+            .background(bg)
+            .clickable(role = androidx.compose.ui.semantics.Role.Tab, onClick = onClick),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (leadingStar) {
+            Icon(
+                Icons.Filled.Star,
+                contentDescription = null,
+                tint = if (selected) starTint else starTint.copy(alpha = 0.8f),
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            label,
+            color = fg,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1
+        )
     }
 }
 

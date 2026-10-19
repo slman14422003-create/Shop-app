@@ -56,6 +56,7 @@ fun GlassAlertDialog(
     confirmButton: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     dismissButton: (@Composable () -> Unit)? = null,
+    confirmLeading: (@Composable () -> Unit)? = null,
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
     text: (@Composable () -> Unit)? = null,
@@ -196,8 +197,14 @@ fun GlassAlertDialog(
                         // that sets its own explicit Text `color` (e.g. the
                         // green "تم السداد" success label) still wins, since
                         // an explicit color always overrides the ambient one.
+                        androidx.compose.foundation.layout.Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                        confirmLeading?.invoke()
                         DialogButtonCell(
-                            Modifier.fillMaxWidth().height(52.dp)
+                            Modifier.weight(1f).height(52.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(MaterialTheme.colorScheme.onSurface)
                         ) {
@@ -211,6 +218,7 @@ fun GlassAlertDialog(
                             ) {
                                 confirmButton()
                             }
+                        }
                         }
                         if (dismissButton != null) {
                             DialogButtonCell(

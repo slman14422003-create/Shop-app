@@ -194,17 +194,19 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     // مشكلة PersonEditDialog قديماً - onDone هون تسمح للواجهة (MaterialEditDialog/
     // QuantityEntryDialog) توقف زر الحفظ وتعرض دائرة تحميل لحد ما الكتابة
     // بفايرستور تخلص فعلياً، بدل ما توهم إنها علقت أو تسمح بضغطات متكررة.
-    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", onDone: (Boolean) -> Unit = {}) {
+    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", important: Boolean = false, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
+                val topOrder = (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
                 // BUG FIXED (see MaterialsRepository.addMaterial): register
                 // the id via onIdAssigned the instant it's generated
                 // (client-side, before the write is even sent) instead of
                 // after the whole suspend call returns — closes the race
                 // where the live listener could fire first and notify this
                 // same device about the material it just added.
-                repo.addMaterial(name, quantity, unit, section.value, notes) { id -> markWrittenHere(id, name, quantity, unit) }
-                learn(name, quantity, unit, false)
+                val newId = repo.addMaterial(name, quantity, unit, section.value, notes) { id -> markWrittenHere(id, name, quantity, unit) }
+                if (important) repo.setImportant(newId, true, topOrder)
+                learn(name, quantity, unit, important)
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)

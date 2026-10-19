@@ -206,3 +206,16 @@ fun List<Material>.priceSummary(prices: Map<String, Double>): MaterialsPriceSumm
     }
     return MaterialsPriceSummary(total = roundMoney(total), unpriced = unpriced)
 }
+
+data class MaterialsPriceBreakdown(
+    val important: MaterialsPriceSummary = MaterialsPriceSummary(),
+    val regular: MaterialsPriceSummary = MaterialsPriceSummary(),
+    val all: MaterialsPriceSummary = MaterialsPriceSummary()
+)
+
+fun List<Material>.priceBreakdown(prices: Map<String, Double>): MaterialsPriceBreakdown =
+    MaterialsPriceBreakdown(
+        important = filter { it.important }.priceSummary(prices),
+        regular = filter { !it.important }.priceSummary(prices),
+        all = priceSummary(prices)
+    )

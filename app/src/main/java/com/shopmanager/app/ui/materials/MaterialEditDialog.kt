@@ -46,7 +46,7 @@ fun MaterialEditDialog(
     initial: Material?,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (name: String, quantity: Double, unit: String, notes: String) -> Unit
+    onSave: (name: String, quantity: Double, unit: String, notes: String, important: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     // FIX: quantity used to be a free-typed decimal field, which is why
@@ -60,6 +60,7 @@ fun MaterialEditDialog(
     }
     var unit by remember { mutableStateOf(MaterialUnit.fromLabel(initial?.unit ?: MaterialUnit.KG.label)) }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
+    var important by remember { mutableStateOf(initial?.important ?: false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     // FIX: a fixed fraction size (نص كيلو، ربع كيلو، لوقية، نص لوقية، ربع
@@ -75,6 +76,13 @@ fun MaterialEditDialog(
     GlassAlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
+        confirmLeading = {
+            com.shopmanager.app.ui.common.ImportantStarButton(
+                checked = important,
+                onCheckedChange = { important = it },
+                enabled = !isSaving
+            )
+        },
         text = {
             Column {
                 // الاسم + الكمية كمجموعة صفوف متلاصقة (مثل مجموعات الإعدادات).
@@ -163,7 +171,7 @@ fun MaterialEditDialog(
                     when {
                         name.isBlank() -> error = "يرجى إدخال اسم المادة"
                         quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
-                        else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim()) }
+                        else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim(), important) }
                     }
                 }
             ) {
