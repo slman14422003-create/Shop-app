@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material.icons.filled.WbSunny
@@ -201,6 +202,7 @@ fun DashboardScreen(
                     totalDebt = debtsState.totalAmount,
                     totalPersons = debtsState.totalPersons,
                     shortagesCount = shortages.size,
+                    importantCount = shortages.count { it.important },
                     debtsLoading = debtsState.isLoading,
                     materialsLoading = materialsState.isLoading,
                     hasShortages = shortages.isNotEmpty(),
@@ -588,6 +590,7 @@ private fun HeroStatsCard(
     totalDebt: Double,
     totalPersons: Int,
     shortagesCount: Int,
+    importantCount: Int,
     debtsLoading: Boolean,
     materialsLoading: Boolean,
     hasShortages: Boolean,
@@ -668,18 +671,25 @@ private fun HeroStatsCard(
                 )
                 HeroMiniStat(
                     modifier = Modifier.weight(1f),
-                    icon = Icons.Default.Groups,
-                    accentColor = MaterialTheme.colorScheme.primary,
-                    title = "أكبر مدين",
+                    icon = Icons.Default.Star,
+                    accentColor = LocalSemanticColors.current.warning,
+                    title = "مواد هامة",
                     valueContent = {
-                        Text(
-                            topDebtorName ?: "—",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            AnimatedCounterText(
+                                targetValue = importantCount.toDouble(),
+                                format = { it.toInt().toString() },
+                                style = MaterialTheme.typography.titleMedium,
+                                animate = !materialsLoading
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (importantCount > 0) "أولوية" else "لا يوجد",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = onSurfaceVariant.copy(alpha = 0.85f),
+                                maxLines = 1
+                            )
+                        }
                     }
                 )
             }

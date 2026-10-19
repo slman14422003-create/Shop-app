@@ -72,7 +72,6 @@ import com.shopmanager.app.data.materials.weightSummary
 import com.shopmanager.app.data.materials.linePrice
 import com.shopmanager.app.data.materials.priceOf
 import com.shopmanager.app.data.materials.priceSummary
-import com.shopmanager.app.data.materials.MaterialsPriceBreakdown
 import com.shopmanager.app.data.materials.priceBreakdown
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.text.input.KeyboardType
@@ -523,13 +522,19 @@ private fun MaterialsList(
     // would silently scramble the position of every hidden item too.
     var listTab by rememberSaveable { mutableStateOf(0) }
     val importantItems = remember(materials) { materials.filter { it.important } }
-    val visibleItems = if (listTab == 1) importantItems else materials
+    val regularItems = remember(materials) { materials.filter { !it.important } }
+    val visibleItems = when (listTab) {
+        0 -> importantItems
+        1 -> regularItems
+        else -> materials
+    }
+    LaunchedEffect(Unit) { if (importantItems.isEmpty()) listTab = 2 }
     var orderedItems by remember { mutableStateOf(visibleItems) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(visibleItems) {
         if (draggingId == null) orderedItems = visibleItems
     }
-    val canReorder = !searching && listTab == 0
+    val canReorder = !searching && listTab == 2
     // Real per-row height in px (row height + the 8.dp spacedBy gap),
     // measured live via onSizeChanged below — used to decide, as the
     // finger moves, when it's dragged far enough past a neighbor to swap
@@ -538,8 +543,10 @@ private fun MaterialsList(
     var dragOffset by remember { mutableStateOf(0f) }
 
     // تُحسب مرة لكل تغيّر فعلي في القائمة المعروضة أو في الأسعار.
-    val weightSummary = remember(materials) { materials.weightSummary() }
-    val priceBreakdown = remember(materials, prices) { materials.priceBreakdown(prices) }
+    val weightSummary = remember(visibleItems) { visibleItems.weightSummary() }
+    val priceSummary = remember(visibleItems, prices) { visibleItems.priceSummary(prices) }
+    val allWeights = remember(materials) { materials.weightSummary() }
+    val allPrices = remember(materials, prices) { materials.priceSummary(prices) }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -567,7 +574,9 @@ private fun MaterialsList(
         item(key = "summary") {
             MaterialsSummaryCard(
                 weights = weightSummary,
-                prices = priceBreakdown,
+                prices = priceSummary,
+                overallWeights = if (listTab == 2) null else allWeights,
+                overallPrices = if (listTab == 2) null else allPrices,
                 animate = animateSummary,
                 modifier = Modifier.padding(bottom = 6.dp)
             )
@@ -576,6 +585,7 @@ private fun MaterialsList(
             MaterialsTabBar(
                 selected = listTab,
                 importantCount = importantItems.size,
+                regularCount = regularItems.size,
                 allCount = materials.size,
                 onSelect = { listTab = it },
                 modifier = Modifier.padding(bottom = 4.dp)
@@ -583,7 +593,11 @@ private fun MaterialsList(
         }
         item(key = "listTitle") {
             AppSectionTitle(
-                text = if (listTab == 1) "المواد الهامة (${visibleItems.size})" else "قائمة النواقص (${materials.size})",
+                text = when (listTab) {
+                    0 -> "المواد الهامة (${visibleItems.size})"
+                    1 -> "المواد الناقصة (${visibleItems.size})"
+                    else -> "كل المواد (${visibleItems.size})"
+                },
                 modifier = Modifier.padding(horizontal = 0.dp),
                 trailing = {
                     TextButton(onClick = onClearAll) {
@@ -599,7 +613,7 @@ private fun MaterialsList(
         if (visibleItems.isEmpty()) {
             item(key = "noImportant") {
                 Text(
-                    "لا توجد مواد هامة\nاضغط على النجمة بجانب أي مادة لتظهر هنا",
+                    if (listTab == 0) "لا توجد مواد هامة\nاضغط على النجمة بجانب أي مادة لتظهر هنا" else "لا توجد مواد هنا",
                     modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
@@ -1076,12 +1090,13 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
 @Composable
 private fun MaterialsSummaryCard(
     weights: MaterialsWeightSummary,
-    prices: MaterialsPriceBreakdown,
+    prices: MaterialsPriceSummary,
+    overallWeights: MaterialsWeightSummary?,
+    overallPrices: MaterialsPriceSummary?,
     animate: Boolean,
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    val gold = LocalSemanticColors.current.warning
     val currency = AppSettingsState.currencySymbol
     val weightCells = remember(weights) {
         buildList {
@@ -1091,16 +1106,22 @@ private fun MaterialsSummaryCard(
         }
     }
     val showWeights = weightCells.isNotEmpty()
-    val showPrice = prices.all.total > 0.0
+    val showPrice = prices.total > 0.0
     if (!showWeights && !showPrice) return
+    val overallText = remember(overallWeights, overallPrices) {
+        if (overallWeights == null || overallPrices == null) null
+        else buildList {
+            if (overallPrices.total > 0.0) add("${Formatters.number(overallPrices.total)} $currency")
+            if (overallWeights.kilos > 0.0) add("${Formatters.number(overallWeights.kilos)} كيلو")
+            if (overallWeights.okes > 0.0) add("${Formatters.number(overallWeights.okes)} لوقية")
+            if (overallWeights.pieces > 0.0) add("${Formatters.number(overallWeights.pieces)} بالعدد")
+        }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+    }
 
     AppCard(modifier = modifier.tierAnimateContentSize()) {
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
             Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min)
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().height(IntrinsicSize.Min),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (showWeights) {
@@ -1144,7 +1165,7 @@ private fun MaterialsSummaryCard(
                         Spacer(Modifier.height(2.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
                             AnimatedCounterText(
-                                targetValue = prices.all.total,
+                                targetValue = prices.total,
                                 format = { Formatters.number(it) },
                                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                                 fontWeight = FontWeight.SemiBold,
@@ -1158,9 +1179,9 @@ private fun MaterialsSummaryCard(
                                 modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
-                        if (prices.all.unpriced > 0) {
+                        if (prices.unpriced > 0) {
                             Text(
-                                "${prices.all.unpriced} بلا سعر (غير محسوبة)",
+                                "${prices.unpriced} بلا سعر (غير محسوبة)",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = cs.onSurfaceVariant
                             )
@@ -1168,97 +1189,16 @@ private fun MaterialsSummaryCard(
                     }
                 }
             }
-            if (showPrice) {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp)
-                        .height(1.dp)
-                        .background(cs.outlineVariant)
+            if (overallText != null) {
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(cs.outlineVariant))
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "الإجمالي الكلي: $overallText",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = cs.onSurfaceVariant
                 )
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PriceSplitCell(
-                        label = "المواد الهامة",
-                        total = prices.important.total,
-                        unpriced = prices.important.unpriced,
-                        currency = currency,
-                        animate = animate,
-                        starred = true,
-                        starTint = gold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Box(
-                        Modifier
-                            .padding(horizontal = 12.dp)
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(cs.outlineVariant)
-                    )
-                    PriceSplitCell(
-                        label = "بقية المواد",
-                        total = prices.regular.total,
-                        unpriced = prices.regular.unpriced,
-                        currency = currency,
-                        animate = animate,
-                        starred = false,
-                        starTint = gold,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
             }
-        }
-    }
-}
-
-@Composable
-private fun PriceSplitCell(
-    label: String,
-    total: Double,
-    unpriced: Int,
-    currency: String,
-    animate: Boolean,
-    starred: Boolean,
-    starTint: androidx.compose.ui.graphics.Color,
-    modifier: Modifier = Modifier
-) {
-    val cs = MaterialTheme.colorScheme
-    Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (starred) {
-                Icon(Icons.Filled.Star, contentDescription = null, tint = starTint, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(4.dp))
-            }
-            Text(label, style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-        }
-        Spacer(Modifier.height(2.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            AnimatedCounterText(
-                targetValue = total,
-                format = { Formatters.number(it) },
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp),
-                fontWeight = FontWeight.SemiBold,
-                animate = animate
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                currency,
-                style = MaterialTheme.typography.labelMedium,
-                color = cs.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 2.dp)
-            )
-        }
-        if (unpriced > 0) {
-            Text(
-                "$unpriced بلا سعر",
-                style = MaterialTheme.typography.labelSmall,
-                color = cs.onSurfaceVariant
-            )
         }
     }
 }
@@ -1267,6 +1207,7 @@ private fun PriceSplitCell(
 private fun MaterialsTabBar(
     selected: Int,
     importantCount: Int,
+    regularCount: Int,
     allCount: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
@@ -1282,19 +1223,27 @@ private fun MaterialsTabBar(
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         MaterialsTabButton(
-            label = "مواد هامة ($importantCount)",
-            selected = selected == 1,
+            label = "هامة ($importantCount)",
+            selected = selected == 0,
             leadingStar = true,
+            starTint = gold,
+            onClick = { onSelect(0) },
+            modifier = Modifier.weight(1f)
+        )
+        MaterialsTabButton(
+            label = "الناقصة ($regularCount)",
+            selected = selected == 1,
+            leadingStar = false,
             starTint = gold,
             onClick = { onSelect(1) },
             modifier = Modifier.weight(1f)
         )
         MaterialsTabButton(
-            label = "جميع المواد ($allCount)",
-            selected = selected == 0,
+            label = "الكل ($allCount)",
+            selected = selected == 2,
             leadingStar = false,
             starTint = gold,
-            onClick = { onSelect(0) },
+            onClick = { onSelect(2) },
             modifier = Modifier.weight(1f)
         )
     }
