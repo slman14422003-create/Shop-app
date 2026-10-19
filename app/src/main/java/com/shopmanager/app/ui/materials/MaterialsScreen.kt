@@ -1087,6 +1087,7 @@ private fun buildMaterialsShareText(materials: List<Material>, prices: Map<Strin
  *  - خلية إجمالي السعر: مجموع (سعر الكيلو × الوزن) لكل مادة مسعّرة. وإن وُجدت مواد بلا
  *    سعر يُذكر عددها تحت الرقم حتى لا يُظنّ أنها داخلة في المجموع.
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun MaterialsSummaryCard(
     weights: MaterialsWeightSummary,
@@ -1108,27 +1109,30 @@ private fun MaterialsSummaryCard(
     val showWeights = weightCells.isNotEmpty()
     val showPrice = prices.total > 0.0
     if (!showWeights && !showPrice) return
-    val overallText = remember(overallWeights, overallPrices) {
-        if (overallWeights == null || overallPrices == null) null
+    val overallCells = remember(overallWeights, overallPrices) {
+        if (overallWeights == null || overallPrices == null) emptyList<String>()
         else buildList {
             if (overallPrices.total > 0.0) add("${Formatters.number(overallPrices.total)} $currency")
             if (overallWeights.kilos > 0.0) add("${Formatters.number(overallWeights.kilos)} كيلو")
             if (overallWeights.okes > 0.0) add("${Formatters.number(overallWeights.okes)} لوقية")
             if (overallWeights.pieces > 0.0) add("${Formatters.number(overallWeights.pieces)} بالعدد")
-        }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+        }
     }
 
     AppCard(modifier = modifier.tierAnimateContentSize()) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(
                 Modifier.fillMaxWidth().height(IntrinsicSize.Min),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 if (showWeights) {
-                    Column(Modifier.weight(1f)) {
-                        Text("الأوزان المطلوبة", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                        Spacer(Modifier.height(2.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Bottom) {
+                    Column(Modifier.weight(1.25f)) {
+                        Text("الأوزان المطلوبة", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1)
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
                             weightCells.forEach { (value, label) ->
                                 Row(verticalAlignment = Alignment.Bottom) {
                                     AnimatedCounterText(
@@ -1143,6 +1147,8 @@ private fun MaterialsSummaryCard(
                                         label,
                                         style = MaterialTheme.typography.labelMedium,
                                         color = cs.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         modifier = Modifier.padding(bottom = 2.dp)
                                     )
                                 }
@@ -1161,8 +1167,8 @@ private fun MaterialsSummaryCard(
                 }
                 if (showPrice) {
                     Column(Modifier.weight(1f)) {
-                        Text("إجمالي السعر", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant)
-                        Spacer(Modifier.height(2.dp))
+                        Text("إجمالي السعر", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, maxLines = 1)
+                        Spacer(Modifier.height(4.dp))
                         Row(verticalAlignment = Alignment.Bottom) {
                             AnimatedCounterText(
                                 targetValue = prices.total,
@@ -1176,12 +1182,14 @@ private fun MaterialsSummaryCard(
                                 currency,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = cs.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(bottom = 2.dp)
                             )
                         }
                         if (prices.unpriced > 0) {
                             Text(
-                                "${prices.unpriced} بلا سعر (غير محسوبة)",
+                                "${prices.unpriced} بلا سعر",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = cs.onSurfaceVariant
                             )
@@ -1189,15 +1197,20 @@ private fun MaterialsSummaryCard(
                     }
                 }
             }
-            if (overallText != null) {
-                Spacer(Modifier.height(8.dp))
+            if (overallCells.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
                 Box(Modifier.fillMaxWidth().height(1.dp).background(cs.outlineVariant))
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "الإجمالي الكلي: $overallText",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = cs.onSurfaceVariant
-                )
+                Text("الإجمالي الكلي", style = MaterialTheme.typography.labelSmall, color = cs.onSurfaceVariant, maxLines = 1)
+                Spacer(Modifier.height(2.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    overallCells.forEach {
+                        Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+                    }
+                }
             }
         }
     }
