@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.backup.InstantBackupWorker
+import com.shopmanager.app.data.learning.HomeSuggestion
+import com.shopmanager.app.data.learning.LearningHub
+import com.shopmanager.app.data.learning.UsageArea
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
@@ -25,6 +28,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 
 data class MaterialsUiState(
@@ -105,8 +113,17 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val finderStore = MissingFinderStore(application)
+    private val finderStore = LearningHub.store(application)
+    private val usage = LearningHub.usage(application)
     private val learnVersion = MutableStateFlow(0)
+
+    init {
+        viewModelScope.launch(LearningHub.io) {
+            finderStore.preload()
+            usage.preload()
+            learnVersion.update { it + 1 }
+        }
+    }
 
     val suggestions: StateFlow<List<MaterialCatalogItem>> = combine(catalog, learnVersion) { items, _ ->
         finderStore.suggested(items)
@@ -122,13 +139,11 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun insightFor(name: String): MissingFinderStore.Insight? = finderStore.insight(name)
 
     fun recordImportant(name: String) {
-        finderStore.recordImportant(name)
-        learnVersion.value += 1
+        finderStore.recordImportant(name) { learnVersion.update { it + 1 } }
     }
 
     fun recordExists(names: Collection<String>) {
-        finderStore.recordExists(names)
-        learnVersion.value += 1
+        finderStore.recordExists(names) { learnVersion.update { it + 1 } }
     }
 
     fun recordSkipped(names: Collection<String>) {
@@ -138,8 +153,48 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun partnerFor(name: String, pendingNames: Collection<String>): String? = finderStore.partnerOf(name, pendingNames)
 
     private fun learn(name: String, quantity: Double, unit: String, important: Boolean) {
-        finderStore.recordAdded(name, quantity, unit, important)
-        learnVersion.value += 1
+        finderStore.recordAdded(name, quantity, unit, important) { learnVersion.update { it + 1 } }
+    }
+
+    fun recordUsage(area: UsageArea) {
+        LearningHub.scope.launch { usage.record(area) }
+    }
+
+    private val _homeSuggestion = MutableStateFlow<HomeSuggestion?>(null)
+    val homeSuggestion: StateFlow<HomeSuggestion?> = _homeSuggestion
+
+    private var enterJob: Job? = null
+    private var lastEnterAt = 0L
+
+    fun onAppEntered() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (lastEnterAt != 0L && now - lastEnterAt < 10_000L) return
+        lastEnterAt = now
+        enterJob?.cancel()
+        enterJob = viewModelScope.launch(Dispatchers.Default) {
+            LearningHub.scope.launch { usage.record(UsageArea.APP_OPEN) }
+            val items = withTimeoutOrNull(2500L) { catalog.first { it.isNotEmpty() } } ?: catalog.value
+            val current = (withTimeoutOrNull(2500L) { uiState.first { !it.isLoading } } ?: uiState.value)
+                .materials.map { it.name }
+            val pick = withContext(LearningHub.io) {
+                finderStore.preload()
+                usage.pickSuggestion(finderStore, items, current)
+            }
+            _homeSuggestion.value = pick
+        }
+    }
+
+    fun onSuggestionAccepted() {
+        val s = _homeSuggestion.value ?: return
+        _homeSuggestion.value = null
+        LearningHub.scope.launch { usage.recordFeedback(s.kind, true) }
+    }
+
+    fun onSuggestionDismissed() {
+        val s = _homeSuggestion.value ?: return
+        _homeSuggestion.value = null
+        LearningHub.scope.launch { usage.recordFeedback(s.kind, false) }
+        if (s.names.isNotEmpty()) finderStore.recordSkipped(s.names)
     }
 
     private val _message = MutableStateFlow<String?>(null)
@@ -389,8 +444,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 repo.updateCatalogItem(id, newName)
                 if (newName != currentName) {
-                    finderStore.rename(currentName, newName)
-                    learnVersion.value += 1
+                    finderStore.rename(currentName, newName) { learnVersion.update { it + 1 } }
                 }
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)

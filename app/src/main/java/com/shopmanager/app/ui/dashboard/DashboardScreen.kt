@@ -2,11 +2,19 @@ package com.shopmanager.app.ui.dashboard
 
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.shopmanager.app.data.learning.HomeSuggestion
+import com.shopmanager.app.data.learning.SuggestionKind
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory2
@@ -100,8 +108,18 @@ fun DashboardScreen(
     materialsViewModel: MaterialsViewModel,
     onNavigateToDebts: () -> Unit = {},
     onNavigateToMaterials: () -> Unit = {},
+    onOpenMissingFinder: () -> Unit = {},
     onOpenDrawer: () -> Unit = {}
 ) {
+    val homeSuggestion by materialsViewModel.homeSuggestion.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) materialsViewModel.onAppEntered()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val debtsState by debtsViewModel.uiState.collectAsStateWithLifecycle()
     val materialsState by materialsViewModel.uiState.collectAsStateWithLifecycle()
     val debtsRefreshing by debtsViewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -217,6 +235,21 @@ fun DashboardScreen(
                     onAddPerson = onNavigateToDebts,
                     onAddMaterial = onNavigateToMaterials
                 )
+            }
+
+            homeSuggestion?.let { suggestion ->
+                item(key = "home_suggestion") {
+                    HomeSuggestionCard(
+                        suggestion = suggestion,
+                        accent = marketAccent,
+                        onAccept = {
+                            materialsViewModel.onSuggestionAccepted()
+                            if (suggestion.kind == SuggestionKind.PRICES_REVIEW) onNavigateToMaterials() else onOpenMissingFinder()
+                        },
+                        onDismiss = { materialsViewModel.onSuggestionDismissed() },
+                        modifier = Modifier.animateItem()
+                    )
+                }
             }
 
             if (isLoading && debtsState.persons.isEmpty() && materialsState.materials.isEmpty()) {
@@ -761,6 +794,86 @@ private fun SectionCard(
         Spacer(Modifier.height(8.dp))
         AppCard {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), content = content)
+        }
+    }
+}
+
+@Composable
+private fun HomeSuggestionCard(
+    suggestion: HomeSuggestion,
+    accent: Color,
+    onAccept: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val title = when (suggestion.kind) {
+        SuggestionKind.DUE_MATERIALS -> "\u0645\u0648\u0627\u062F \u0642\u062F \u062A\u062D\u062A\u0627\u062C\u0647\u0627"
+        SuggestionKind.USUAL_CHECK -> "\u0648\u0642\u062A \u0641\u062D\u0635 \u0627\u0644\u0646\u0648\u0627\u0642\u0635"
+        SuggestionKind.PRICES_REVIEW -> "\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0623\u0633\u0639\u0627\u0631"
+    }
+    val body = when (suggestion.kind) {
+        SuggestionKind.DUE_MATERIALS -> suggestion.names.joinToString("\u060C ")
+        SuggestionKind.USUAL_CHECK -> "\u0639\u0627\u062F\u0629 \u062A\u0631\u0627\u062C\u0639 \u0627\u0644\u0646\u0648\u0627\u0642\u0635 \u0641\u064A \u0647\u0630\u0627 \u0627\u0644\u0648\u0642\u062A"
+        SuggestionKind.PRICES_REVIEW -> "\u062A\u0631\u0627\u062C\u0639 \u0627\u0644\u0623\u0633\u0639\u0627\u0631 \u0639\u0627\u062F\u0629 \u0641\u064A \u0647\u0630\u0627 \u0627\u0644\u0648\u0642\u062A"
+    }
+    val action = when (suggestion.kind) {
+        SuggestionKind.PRICES_REVIEW -> "\u0627\u0641\u062A\u062D \u0627\u0644\u0645\u0648\u0627\u062F"
+        else -> "\u0627\u0641\u062D\u0635 \u0627\u0644\u0646\u0648\u0627\u0642\u0635"
+    }
+    val shape = RoundedCornerShape(AppGroupLargeRadius)
+    AppCard(
+        modifier = modifier
+            .padding(horizontal = AppScreenPadding)
+            .clip(shape)
+            .clickable(onClick = onAccept)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(38.dp).clip(CircleShape).background(accent.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = accent, modifier = Modifier.size(19.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "\u0627\u0642\u062A\u0631\u0627\u062D \u0630\u0643\u064A",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = accent
+                )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    body,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    action,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent
+                )
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    Icons.Default.Close,
+                    contentDescription = "\u0625\u062E\u0641\u0627\u0621",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

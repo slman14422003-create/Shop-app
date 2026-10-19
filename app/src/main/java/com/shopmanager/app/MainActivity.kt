@@ -216,6 +216,7 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onStop() {
+        com.shopmanager.app.data.learning.LearningHub.flush()
         if (!isFinishing && lockSettings.hasPin && lockSettings.autoLockOnLeave) {
             lockedByLeave = true
         }
@@ -762,6 +763,15 @@ private fun ShopManagerApp(
     // composable) so it survives navigating away to Settings/Help and back,
     // and so the bottom bar can read/drive the current page directly.
     val pagerState = rememberPagerState(initialPage = PAGE_DASHBOARD) { 4 }
+    LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow { pagerState.settledPage }.collect { page ->
+            when (page) {
+                PAGE_MATERIALS -> com.shopmanager.app.data.learning.UsageArea.MATERIALS
+                PAGE_NOTES -> com.shopmanager.app.data.learning.UsageArea.NOTES
+                else -> null
+            }?.let { materialsViewModel.recordUsage(it) }
+        }
+    }
     // REDESIGN ("زر عميل جديد بجانب الشريط السفلي"): the "+" that used to
     // be each tab's own FloatingActionButton is now a single shared button
     // rendered as part of FloatingBottomNav itself (see its `quickAction`
@@ -783,6 +793,9 @@ private fun ShopManagerApp(
     // pill button below only appears, and only shows a changed-count
     // description, while that specific tab is actually on screen.
     var materialsPricesTabActive by remember { mutableStateOf(false) }
+    LaunchedEffect(materialsPricesTabActive) {
+        if (materialsPricesTabActive) materialsViewModel.recordUsage(com.shopmanager.app.data.learning.UsageArea.PRICES)
+    }
     var pricesChangedCount by remember { mutableStateOf(0) }
     var savePricesRequested by remember { mutableStateOf(false) }
     // BUG FIXED ("ترابط بين الديون والملاحظات" كان يغطي الأشخاص فقط):
@@ -1133,6 +1146,7 @@ private fun ShopManagerApp(
                             materialsViewModel = materialsViewModel,
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
+                            onOpenMissingFinder = { navController.safeNavigate(ROUTE_MISSING_FINDER) },
                             onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
                         PAGE_DEBTS -> DebtsScreen(

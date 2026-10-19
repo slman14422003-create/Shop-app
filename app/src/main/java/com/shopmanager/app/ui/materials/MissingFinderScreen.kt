@@ -96,6 +96,7 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     var waited by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
+        viewModel.recordUsage(com.shopmanager.app.data.learning.UsageArea.MISSING_FINDER)
         delay(2500)
         waited = true
     }
