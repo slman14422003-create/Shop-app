@@ -131,6 +131,12 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         learnVersion.value += 1
     }
 
+    fun recordSkipped(names: Collection<String>) {
+        finderStore.recordSkipped(names)
+    }
+
+    fun partnerFor(name: String, pendingNames: Collection<String>): String? = finderStore.partnerOf(name, pendingNames)
+
     private fun learn(name: String, quantity: Double, unit: String, important: Boolean) {
         finderStore.recordAdded(name, quantity, unit, important)
         learnVersion.value += 1
@@ -226,6 +232,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
             if (ok > 0) {
+                finderStore.recordBatch(items.map { it.name })
                 _message.value = "تمت إضافة $ok مادة إلى النواقص"
                 InstantBackupWorker.requestNow(getApplication())
             }

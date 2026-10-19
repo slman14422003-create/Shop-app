@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TaskAlt
@@ -47,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,7 +64,9 @@ import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
 import com.shopmanager.app.data.materials.MissingFinderStore
 import com.shopmanager.app.data.materials.PendingMaterial
+import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.MotionSpecs
+import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.ui.common.AppEmptyState
 import com.shopmanager.app.ui.common.AppFootnote
 import com.shopmanager.app.ui.common.AppGroupGap
@@ -101,21 +105,19 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
 
     val ready = catalog.isNotEmpty() && !state.isLoading
     var onlySuggested by remember { mutableStateOf(false) }
-    val hasSuggestions = remember(ready) { ready && viewModel.suggestedNow(catalog).isNotEmpty() }
+    val lowTier = LocalPerformanceTier.current == PerformanceTier.LOW
+    val listedKeys = remember(ready) {
+        if (!ready) emptySet() else state.materials.map { ArabicText.normalize(it.name) }.toSet()
+    }
+    val suggestedAll = remember(ready) { if (ready) viewModel.suggestedNow(catalog) else emptyList() }
+    val rankedAll = remember(ready) { if (ready) viewModel.rankedCatalog(catalog) else emptyList() }
+    val hasSuggestions = suggestedAll.isNotEmpty()
     val queue: List<MaterialCatalogItem> = remember(ready, onlySuggested) {
         if (!ready) emptyList()
-        else {
-            val listed = state.materials.map { ArabicText.normalize(it.name) }.toSet()
-            val base = if (onlySuggested) viewModel.suggestedNow(catalog) else viewModel.rankedCatalog(catalog)
-            base.filter { ArabicText.normalize(it.name) !in listed }
-        }
+        else (if (onlySuggested) suggestedAll else rankedAll).filter { ArabicText.normalize(it.name) !in listedKeys }
     }
     val alreadyListed = remember(ready) {
-        if (!ready) 0
-        else {
-            val listed = state.materials.map { ArabicText.normalize(it.name) }.toSet()
-            catalog.count { ArabicText.normalize(it.name) in listed }
-        }
+        if (!ready) 0 else catalog.count { ArabicText.normalize(it.name) in listedKeys }
     }
 
     var index by remember { mutableIntStateOf(0) }
@@ -168,7 +170,8 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                     onRemove = { name -> answers.removeAll { it.pending?.name == name } },
                     onConfirm = {
                         val pendingList = answers.mapNotNull { it.pending }
-                        viewModel.recordExists(answers.filter { it.pending == null }.map { it.name })
+                        viewModel.recordExists(answers.filter { it.pending == null && !it.skipped }.map { it.name })
+                        viewModel.recordSkipped(answers.filter { it.skipped }.map { it.name })
                         if (pendingList.isEmpty()) {
                             onBack()
                         } else {
@@ -188,7 +191,8 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 else -> {
                     val total = queue.size
                     val missingCount = answers.count { it.pending != null }
-                    val existsCount = answers.size - missingCount
+                    val skippedCount = answers.count { it.skipped }
+                    val existsCount = answers.size - missingCount - skippedCount
                     Column(
                         Modifier.fillMaxWidth().padding(horizontal = AppScreenPadding, vertical = 6.dp)
                     ) {
@@ -206,6 +210,9 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                             if (existsCount > 0) {
                                 PillBadge(text = "موجود: $existsCount", color = LocalSemanticColors.current.success)
                             }
+                            if (skippedCount > 0) {
+                                PillBadge(text = "تخطي: $skippedCount", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             if (missingCount > 0) {
                                 PillBadge(text = "ناقص: $missingCount", color = MaterialTheme.colorScheme.error)
                             }
@@ -218,18 +225,15 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
                     }
-                    AnimatedContent(
-                        targetState = index,
-                        transitionSpec = { fadeIn(fadeInSpec) togetherWith fadeOut(fadeOutSpec) },
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        label = "finderStep"
-                    ) { i ->
+                    val step: @Composable (Int) -> Unit = { i ->
                         val item = queue[i.coerceIn(0, queue.lastIndex)]
                         val previous = answers.firstOrNull { it.name == item.name }
+                        val pendingNames = answers.mapNotNull { it.pending?.name }
                         ItemStep(
                             item = item,
                             insight = remember(item.name) { viewModel.insightFor(item.name) },
                             suggestion = remember(item.name) { viewModel.suggestionFor(item.name) },
+                            partner = remember(item.name, pendingNames.size) { viewModel.partnerFor(item.name, pendingNames) },
                             initial = previous?.pending,
                             canGoBack = i > 0,
                             onGoBack = {
@@ -245,12 +249,29 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                                 answers.add(Answer(item.name, null))
                                 index += 1
                             },
+                            onSkip = {
+                                answers.removeAll { it.name == item.name }
+                                answers.add(Answer(item.name, null, skipped = true))
+                                index += 1
+                            },
                             onMissing = { pending ->
                                 answers.removeAll { it.name == item.name }
                                 answers.add(Answer(item.name, pending))
                                 index += 1
                             }
                         )
+                    }
+                    if (lowTier) {
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                            key(index) { step(index) }
+                        }
+                    } else {
+                        AnimatedContent(
+                            targetState = index,
+                            transitionSpec = { fadeIn(fadeInSpec) togetherWith fadeOut(fadeOutSpec) },
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            label = "finderStep"
+                        ) { i -> step(i) }
                     }
                     if (alreadyListed > 0) {
                         AppFootnote(
@@ -264,7 +285,7 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     }
 }
 
-private data class Answer(val name: String, val pending: PendingMaterial?)
+private data class Answer(val name: String, val pending: PendingMaterial?, val skipped: Boolean = false)
 
 @Composable
 private fun ModeRow(onlySuggested: Boolean, onChange: (Boolean) -> Unit) {
@@ -304,12 +325,14 @@ private fun ItemStep(
     item: MaterialCatalogItem,
     insight: MissingFinderStore.Insight?,
     suggestion: Pair<Int, MaterialUnit>?,
+    partner: String?,
     initial: PendingMaterial?,
     canGoBack: Boolean,
     hasPending: Boolean,
     onGoBack: () -> Unit,
     onFinishNow: () -> Unit,
     onExists: () -> Unit,
+    onSkip: () -> Unit,
     onMissing: (PendingMaterial) -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
@@ -376,6 +399,9 @@ private fun ItemStep(
                         } else if (insight.added == 1) {
                             PillBadge(text = "أضفتها مرة", color = semantic.warning)
                         }
+                        if (insight.due) {
+                            PillBadge(text = "حان وقت نقصها", color = semantic.warning)
+                        }
                         insight.daysSinceLast?.let { days ->
                             if (insight.added > 0) {
                                 PillBadge(
@@ -385,6 +411,10 @@ private fun ItemStep(
                             }
                         }
                     }
+                }
+                if (partner != null) {
+                    Spacer(Modifier.height(8.dp))
+                    PillBadge(text = "غالباً تنقص مع $partner", color = semantic.info)
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -414,6 +444,14 @@ private fun ItemStep(
                     height = 60.dp,
                     modifier = Modifier.weight(1f)
                 )
+            }
+            TextButton(
+                onClick = onSkip,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+            ) {
+                Icon(Icons.Default.SkipNext, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("تخطي")
             }
         } else {
             QuantityStepper(
