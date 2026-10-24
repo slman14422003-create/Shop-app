@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PersonSearch
@@ -127,6 +128,7 @@ fun DebtsScreen(
     val deleteTarget = remember { mutableStateOf<Person?>(null) }
     val payTarget = remember { mutableStateOf<Person?>(null) }
     val showShareChoice = remember { mutableStateOf(false) }
+    val showActivityLog = remember { mutableStateOf(false) }
     val showShareConfirm = remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(DebtFilter.ALL) }
     val haptics = LocalHapticFeedback.current
@@ -223,7 +225,7 @@ fun DebtsScreen(
             } else {
                 ScreenTopBar(
                     title = "الديون",
-                    reservedIcons = 2,
+                    reservedIcons = 3,
                     navigation = {
                         ScreenIconButton(
                             icon = Icons.Default.Menu,
@@ -232,6 +234,12 @@ fun DebtsScreen(
                         )
                     },
                     actions = {
+                        // زر سجل الديون (آخر العمليات: سداد/إضافة دين... مع التاريخ).
+                        ScreenIconButton(
+                            icon = Icons.Default.History,
+                            contentDescription = "سجل الديون",
+                            onClick = { showActivityLog.value = true }
+                        )
                         AppActionPill(
                             height = 42.dp,
                             container = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -280,12 +288,25 @@ fun DebtsScreen(
             // Stable sort, so equal amounts keep their original order.
             val overdueDays = remember { SettingsRepository(context).overdueDays }
             val overdueIds = remember(state.debts, overdueDays) { overduePersonIds(state.debts, overdueDays) }
-            val sortedPersons = remember(state.persons, filter, overdueIds) {
+            // "الأحدث" = آخر عميل أُضيف له دين أو أُضيف هو نفسه (وليس تاريخ إنشاء العميل
+            // فقط): عميل قديم أُضيف له دين اليوم يظهر في الأعلى. الدين القديم بلا
+            // createdAt يُستعان بتاريخه المكتوب.
+            val lastAddedAt = remember(state.persons, state.debts) {
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+                val latestDebt = HashMap<String, Long>()
+                for (d in state.debts) {
+                    val t = if (d.createdAt > 0L) d.createdAt
+                    else runCatching { dateFormat.parse(d.date.trim())?.time }.getOrNull() ?: 0L
+                    if (t > (latestDebt[d.personId] ?: 0L)) latestDebt[d.personId] = t
+                }
+                state.persons.associate { p -> p.id to maxOf(p.createdAt, latestDebt[p.id] ?: 0L) }
+            }
+            val sortedPersons = remember(state.persons, filter, overdueIds, lastAddedAt) {
                 when (filter) {
                     DebtFilter.ALL -> state.persons.sortedByDescending { it.amount }
                     DebtFilter.OVERDUE -> state.persons.filter { it.id in overdueIds }.sortedByDescending { it.amount }
                     DebtFilter.LARGEST -> state.persons.filter { it.amount > 0 }.sortedByDescending { it.amount }
-                    DebtFilter.NEWEST -> state.persons.sortedByDescending { it.createdAt }
+                    DebtFilter.NEWEST -> state.persons.sortedByDescending { lastAddedAt[it.id] ?: 0L }
                 }
             }
             val filtered = com.shopmanager.app.ui.common.rememberSmartSearch(sortedPersons, search.value) { it.name }
@@ -462,6 +483,10 @@ fun DebtsScreen(
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { payTarget.value = null }) { Text("إلغاء") } }
         )
+    }
+
+    if (showActivityLog.value) {
+        DebtActivityDialog(onDismiss = { showActivityLog.value = false })
     }
 
     if (showShareConfirm.value) {

@@ -35,8 +35,10 @@ class DebtsRepository {
     private val db: FirebaseFirestore get() = FirebaseModule.debtsDb
 
     fun listenPersons(): Flow<List<Person>> = callbackFlow {
+        // BUG FIXED: كان هنا orderBy("createdAt") — فايرستور يستبعد أي مستند لا يحتوي
+        // هذا الحقل (عملاء قدامى/مستوردون)، فكانوا يختفون من القائمة كلياً. الترتيب
+        // صار يتم على الجهاز بعد الجلب فلا يسقط أي عميل.
         val registration: ListenerRegistration = db.collection("persons")
-            .orderBy("createdAt", Query.Direction.DESCENDING)
             .addSnapshotListener(FirebaseModule.snapshotExecutor) { snapshot, error ->
                 if (error != null) {
                     close(error)
@@ -52,7 +54,7 @@ class DebtsRepository {
                         phone = doc.getString("phone") ?: ""
                     )
                 } ?: emptyList()
-                trySend(persons)
+                trySend(persons.sortedByDescending { it.createdAt })
             }
         awaitClose { registration.remove() }
     }
@@ -86,7 +88,8 @@ class DebtsRepository {
                 }
                 val debts = snapshot?.documents
                     ?.map { it.toDebt() }
-                    ?.sortedByDescending { it.date }
+                    // ترتيب حسب وقت الإضافة (الأحدث أولاً) ثم التاريخ المكتوب.
+                    ?.sortedWith(compareByDescending<Debt> { it.createdAt }.thenByDescending { it.date })
                     ?: emptyList()
                 trySend(debts)
             }

@@ -105,6 +105,10 @@ class NotificationActionReceiver : BroadcastReceiver() {
         try {
             FirebaseModule.init(context)
             DebtsRepository().markDebtAsPaid(debtId)
+            com.shopmanager.app.data.debts.DebtActivityLog.log(
+                context, com.shopmanager.app.data.debts.DebtActivityLog.Kind.PAID, personName,
+                amount.mapNotNull { c -> Character.digit(c, 10).takeIf { it >= 0 } }.joinToString("").toDoubleOrNull() ?: 0.0
+            )
             // ترابط بالنسخ الاحتياطي: السداد من الإشعار (والتطبيق مغلق) لا يمرّ
             // بأي ViewModel، فلم يكن يطلب نسخة احتياطية محلية كبقية التغييرات.
             runCatching { InstantBackupWorker.requestNow(context) }

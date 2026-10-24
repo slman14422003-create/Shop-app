@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.data.debts.Debt
+import com.shopmanager.app.data.debts.DebtActivityLog
 import com.shopmanager.app.data.history.ChangeHistory
 import com.shopmanager.app.data.retryOnError
 import com.shopmanager.app.data.debts.DebtsRepository
@@ -195,6 +196,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 action.restore()
                 ChangeHistory.log(getApplication(), "تراجع عن عملية حذف/سداد")
+                logActivity(DebtActivityLog.Kind.UNDO, "")
                 _message.value = "تم التراجع"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
@@ -206,6 +208,13 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     private fun logChange(text: String) {
         ChangeHistory.log(getApplication(), text)
     }
+
+    private fun logActivity(kind: DebtActivityLog.Kind, person: String, amount: Double = 0.0) {
+        DebtActivityLog.log(getApplication(), kind, person, amount)
+    }
+
+    private fun personNameOf(personId: String): String =
+        uiState.value.persons.firstOrNull { it.id == personId }?.name ?: "عميل"
 
     /** [phone]: رقم العميل (اختياري). null عند التعديل = لا تغيّر الرقم المحفوظ. */
     fun savePerson(existingId: String?, name: String, amount: Double, date: String, note: String = "", phone: String? = null, onDone: (Boolean) -> Unit) {
@@ -235,6 +244,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                             // listener could fire first and notify this same
                             // device about its own new debt.
                             repo.addDebt(existingPersonId, amount, date, note) { id -> markCreatedHere(id) }
+                            logActivity(DebtActivityLog.Kind.ADDED, name, amount)
                             _message.value = "\"$name\" موجود مسبقاً — تمت إضافة الدين لسجله"
                             InstantBackupWorker.requestNow(getApplication())
                         } else {
@@ -249,11 +259,13 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     // the whole batch is durably committed).
                     repo.addPerson(name, amount, date, note, phone ?: "") { id -> markCreatedHere(id) }
                     logChange("إضافة العميل \"$name\" بمبلغ ${Formatters.number(amount)}")
+                    logActivity(DebtActivityLog.Kind.NEW_CUSTOMER, name, amount)
                     _message.value = "تم إضافة \"$name\""
                     InstantBackupWorker.requestNow(getApplication())
                 } else {
                     repo.updatePerson(existingId, name, amount, date, phone)
                     logChange("تعديل بيانات العميل \"$name\"")
+                    logActivity(DebtActivityLog.Kind.EDITED, name)
                     _message.value = "تم تعديل العميل"
                     InstantBackupWorker.requestNow(getApplication())
                 }
@@ -274,6 +286,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 if (personSnapshot != null) {
                     _undo.value = UndoAction { repo.restorePerson(personSnapshot, debtsSnapshot) }
                     logChange("حذف العميل \"${personSnapshot.name}\" مع ${debtsSnapshot.size} دين")
+                    logActivity(DebtActivityLog.Kind.DELETED_CUSTOMER, personSnapshot.name, debtsSnapshot.sumOf { it.amount })
                 }
                 _message.value = "تم حذف العميل وديونه"
                 InstantBackupWorker.requestNow(getApplication())
@@ -302,10 +315,12 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     // onIdAssigned, synchronously, before the write is sent.
                     repo.addDebt(personId, amount, date, note) { id -> markCreatedHere(id) }
                     logChange("إضافة دين بمبلغ ${Formatters.number(amount)}")
+                    logActivity(DebtActivityLog.Kind.ADDED, personNameOf(personId), amount)
                     _message.value = "تم إضافة الدين"
                 } else {
                     repo.updateDebt(existingId, amount, date, note)
                     logChange("تعديل دين إلى ${Formatters.number(amount)}")
+                    logActivity(DebtActivityLog.Kind.EDITED, personNameOf(personId), amount)
                     _message.value = "تم تعديل الدين"
                 }
                 InstantBackupWorker.requestNow(getApplication())
@@ -323,6 +338,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 if (debtSnapshot != null) {
                     _undo.value = UndoAction { repo.restoreDebts(listOf(debtSnapshot)) }
                     logChange("حذف دين بمبلغ ${Formatters.number(debtSnapshot.amount)}")
+                    logActivity(DebtActivityLog.Kind.DELETED, personNameOf(debtSnapshot.personId), debtSnapshot.amount)
                 }
                 _message.value = "تم حذف الدين"
                 InstantBackupWorker.requestNow(getApplication())
@@ -344,6 +360,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 repo.markAllDebtsAsPaid(person.id)
                 _undo.value = UndoAction { repo.restoreDebts(debtsSnapshot) }
                 logChange("سداد كامل للعميل \"${person.name}\" بمبلغ ${Formatters.number(person.amount)}")
+                logActivity(DebtActivityLog.Kind.PAID_ALL, person.name, person.amount)
                 _message.value = "تم تسجيل سداد \"${person.name}\" ✅"
                 InstantBackupWorker.requestNow(getApplication())
                 if (settings.notificationsEnabled) {
@@ -364,6 +381,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 repo.markDebtAsPaid(debt.id)
                 _undo.value = UndoAction { repo.restoreDebts(listOf(debt)) }
                 logChange("سداد دين للعميل \"$personName\" بمبلغ ${Formatters.number(debt.amount)}")
+                logActivity(DebtActivityLog.Kind.PAID, personName, debt.amount)
                 _message.value = "تم تسجيل السداد ✅"
                 InstantBackupWorker.requestNow(getApplication())
                 if (settings.notificationsEnabled) {
