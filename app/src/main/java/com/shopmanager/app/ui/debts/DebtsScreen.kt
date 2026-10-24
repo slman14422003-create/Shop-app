@@ -96,7 +96,8 @@ fun DebtsScreen(
     viewModel: DebtsViewModel = viewModel(),
     addPersonRequested: Boolean = false,
     onAddPersonRequestHandled: () -> Unit = {},
-    onOpenDrawer: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
+    onOpenActivityLog: () -> Unit = {}
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
     val message = viewModel.message.collectAsStateWithLifecycle().value
@@ -128,7 +129,6 @@ fun DebtsScreen(
     val deleteTarget = remember { mutableStateOf<Person?>(null) }
     val payTarget = remember { mutableStateOf<Person?>(null) }
     val showShareChoice = remember { mutableStateOf(false) }
-    val showActivityLog = remember { mutableStateOf(false) }
     val showShareConfirm = remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf(DebtFilter.ALL) }
     val haptics = LocalHapticFeedback.current
@@ -238,7 +238,7 @@ fun DebtsScreen(
                         ScreenIconButton(
                             icon = Icons.Default.History,
                             contentDescription = "سجل الديون",
-                            onClick = { showActivityLog.value = true }
+                            onClick = onOpenActivityLog
                         )
                         AppActionPill(
                             height = 42.dp,
@@ -483,10 +483,6 @@ fun DebtsScreen(
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { payTarget.value = null }) { Text("إلغاء") } }
         )
-    }
-
-    if (showActivityLog.value) {
-        DebtActivityDialog(onDismiss = { showActivityLog.value = false })
     }
 
     if (showShareConfirm.value) {

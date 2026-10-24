@@ -155,6 +155,7 @@ private const val ROUTE_ADMIN = "adminPanel"
 private const val ROUTE_MATERIAL_CATALOG = "materialCatalog"
 private const val ROUTE_MISSING_FINDER = "missingFinder"
 private const val ROUTE_HELP = "help"
+private const val ROUTE_DEBT_ACTIVITY = "debtActivity"
 private const val ROUTE_PRIVACY = "privacy"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
@@ -1156,7 +1157,8 @@ private fun ShopManagerApp(
                             onOpenPerson = { personId -> navController.safeNavigate("personDetail/$personId") },
                             addPersonRequested = addPersonRequested,
                             onAddPersonRequestHandled = { addPersonRequested = false },
-                            onOpenDrawer = { drawerScope.launch { drawerState.open() } }
+                            onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                            onOpenActivityLog = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) }
                         )
                         PAGE_MATERIALS -> MaterialsScreen(
                             viewModel = materialsViewModel,
@@ -1186,6 +1188,11 @@ private fun ShopManagerApp(
             composable(ROUTE_MATERIAL_CATALOG) {
                 MaterialCatalogScreen(
                     viewModel = materialsViewModel,
+                    onBack = { navController.safePopBackStack() }
+                )
+            }
+            composable(ROUTE_DEBT_ACTIVITY) {
+                com.shopmanager.app.ui.debts.DebtActivityScreen(
                     onBack = { navController.safePopBackStack() }
                 )
             }
