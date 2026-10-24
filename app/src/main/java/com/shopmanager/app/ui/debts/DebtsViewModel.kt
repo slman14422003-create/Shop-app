@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.shopmanager.app.data.backup.InstantBackupWorker
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.data.debts.Debt
+import com.shopmanager.app.data.history.ChangeHistory
+import com.shopmanager.app.data.retryOnError
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.data.notes.NotesRepository
@@ -25,6 +27,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+class UndoAction(val restore: suspend () -> Unit)
 
 data class DebtsUiState(
     val persons: List<Person> = emptyList(),
@@ -76,7 +80,6 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     // restore from the local backup forever afterward, even long after
     // the connection and live data had fully recovered.
     private val personsFlow = repo.listenPersons()
-        .catch { _hasSyncError.value = true; emit(emptyList()) }
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
@@ -87,8 +90,8 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             // "آخر مزامنة" time instead of nothing. See SyncStatus.kt.
             SyncStatusStore.recordSuccess(getApplication())
         }
+        .retryOnError { _hasSyncError.value = true }
     private val debtsFlow = repo.listenAllDebts()
-        .catch { _hasSyncError.value = true; emit(emptyList()) }
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
@@ -96,6 +99,7 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             InstantBackupWorker.requestDeferred(getApplication())
             SyncStatusStore.recordSuccess(getApplication())
         }
+        .retryOnError { _hasSyncError.value = true }
 
     /**
      * BUG FIXED: `persons.amount` used to be a separately-maintained field
@@ -179,6 +183,30 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearMessage() { _message.value = null }
 
+    private val _undo = MutableStateFlow<UndoAction?>(null)
+    val undo: StateFlow<UndoAction?> = _undo
+
+    fun clearUndo() { _undo.value = null }
+
+    fun performUndo() {
+        val action = _undo.value ?: return
+        _undo.value = null
+        viewModelScope.launch {
+            try {
+                action.restore()
+                ChangeHistory.log(getApplication(), "تراجع عن عملية حذف/سداد")
+                _message.value = "تم التراجع"
+                InstantBackupWorker.requestNow(getApplication())
+            } catch (e: Exception) {
+                _message.value = "تعذر التراجع: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+            }
+        }
+    }
+
+    private fun logChange(text: String) {
+        ChangeHistory.log(getApplication(), text)
+    }
+
     /** [phone]: رقم العميل (اختياري). null عند التعديل = لا تغيّر الرقم المحفوظ. */
     fun savePerson(existingId: String?, name: String, amount: Double, date: String, note: String = "", phone: String? = null, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
@@ -220,10 +248,12 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     // instead of the returned value (which only settles once
                     // the whole batch is durably committed).
                     repo.addPerson(name, amount, date, note, phone ?: "") { id -> markCreatedHere(id) }
+                    logChange("إضافة العميل \"$name\" بمبلغ ${Formatters.number(amount)}")
                     _message.value = "تم إضافة \"$name\""
                     InstantBackupWorker.requestNow(getApplication())
                 } else {
                     repo.updatePerson(existingId, name, amount, date, phone)
+                    logChange("تعديل بيانات العميل \"$name\"")
                     _message.value = "تم تعديل العميل"
                     InstantBackupWorker.requestNow(getApplication())
                 }
@@ -236,9 +266,15 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deletePerson(id: String) {
+        val personSnapshot = uiState.value.persons.firstOrNull { it.id == id }
+        val debtsSnapshot = uiState.value.debts.filter { it.personId == id }
         viewModelScope.launch {
             try {
                 repo.deletePersonWithDebts(id)
+                if (personSnapshot != null) {
+                    _undo.value = UndoAction { repo.restorePerson(personSnapshot, debtsSnapshot) }
+                    logChange("حذف العميل \"${personSnapshot.name}\" مع ${debtsSnapshot.size} دين")
+                }
                 _message.value = "تم حذف العميل وديونه"
                 InstantBackupWorker.requestNow(getApplication())
                 // "ترابط بين الديون والملاحظات": أي ملاحظة كانت مرتبطة بهذا
@@ -265,9 +301,11 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                     // BUG FIXED (see DebtsRepository.addDebt): register via
                     // onIdAssigned, synchronously, before the write is sent.
                     repo.addDebt(personId, amount, date, note) { id -> markCreatedHere(id) }
+                    logChange("إضافة دين بمبلغ ${Formatters.number(amount)}")
                     _message.value = "تم إضافة الدين"
                 } else {
                     repo.updateDebt(existingId, amount, date, note)
+                    logChange("تعديل دين إلى ${Formatters.number(amount)}")
                     _message.value = "تم تعديل الدين"
                 }
                 InstantBackupWorker.requestNow(getApplication())
@@ -278,9 +316,14 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteDebt(id: String) {
+        val debtSnapshot = uiState.value.debts.firstOrNull { it.id == id }
         viewModelScope.launch {
             try {
                 repo.deleteDebt(id)
+                if (debtSnapshot != null) {
+                    _undo.value = UndoAction { repo.restoreDebts(listOf(debtSnapshot)) }
+                    logChange("حذف دين بمبلغ ${Formatters.number(debtSnapshot.amount)}")
+                }
                 _message.value = "تم حذف الدين"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
@@ -295,9 +338,12 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
      * same "paid" notification as marking one debt as paid.
      */
     fun markPersonAsPaid(person: Person) {
+        val debtsSnapshot = uiState.value.debts.filter { it.personId == person.id }
         viewModelScope.launch {
             try {
                 repo.markAllDebtsAsPaid(person.id)
+                _undo.value = UndoAction { repo.restoreDebts(debtsSnapshot) }
+                logChange("سداد كامل للعميل \"${person.name}\" بمبلغ ${Formatters.number(person.amount)}")
                 _message.value = "تم تسجيل سداد \"${person.name}\" ✅"
                 InstantBackupWorker.requestNow(getApplication())
                 if (settings.notificationsEnabled) {
@@ -316,6 +362,8 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 repo.markDebtAsPaid(debt.id)
+                _undo.value = UndoAction { repo.restoreDebts(listOf(debt)) }
+                logChange("سداد دين للعميل \"$personName\" بمبلغ ${Formatters.number(debt.amount)}")
                 _message.value = "تم تسجيل السداد ✅"
                 InstantBackupWorker.requestNow(getApplication())
                 if (settings.notificationsEnabled) {

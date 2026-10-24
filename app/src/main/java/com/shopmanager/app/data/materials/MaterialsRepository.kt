@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import com.shopmanager.app.data.awaitQueued
 
 private const val WRITE_TIMEOUT_MS = 15_000L
 
@@ -146,7 +147,7 @@ class MaterialsRepository {
                 // timestamp used for prior reorders happened to be.
                 "order" to now
             )
-            ref.set(data).await()
+            ref.set(data).awaitQueued()
             ref.id
         }
 
@@ -160,12 +161,12 @@ class MaterialsRepository {
                 "notes" to notes,
                 "timestamp" to System.currentTimeMillis()
             )
-            db.collection(materialsCollection).document(id).update(data).await()
+            db.collection(materialsCollection).document(id).update(data).awaitQueued()
             Unit
         }
 
     suspend fun deleteMaterial(id: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(materialsCollection).document(id).delete().await()
+        db.collection(materialsCollection).document(id).delete().awaitQueued()
         Unit
     }
 
@@ -180,7 +181,7 @@ class MaterialsRepository {
         withTimeout(WRITE_TIMEOUT_MS) {
             val data = if (topOrder != null) mapOf("important" to important, "order" to topOrder)
                 else mapOf("important" to important)
-            db.collection(materialsCollection).document(id).update(data).await()
+            db.collection(materialsCollection).document(id).update(data).awaitQueued()
             Unit
         }
 
@@ -192,13 +193,12 @@ class MaterialsRepository {
      * place.
      */
     suspend fun updateMaterialsOrder(orderedIds: List<String>) = withTimeout(WRITE_TIMEOUT_MS) {
-        orderedIds.chunked(400).forEach { chunk ->
+        orderedIds.withIndex().chunked(400).forEach { chunk ->
             val batch = db.batch()
-            chunk.forEach { id ->
-                val position = orderedIds.indexOf(id)
+            chunk.forEach { (position, id) ->
                 batch.update(db.collection(materialsCollection).document(id), "order", position.toLong())
             }
-            batch.commit().await()
+            batch.commit().awaitQueued()
         }
         Unit
     }
@@ -214,7 +214,7 @@ class MaterialsRepository {
         ids.chunked(400).forEach { chunk ->
             val batch = db.batch()
             chunk.forEach { batch.delete(db.collection(materialsCollection).document(it)) }
-            batch.commit().await()
+            batch.commit().awaitQueued()
         }
         Unit
     }
@@ -239,7 +239,7 @@ class MaterialsRepository {
         mapOf("name" to materialName.trim(), "price" to price)
 
     suspend fun setPrice(materialName: String, price: Double) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(pricesCollection).document(priceDocId(materialName)).set(priceData(materialName, price)).await()
+        db.collection(pricesCollection).document(priceDocId(materialName)).set(priceData(materialName, price)).awaitQueued()
         Unit
     }
 
@@ -250,7 +250,7 @@ class MaterialsRepository {
             chunk.forEach { (name, price) ->
                 batch.set(db.collection(pricesCollection).document(priceDocId(name)), priceData(name, price))
             }
-            batch.commit().await()
+            batch.commit().awaitQueued()
         }
         Unit
     }
@@ -261,12 +261,12 @@ class MaterialsRepository {
     }
 
     suspend fun addCatalogItem(name: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(catalogCollection).add(mapOf("name" to name)).await()
+        db.collection(catalogCollection).document().set(mapOf("name" to name)).awaitQueued()
         Unit
     }
 
     suspend fun deleteCatalogItem(id: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(catalogCollection).document(id).delete().await()
+        db.collection(catalogCollection).document(id).delete().awaitQueued()
         Unit
     }
 
@@ -277,7 +277,7 @@ class MaterialsRepository {
      * prices are keyed by name).
      */
     suspend fun updateCatalogItem(id: String, name: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(catalogCollection).document(id).update("name", name).await()
+        db.collection(catalogCollection).document(id).update("name", name).awaitQueued()
         Unit
     }
 
@@ -330,19 +330,10 @@ class MaterialsRepository {
         materials: List<Material>,
         prices: Map<String, Double>,
         catalog: List<MaterialCatalogItem>
-    ) = withTimeout(60_000L) {
+    ) = withTimeout(120_000L) {
         val existingMaterials = db.collection(materialsCollection).get().await()
         val existingPrices = db.collection(pricesCollection).get().await()
         val existingCatalog = db.collection(catalogCollection).get().await()
-
-        val deletes = existingMaterials.documents.map { db.collection(materialsCollection).document(it.id) } +
-            existingPrices.documents.map { db.collection(pricesCollection).document(it.id) } +
-            existingCatalog.documents.map { db.collection(catalogCollection).document(it.id) }
-        deletes.chunked(400).forEach { chunk ->
-            val batch = db.batch()
-            chunk.forEach { batch.delete(it) }
-            batch.commit().await()
-        }
 
         val materialWrites = materials.filter { it.id.isNotBlank() }.map {
             db.collection(materialsCollection).document(it.id) to mapOf(
@@ -360,7 +351,22 @@ class MaterialsRepository {
         (materialWrites + priceWrites + catalogWrites).chunked(400).forEach { chunk ->
             val batch = db.batch()
             chunk.forEach { (ref, data) -> batch.set(ref, data) }
-            batch.commit().await()
+            batch.commit().awaitQueued(30_000L)
+        }
+
+        val keepMaterials = materialWrites.map { it.first.id }.toSet()
+        val keepPrices = priceWrites.map { it.first.id }.toSet()
+        val keepCatalog = catalogWrites.map { it.first.id }.toSet()
+        val deletes = existingMaterials.documents.filter { it.id !in keepMaterials }
+            .map { db.collection(materialsCollection).document(it.id) } +
+            existingPrices.documents.filter { it.id !in keepPrices }
+                .map { db.collection(pricesCollection).document(it.id) } +
+            existingCatalog.documents.filter { it.id !in keepCatalog }
+                .map { db.collection(catalogCollection).document(it.id) }
+        deletes.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().awaitQueued(30_000L)
         }
         Unit
     }

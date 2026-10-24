@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.graphics.graphicsLayer
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -52,6 +53,7 @@ fun ActionIconButton(
 
     Box(
         modifier
+            .minimumInteractiveComponentSize()
             .size(40.dp)
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
             .clip(CircleShape)

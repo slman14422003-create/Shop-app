@@ -57,8 +57,14 @@ object WholeAppReportImage {
                 PADDING * 2
             ).toInt()
 
-        val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)
+        val reportScale = com.shopmanager.app.ui.common.ReportScale.factor(context)
+        val bitmap = Bitmap.createBitmap(
+            (WIDTH * reportScale).toInt(),
+            (height * reportScale).toInt(),
+            Bitmap.Config.ARGB_8888
+        )
         val canvas = Canvas(bitmap)
+        canvas.scale(reportScale, reportScale)
         canvas.drawColor(Color.WHITE)
 
         val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = brandColor }

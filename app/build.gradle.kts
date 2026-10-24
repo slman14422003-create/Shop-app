@@ -387,4 +387,5 @@ dependencies {
     // is not reliable on Android 11/12 devices — this library picks the
     // right mechanism at runtime).
     implementation("androidx.webkit:webkit:1.16.0")
+    testImplementation("junit:junit:4.13.2")
 }

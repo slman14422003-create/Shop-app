@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import com.shopmanager.app.data.retryOnError
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -78,7 +79,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         section.collect { s ->
             repo.listenMaterials(s).collect { send(it) }
         }
-    }.catch { _hasSyncError.value = true; emit(emptyList()) }
+    }
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
@@ -87,9 +88,9 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             // "طبقة مساعدة للمزامنة" — see SyncStatus.kt.
             SyncStatusStore.recordSuccess(getApplication())
         }
+        .retryOnError { _hasSyncError.value = true }
 
     private val pricesFlow = repo.listenPrices()
-        .catch { _hasSyncError.value = true; emit(emptyMap()) }
         .distinctUntilChanged()
         .onEach {
             _hasSyncError.value = false
@@ -97,6 +98,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             InstantBackupWorker.requestDeferred(getApplication())
             SyncStatusStore.recordSuccess(getApplication())
         }
+        .retryOnError { _hasSyncError.value = true }
 
     // Same fix as DebtsViewModel.uiState: debounce the cache→server settle
     // burst on cold start so the dashboard's "قائمة النواقص" counter counts
@@ -109,8 +111,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MaterialsUiState())
 
     val catalog: StateFlow<List<MaterialCatalogItem>> = repo.listenCatalog()
-        .catch { emit(emptyList()) }
         .distinctUntilChanged()
+        .retryOnError { }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val finderStore = LearningHub.store(application)

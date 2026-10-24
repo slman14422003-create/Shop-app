@@ -88,6 +88,14 @@ class SettingsRepository(context: Context) {
     /** "تفضيل الأداء" — manual override of the auto-detected device tier
      * (see [PerformanceMode]). Defaults to AUTO so nobody's experience
      * changes unless they open Settings and pick something else. */
+    var overdueReminderEnabled: Boolean
+        get() = prefs.getBoolean(KEY_OVERDUE_ENABLED, true)
+        set(value) = prefs.edit().putBoolean(KEY_OVERDUE_ENABLED, value).apply()
+
+    var overdueDays: Int
+        get() = prefs.getInt(KEY_OVERDUE_DAYS, 30).coerceIn(1, 365)
+        set(value) = prefs.edit().putInt(KEY_OVERDUE_DAYS, value.coerceIn(1, 365)).apply()
+
     var performanceMode: PerformanceMode
         // قيمة "BALANCED" المحفوظة من إصدار سابق (لم يعد خياراً يدوياً) أو أي قيمة غير معروفة ← AUTO.
         get() = runCatching {
@@ -237,6 +245,8 @@ class SettingsRepository(context: Context) {
 
     companion object {
         private const val KEY_THEME = "theme_mode"
+        private const val KEY_OVERDUE_ENABLED = "overdue_reminder_enabled"
+        private const val KEY_OVERDUE_DAYS = "overdue_days"
         private const val KEY_PIN_HASH = "pin_hash"
         private const val KEY_PIN_SALT = "pin_salt"
         private const val KEY_BIOMETRIC = "biometric_unlock"

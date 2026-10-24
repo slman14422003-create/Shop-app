@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import com.shopmanager.app.data.awaitQueued
 
 private const val WRITE_TIMEOUT_MS = 15_000L
 
@@ -205,7 +206,7 @@ class DebtsRepository {
                 )
             )
         }
-        batch.commit().await()
+        batch.commit().awaitQueued()
         debtId
     }
 
@@ -213,32 +214,29 @@ class DebtsRepository {
     suspend fun updatePerson(id: String, name: String, amount: Double, date: String, phone: String? = null) = withTimeout(WRITE_TIMEOUT_MS) {
         val data = mutableMapOf<String, Any>("name" to name, "amount" to amount, "date" to date)
         if (phone != null) data["phone"] = phone
-        db.collection("persons").document(id).update(data).await()
+        db.collection("persons").document(id).update(data).awaitQueued()
         Unit
     }
 
     suspend fun deletePersonWithDebts(id: String) = withTimeout(WRITE_TIMEOUT_MS) {
         val debts = db.collection("debts").whereEqualTo("personId", id).get().await()
-        for (doc in debts.documents) {
-            db.collection("debts").document(doc.id).delete().await()
+        val refs = debts.documents.map { db.collection("debts").document(it.id) } +
+            db.collection("persons").document(id)
+        refs.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().awaitQueued()
         }
-        db.collection("persons").document(id).delete().await()
         Unit
     }
 
-    /**
-     * Settles a person's whole outstanding balance from the main debts list
-     * (the checkmark on each person row): deletes every one of their debts
-     * in one batch, same as marking each individual debt as paid one by
-     * one, but without deleting the person itself.
-     */
     suspend fun markAllDebtsAsPaid(personId: String) = withTimeout(WRITE_TIMEOUT_MS) {
         val debts = db.collection("debts").whereEqualTo("personId", personId).get().await()
-        val batch = db.batch()
-        for (doc in debts.documents) {
-            batch.delete(db.collection("debts").document(doc.id))
+        debts.documents.map { db.collection("debts").document(it.id) }.chunked(400).forEach { chunk ->
+            val chunkBatch = db.batch()
+            chunk.forEach { chunkBatch.delete(it) }
+            chunkBatch.commit().awaitQueued()
         }
-        batch.commit().await()
         Unit
     }
 
@@ -277,18 +275,18 @@ class DebtsRepository {
             "note" to note,
             "createdAt" to System.currentTimeMillis()
         )
-        ref.set(data).await()
+        ref.set(data).awaitQueued()
         ref.id
     }
 
     suspend fun updateDebt(id: String, amount: Double, date: String, note: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
         val data = mapOf("amount" to amount, "date" to date, "note" to note)
-        db.collection("debts").document(id).update(data).await()
+        db.collection("debts").document(id).update(data).awaitQueued()
         Unit
     }
 
     suspend fun deleteDebt(id: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection("debts").document(id).delete().await()
+        db.collection("debts").document(id).delete().awaitQueued()
         Unit
     }
 
@@ -299,7 +297,7 @@ class DebtsRepository {
      * write is needed here — one less place for the two to drift apart.
      */
     suspend fun markDebtAsPaid(debtId: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection("debts").document(debtId).delete().await()
+        db.collection("debts").document(debtId).delete().awaitQueued()
         Unit
     }
 
@@ -308,6 +306,49 @@ class DebtsRepository {
      * the daily local backup snapshot (see BackupManager); the rest of the
      * app always uses the live listeners above.
      */
+    suspend fun restoreDebts(debts: List<Debt>) = withTimeout(WRITE_TIMEOUT_MS) {
+        debts.filter { it.id.isNotBlank() }.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { d ->
+                batch.set(
+                    db.collection("debts").document(d.id),
+                    mapOf(
+                        "personId" to d.personId, "amount" to d.amount, "date" to d.date,
+                        "note" to d.note, "createdAt" to d.createdAt
+                    )
+                )
+            }
+            batch.commit().awaitQueued()
+        }
+        Unit
+    }
+
+    suspend fun restorePerson(person: Person, debts: List<Debt>) = withTimeout(WRITE_TIMEOUT_MS) {
+        db.collection("persons").document(person.id).set(
+            mapOf(
+                "name" to person.name, "amount" to person.amount, "date" to person.date,
+                "createdAt" to person.createdAt, "phone" to person.phone
+            )
+        ).awaitQueued()
+        restoreDebtsNoTimeout(debts)
+    }
+
+    private suspend fun restoreDebtsNoTimeout(debts: List<Debt>) {
+        debts.filter { it.id.isNotBlank() }.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { d ->
+                batch.set(
+                    db.collection("debts").document(d.id),
+                    mapOf(
+                        "personId" to d.personId, "amount" to d.amount, "date" to d.date,
+                        "note" to d.note, "createdAt" to d.createdAt
+                    )
+                )
+            }
+            batch.commit().awaitQueued()
+        }
+    }
+
     suspend fun fetchAllForBackup(): Pair<List<Person>, List<Debt>> = withTimeout(WRITE_TIMEOUT_MS) {
         val personsSnap = db.collection("persons").get().await()
         val debtsSnap = db.collection("debts").get().await()
@@ -335,17 +376,9 @@ class DebtsRepository {
      * one-tap "server unavailable, restore local backup" prompt — never
      * silently.
      */
-    suspend fun restoreFromBackup(persons: List<Person>, debts: List<Debt>) = withTimeout(60_000L) {
+    suspend fun restoreFromBackup(persons: List<Person>, debts: List<Debt>) = withTimeout(120_000L) {
         val existingPersons = db.collection("persons").get().await()
         val existingDebts = db.collection("debts").get().await()
-
-        val deletes = existingPersons.documents.map { db.collection("persons").document(it.id) } +
-            existingDebts.documents.map { db.collection("debts").document(it.id) }
-        deletes.chunked(400).forEach { chunk ->
-            val batch = db.batch()
-            chunk.forEach { batch.delete(it) }
-            batch.commit().await()
-        }
 
         val personWrites = persons.filter { it.id.isNotBlank() }.map {
             db.collection("persons").document(it.id) to mapOf(
@@ -362,7 +395,19 @@ class DebtsRepository {
         (personWrites + debtWrites).chunked(400).forEach { chunk ->
             val batch = db.batch()
             chunk.forEach { (ref, data) -> batch.set(ref, data) }
-            batch.commit().await()
+            batch.commit().awaitQueued(30_000L)
+        }
+
+        val keepPersons = personWrites.map { it.first.id }.toSet()
+        val keepDebts = debtWrites.map { it.first.id }.toSet()
+        val deletes = existingPersons.documents.filter { it.id !in keepPersons }
+            .map { db.collection("persons").document(it.id) } +
+            existingDebts.documents.filter { it.id !in keepDebts }
+                .map { db.collection("debts").document(it.id) }
+        deletes.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { batch.delete(it) }
+            batch.commit().awaitQueued(30_000L)
         }
         Unit
     }

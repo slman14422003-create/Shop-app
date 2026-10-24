@@ -59,8 +59,14 @@ object MaterialsReportImage {
         val height = (HEADER_HEIGHT + sorted.size.coerceAtLeast(1) * ROW_HEIGHT + footerHeight + PADDING)
             .toInt()
 
-        val bitmap = Bitmap.createBitmap(WIDTH, height, Bitmap.Config.ARGB_8888)
+        val reportScale = com.shopmanager.app.ui.common.ReportScale.factor(context)
+        val bitmap = Bitmap.createBitmap(
+            (WIDTH * reportScale).toInt(),
+            (height * reportScale).toInt(),
+            Bitmap.Config.ARGB_8888
+        )
         val canvas = Canvas(bitmap)
+        canvas.scale(reportScale, reportScale)
         canvas.drawColor(Color.WHITE)
 
         // Header band, using the app's own current brand color so the

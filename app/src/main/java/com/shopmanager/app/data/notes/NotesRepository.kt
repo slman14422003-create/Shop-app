@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import com.shopmanager.app.data.awaitQueued
 
 private const val WRITE_TIMEOUT_MS = 15_000L
 
@@ -63,7 +64,7 @@ class NotesRepository {
             "isDone" to note.isDone,
             "createdAt" to System.currentTimeMillis()
         )
-        ref.set(data).await()
+        ref.set(data).awaitQueued()
         ref.id
     }
 
@@ -78,17 +79,17 @@ class NotesRepository {
             "isPinned" to note.isPinned,
             "isDone" to note.isDone
         )
-        db.collection(notesCollection).document(note.id).update(data).await()
+        db.collection(notesCollection).document(note.id).update(data).awaitQueued()
         Unit
     }
 
     suspend fun setDone(id: String, done: Boolean) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(notesCollection).document(id).update("isDone", done).await()
+        db.collection(notesCollection).document(id).update("isDone", done).awaitQueued()
         Unit
     }
 
     suspend fun setPinned(id: String, pinned: Boolean) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(notesCollection).document(id).update("isPinned", pinned).await()
+        db.collection(notesCollection).document(id).update("isPinned", pinned).awaitQueued()
         Unit
     }
 
@@ -105,7 +106,7 @@ class NotesRepository {
      * وما نملكها بسياق الإشعار) يخلي المستند يعكس وقت التأجيل الحقيقي.
      */
     suspend fun updateReminderAt(id: String, reminderAtMillis: Long) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(notesCollection).document(id).update("reminderAt", reminderAtMillis).await()
+        db.collection(notesCollection).document(id).update("reminderAt", reminderAtMillis).awaitQueued()
         Unit
     }
 
@@ -136,14 +137,14 @@ class NotesRepository {
                         )
                     )
                 }
-                batch.commit().await()
+                batch.commit().awaitQueued()
             }
         }
         Unit
     }
 
     suspend fun deleteNote(id: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(notesCollection).document(id).delete().await()
+        db.collection(notesCollection).document(id).delete().awaitQueued()
         Unit
     }
 
@@ -153,15 +154,9 @@ class NotesRepository {
         db.collection(notesCollection).get().await().documents.map { it.toNote() }
     }
 
-    suspend fun restoreFromBackup(notes: List<ImportantNote>) = withTimeout(60_000L) {
+    suspend fun restoreFromBackup(notes: List<ImportantNote>) = withTimeout(120_000L) {
         val existing = db.collection(notesCollection).get().await()
-        existing.documents.map { db.collection(notesCollection).document(it.id) }
-            .chunked(400).forEach { chunk ->
-                val batch = db.batch()
-                chunk.forEach { batch.delete(it) }
-                batch.commit().await()
-            }
-        notes.filter { it.id.isNotBlank() }.map {
+        val writes = notes.filter { it.id.isNotBlank() }.map {
             db.collection(notesCollection).document(it.id) to mapOf(
                 "title" to it.title,
                 "content" to it.content,
@@ -173,11 +168,20 @@ class NotesRepository {
                 "isDone" to it.isDone,
                 "createdAt" to it.createdAt
             )
-        }.chunked(400).forEach { chunk ->
+        }
+        writes.chunked(400).forEach { chunk ->
             val batch = db.batch()
             chunk.forEach { (ref, data) -> batch.set(ref, data) }
-            batch.commit().await()
+            batch.commit().awaitQueued(30_000L)
         }
+        val keep = writes.map { it.first.id }.toSet()
+        existing.documents.filter { it.id !in keep }
+            .map { db.collection(notesCollection).document(it.id) }
+            .chunked(400).forEach { chunk ->
+                val batch = db.batch()
+                chunk.forEach { batch.delete(it) }
+                batch.commit().awaitQueued(30_000L)
+            }
         Unit
     }
 

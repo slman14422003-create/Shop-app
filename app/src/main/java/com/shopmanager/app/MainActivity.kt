@@ -71,6 +71,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import com.shopmanager.app.data.FirebaseModule
 import com.shopmanager.app.data.backup.DailyBackupWorker
+import com.shopmanager.app.data.notifications.OverdueDebtsWorker
 import com.shopmanager.app.data.notifications.BackgroundSyncWorker
 import com.shopmanager.app.data.notifications.BatteryOptimizationHelper
 import com.shopmanager.app.data.notifications.NotificationAction
@@ -323,6 +324,7 @@ class MainActivity : FragmentActivity() {
                 // Silent, fully local daily backup — no notification, ever
                 // (see DailyBackupWorker/BackupManager).
                 runCatching { DailyBackupWorker.schedule(applicationContext) }
+                runCatching { OverdueDebtsWorker.schedule(applicationContext) }
 
                 // "الإشعارات لا تأتي في الخلفية": يشغّل مراقب تغييرات الأجهزة الأخرى
                 // (والخدمة الأمامية إذا كانت "المزامنة الفورية" مفعّلة) — مكان واحد

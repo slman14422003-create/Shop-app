@@ -25,11 +25,31 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.data.settings.SettingsRepository
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
+import java.text.SimpleDateFormat
+import java.util.Locale
 import com.shopmanager.app.ui.common.AppSearchBar
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassSnackbarHost
+import com.shopmanager.app.ui.common.showWithOptionalUndo
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.PullToRefreshContent
 import com.shopmanager.app.ui.common.ShareFormatDialog
@@ -107,6 +127,9 @@ fun DebtsScreen(
     val deleteTarget = remember { mutableStateOf<Person?>(null) }
     val payTarget = remember { mutableStateOf<Person?>(null) }
     val showShareChoice = remember { mutableStateOf(false) }
+    val showShareConfirm = remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf(DebtFilter.ALL) }
+    val haptics = LocalHapticFeedback.current
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -141,7 +164,9 @@ fun DebtsScreen(
 
     LaunchedEffect(message) {
         message?.let {
-            snackbarHost.showSnackbar(it)
+            val hasUndo = viewModel.undo.value != null
+            val undone = snackbarHost.showWithOptionalUndo(it, hasUndo)
+            if (undone) viewModel.performUndo() else viewModel.clearUndo()
             viewModel.clearMessage()
         }
     }
@@ -212,7 +237,7 @@ fun DebtsScreen(
                             container = MaterialTheme.colorScheme.surfaceContainerHigh,
                             actions = listOf(
                                 ActionSpec(Icons.Default.Search, "بحث") { isSearching = true },
-                                ActionSpec(Icons.Default.Share, "مشاركة") { showShareChoice.value = true }
+                                ActionSpec(Icons.Default.Share, "مشاركة") { showShareConfirm.value = true }
                             )
                         )
                     }
@@ -253,8 +278,35 @@ fun DebtsScreen(
             // `state.persons` actually changed.
             // Largest debt first; customers with no debt sink to the bottom.
             // Stable sort, so equal amounts keep their original order.
-            val sortedPersons = remember(state.persons) { state.persons.sortedByDescending { it.amount } }
+            val overdueDays = remember { SettingsRepository(context).overdueDays }
+            val overdueIds = remember(state.debts, overdueDays) { overduePersonIds(state.debts, overdueDays) }
+            val sortedPersons = remember(state.persons, filter, overdueIds) {
+                when (filter) {
+                    DebtFilter.ALL -> state.persons.sortedByDescending { it.amount }
+                    DebtFilter.OVERDUE -> state.persons.filter { it.id in overdueIds }.sortedByDescending { it.amount }
+                    DebtFilter.LARGEST -> state.persons.filter { it.amount > 0 }.sortedByDescending { it.amount }
+                    DebtFilter.NEWEST -> state.persons.sortedByDescending { it.createdAt }
+                }
+            }
             val filtered = com.shopmanager.app.ui.common.rememberSmartSearch(sortedPersons, search.value) { it.name }
+
+            if (state.persons.isNotEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = AppScreenPadding, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    DebtFilter.values().forEach { option ->
+                        FilterChip(
+                            selected = filter == option,
+                            onClick = { filter = option },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
+            }
 
             if (state.isLoading && filtered.isEmpty()) {
                 // التحميل الأول: هياكل صفوف بدل شاشة فارغة/"لا يوجد عملاء" الوامضة.
@@ -266,7 +318,11 @@ fun DebtsScreen(
                 Box(Modifier.padding(horizontal = AppScreenPadding)) { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
                 EmptyState(
                     icon = if (search.value.isBlank()) Icons.Default.People else Icons.Default.PersonSearch,
-                    text = if (search.value.isBlank()) "لا يوجد عملاء بعد\nاضغط \"عميل جديد\" للبدء" else "لا توجد نتائج"
+                    text = when {
+                        search.value.isNotBlank() -> "لا توجد نتائج"
+                        filter != DebtFilter.ALL && state.persons.isNotEmpty() -> "لا يوجد عملاء ضمن هذا الفلتر"
+                        else -> "لا يوجد عملاء بعد\nاضغط \"عميل جديد\" للبدء"
+                    }
                 )
             } else {
                 LazyColumn(
@@ -284,22 +340,75 @@ fun DebtsScreen(
                     // الإحصاءات أول عنصر في القائمة: تمرّ مع التمرير فيأخذ العملاء كامل الشاشة.
                     item(key = "stats") { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
                     itemsIndexed(filtered, key = { _, person -> person.id }, contentType = { _, _ -> "person" }) { index, person ->
-                        PersonRow(
-                            person,
-                            groupedRowShape(index, filtered.lastIndex),
-                            Modifier
+                        val rowShape = groupedRowShape(index, filtered.lastIndex)
+                        val currentPerson by rememberUpdatedState(person)
+                        val swipeState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                when (value) {
+                                    SwipeToDismissBoxValue.StartToEnd -> {
+                                        if (currentPerson.amount > 0) {
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            payTarget.value = currentPerson
+                                        }
+                                    }
+                                    SwipeToDismissBoxValue.EndToStart -> {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        deleteTarget.value = currentPerson
+                                    }
+                                    SwipeToDismissBoxValue.Settled -> Unit
+                                }
+                                false
+                            }
+                        )
+                        SwipeToDismissBox(
+                            state = swipeState,
+                            modifier = Modifier
                                 .animateItem(
                                     fadeInSpec = null,
                                     placementSpec = MotionSpecs.reorderSpring(),
-                                    fadeOutSpec = if (com.shopmanager.app.data.performance.LocalPerformanceTier.current ==
-                                        com.shopmanager.app.data.performance.PerformanceTier.LOW) null
+                                    fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
                                     else MotionSpecs.listItemFadeOut()
                                 )
                                 .listItemEntrance(index),
-                            onClick = { onOpenPerson(person.id) },
-                            onDelete = { deleteTarget.value = person },
-                            onMarkPaid = { payTarget.value = person }
-                        )
+                            enableDismissFromStartToEnd = person.amount > 0,
+                            enableDismissFromEndToStart = true,
+                            backgroundContent = {
+                                val direction = swipeState.dismissDirection
+                                val semantic = LocalSemanticColors.current
+                                val paying = direction == SwipeToDismissBoxValue.StartToEnd
+                                val active = direction != SwipeToDismissBoxValue.Settled
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clip(rowShape)
+                                        .background(
+                                            if (!active) Color.Transparent
+                                            else if (paying) semantic.success.copy(alpha = 0.22f)
+                                            else semantic.danger.copy(alpha = 0.22f)
+                                        )
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = if (paying) Alignment.CenterStart else Alignment.CenterEnd
+                                ) {
+                                    if (active) {
+                                        Icon(
+                                            if (paying) Icons.Default.Check else Icons.Default.Close,
+                                            contentDescription = if (paying) "تسجيل سداد" else "حذف",
+                                            tint = if (paying) semantic.success else semantic.danger
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            PersonRow(
+                                person,
+                                rowShape,
+                                Modifier,
+                                overdue = person.id in overdueIds,
+                                onClick = { onOpenPerson(person.id) },
+                                onDelete = { deleteTarget.value = person },
+                                onMarkPaid = { payTarget.value = person }
+                            )
+                        }
                     }
                 }
             }
@@ -346,11 +455,27 @@ fun DebtsScreen(
             text = { Text("هل \"${person.name}\" وفى ${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}؟ سيتم حذف كل ديونه من السجل وإرسال إشعار.") },
             confirmButton = {
                 TextButton(shape = RectangleShape, onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     viewModel.markPersonAsPaid(person)
                     payTarget.value = null
                 }) { Text("تم السداد", color = LocalSemanticColors.current.success, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { payTarget.value = null }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showShareConfirm.value) {
+        GlassAlertDialog(
+            onDismissRequest = { showShareConfirm.value = false },
+            title = { Text("مشاركة كشف الديون") },
+            text = { Text("الكشف يحتوي أسماء العملاء ومبالغ ديونهم. هل تريد المتابعة؟") },
+            confirmButton = {
+                TextButton(shape = RectangleShape, onClick = {
+                    showShareConfirm.value = false
+                    showShareChoice.value = true
+                }) { Text("متابعة") }
+            },
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { showShareConfirm.value = false }) { Text("إلغاء") } }
         )
     }
 
@@ -406,6 +531,7 @@ private fun PersonRow(
     person: Person,
     shape: Shape,
     modifier: Modifier = Modifier,
+    overdue: Boolean = false,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onMarkPaid: () -> Unit
@@ -438,10 +564,16 @@ private fun PersonRow(
                 )
                 if (person.amount > 0) {
                     Spacer(Modifier.height(2.dp))
-                    com.shopmanager.app.ui.common.PillBadge(
-                        text = "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
-                        color = LocalSemanticColors.current.danger
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        com.shopmanager.app.ui.common.PillBadge(
+                            text = "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
+                            color = LocalSemanticColors.current.danger
+                        )
+                        if (overdue) {
+                            Spacer(Modifier.width(6.dp))
+                            OverdueTag()
+                        }
+                    }
                 } else {
                     Text(
                         "لا يوجد دين حالياً",
@@ -475,4 +607,47 @@ private fun buildDebtsShareText(persons: List<Person>, totalAmount: Double): Str
     }
     sb.append("\nالإجمالي: ${Formatters.number(totalAmount)} $currency")
     return sb.toString()
+}
+
+enum class DebtFilter(val label: String) {
+    ALL("الكل"),
+    OVERDUE("متأخر"),
+    LARGEST("الأكبر"),
+    NEWEST("الأحدث")
+}
+
+private fun overduePersonIds(debts: List<Debt>, days: Int): Set<String> {
+    val limit = System.currentTimeMillis() - days * 86_400_000L
+    val format = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+    return debts
+        .filter { debt ->
+            val time = runCatching { format.parse(debt.date.trim())?.time }.getOrNull()
+            debt.amount > 0 && time != null && time < limit
+        }
+        .map { it.personId }
+        .toSet()
+}
+
+@Composable
+private fun OverdueTag() {
+    val tier = LocalPerformanceTier.current
+    val warning = LocalSemanticColors.current.warning
+    val pulse = if (tier == PerformanceTier.STANDARD) {
+        val transition = rememberInfiniteTransition(label = "overduePulse")
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.55f,
+            animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse),
+            label = "overduePulseAlpha"
+        ).value
+    } else 1f
+    Box(
+        Modifier
+            .alpha(pulse)
+            .clip(RoundedCornerShape(50))
+            .background(warning.copy(alpha = 0.16f))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text("متأخر", style = MaterialTheme.typography.labelSmall, color = warning, fontWeight = FontWeight.SemiBold)
+    }
 }

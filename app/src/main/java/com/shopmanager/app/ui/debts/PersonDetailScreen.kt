@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.PriceCheck
@@ -38,9 +39,11 @@ import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassSnackbarHost
+import com.shopmanager.app.ui.common.showWithOptionalUndo
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.PhoneUtils
+import com.shopmanager.app.ui.common.StatementText
 import com.shopmanager.app.ui.notes.NoteEditScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.theme.LocalSemanticColors
@@ -134,7 +137,12 @@ fun PersonDetailScreen(
     val avatarColor = remember(person.name) { avatarColorFor(person.name) }
 
     LaunchedEffect(message) {
-        message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
+        message?.let {
+            val hasUndo = viewModel.undo.value != null
+            val undone = snackbarHost.showWithOptionalUndo(it, hasUndo)
+            if (undone) viewModel.performUndo() else viewModel.clearUndo()
+            viewModel.clearMessage()
+        }
     }
 
     val total = debts.sumOf { it.amount }
@@ -194,7 +202,14 @@ fun PersonDetailScreen(
                     phone = person.phone,
                     onCall = { PhoneUtils.call(context, person.phone) },
                     onWhatsApp = { PhoneUtils.whatsApp(context, person.phone) },
-                    onSms = { PhoneUtils.sms(context, person.phone) }
+                    onSms = { PhoneUtils.sms(context, person.phone) },
+                    onStatement = {
+                        PhoneUtils.whatsApp(
+                            context,
+                            person.phone,
+                            StatementText.build(person.name, debts, total, AppSettingsState.currencySymbol)
+                        )
+                    }
                 )
             }
 
@@ -490,7 +505,8 @@ private fun PersonHeader(
     phone: String = "",
     onCall: () -> Unit = {},
     onWhatsApp: () -> Unit = {},
-    onSms: () -> Unit = {}
+    onSms: () -> Unit = {},
+    onStatement: () -> Unit = {}
 ) {
     // بطاقة الملخص بنفس شكل بطاقة الحساب في الإعدادات: مسطّحة وزواياها كبيرة.
     AppCard {
@@ -552,6 +568,11 @@ private fun PersonHeader(
                 ContactActionButton(Modifier.weight(1f), Icons.Default.Call, "اتصال", MaterialTheme.colorScheme.onSurface, onCall)
                 ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Chat, "واتساب", LocalSemanticColors.current.success, onWhatsApp)
                 ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Send, "رسالة", LocalSemanticColors.current.info, onSms)
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+            ) {
+                ContactActionButton(Modifier.weight(1f), Icons.Default.Description, "إرسال كشف الحساب عبر واتساب", LocalSemanticColors.current.success, onStatement)
             }
         }
         }

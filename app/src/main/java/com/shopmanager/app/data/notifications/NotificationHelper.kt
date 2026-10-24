@@ -70,6 +70,7 @@ object NotificationHelper {
     // grouping and modern Android apps both use.
     private const val GROUP_DEBTS = "com.shopmanager.app.GROUP_DEBTS"
     private const val NOTIF_ID_DEBTS_SUMMARY = 1900
+    private const val NOTIF_ID_OVERDUE = 1903
 
     // نفس لون Claude الأساسي في ثيم التطبيق (ClaudeOrangeLight في ui/theme/Color.kt) —
     // يُطبَّق عبر setColor() ليتطابق تلوين الأيقونة الصغيرة وبانر الإشعار مع بقية
@@ -636,6 +637,35 @@ object NotificationHelper {
             // Permission revoked between the check above and this call — skip.
         }
         postDebtsGroupSummary(context)
+    }
+
+    fun showOverdueDebtsNotification(context: Context, names: List<String>, days: Int) {
+        if (!hasPermission(context) || names.isEmpty()) return
+        val shown = names.take(3).joinToString("، ")
+        val more = if (names.size > 3) " و${names.size - 3} آخرين" else ""
+        val text = "${names.size} عميل لديهم ديون أقدم من $days يوم: $shown$more"
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            context, NOTIF_ID_OVERDUE, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, NotificationSounds.channelId(context, NotifKind.DEBTS))
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle("⏰ ديون متأخرة")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setAutoCancel(true)
+            .setContentIntent(pending)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(NOTIF_ID_OVERDUE, notification)
+        } catch (e: SecurityException) {
+        }
     }
 
     /**

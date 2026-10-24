@@ -39,6 +39,12 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.shopmanager.app.data.performance.MotionSpecs
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
+import android.os.Build
+import android.view.WindowManager
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 
 /**
  * Replacement for [androidx.compose.material3.AlertDialog], kept with the
@@ -80,6 +86,21 @@ fun GlassAlertDialog(
         // Springy pop-in instead of Dialog's default hard cut.
         var visible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { visible = true }
+        val blurTier = LocalPerformanceTier.current
+        val dialogView = LocalView.current
+        LaunchedEffect(blurTier) {
+            if (blurTier == PerformanceTier.STANDARD && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                runCatching {
+                    val window = (dialogView.parent as? DialogWindowProvider)?.window
+                    if (window != null) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                        val attrs = window.attributes
+                        attrs.blurBehindRadius = 24
+                        window.attributes = attrs
+                    }
+                }
+            }
+        }
         val scale by animateFloatAsState(
             targetValue = if (visible) 1f else 0.86f,
             animationSpec = MotionSpecs.popInSpring(),

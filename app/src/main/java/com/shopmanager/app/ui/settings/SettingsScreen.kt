@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.SettingsBrightness
@@ -140,6 +141,10 @@ fun SettingsScreen(
     var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
     // "المزامنة الفورية بالخلفية": مفتاح مستقل لكل جهاز (انظر RealtimeSyncService).
     var realtimeSyncEnabled by remember { mutableStateOf(settings.realtimeSyncEnabled) }
+    var overdueEnabled by remember { mutableStateOf(settings.overdueReminderEnabled) }
+    var overdueDays by remember { mutableStateOf(settings.overdueDays) }
+    var showHistory by remember { mutableStateOf(false) }
+    var showBackupPicker by remember { mutableStateOf(false) }
     // BUG FIXED ("notifications sometimes never arrive at all", root
     // cause): the switch above only ever reflected this app's OWN saved
     // preference — it had no idea whether Android itself was actually
@@ -634,6 +639,29 @@ fun SettingsScreen(
                                 NotificationSync.apply(context)
                             }
                         )
+                        switchItem(
+                            icon = Icons.Outlined.Timer,
+                            title = "تذكير بالديون المتأخرة",
+                            subtitle = "إشعار بالعملاء الذين مضى على دينهم أكثر من المدة المحددة",
+                            checked = overdueEnabled,
+                            onCheckedChange = {
+                                overdueEnabled = it
+                                settings.overdueReminderEnabled = it
+                            }
+                        )
+                        if (overdueEnabled) {
+                            item(
+                                icon = Icons.Outlined.Timer,
+                                title = "مدة اعتبار الدين متأخرًا",
+                                subtitle = "$overdueDays يوم · اضغط للتغيير",
+                                onClick = {
+                                    val options = listOf(7, 14, 30, 60, 90)
+                                    val next = options.firstOrNull { it > overdueDays } ?: options.first()
+                                    overdueDays = next
+                                    settings.overdueDays = next
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -836,9 +864,22 @@ fun SettingsScreen(
                             enabled = !isRestoring,
                             onClick = { importFileLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) }
                         )
+                        item(
+                            icon = Icons.Outlined.Backup,
+                            title = "نسخ سابقة على الجهاز",
+                            subtitle = "${backups.size} نسخة محفوظة · اضغط لاختيار نسخة أقدم",
+                            enabled = backups.size > 1 && !isRestoring,
+                            onClick = { showBackupPicker = true }
+                        )
+                        item(
+                            icon = Icons.Outlined.History,
+                            title = "سجل التعديلات",
+                            subtitle = "آخر العمليات: إضافة وتعديل وحذف وسداد",
+                            onClick = { showHistory = true }
+                        )
                     }
                     SettingsFootnote(
-                        "يحتفظ التطبيق دائمًا بآخر نسخة كاملة على هذا الجهاز فقط، وتُحدَّث بصمت بعد كل حفظ جديد. " +
+                        "يحتفظ التطبيق بعدة نسخ حديثة على هذا الجهاز، وتُحدَّث بصمت بعد كل حفظ جديد. " +
                             "تُستعاد من هنا أو إذا تعذّر الاتصال بالخادم."
                     )
                     AnimatedVisibility(
@@ -896,6 +937,17 @@ fun SettingsScreen(
                 applySecure()
                 showSetPinDialog = false
             }
+        )
+    }
+
+    if (showHistory) ChangeHistoryDialog(onDismiss = { showHistory = false })
+
+    if (showBackupPicker) {
+        BackupPickerDialog(
+            backups = backups,
+            formatDate = { formatBackupDate(it) },
+            onPick = { showBackupPicker = false; pendingRestore = it },
+            onDismiss = { showBackupPicker = false }
         )
     }
 

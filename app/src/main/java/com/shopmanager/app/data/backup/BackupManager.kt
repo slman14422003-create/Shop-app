@@ -21,14 +21,9 @@ import java.util.Locale
  * manager and is wiped automatically only if the app itself is
  * uninstalled (same lifetime guarantee as everything else the app owns).
  *
- * Only ONE snapshot is ever kept on disk. Every [performBackup] call
- * writes the new snapshot to its own new file first, then immediately
- * deletes every other file in the backups directory (see
- * [pruneOldBackups]). An older snapshot is never useful once a newer one
- * exists — restoring always means "put back the most recent state this
- * device saw" — so keeping a history around is just wasted device
- * storage, and it's exactly what used to read as confusing ("why are
- * there five of these") in Settings.
+ * Recent snapshots are kept per kind (see KEEP_DAILY / KEEP_INSTANT) so a
+ * bad or empty state can never overwrite the only good copy. An empty
+ * snapshot is never written while older ones exist.
  *
  * Restoring is intentionally NEVER silent/automatic in the sense of
  * quietly overwriting Firestore on its own: it always requires either an
@@ -65,6 +60,9 @@ object BackupManager {
     private const val DIR_NAME = "backups"
     private const val LEGACY_PREFIX = "backup_"
     private const val SUFFIX = ".json"
+    private const val KEEP_DAILY = 7
+    private const val KEEP_INSTANT = 5
+    private const val KEEP_LEGACY = 2
 
     private fun stampFormat() = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US)
 
@@ -97,6 +95,10 @@ object BackupManager {
     ) {
         val json = buildSnapshotJson(debtsRepo, materialsRepo)
 
+        val isEmptySnapshot = (json.optJSONArray("persons")?.length() ?: 0) == 0 &&
+            (json.optJSONArray("materials")?.length() ?: 0) == 0
+        if (isEmptySnapshot && backupFiles(context).isNotEmpty()) return
+
         // Millisecond-resolution timestamp in the filename (not just
         // seconds) so two backups triggered a moment apart — e.g. an
         // instant backup plus a WorkManager retry — can never collide on
@@ -104,7 +106,7 @@ object BackupManager {
         val file = File(backupDir(context), "${kind.filePrefix}${stampFormat().format(System.currentTimeMillis())}$SUFFIX")
         file.writeText(json.toString())
 
-        pruneOldBackups(context, keep = file)
+        pruneOldBackups(context)
     }
 
     /**
@@ -152,15 +154,24 @@ object BackupManager {
                 }.getOrNull()
             } ?: emptyList()
 
-    /**
-     * Deletes every backup file except [keep] (the one just written),
-     * regardless of kind (daily/instant/legacy) — only the newest
-     * snapshot is ever worth having on disk, see the class doc above.
-     */
-    private fun pruneOldBackups(context: Context, keep: File) {
+    private fun backupFiles(context: Context): List<File> =
         backupDir(context)
             .listFiles { f -> f.name.startsWith(LEGACY_PREFIX) && f.name.endsWith(SUFFIX) }
-            ?.forEach { f -> if (f != keep) f.delete() }
+            ?.toList() ?: emptyList()
+
+    private fun pruneOldBackups(context: Context) {
+        val files = backupFiles(context)
+        val groups = listOf(
+            files.filter { it.name.startsWith(BackupKind.DAILY.filePrefix) } to KEEP_DAILY,
+            files.filter { it.name.startsWith(BackupKind.INSTANT.filePrefix) } to KEEP_INSTANT,
+            files.filter {
+                !it.name.startsWith(BackupKind.DAILY.filePrefix) &&
+                    !it.name.startsWith(BackupKind.INSTANT.filePrefix)
+            } to KEEP_LEGACY
+        )
+        groups.forEach { (group, keep) ->
+            group.sortedByDescending { it.name }.drop(keep).forEach { it.delete() }
+        }
     }
 
     /** Writes a chosen local snapshot back into Firestore, replacing what's
@@ -185,6 +196,12 @@ object BackupManager {
         materialsRepo: MaterialsRepository
     ) {
         val json = JSONObject(jsonText)
+
+        if ((json.optJSONArray("persons")?.length() ?: 0) == 0 &&
+            (json.optJSONArray("materials")?.length() ?: 0) == 0
+        ) {
+            throw IllegalArgumentException("النسخة المحددة فارغة ولن تتم استعادتها")
+        }
 
         // BUG FIXED (استعادة تفشل بالكامل): only ONE snapshot is ever kept
         // on disk (see the class doc above) - there is no older backup to

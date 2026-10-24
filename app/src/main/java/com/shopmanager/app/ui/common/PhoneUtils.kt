@@ -60,12 +60,14 @@ object PhoneUtils {
         launch(context, Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")))
     }
 
-    fun whatsApp(context: Context, raw: String) {
+    fun whatsApp(context: Context, raw: String, text: String? = null) {
         val number = forWhatsApp(raw)
         if (number.isEmpty()) return
+        val suffix = if (text.isNullOrBlank()) "" else "&text=" + Uri.encode(text)
+        val webSuffix = if (text.isNullOrBlank()) "" else "?text=" + Uri.encode(text)
         // أولاً مباشرة بتطبيق واتساب، وإن لم يوجد نفتح رابط wa.me (يفتح التطبيق أو المتصفح).
-        val opened = launch(context, Intent(Intent.ACTION_VIEW, Uri.parse("whatsapp://send?phone=$number")), showError = false)
-        if (!opened) launch(context, Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$number")))
+        val opened = launch(context, Intent(Intent.ACTION_VIEW, Uri.parse("whatsapp://send?phone=$number$suffix")), showError = false)
+        if (!opened) launch(context, Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$number$webSuffix")))
     }
 
     private fun launch(context: Context, intent: Intent, showError: Boolean = true): Boolean = try {
