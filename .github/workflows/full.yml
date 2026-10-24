@@ -1,0 +1,240 @@
+name: Build and Release Full (Developer) APK
+
+# مستقل تمامًا عن release.yml (نسخة public): يبني ويُصدر نسخة full فقط،
+# بتشغيل يدوي حصرًا (لا يوجد push trigger هنا)، وبتاجات/إصدارات خاصة به
+# بادئتها "full-v" (full-v1.0, full-v1.1 ...) منفصلة تمامًا عن تاجات
+# "v1.0, v1.1 ..." الخاصة بنسخة public في release.yml - فلا يتعارض
+# ترقيمهما ولا يستهلك أحدهما من الآخر، ولا ينشئ هذا الووركفلو أي تحديث أو
+# GitHub Release يراه نظام التحديث الخاص بنسخة public (UpdateRepository).
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: >-
+          تحديد رقم إصدار نسخة full يدويًا (مثال: 1.0) بدل الزيادة التلقائية
+          عن آخر تاج full-v* موجود. اتركها فارغة للسلوك المعتاد
+          (١.٠ ← ١.١ ← ١.٢ ...).
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-full:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE_SECRET: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # نحتاج كامل تاريخ التاجات كي نقرأ آخر تاج full-v* ونزيده تلقائيًا.
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          # لا نترك هذا الأكشن يوافق على التراخيص أو يثبّت الحزم؛ إصدارات
+          # cmdline-tools الحديثة تطرح أسئلة ترخيص أكثر من الـ 10 الثابتة
+          # التي يرسلها هذا الأكشن، فيفشل "sdkmanager --licenses" بخطأ
+          # exit code 1. نقوم بالخطوتين يدويًا في الخطوة التالية بدل ذلك.
+          accept-android-sdk-licenses: false
+          packages: ''
+
+      - name: Accept SDK licenses and install packages
+        run: |
+          set -euo pipefail
+          # الأكشن android-actions/setup-android يضيف مجلد cmdline-tools/<إصدار
+          # جديد نُزِّل للتو> إلى PATH صراحة - هذا هو المصدر الموثوق للنسخة
+          # الصحيحة، لا البحث اليدوي. البحث بـ find + sort -V كان يختار خطأً
+          # مجلد "latest" القديم المثبَّت مسبقًا على الـ runner (يحوي مستودعًا/
+          # تراخيص غير ذات صلة إطلاقًا بأندرويد) لأن "sort -V" يضع كلمة
+          # "latest" أعلى من أي رقم إصدار. نعتمد أولًا على PATH، ونستثني صراحة
+          # مجلد latest من أي احتياط يدوي بديل.
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+            SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -path '*/bin/*' | grep -v '/cmdline-tools/latest/' | sort -V | tail -1)
+            if [ -z "$SDKMANAGER" ]; then
+              SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -path '*/bin/*' | sort -V | tail -1)
+            fi
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found"
+            exit 1
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+
+          # yes ينتهي بـ SIGPIPE بمجرد إغلاق sdkmanager لمدخلاته، فقد يعطي
+          # كود خروج غير صفري رغم نجاح قبول التراخيص فعليًا - نتجاهله هنا
+          # عمدًا ونتحقق من النجاح الحقيقي عبر خطوة sdkmanager --install التالية.
+          yes | "$SDKMANAGER" --licenses > /tmp/sdkmanager-licenses.log 2>&1 || true
+          tail -n 30 /tmp/sdkmanager-licenses.log || true
+
+          # ثابتون على أندرويد 16 (API 36) للاستقرار - حزمة android-37 غير
+          # متوفرة بعد عبر مستودع sdkmanager بأي قناة.
+          "$SDKMANAGER" --install 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: 9.7.1
+
+      - name: Resolve next full-flavor version (زيادة تلقائية full-v1.0 → full-v1.1 ...)
+        id: appver
+        run: |
+          git fetch --tags --force >/dev/null 2>&1 || true
+
+          MANUAL_VNAME="${{ github.event.inputs.version_name }}"
+
+          if [ -n "$MANUAL_VNAME" ]; then
+            NEXT_VNAME="$MANUAL_VNAME"
+          else
+            # آخر تاج بادئته "full-v" تحديدًا - لا علاقة له بتاجات "v*"
+            # الخاصة بنسخة public في release.yml.
+            LAST_TAG=$(git tag --list 'full-v*' \
+              | sed 's/^full-v//' \
+              | grep -E '^[0-9]+\.[0-9]+$' \
+              | sort -t. -k1,1n -k2,2n \
+              | tail -1)
+
+            if [ -z "$LAST_TAG" ]; then
+              NEXT_VNAME="1.0"
+            else
+              MAJOR=$(echo "$LAST_TAG" | cut -d. -f1)
+              MINOR=$(echo "$LAST_TAG" | cut -d. -f2)
+              MINOR=$((MINOR + 1))
+              if [ "$MINOR" -ge 10 ]; then
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+              fi
+              NEXT_VNAME="${MAJOR}.${MINOR}"
+            fi
+          fi
+
+          VCODE=${{ github.run_number }}
+
+          echo "version_name=$NEXT_VNAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VCODE" >> "$GITHUB_OUTPUT"
+          echo "الإصدار السابق (full): ${LAST_TAG:-لا يوجد} → الإصدار الجديد: $NEXT_VNAME ($VCODE)"
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Prepare release signing (optional in CI)
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mkdir -p app
+
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            KS_PATH="$GITHUB_WORKSPACE/app/release.keystore.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KS_PATH"
+            keytool -list -keystore "$KS_PATH" -storepass "$KEYSTORE_PASSWORD" >/dev/null
+
+            # بصمة شهادة التوقيع (SHA-256/SHA-1) محسوبة مباشرة من نفس الـ
+            # keystore السرّي أعلاه - لا سرّ إضافي مطلوب. تُغذّي متغيّر البناء
+            # RELEASE_SIGNATURE_SHA256 (فحص إعادة التوقيع في SecurityUtils.kt).
+            CERT_INFO=$(keytool -list -v -keystore "$KS_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS")
+            SIG_SHA256=$(echo "$CERT_INFO" | awk -F': ' '/SHA256:/{gsub(":","",$2); print $2; exit}')
+            SIG_SHA1=$(echo "$CERT_INFO" | awk -F': ' '/SHA1:/{gsub(":","",$2); print $2; exit}')
+
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "store_file=$KS_PATH" >> "$GITHUB_OUTPUT"
+            echo "store_password=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "key_alias=$KEY_ALIAS" >> "$GITHUB_OUTPUT"
+            echo "key_password=$KEY_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "sig_sha256=$SIG_SHA256" >> "$GITHUB_OUTPUT"
+            echo "Release signing secrets found; building signed artifact."
+            echo "::notice::Release certificate SHA-256: $SIG_SHA256"
+            echo "::notice::Release certificate SHA-1: $SIG_SHA1"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "store_file=" >> "$GITHUB_OUTPUT"
+            echo "store_password=" >> "$GITHUB_OUTPUT"
+            echo "key_alias=" >> "$GITHUB_OUTPUT"
+            echo "key_password=" >> "$GITHUB_OUTPUT"
+            echo "sig_sha256=" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release signing secrets are not configured. Building unsigned full-flavor artifact for testing only."
+          fi
+
+      - name: Build full-flavor release APK
+        env:
+          APP_VERSION_CODE: ${{ steps.appver.outputs.version_code }}
+          APP_VERSION_NAME: ${{ steps.appver.outputs.version_name }}
+          RELEASE_STORE_FILE: ${{ steps.keystore.outputs.store_file }}
+          RELEASE_STORE_PASSWORD: ${{ steps.keystore.outputs.store_password }}
+          RELEASE_KEY_ALIAS: ${{ steps.keystore.outputs.key_alias }}
+          RELEASE_KEY_PASSWORD: ${{ steps.keystore.outputs.key_password }}
+          RELEASE_SIGNATURE_SHA256: ${{ steps.keystore.outputs.sig_sha256 }}
+        run: |
+          # نكهة full فقط - نسخة public لا تُبنى ولا تُلمَس هنا إطلاقًا
+          # (راجع release.yml المنفصل لها).
+          gradle :app:assembleFullRelease --no-daemon --stacktrace
+
+          echo "Build outputs:"
+          find app/build/outputs/apk/full -name "*.apk"
+
+      - name: Locate build output
+        id: outputs
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/full -name "*.apk" 2>/dev/null | sort | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::No full-flavor APK found under app/build/outputs/apk/full/"
+            exit 1
+          fi
+          echo "apk_path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Verify APK signature (v2/v3 scheme + certificate check)
+        if: ${{ steps.keystore.outputs.signed == 'true' }}
+        run: |
+          set -euo pipefail
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$APKSIGNER" verify --print-certs -v "${{ steps.outputs.outputs.apk_path }}"
+
+      - name: Generate SHA-256 checksum for the APK
+        id: checksum
+        run: |
+          echo "checksum=$(sha256sum "${{ steps.outputs.outputs.apk_path }}")" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release (full flavor)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: full-v${{ steps.appver.outputs.version_name }}
+          name: full - الإصدار ${{ steps.appver.outputs.version_name }}
+          body: |
+            ## 🛠️ نسخة full (المطوّر) - الإصدار ${{ steps.appver.outputs.version_name }}
+
+            - رقم الإصدار: ${{ steps.appver.outputs.version_code }}
+            - نسخة full فقط (بلوحة تحكم إدارية) - للاختبار الداخلي، لا تُطرَح لمستخدمي public.
+            - إذا لم تُضبط أسرار التوقيع، فهذا البناء غير موقّع ومخصص للاختبار فقط.
+            - بصمة شهادة التوقيع (SHA-256): `${{ steps.keystore.outputs.sig_sha256 }}`
+            - بصمة SHA-256 لملف الـ APK: `${{ steps.checksum.outputs.checksum }}`
+          generate_release_notes: true
+          files: ${{ steps.outputs.outputs.apk_path }}
+          fail_on_unmatched_files: true
+
+      - name: Cleanup Gradle cache
+        if: always()
+        run: |
+          rm -rf ~/.gradle/caches/modules-2/files-2.1/* 2>/dev/null || true

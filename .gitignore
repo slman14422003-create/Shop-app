@@ -1,39 +1,28 @@
 *.iml
 .gradle/
 /local.properties
-.idea/
+/.idea/
 .DS_Store
 /build
-/app/build
 /captures
 .externalNativeBuild
 .cxx
+local.properties
 
-# Play Store release signing key — never commit this. Losing it means
-# this app can never be updated on the Play Store again under the same
-# listing; leaking it means anyone who has it can publish updates that
-# look like they come from you. Back the whole keystore/ folder up
-# somewhere private and durable (a password manager, an encrypted drive)
-# outside of git.
-/keystore/*.jks
-/keystore/*.properties.local
+# Gradle wrapper jar is normally committed, but if you regenerate the
+# wrapper via Android Studio these paths stay ignored:
+!gradle/wrapper/gradle-wrapper.jar
 
-# SECURITY (إضافة): أي ملف مفتاح توقيع أو أسرار بأي مكان بالمشروع، مو بس
-# داخل keystore/. (كان الاستثناء السابق يغطي مجلد keystore/ فقط، فنسخة
-# مفتاح محطوطة بمكان ثاني بالغلط كانت بتنرفع للمستودع.)
+# Never commit signing material
 *.jks
 *.keystore
-*.p12
-*.pem
-*.key
-keystore.properties
-*.properties.local
-google-services.json
-service-account*.json
+release.keystore.jks
+app/keystore.properties
 
-# مخرجات البناء/الفحص المحلية
-*.apk
-*.aab
-*.hprof
-.kotlin/
-/app/release/
+# Never commit real Firebase Android config if you later add one
+app/google-services.json
+# Release signing material — never commit private keys or passwords
+app/*.jks
+app/keystore.properties
+app/release.keystore.jks
+app/ai.properties

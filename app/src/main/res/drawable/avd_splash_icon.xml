@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    نسخة متحرّكة (AnimatedVectorDrawable) من أيقونة شاشة البداية، تحلّ محل
+    الصورة الثابتة (mipmap/ic_splash_logo) التي كانت تُستخدم سابقاً في
+    windowSplashScreenAnimatedIcon داخل themes.xml رغم أنها بلا أي حركة
+    فعلية إطلاقاً (مجرد PNG). نفس رسمة الورقة تماماً (ic_splash_leaf) بنفس
+    اللون الأخضر للهوية (#1B5E20)، لكن مضمَّنة هنا مباشرة (بدل الإشارة لملف
+    drawable منفصل) مع حركة "تكبّر ناعمة مع ارتداد خفيف" (Overshoot) من 40%
+    إلى الحجم الكامل عند ظهور شاشة النظام — فتشعر الأيقونة بأنها "تنبت"
+    فعلاً بدل الظهور المفاجئ الجامد كصورة ثابتة.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="96dp"
+            android:height="96dp"
+            android:viewportWidth="132"
+            android:viewportHeight="132">
+            <!-- pivotX/pivotY تقريباً مركز شكل الورقتين مجتمعتين (قبل
+                 الإزاحة translateX/Y)، حتى يكون التكبّر حول مركز الشعار
+                 نفسه بدل الزاوية العلوية اليسرى الافتراضية. -->
+            <group
+                android:name="leaf"
+                android:translateX="18"
+                android:translateY="18"
+                android:pivotX="49"
+                android:pivotY="45"
+                android:scaleX="0.4"
+                android:scaleY="0.4">
+                <path
+                    android:fillColor="#1B5E20"
+                    android:pathData="M48,78 C45,62 45,48 50,34 C55,20 68,13 80,13 C80,27 77,40 68,49 C60,57 52,60 48,60 Z" />
+                <path
+                    android:fillColor="#1B5E20"
+                    android:pathData="M48,78 C35,67 24,55 21,42 C18,29 24,19 34,13 C45,23 51,34 51,47 C51,59 48,68 48,78 Z" />
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="leaf">
+        <aapt:attr name="android:animation">
+            <set android:ordering="together">
+                <objectAnimator
+                    android:propertyName="scaleX"
+                    android:duration="420"
+                    android:valueFrom="0.4"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/overshoot" />
+                <objectAnimator
+                    android:propertyName="scaleY"
+                    android:duration="420"
+                    android:valueFrom="0.4"
+                    android:valueTo="1.0"
+                    android:valueType="floatType"
+                    android:interpolator="@android:interpolator/overshoot" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>

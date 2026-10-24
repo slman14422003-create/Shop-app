@@ -1,266 +1,316 @@
-name: Build Android App and Release
+name: Build and Release Public APK
 
+# مستقل تمامًا عن full.yml (نسخة المطوّر): يبني ويُصدر نسخة public فقط،
+# وبتشغيل يدوي حصرًا (لا يوجد push trigger هنا) - فالنشر الفعلي لمستخدمي
+# نسخة public (تاج/إصدار جديد + GitHub Release يعتمد عليه نظام التحديث في
+# التطبيق، راجع UpdateRepository) يصير فقط عند تشغيل هذا الووركفلو يدويًا
+# بقرار واعٍ، لا تلقائيًا مع كل push أثناء تطوير/تجربة نسخة full.
 on:
-  push:
-    branches: [ main ]
-    # لا داعي لبناء + نشر إصدار جديد لتعديل توثيق فقط
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
   workflow_dispatch:
     inputs:
-      publish:
-        description: 'انشر إصدارًا على Shop-app-updates (عطّلها لتجربة بناء فقط)'
-        type: boolean
-        default: true
+      version_name:
+        description: >-
+          تحديد رقم الإصدار يدويًا (مثال: 1.0) بدل الزيادة التلقائية عن آخر
+          تاج — استخدمها لإعادة ترقيم الإصدار (مثلاً بعد استقرار نسخة معيّنة
+          وإرادة تسميتها "1.0" بصرف النظر عن آخر تاج مرفوع فعلاً). اتركها
+          فارغة للسلوك المعتاد (١.٠ ← ١.١ ← ١.٢ ...).
+        required: false
+        type: string
 
-# أقل صلاحيات ممكنة على مستوى الـ workflow؛ الـ job وحده يرفع الصلاحية لـ write
-# (مطلوبة فقط لدفع CHANGELOG.md في الخطوة الأخيرة).
 permissions:
-  contents: read
-
-# التزامن: cancel-in-progress كان يقتل التشغيل الأقدم في منتصف النشر، فيتركك مع
-# إصدار منشور نصفه (APK واحد بدل اثنين) أو CHANGELOG غير مدفوع. الآن التشغيل
-# الجاري يكمل للآخر، وأي تشغيلات تنتظر خلفه يبقى منها الأحدث فقط.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  contents: write
 
 jobs:
-  build-and-release:
+  release-public:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: write
-    defaults:
-      run:
-        shell: bash
     env:
-      # يمنع Gradle من طباعة تلميحات تفاعلية، ويثبّت الترميز
-      GRADLE_OPTS: -Dfile.encoding=UTF-8 -Dorg.gradle.console=plain
+      HAS_KEYSTORE_SECRET: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          # التاريخ الكامل مطلوب لتوليد ملاحظات الإصدار من الـ commits
+          # نحتاج كامل تاريخ التاجات (tags) كي نتمكن من قراءة آخر رقم إصدار
+          # وزيادته تلقائيًا (1.0 → 1.1 → 1.2 ...). fetch-depth: 0 = تاريخ كامل.
           fetch-depth: 0
 
-      - name: Setup JDK 25
-        uses: actions/setup-java@v6
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
         with:
-          distribution: 'temurin'
-          java-version: '25'
+          distribution: temurin
+          java-version: '17'
 
-      # packages: '' يمنع التنزيل الافتراضي المكسور لحزمة "tools" (انظر تاريخ
-      # الملف) لكن يضل يجهّز ANDROID_HOME ويقبل التراخيص.
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
         with:
+          # لا نترك هذا الأكشن يوافق على التراخيص أو يثبّت الحزم؛ إصدارات
+          # cmdline-tools الحديثة تطرح أسئلة ترخيص أكثر من الـ 10 الثابتة
+          # التي يرسلها هذا الأكشن، فيفشل "sdkmanager --licenses" بخطأ
+          # exit code 1. نقوم بالخطوتين يدويًا في الخطوة التالية بدل ذلك.
+          accept-android-sdk-licenses: false
           packages: ''
 
-      # يطابق الحد الأدنى المطلوب لـ AGP 9.4 (Gradle 9.6.0+). كاش Gradle
-      # والتبعيات يديره هذا الـ action تلقائيًا.
-      - name: Setup Gradle
+      - name: Accept SDK licenses and install packages
+        run: |
+          set -euo pipefail
+          # الأكشن android-actions/setup-android يضيف مجلد cmdline-tools/<إصدار
+          # جديد نُزِّل للتو> إلى PATH صراحة - هذا هو المصدر الموثوق للنسخة
+          # الصحيحة، لا البحث اليدوي. البحث بـ find + sort -V كان يختار خطأً
+          # مجلد "latest" القديم المثبَّت مسبقًا على الـ runner (يحوي مستودعًا/
+          # تراخيص غير ذات صلة إطلاقًا بأندرويد) لأن "sort -V" يضع كلمة
+          # "latest" أعلى من أي رقم إصدار. نعتمد أولًا على PATH، ونستثني صراحة
+          # مجلد latest من أي احتياط يدوي بديل.
+          SDKMANAGER="$(command -v sdkmanager || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+            SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -path '*/bin/*' | grep -v '/cmdline-tools/latest/' | sort -V | tail -1)
+            if [ -z "$SDKMANAGER" ]; then
+              SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -maxdepth 3 -type f -name sdkmanager -path '*/bin/*' | sort -V | tail -1)
+            fi
+          fi
+          if [ -z "$SDKMANAGER" ]; then
+            echo "::error::sdkmanager not found"
+            exit 1
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+
+          # yes ينتهي بـ SIGPIPE بمجرد إغلاق sdkmanager لمدخلاته، فقد يعطي
+          # كود خروج غير صفري رغم نجاح قبول التراخيص فعليًا - نتجاهله هنا
+          # عمدًا ونتحقق من النجاح الحقيقي عبر خطوة sdkmanager --install التالية.
+          yes | "$SDKMANAGER" --licenses > /tmp/sdkmanager-licenses.log 2>&1 || true
+          tail -n 30 /tmp/sdkmanager-licenses.log || true
+
+          # ثابتون على أندرويد 16 (API 36) للاستقرار - حزمة android-37 غير
+          # متوفرة بعد عبر مستودع sdkmanager بأي قناة.
+          "$SDKMANAGER" --install 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
-          gradle-version: '9.7.1'
+          gradle-version: 9.7.1
 
-      # ─────────────────────────────────────────────────────────────────────
-      # توقيع الإصدار (إصلاح مهم): بدون مفتاح ثابت كان AGP يولّد مفتاح debug
-      # جديدًا في كل تشغيل على GitHub، فكل APK ينزل بتوقيع مختلف عن اللي قبله
-      # وأندرويد يرفض التحديث فوق النسخة المثبّتة ("App not installed" /
-      # تعارض توقيع). الحل: حط keystore الإصدار الحقيقي كـ Secrets (مرة وحدة):
-      #   RELEASE_KEYSTORE_BASE64  ← base64 -w0 keystore/shopmanager-release.jks
-      #   RELEASE_STORE_PASSWORD
-      #   RELEASE_KEY_ALIAS
-      #   RELEASE_KEY_PASSWORD
-      # إذا ما انحطّوا يكمل البناء كالسابق (مفتاح debug) مع تحذير واضح.
-      # ─────────────────────────────────────────────────────────────────────
-      - name: Restore release keystore (optional)
-        env:
-          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      - name: Resolve next app version (زيادة تلقائية 1.0 → 1.1 → 1.2 ...)
+        id: appver
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            mkdir -p "$RUNNER_TEMP/signing"
-            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/signing/release.jks"
-            chmod 600 "$RUNNER_TEMP/signing/release.jks"
-            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/signing/release.jks" >> "$GITHUB_ENV"
-            echo "تم تجهيز مفتاح التوقيع من الـ Secrets."
+          git fetch --tags --force >/dev/null 2>&1 || true
+
+          MANUAL_VNAME="${{ github.event.inputs.version_name }}"
+
+          if [ -n "$MANUAL_VNAME" ]; then
+            NEXT_VNAME="$MANUAL_VNAME"
           else
-            echo "::warning title=توقيع غير ثابت::RELEASE_KEYSTORE_BASE64 غير معرّف — سيُوقَّع الإصدار بمفتاح debug مؤقت، وتحديث التطبيق من داخله سيفشل بتعارض التوقيع."
+            LAST_TAG=$(git tag --list 'v*' \
+              | sed 's/^v//' \
+              | grep -E '^[0-9]+\.[0-9]+$' \
+              | sort -t. -k1,1n -k2,2n \
+              | tail -1)
+
+            if [ -z "$LAST_TAG" ]; then
+              NEXT_VNAME="1.0"
+            else
+              MAJOR=$(echo "$LAST_TAG" | cut -d. -f1)
+              MINOR=$(echo "$LAST_TAG" | cut -d. -f2)
+              MINOR=$((MINOR + 1))
+              if [ "$MINOR" -ge 10 ]; then
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+              fi
+              NEXT_VNAME="${MAJOR}.${MINOR}"
+            fi
           fi
 
-      # بناء واحد لكل المهام (تشغيل Gradle مرة وحدة بدل ٤ مرات، مع إعادة
-      # استخدام الـ daemon والكاش) — الاختبارات أولًا، ثم الـ APKs.
-      - name: Test and build APKs
-        env:
-          SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          SIGNING_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          SIGNING_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: gradle testDebugUnitTest assembleDebug assembleRelease --parallel --build-cache --stacktrace
+          VCODE=${{ github.run_number }}
 
-      # فحص lint غير مانع (continue-on-error) كالسابق، لكنه يعمل بعد البناء
-      # حتى لا يؤخر وصول الـ APK لو علق.
-      - name: Run Android Lint (release)
-        continue-on-error: true
-        run: gradle lintRelease --parallel --build-cache
+          echo "version_name=$NEXT_VNAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VCODE" >> "$GITHUB_OUTPUT"
+          echo "الإصدار السابق: ${LAST_TAG:-لا يوجد} → الإصدار الجديد: $NEXT_VNAME ($VCODE)"
 
-      - name: Locate APKs and checksums
-        run: |
-          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
-          RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          [ -n "$DEBUG_APK" ] && [ -n "$RELEASE_APK" ] || { echo "::error::لم يتم العثور على أحد ملفات APK"; exit 1; }
-          cp "$DEBUG_APK" shop-manager-debug.apk
-          cp "$RELEASE_APK" shop-manager-release.apk
-          sha256sum shop-manager-debug.apk shop-manager-release.apk > SHA256SUMS.txt
-          cat SHA256SUMS.txt
-
-      # يطبع بصمة شهادة التوقيع في ملخص التشغيل: قارن بينها وبين الإصدار
-      # السابق — إذا اختلفت فالتحديث من داخل التطبيق لن يعمل.
-      - name: Verify APK signature
-        run: |
-          APKSIGNER=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner -type f 2>/dev/null | sort -V | tail -n 1 || true)
-          if [ -z "$APKSIGNER" ]; then
-            echo "apksigner غير متوفر — تخطي التحقق"
-            exit 0
-          fi
-          {
-            echo "### 🔏 توقيع الإصدار"
-            echo '```'
-            "$APKSIGNER" verify --print-certs shop-manager-release.apk 2>&1 | grep -E "SHA-256|Signer #1 certificate DN" || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          "$APKSIGNER" verify shop-manager-release.apk
-
-      - name: Upload APK artifacts
-        uses: actions/upload-artifact@v7
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v5
         with:
-          name: apks-${{ github.run_number }}
           path: |
-            shop-manager-debug.apk
-            shop-manager-release.apk
-            SHA256SUMS.txt
-          retention-days: 30
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
 
-      - name: Upload lint report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: lint-report
-          path: app/build/reports/lint-results-release.html
-          if-no-files-found: ignore
-          retention-days: 30
-
-      # ملف mapping الخاص بـ R8 — بدونه ما بتقدر تفك تشفير (deobfuscate) أي
-      # crash قادم من نسخة release.
-      - name: Upload R8 mapping
-        uses: actions/upload-artifact@v7
-        with:
-          name: r8-mapping-${{ github.run_number }}
-          path: app/build/outputs/mapping/release/mapping.txt
-          if-no-files-found: ignore
-          retention-days: 90
-
-      # ملاحظات الإصدار تلقائيًا من رسائل الـ commits (بدون ضجيج البناء/CI).
-      # أمان: المُحدِّد العشوائي لـ GITHUB_OUTPUT يمنع commit بعنوان مصمَّم من
-      # إنهاء القيمة مبكرًا وحقن مخرجات أخرى.
-      - name: Generate changelog
-        id: changelog
-        if: github.event_name == 'push' || inputs.publish
+      - name: Prepare release signing (optional in CI)
+        id: keystore
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          BEFORE_SHA: ${{ github.event.before }}
-          HEAD_SHA: ${{ github.sha }}
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          NOISE_PATTERN='^(ci|chore|docs|build|test|merge)(\(.*\))?:|\b(ci|workflow|github action|gradle|jdk|keystore|signing|proguard|r8|assemble(debug|release)?|debug apk|release apk|changelog|readme|gitignore)\b'
-          GITHUB_AUTOMSG_PATTERN='^(add files via upload|initial commit)$|^(update|create|delete) [^ ]+\.[A-Za-z0-9]+$|^rename .+ to .+$'
-          if [ "$EVENT_NAME" = "push" ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE_SHA" 2>/dev/null; then
-            RANGE="${BEFORE_SHA}..${HEAD_SHA}"
+          set -euo pipefail
+          mkdir -p app
+
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            KS_PATH="$GITHUB_WORKSPACE/app/release.keystore.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KS_PATH"
+            keytool -list -keystore "$KS_PATH" -storepass "$KEYSTORE_PASSWORD" >/dev/null
+
+            # بصمة شهادة التوقيع (SHA-256/SHA-1) محسوبة مباشرة من نفس الـ
+            # keystore السرّي أعلاه - لا سرّ إضافي مطلوب. تُغذّي متغيّر البناء
+            # RELEASE_SIGNATURE_SHA256 (فحص إعادة التوقيع في SecurityUtils.kt)
+            # وتُطبَع كمرجع لضبط Firebase/Google Sign-In/Play Console App Signing.
+            CERT_INFO=$(keytool -list -v -keystore "$KS_PATH" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS")
+            SIG_SHA256=$(echo "$CERT_INFO" | awk -F': ' '/SHA256:/{gsub(":","",$2); print $2; exit}')
+            SIG_SHA1=$(echo "$CERT_INFO" | awk -F': ' '/SHA1:/{gsub(":","",$2); print $2; exit}')
+
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            echo "store_file=$KS_PATH" >> "$GITHUB_OUTPUT"
+            echo "store_password=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "key_alias=$KEY_ALIAS" >> "$GITHUB_OUTPUT"
+            echo "key_password=$KEY_PASSWORD" >> "$GITHUB_OUTPUT"
+            echo "sig_sha256=$SIG_SHA256" >> "$GITHUB_OUTPUT"
+            echo "Release signing secrets found; building signed artifacts."
+            echo "::notice::Release certificate SHA-256: $SIG_SHA256"
+            echo "::notice::Release certificate SHA-1: $SIG_SHA1"
           else
-            RANGE="-15"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "store_file=" >> "$GITHUB_OUTPUT"
+            echo "store_password=" >> "$GITHUB_OUTPUT"
+            echo "key_alias=" >> "$GITHUB_OUTPUT"
+            echo "key_password=" >> "$GITHUB_OUTPUT"
+            echo "sig_sha256=" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release signing secrets are not configured. Building unsigned artifacts for CI/testing only. Configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD for a Play-ready signed build."
           fi
-          UNRELEASED=$(git log $RANGE --no-merges --pretty=format:'%s' \
-            | grep -viE "$NOISE_PATTERN" \
-            | grep -viE "$GITHUB_AUTOMSG_PATTERN" \
-            | sed 's/^/- /' || true)
-          if [ -z "$UNRELEASED" ]; then
-            UNRELEASED="- تحسينات وإصلاحات عامة"
+
+      - name: Build public-flavor release APK and App Bundle
+        env:
+          APP_VERSION_CODE: ${{ steps.appver.outputs.version_code }}
+          APP_VERSION_NAME: ${{ steps.appver.outputs.version_name }}
+          RELEASE_STORE_FILE: ${{ steps.keystore.outputs.store_file }}
+          RELEASE_STORE_PASSWORD: ${{ steps.keystore.outputs.store_password }}
+          RELEASE_KEY_ALIAS: ${{ steps.keystore.outputs.key_alias }}
+          RELEASE_KEY_PASSWORD: ${{ steps.keystore.outputs.key_password }}
+          RELEASE_SIGNATURE_SHA256: ${{ steps.keystore.outputs.sig_sha256 }}
+        run: |
+          # نكهة public فقط - نسخة full لا تُبنى ولا تُنشَر هنا إطلاقًا
+          # (راجع full.yml المنفصل لها).
+          gradle :app:assemblePublicRelease :app:bundlePublicRelease --no-daemon --stacktrace
+
+          echo "Build outputs:"
+          find app/build/outputs/apk/public -name "*.apk"
+          find app/build/outputs/bundle/publicRelease -name "*.aab"
+
+      - name: Locate build outputs
+        id: outputs
+        run: |
+          APK_PATHS=$(find app/build/outputs/apk/public -name "*.apk" 2>/dev/null | sort)
+          AAB_PATHS=$(find app/build/outputs/bundle/publicRelease -name "*.aab" 2>/dev/null | sort)
+
+          if [ -z "$APK_PATHS" ]; then
+            echo "::error::No public-flavor APK found under app/build/outputs/apk/public/"
+            exit 1
           fi
-          DELIM="CHANGELOG_$(openssl rand -hex 12)"
+
+          if [ -z "$AAB_PATHS" ]; then
+            echo "::warning::No AAB found under app/build/outputs/bundle/publicRelease/"
+          fi
+
           {
-            echo "notes<<$DELIM"
-            echo "$UNRELEASED"
-            echo "$DELIM"
+            echo "apk_paths<<EOF"
+            echo "$APK_PATHS"
+            echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # النشر على مستودع Shop-app-updates العام (يتطلب Secret باسم
-      # UPDATES_REPO_TOKEN). مقسوم لخطوتين لتجنب خطأ "Unicorn" لما يُرفع ملفان
-      # كبيران بنفس الطلب مباشرة بعد إنشاء الإصدار.
-      - name: Create GitHub Release on Shop-app-updates (with debug APK)
-        if: github.event_name == 'push' || inputs.publish
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: slman14422003-create/Shop-app-updates
-          token: ${{ secrets.UPDATES_REPO_TOKEN }}
-          tag_name: v1.0.${{ github.run_number }}
-          name: إصدار ${{ github.run_number }}
-          body: |
-            ## 🆕 ما الجديد بهذا الإصدار
-            ${{ steps.changelog.outputs.notes }}
+          {
+            echo "aab_paths<<EOF"
+            echo "$AAB_PATHS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-            ---
-            📦 **shop-manager-release.apk** ← هاي النسخة المستخدمة تنزّلها عادةً: أصغر حجماً وأسرع بالتشغيل (مضغوطة/محسّنة عبر R8).
-            🛠️ **shop-manager-debug.apk** ← نسخة تجريبية أكبر حجماً وأبطأ شوي، للاختبار فقط.
-            🔐 **SHA256SUMS.txt** ← بصمات الملفات للتحقق من سلامتها.
+          echo "Found APKs:"
+          echo "$APK_PATHS"
+          echo "Found AABs:"
+          echo "$AAB_PATHS"
 
-            كلا الملفين موقّعين وجاهزين للتثبيت المباشر بعد تفعيل "مصادر غير معروفة" على الجهاز.
-          files: |
-            shop-manager-debug.apk
-            SHA256SUMS.txt
-
-      - name: Wait for release to settle
-        if: github.event_name == 'push' || inputs.publish
-        run: sleep 10
-
-      - name: Upload release APK to the same release
-        if: github.event_name == 'push' || inputs.publish
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: slman14422003-create/Shop-app-updates
-          token: ${{ secrets.UPDATES_REPO_TOKEN }}
-          tag_name: v1.0.${{ github.run_number }}
-          files: shop-manager-release.apk
-
-      # تسجيل CHANGELOG.md. أمان: ملاحظات الإصدار تأتي من رسائل commits
-      # (نص غير موثوق)، وكانت تُحقن مباشرة داخل سكربت bash عبر ${{ }} — يعني
-      # commit بعنوان فيه $(...) أو علامة اقتباس كان ينفّذ أوامر بصلاحية كتابة
-      # على المستودع. الآن تمر عبر متغير بيئة فقط، وتُستخدم كنص خام.
-      # ومع التزامن الجديد: نعيد الضبط على آخر main قبل كل محاولة دفع حتى لا
-      # يفشل push بسبب تشغيل سابق دفع قبلنا.
-      - name: Record changelog entry
-        if: (github.event_name == 'push' || inputs.publish) && github.ref == 'refs/heads/main'
-        env:
-          NOTES: ${{ steps.changelog.outputs.notes }}
-          RUN_NUMBER: ${{ github.run_number }}
+      - name: Verify APK/AAB signature (v2/v3 scheme + certificate check)
+        if: ${{ steps.keystore.outputs.signed == 'true' }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          for attempt in 1 2 3 4; do
-            git fetch origin main
-            git reset --hard origin/main
-            {
-              echo "## v1.0.${RUN_NUMBER} — $(date +%Y-%m-%d)"
-              printf '%s\n' "$NOTES"
-              echo ""
-              cat CHANGELOG.md 2>/dev/null || true
-            } > CHANGELOG.md.tmp
-            mv CHANGELOG.md.tmp CHANGELOG.md
-            git add CHANGELOG.md
-            git commit -m "chore: record changelog for v1.0.${RUN_NUMBER} [skip ci]"
-            if git push origin HEAD:main; then
-              exit 0
-            fi
-            echo "فشل الدفع (المحاولة $attempt) — إعادة المحاولة..."
-            sleep $((attempt * 4))
-          done
-          echo "::warning::تعذّر دفع CHANGELOG.md بعد عدة محاولات (الإصدار نفسه نُشر بنجاح)."
+          set -euo pipefail
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          while IFS= read -r apk; do
+            [ -z "$apk" ] && continue
+            echo "== التحقق من التوقيع: $apk =="
+            "$APKSIGNER" verify --print-certs -v "$apk"
+          done <<< "${{ steps.outputs.outputs.apk_paths }}"
+
+      - name: Generate SHA-256 checksums for release artifacts
+        id: checksums
+        run: |
+          set -euo pipefail
+          {
+            echo "checksums<<EOF"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              sha256sum "$f"
+            done <<< "${{ steps.outputs.outputs.apk_paths }}
+          ${{ steps.outputs.outputs.aab_paths }}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact (for direct download)
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-public-release-apk
+          path: ${{ steps.outputs.outputs.apk_paths }}
+          if-no-files-found: error
+
+      - name: Upload App Bundle artifact (for Play Store upload)
+        if: ${{ steps.outputs.outputs.aab_paths != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-public-release-bundle
+          path: ${{ steps.outputs.outputs.aab_paths }}
+          if-no-files-found: warn
+
+      - name: Create GitHub Release (APK)
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.appver.outputs.version_name }}
+          name: الإصدار ${{ steps.appver.outputs.version_name }}
+          body: |
+            ## 📦 الإصدار ${{ steps.appver.outputs.version_name }}
+
+            - رقم الإصدار: ${{ steps.appver.outputs.version_code }}
+            - نسخة public (للمستخدم العادي) فقط.
+            - إذا لم تُضبط أسرار التوقيع، فهذا البناء غير موقّع ومخصص للاختبار فقط.
+            - بصمة شهادة التوقيع (SHA-256): `${{ steps.keystore.outputs.sig_sha256 }}`
+
+            **بصمات SHA-256 لملفات هذا الإصدار (للتحقق من سلامتها بعد التنزيل):**
+            ```
+            ${{ steps.checksums.outputs.checksums }}
+            ```
+          generate_release_notes: true
+          files: ${{ steps.outputs.outputs.apk_paths }}
+          fail_on_unmatched_files: true
+
+      - name: Publish public APK to the public releases repo
+        continue-on-error: true
+        uses: softprops/action-gh-release@v3
+        with:
+          repository: slman14422003-create/Harbs-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: v${{ steps.appver.outputs.version_name }}
+          name: الإصدار ${{ steps.appver.outputs.version_name }}
+          body: |
+            موسوعة الأعشاب الطبية — الإصدار ${{ steps.appver.outputs.version_name }}
+          files: ${{ steps.outputs.outputs.apk_paths }}
+          fail_on_unmatched_files: true
+
+      - name: Add App Bundle to GitHub Release
+        if: ${{ steps.outputs.outputs.aab_paths != '' }}
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.appver.outputs.version_name }}
+          files: ${{ steps.outputs.outputs.aab_paths }}
+          fail_on_unmatched_files: true
+
+      - name: Cleanup Gradle cache
+        if: always()
+        run: |
+          rm -rf ~/.gradle/caches/modules-2/files-2.1/* 2>/dev/null || true

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    طبقة "Themed Icon" (Android 13+ / Material You): سيلويت أبيض واحد
+    لشكل المحفظة + الورقة النهائي، يلوّنه النظام ديناميكياً حسب خلفية
+    المستخدم. يطابق تناسب النسخة الملوّنة في ic_launcher_foreground.xml.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- الورقة -->
+    <path
+        android:pathData="M54,7 L51.87,8.12 L50.2,9.25 L48.7,10.38 L47.34,11.5 L46.13,12.62 L45.06,13.75 L44.14,14.88 L43.38,16 L42.78,17.12 L42.35,18.25 L42.09,19.38 L42,20.5 L42.09,21.62 L42.35,22.75 L42.78,23.88 L43.38,25 L44.14,26.12 L45.06,27.25 L46.13,28.38 L47.34,29.5 L48.7,30.62 L50.2,31.75 L51.87,32.88 L54,34 L56.13,32.88 L57.8,31.75 L59.3,30.62 L60.66,29.5 L61.87,28.38 L62.94,27.25 L63.86,26.12 L64.62,25 L65.22,23.88 L65.65,22.75 L65.91,21.62 L66,20.5 L65.91,19.38 L65.65,18.25 L65.22,17.12 L64.62,16 L63.86,14.88 L62.94,13.75 L61.87,12.62 L60.66,11.5 L59.3,10.38 L57.8,9.25 L56.13,8.12 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- جسم المحفظة كسيلويت واحد متماسك -->
+    <path
+        android:pathData="M39,31 A9,9 0 0 0 30,40 L30,78 A9,9 0 0 0 39,87 L73,87 A9,9 0 0 0 82,78 L82,40 A9,9 0 0 0 73,31 Z"
+        android:fillColor="#FFFFFF" />
+    <!-- فتحة الخطاف الجانبي كتجويف بسيط في السيلويت -->
+    <path
+        android:pathData="M68.09,71.83 A11,11 0 1 1 80.34,57.24"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

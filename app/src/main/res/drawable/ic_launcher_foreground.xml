@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    مقدّمة الأيقونة المتكيّفة — النسخة النهائية المطابقة للصورة المرجعية:
+    محفظة/كتاب جلدي بتدرّج ترياكوتا، ورقة خضراء ملساء بلونين مغروسة
+    بالفتحة العلوية، وخطاف نيون سماوي متوهّج على الجانب. التدرّجات
+    اللونية مدعومة هنا عبر <aapt:attr>/<gradient>، والتوهّج مُحاكى
+    بطبقات خط متراكبة متزايدة الشفافية بدل تمويه حقيقي (غير مدعوم في
+    Vector Drawable).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ظل ناعم أسفل المحفظة (طبقات شفافية متدرّجة تحاكي التمويه). -->
+    <path android:pathData="M31,35 L83,35 A9,9 0 0 1 92,44 L92,90 A9,9 0 0 1 83,99 L31,99 A9,9 0 0 1 22,90 L22,44 A9,9 0 0 1 31,35 Z"
+        android:fillColor="#1E0F0A" android:fillAlpha="0.06" />
+    <path android:pathData="M31,34 L83,34 A9,9 0 0 1 92,43 L92,92 A9,9 0 0 1 83,101 L31,101 A9,9 0 0 1 22,92 L22,43 A9,9 0 0 1 31,34 Z"
+        android:fillColor="#1E0F0A" android:fillAlpha="0.10" />
+
+    <!-- شريحة الغلاف الخلفي (سليفر داكن يظهر أعلى الغلاف الأمامي). -->
+    <path
+        android:pathData="M41,23 L77,23 A6,6 0 0 1 83,29 L83,36 L35,36 L35,29 A6,6 0 0 1 41,23 Z"
+        android:fillColor="#5A372A" />
+
+    <!-- الغلاف الأمامي الرئيسي بتدرّج ترياكوتا (فاتح أعلى، داكن أسفل). -->
+    <path android:pathData="M39,31 A9,9 0 0 0 30,40 L30,78 A9,9 0 0 0 39,87 L73,87 A9,9 0 0 0 82,78 L82,40 A9,9 0 0 0 73,31 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54" android:startY="31"
+                android:endX="54" android:endY="87"
+                android:type="linear">
+                <item android:offset="0" android:color="#CD765A" />
+                <item android:offset="1" android:color="#963F2F" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- إبراز علوي خفيف (انعكاس ضوء على الجلد). -->
+    <path
+        android:pathData="M38,35 L74,35 A2,2 0 0 1 76,37 L76,39 A2,2 0 0 1 74,41 L38,41 A2,2 0 0 1 36,39 L36,37 A2,2 0 0 1 38,35 Z"
+        android:fillColor="#FFEBDC" android:fillAlpha="0.25" />
+
+    <!-- حافة الصفحات الكريمية على يمين الغلاف. -->
+    <path
+        android:pathData="M76,35 L79,35 A1.4,1.4 0 0 1 80.4,36.4 L80.4,82.6 A1.4,1.4 0 0 1 79,84 L76,84 A1.4,1.4 0 0 1 74.6,82.6 L74.6,36.4 A1.4,1.4 0 0 1 76,35 Z"
+        android:fillColor="#FFF3E0" android:fillAlpha="0.92" />
+
+    <!-- ورقة العشب المغروسة بالفتحة العلوية: نصف داكن + نصف فاتح. -->
+    <path
+        android:pathData="M54,7 L51.87,8.12 L50.2,9.25 L48.7,10.38 L47.34,11.5 L46.13,12.62 L45.06,13.75 L44.14,14.88 L43.38,16 L42.78,17.12 L42.35,18.25 L42.09,19.38 L42,20.5 L42.09,21.62 L42.35,22.75 L42.78,23.88 L43.38,25 L44.14,26.12 L45.06,27.25 L46.13,28.38 L47.34,29.5 L48.7,30.62 L50.2,31.75 L51.87,32.88 L54,34 L56.13,32.88 L57.8,31.75 L59.3,30.62 L60.66,29.5 L61.87,28.38 L62.94,27.25 L63.86,26.12 L64.62,25 L65.22,23.88 L65.65,22.75 L65.91,21.62 L66,20.5 L65.91,19.38 L65.65,18.25 L65.22,17.12 L64.62,16 L63.86,14.88 L62.94,13.75 L61.87,12.62 L60.66,11.5 L59.3,10.38 L57.8,9.25 L56.13,8.12 Z"
+        android:fillColor="#1B6E37" />
+    <path
+        android:pathData="M54,7 L56.13,8.12 L57.8,9.25 L59.3,10.38 L60.66,11.5 L61.87,12.62 L62.94,13.75 L63.86,14.88 L64.62,16 L65.22,17.12 L65.65,18.25 L65.91,19.38 L66,20.5 L65.91,21.62 L65.65,22.75 L65.22,23.88 L64.62,25 L63.86,26.12 L62.94,27.25 L61.87,28.38 L60.66,29.5 L59.3,30.62 L57.8,31.75 L56.13,32.88 L54,34 Z"
+        android:fillColor="#44A858" />
+    <path
+        android:pathData="M54,8 L54,33"
+        android:strokeColor="#D2EED2"
+        android:strokeWidth="0.9"
+        android:strokeAlpha="0.75"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M54,17.5 L59.9,14.4 M54,17.5 L48.1,14.4 M54,23.6 L60.9,20 M54,23.6 L47.1,20 M54,29.5 L58.5,26.9 M54,29.5 L49.5,26.9"
+        android:strokeColor="#D2EED2"
+        android:strokeWidth="0.7"
+        android:strokeAlpha="0.55"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- خطاف النيون السماوي: توهّج مُحاكى بطبقات متزايدة الشفافية خلف الخط الأساسي. -->
+    <path android:pathData="M68.09,71.83 A11,11 0 1 1 80.34,57.24"
+        android:strokeColor="#46EBDC" android:strokeAlpha="0.12" android:strokeWidth="7.5"
+        android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M68.09,71.83 A11,11 0 1 1 80.34,57.24"
+        android:strokeColor="#46EBDC" android:strokeAlpha="0.28" android:strokeWidth="4.6"
+        android:strokeLineCap="round" android:fillColor="#00000000" />
+    <path android:pathData="M68.09,71.83 A11,11 0 1 1 80.34,57.24"
+        android:strokeColor="#5FF4E6" android:strokeWidth="2.4"
+        android:strokeLineCap="round" android:fillColor="#00000000" />
+</vector>

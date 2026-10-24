@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    أيقونة شاشة البداية (النظام). أُعيدت بلون واحد أخضر غامق (نفس
+    brandGreen المستخدم لأيقونة شاشة البداية داخل التطبيق Compose)
+    بدل التقسيم السابق للورقة إلى نصفين بلونين (أبيض/أخضر فاتح) الذي
+    كان يفقد وضوحه عند التصوير/الضغط. تُعرض الآن فوق دائرة بيضاء
+    (windowSplashScreenIconBackgroundColor) لتطابق تماماً دائرة الزجاج
+    البيضاء المحيطة بأيقونة الورقة في شاشة البداية داخل التطبيق. مساحة
+    اللوحة زيدت مع تصغير الورقة نسبياً (بدل الامتداد حافة لحافة) حتى
+    تترك هامشاً مريحاً داخل الدائرة البيضاء التي يرسمها النظام تلقائياً.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="132"
+    android:viewportHeight="132">
+    <group android:translateX="18" android:translateY="18">
+        <path android:fillColor="#1B5E20" android:pathData="M48,78 C45,62 45,48 50,34 C55,20 68,13 80,13 C80,27 77,40 68,49 C60,57 52,60 48,60 Z"/>
+        <path android:fillColor="#1B5E20" android:pathData="M48,78 C35,67 24,55 21,42 C18,29 24,19 34,13 C45,23 51,34 51,47 C51,59 48,68 48,78 Z"/>
+    </group>
+</vector>
