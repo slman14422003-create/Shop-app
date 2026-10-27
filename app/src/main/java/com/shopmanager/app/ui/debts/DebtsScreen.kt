@@ -658,7 +658,7 @@ private fun OverdueTag() {
         transition.animateFloat(
             initialValue = 1f,
             targetValue = 0.55f,
-            animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(MotionSpecs.breatheMs), RepeatMode.Reverse),
             label = "overduePulseAlpha"
         ).value
     } else 1f

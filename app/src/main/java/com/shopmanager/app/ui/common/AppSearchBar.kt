@@ -124,7 +124,7 @@ fun AppSearchBar(
                                 Text(
                                     placeholder,
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
                                 )
                             }
                             inner()
@@ -171,7 +171,7 @@ fun AppCapsuleSearchField(
     val low = com.shopmanager.app.data.performance.LocalPerformanceTier.current ==
         com.shopmanager.app.data.performance.PerformanceTier.LOW
     val colorSpec = if (low) androidx.compose.animation.core.snap<androidx.compose.ui.graphics.Color>()
-    else androidx.compose.animation.core.tween<androidx.compose.ui.graphics.Color>(150)
+    else androidx.compose.animation.core.tween<androidx.compose.ui.graphics.Color>(com.shopmanager.app.data.performance.MotionSpecs.baseMs)
     val borderColor by animateColorAsState(
         targetValue = if (focused) cs.onSurface.copy(alpha = 0.55f) else cs.onSurface.copy(alpha = 0.08f),
         animationSpec = colorSpec, label = "capsuleSearchBorder"
@@ -222,7 +222,7 @@ fun AppCapsuleSearchField(
                         Text(
                             placeholder,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = cs.onSurfaceVariant.copy(alpha = 0.65f)
+                            color = cs.onSurfaceVariant.copy(alpha = 0.9f)
                         )
                     }
                     inner()

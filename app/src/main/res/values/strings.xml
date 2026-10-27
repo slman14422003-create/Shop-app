@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">إدارة المحل</string>
+    <string name="widget_description">إجمالي الديون وعدد النواقص</string>
+    <string name="widget_total_debt">إجمالي الديون</string>
+    <string name="widget_shortages">عدد النواقص</string>
+    <string name="widget_empty_value">—</string>
+    <string name="widget_not_synced">افتح التطبيق للمزامنة</string>
+    <string name="widget_updated_at">آخر تحديث: %1$s</string>
 </resources>

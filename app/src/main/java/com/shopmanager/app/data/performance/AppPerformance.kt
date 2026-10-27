@@ -52,6 +52,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -572,6 +573,62 @@ object MotionSpecs {
                     scaleOut(tween(260, easing = claudeEasing), targetScale = 1.04f))
     }
 
+    // ───────────────────────── unified motion vocabulary ─────────────────────────
+    // Every screen should pick from these names instead of hand-written tween(...) values.
+    const val fastMs = 120
+    const val baseMs = 180
+    const val slowMs = 240
+    const val emphasizedMs = 360
+    const val breatheMs = 1100
+    const val cardStaggerMs = 30L
+    const val cardStaggerCount = 5
+
+    /** Standard easing for small, utility motion. */
+    val standardEasing: Easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
+
+    /** Emphasized easing for entrances and transitions (same curve as [claudeEasing]). */
+    val emphasizedEasing: Easing = claudeEasing
+
+    /** True when the system animation scale is set to 0 (remove animations). */
+    @Composable
+    fun reduceMotion(): Boolean {
+        val ctx = LocalContext.current
+        return remember {
+            runCatching {
+                Settings.Global.getFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+            }.getOrDefault(false)
+        }
+    }
+
+    @Composable
+    fun <T> enterSpec(): FiniteAnimationSpec<T> = contentTween()
+
+    @Composable
+    fun <T> exitSpec(): FiniteAnimationSpec<T> = tween(
+        durationMillis = when (LocalPerformanceTier.current) {
+            PerformanceTier.LOW -> 75
+            PerformanceTier.BALANCED -> balancedFastMs
+            PerformanceTier.STANDARD -> (160 * durationScale()).toInt()
+        },
+        easing = standardEasing
+    )
+
+    @Composable
+    fun itemPlacement(): FiniteAnimationSpec<IntOffset> = reorderSpring()
+
+    @Composable
+    fun <T> pressSpec(): FiniteAnimationSpec<T> = quickSpring()
+
+    @Composable
+    fun expandSpec(): FiniteAnimationSpec<IntSize> = expandSpring()
+
+    /** Dialog / sheet appearance and disappearance. */
+    @Composable
+    fun dialogEnter(): EnterTransition = fadeIn(enterSpec()) + scaleIn(enterSpec(), initialScale = 0.92f)
+
+    @Composable
+    fun dialogExit(): ExitTransition = fadeOut(exitSpec()) + scaleOut(exitSpec(), targetScale = 0.96f)
+
     // ───────────────────────── دورات الحركة اللانهائية (تُفعَّل حسب المستوى فقط) ─────────────────────────
     const val shimmerMs = 1300      // لمعان هيكل التحميل (القوي)
     const val pulseMs = 900         // نبض هيكل التحميل (المتوازن)
@@ -618,7 +675,7 @@ fun InteractionSource.collectDelayedPressedAsState(delayMs: Long = 60L): State<B
  */
 @Composable
 fun Modifier.sheenSweep(): Modifier {
-    if (LocalPerformanceTier.current != PerformanceTier.STANDARD) return this
+    if (LocalPerformanceTier.current != PerformanceTier.STANDARD || MotionSpecs.reduceMotion()) return this
     val t = rememberInfiniteTransition(label = "sheenSweep")
     val phase = t.animateFloat(
         initialValue = 0f,
@@ -718,10 +775,11 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
         PerformanceTier.BALANCED -> 6
         PerformanceTier.STANDARD -> MAX_ANIMATED_INDEX
     }
+    val reduce = MotionSpecs.reduceMotion()
     val played = rememberSaveable { mutableStateOf(false) }
     // تُحسب مرة واحدة عند دخول هذا الصف التركيب (لا تتغير بعدها) — وهذا ما
     // يجعل الشرط أدناه ثابتاً ولا يقطع الحركة حين نكتب played = true.
-    val shouldAnimate = remember { !played.value && index <= maxIndex }
+    val shouldAnimate = remember { !reduce && !played.value && index <= maxIndex }
     val progress = remember { Animatable(if (shouldAnimate) 0f else 1f) }
     // تعلّمناها من تطبيق الملاحظات (Motion.enter: LAYER_TYPE_NONE عند انتهاء الحركة): graphicsLayer
     // يُبقي RenderNode/طبقة لكل صف حتى بعد انتهاء حركته. هنا يُزال المُعدِّل كلياً بعد الانتهاء،
@@ -771,5 +829,5 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
  */
 @Composable
 fun Modifier.tierAnimateContentSize(): Modifier =
-    if (LocalPerformanceTier.current == PerformanceTier.LOW) this
+    if (LocalPerformanceTier.current == PerformanceTier.LOW || MotionSpecs.reduceMotion()) this
     else this.animateContentSize(MotionSpecs.expandSpring())

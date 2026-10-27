@@ -17,7 +17,11 @@ service cloud.firestore {
                             && okStr(request.resource.data, 'phone', 40)
                             && okStr(request.resource.data, 'date', 40)
                             && okNum(request.resource.data, 'amount')
-                            && okNum(request.resource.data, 'createdAt');
+                            && okNum(request.resource.data, 'createdAt')
+                            && okNum(request.resource.data, 'dueDate')
+                            && (!('installments' in request.resource.data)
+                                || (request.resource.data.installments is list
+                                    && request.resource.data.installments.size() <= 60));
     }
 
     match /debts/{id} {

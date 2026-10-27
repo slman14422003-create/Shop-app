@@ -65,6 +65,16 @@ val AppGroupSmallRadius = 4.dp
 val AppGroupGap = 3.dp
 val AppSectionGap = 14.dp
 val AppScreenPadding = 14.dp
+val AppMinTouchTarget = 48.dp
+val AppSpace2 = 2.dp
+val AppSpace6 = 6.dp
+val AppSpace10 = 10.dp
+val AppSpace20 = 20.dp
+val AppSpaceXs = 4.dp
+val AppSpaceSm = 8.dp
+val AppSpaceMd = 12.dp
+val AppSpaceLg = 16.dp
+val AppSpaceXl = 24.dp
 
 /** شكل صف داخل مجموعة عمودية: أول/وسط/أخير. */
 fun groupedRowShape(index: Int, lastIndex: Int): Shape {

@@ -136,12 +136,24 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private val _undo = MutableStateFlow<(() -> Unit)?>(null)
+    val undo: StateFlow<(() -> Unit)?> = _undo
+    fun clearUndo() { _undo.value = null }
+    fun performUndo() {
+        val action = _undo.value ?: return
+        _undo.value = null
+        action()
+    }
+
     fun deleteNote(note: ImportantNote) {
         viewModelScope.launch {
             try {
                 repo.deleteNote(note.id)
                 NoteReminderWorker.cancel(getApplication(), note.id)
                 NotificationHelper.cancelNoteReminderNotification(getApplication(), note.id)
+                _undo.value = {
+                    addNote(note.title, note.content, note.linkType, note.linkedId, note.linkedName, note.reminderAt)
+                }
                 _message.value = "تم حذف الملاحظة"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {

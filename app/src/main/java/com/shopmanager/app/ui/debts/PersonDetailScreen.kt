@@ -1,5 +1,13 @@
 package com.shopmanager.app.ui.debts
 
+import com.shopmanager.app.ui.common.AppSpace10
+import com.shopmanager.app.ui.common.AppSpace2
+import com.shopmanager.app.ui.common.AppSpace20
+import com.shopmanager.app.ui.common.AppSpace6
+import com.shopmanager.app.ui.common.AppSpaceLg
+import com.shopmanager.app.ui.common.AppSpaceMd
+import com.shopmanager.app.ui.common.AppSpaceSm
+import com.shopmanager.app.ui.common.AppSpaceXs
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -189,7 +197,7 @@ fun PersonDetailScreen(
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 28.dp),
+            contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = AppSpace6, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(AppGroupGap)
         ) {
             item {
@@ -240,15 +248,31 @@ fun PersonDetailScreen(
 
             item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
 
+            item {
+                PersonScheduleCard(
+                    person = person,
+                    totalOwed = total,
+                    currency = AppSettingsState.currencySymbol,
+                    onSetDueDate = { viewModel.saveSchedule(person, it, person.installments) },
+                    onAddInstallment = { viewModel.saveSchedule(person, person.dueDate, person.installments + it) },
+                    onDeleteInstallment = { removed ->
+                        viewModel.saveSchedule(person, person.dueDate, person.installments.filter { it.id != removed.id })
+                    },
+                    onPayInstallment = { viewModel.payInstallment(person, it) }
+                )
+            }
+
+            item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
+
             item { AppSectionTitle("سجل الديون") }
 
-            item { Spacer(Modifier.height(4.dp)) }
+            item { Spacer(Modifier.height(AppSpaceXs)) }
 
             if (debts.isEmpty()) {
                 item {
                     AppRowSurface(shape = RoundedCornerShape(AppGroupLargeRadius)) {
                         Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 18.dp),
+                            Modifier.fillMaxWidth().padding(horizontal = AppSpaceLg, vertical = 18.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
@@ -256,7 +280,7 @@ fun PersonDetailScreen(
                                 modifier = Modifier.size(24.dp),
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(Modifier.width(16.dp))
+                            Spacer(Modifier.width(AppSpaceLg))
                             Text(
                                 "لا يوجد ديون مسجلة",
                                 style = MaterialTheme.typography.bodyLarge,
@@ -300,7 +324,7 @@ fun PersonDetailScreen(
                 )
             }
 
-            item { Spacer(Modifier.height(4.dp)) }
+            item { Spacer(Modifier.height(AppSpaceXs)) }
 
             if (linkedNotes.isEmpty()) {
                 item {
@@ -399,7 +423,7 @@ fun PersonDetailScreen(
                             "رقم الهاتف غير صحيح",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                            modifier = Modifier.padding(top = AppSpace10, start = AppSpaceSm)
                         )
                     }
                 }
@@ -514,7 +538,7 @@ private fun PersonHeader(
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .padding(horizontal = AppSpace20, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AppIconCircle(color = avatarColor, size = 52.dp) {
@@ -525,7 +549,7 @@ private fun PersonHeader(
                     style = MaterialTheme.typography.titleLarge
                 )
             }
-            Spacer(Modifier.width(16.dp))
+            Spacer(Modifier.width(AppSpaceLg))
             Column(Modifier.weight(1f)) {
                 Text(
                     "إجمالي الديون",
@@ -539,11 +563,11 @@ private fun PersonHeader(
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(AppSpaceMd))
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.onSurface) {
                 Text(
                     "$debtsCount عملية",
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = AppScreenPadding, vertical = AppSpace6),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.surface
                 )
@@ -552,25 +576,25 @@ private fun PersonHeader(
         // رقم العميل (اختياري): يظهر مع أزرار تواصل سريعة فقط إن كان محفوظاً.
         if (phone.isNotBlank()) {
             HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 20.dp),
+                modifier = Modifier.padding(horizontal = AppSpace20),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
             )
             Text(
                 "\u200E$phone",
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp),
+                modifier = Modifier.padding(start = AppSpace20, end = AppSpace20, top = AppSpaceMd),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                Modifier.fillMaxWidth().padding(horizontal = AppScreenPadding, vertical = AppSpace10),
+                horizontalArrangement = Arrangement.spacedBy(AppSpaceSm)
             ) {
                 ContactActionButton(Modifier.weight(1f), Icons.Default.Call, "اتصال", MaterialTheme.colorScheme.onSurface, onCall)
                 ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Chat, "واتساب", LocalSemanticColors.current.success, onWhatsApp)
                 ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Send, "رسالة", LocalSemanticColors.current.info, onSms)
             }
             Row(
-                Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, bottom = 10.dp)
+                Modifier.fillMaxWidth().padding(start = AppScreenPadding, end = AppScreenPadding, bottom = AppSpace10)
             ) {
                 ContactActionButton(Modifier.weight(1f), Icons.Default.Description, "إرسال كشف الحساب عبر واتساب", LocalSemanticColors.current.success, onStatement)
             }
@@ -594,12 +618,12 @@ private fun ContactActionButton(
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            Modifier.fillMaxWidth().padding(vertical = AppSpace10),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(AppSpace6))
             Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
         }
     }
@@ -621,13 +645,13 @@ private fun AddDebtCard(
     // طلب "دمج نمط الـ Glassmorphism": نفس البطاقة، بستايل الزجاج الموحّد
     // (GlassCard) بدل الـ Surface المسطحة - راجع الشرح الكامل بـ GlassCard.kt.
     AppCard {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(AppSpaceLg)) {
             Text(
                 if (isEditing) "تعديل الدين" else "إضافة دين جديد",
                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
                 fontWeight = FontWeight.SemiBold
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(AppSpace10))
             Row(verticalAlignment = Alignment.Top) {
                 AppTextField(
                     value = amount, onValueChange = onAmountChange,
@@ -636,7 +660,7 @@ private fun AddDebtCard(
                     singleLine = true,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(AppSpaceSm))
                 AppTextField(
                     value = date, onValueChange = onDateChange,
                     label = "التاريخ",
@@ -645,7 +669,7 @@ private fun AddDebtCard(
                     modifier = Modifier.weight(1f)
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(AppSpaceSm))
             AppTextField(
                 value = note, onValueChange = onNoteChange,
                 label = "ملاحظة (اختياري)",
@@ -655,8 +679,8 @@ private fun AddDebtCard(
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(14.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(AppSectionGap))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpaceSm)) {
                 AppPillButton(
                     label = if (isEditing) "حفظ التعديل" else "إضافة الدين",
                     onClick = onSubmit,
@@ -685,7 +709,7 @@ private fun DebtRow(
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 64.dp)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = AppScreenPadding, vertical = AppSpace10),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(Modifier.weight(1f)) {
@@ -702,15 +726,15 @@ private fun DebtRow(
                 )
                 if (debt.note.isNotBlank()) {
                     Row(
-                        Modifier.padding(top = 2.dp),
+                        Modifier.padding(top = AppSpace2),
                         verticalAlignment = Alignment.Top
                     ) {
                         Icon(
                             Icons.Default.Notes, contentDescription = null,
-                            modifier = Modifier.size(14.dp).padding(top = 2.dp),
+                            modifier = Modifier.size(14.dp).padding(top = AppSpace2),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.width(4.dp))
+                        Spacer(Modifier.width(AppSpaceXs))
                         Text(
                             debt.note,
                             style = MaterialTheme.typography.bodySmall,
@@ -720,7 +744,7 @@ private fun DebtRow(
                     }
                 }
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(AppSpaceSm))
             AppActionPill(
                 actions = listOf(
                     ActionSpec(Icons.Default.Check, "تسجيل السداد", LocalSemanticColors.current.success, onMarkPaid),
@@ -749,7 +773,7 @@ private fun LinkedNoteRow(
 ) {
     AppRowSurface(shape = shape) {
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 10.dp),
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = AppScreenPadding, vertical = AppSpace10),
             verticalAlignment = Alignment.CenterVertically
         ) {
             ActionIconButton(
@@ -758,7 +782,7 @@ private fun LinkedNoteRow(
                 contentDescription = "تم",
                 onClick = onToggleDone
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(AppSpace10))
             Column(Modifier.weight(1f)) {
                 Text(
                     note.title,
@@ -782,7 +806,7 @@ private fun LinkedNoteRow(
                     )
                 }
                 if (note.reminderAt > 0) {
-                    Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.padding(top = AppSpace2), verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             Icons.Default.Schedule, contentDescription = null,
                             modifier = Modifier.size(12.dp),
@@ -799,7 +823,7 @@ private fun LinkedNoteRow(
                     }
                 }
             }
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(AppSpaceSm))
             AppActionPill(
                 actions = listOf(
                     ActionSpec(Icons.Default.Edit, "تعديل الملاحظة", null, onEdit),

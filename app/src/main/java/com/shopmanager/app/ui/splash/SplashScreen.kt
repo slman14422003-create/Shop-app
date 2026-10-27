@@ -1,6 +1,6 @@
 package com.shopmanager.app.ui.splash
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,9 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -52,42 +50,44 @@ import com.shopmanager.app.data.performance.MotionSpecs
  * بحيث تقصر على الشاشات 60Hz. الألوان كلها من MaterialTheme لتتبع وضع التطبيق
  * (فاتح/داكن) المختار من الإعدادات وليس وضع النظام فقط.
  */
+/** Whole splash animation length (ms) before the 60Hz scale; kept under ~600ms. */
+private const val SPLASH_ANIM_MS = 600
+
 @Composable
 fun AppSplashScreen(modifier: Modifier = Modifier, motion: LogoMotion = LogoMotion.ONCE) {
-    var settled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { settled = true }
-
+    // One progress value (0..1) drives the whole splash; tile, title and credit are
+    // staggered slices of it, so there is a single animation to run and to hand off from.
+    val progress = remember { Animatable(0f) }
+    val reduce = MotionSpecs.reduceMotion()
     val scale = MotionSpecs.durationScale()
-    fun ms(base: Int) = (base * scale).toInt()
-
-    val tileProgress by animateFloatAsState(
-        targetValue = if (settled) 1f else 0f,
-        animationSpec = tween(ms(520), easing = MotionSpecs.claudeEasing),
-        label = "splashTile"
-    )
-    val titleProgress by animateFloatAsState(
-        targetValue = if (settled) 1f else 0f,
-        animationSpec = tween(ms(460), delayMillis = ms(140), easing = MotionSpecs.claudeEasing),
-        label = "splashTitle"
-    )
-    val creditProgress by animateFloatAsState(
-        targetValue = if (settled) 1f else 0f,
-        animationSpec = tween(ms(420), delayMillis = ms(280), easing = MotionSpecs.claudeEasing),
-        label = "splashCredit"
-    )
+    LaunchedEffect(reduce, motion) {
+        if (reduce || motion == LogoMotion.NONE) {
+            progress.snapTo(1f)
+        } else {
+            progress.animateTo(
+                1f,
+                animationSpec = tween(
+                    durationMillis = (SPLASH_ANIM_MS * scale).toInt(),
+                    easing = MotionSpecs.emphasizedEasing
+                )
+            )
+        }
+    }
+    fun slice(from: Float, to: Float): Float = ((progress.value - from) / (to - from)).coerceIn(0f, 1f)
 
     val cs = MaterialTheme.colorScheme
 
     // رمز التطبيق: اقتصادي = ثابت، متوازن = قفزة دخول نابضة، مرتفع = + نبضة حلقة مستمرة.
-    val pop = remember { androidx.compose.animation.core.Animatable(if (motion == LogoMotion.NONE) 1f else 0.7f) }
-    LaunchedEffect(motion) {
-        if (motion == LogoMotion.NONE) pop.snapTo(1f)
-        else pop.animateTo(1f, androidx.compose.animation.core.spring(androidx.compose.animation.core.Spring.DampingRatioMediumBouncy, androidx.compose.animation.core.Spring.StiffnessLow))
+    val pop = remember { Animatable(if (motion == LogoMotion.NONE) 1f else 0.7f) }
+    val popSpec = MotionSpecs.popInSpring()
+    LaunchedEffect(motion, reduce) {
+        if (motion == LogoMotion.NONE || reduce) pop.snapTo(1f)
+        else pop.animateTo(1f, popSpec)
     }
     val ring = if (motion == LogoMotion.LOOP) {
         androidx.compose.animation.core.rememberInfiniteTransition(label = "splashRing").animateFloat(
             0f, 1f,
-            androidx.compose.animation.core.infiniteRepeatable(tween(1800, easing = androidx.compose.animation.core.LinearEasing)),
+            androidx.compose.animation.core.infiniteRepeatable(tween(MotionSpecs.floatMs, easing = androidx.compose.animation.core.LinearEasing)),
             label = "ring"
         )
     } else null
@@ -111,6 +111,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier, motion: LogoMotion = LogoMoti
                         }
                     }
                     .graphicsLayer {
+                        val tileProgress = slice(0f, 0.7f)
                         val s = (0.9f + 0.1f * tileProgress) * pop.value
                         scaleX = s
                         scaleY = s
@@ -139,6 +140,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier, motion: LogoMotion = LogoMoti
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.graphicsLayer {
+                    val titleProgress = slice(0.2f, 0.85f)
                     alpha = titleProgress
                     translationY = (1f - titleProgress) * 12.dp.toPx()
                 }
@@ -152,7 +154,7 @@ fun AppSplashScreen(modifier: Modifier = Modifier, motion: LogoMotion = LogoMoti
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 40.dp)
-                .graphicsLayer { alpha = creditProgress }
+                .graphicsLayer { alpha = slice(0.4f, 1f) }
         ) {
             Text(
                 "SEMO STUDIO",

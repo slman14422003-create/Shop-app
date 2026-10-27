@@ -88,7 +88,15 @@ class UsageLearner(context: Context) {
         store: MissingFinderStore,
         catalog: List<MaterialCatalogItem>,
         currentShortages: Collection<String>
-    ): HomeSuggestion? {
+    ): HomeSuggestion? = pickSuggestions(store, catalog, currentShortages, 1).firstOrNull()
+
+    /** Ranked suggestions (best first), at most [max]; empty when nothing is strong enough. */
+    fun pickSuggestions(
+        store: MissingFinderStore,
+        catalog: List<MaterialCatalogItem>,
+        currentShortages: Collection<String>,
+        max: Int
+    ): List<HomeSuggestion> {
         preload()
         val slot = slotNow()
         data class Cand(val s: HomeSuggestion, val p: Double)
@@ -124,7 +132,7 @@ class UsageLearner(context: Context) {
             cands += Cand(HomeSuggestion(SuggestionKind.PRICES_REVIEW), 1.6 + it)
         }
 
-        val best = cands
+        val ranked = cands
             .map { c ->
                 val k = c.s.kind.ordinal
                 var p = c.p * feedbackFactor(k)
@@ -132,14 +140,15 @@ class UsageLearner(context: Context) {
                 Cand(c.s, p)
             }
             .filter { it.p >= 0.8 }
-            .maxByOrNull { it.p }
-            ?.s
+            .sortedByDescending { it.p }
+            .take(max.coerceAtLeast(1))
+            .map { it.s }
 
-        if (best != null) {
-            lastKind = best.kind.ordinal
+        ranked.firstOrNull()?.let {
+            lastKind = it.kind.ordinal
             writer.trigger()
         }
-        return best
+        return ranked
     }
 
     fun flushNow() = writer.flushNow()

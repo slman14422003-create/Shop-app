@@ -44,16 +44,7 @@ class DebtsRepository {
                     close(error)
                     return@addSnapshotListener
                 }
-                val persons = snapshot?.documents?.map { doc ->
-                    Person(
-                        id = doc.id,
-                        name = doc.getString("name") ?: "",
-                        amount = doc.getDouble("amount") ?: 0.0,
-                        date = doc.getString("date") ?: "",
-                        createdAt = doc.getLong("createdAt") ?: 0L,
-                        phone = doc.getString("phone") ?: ""
-                    )
-                } ?: emptyList()
+                val persons = snapshot?.documents?.map { it.toPerson() } ?: emptyList()
                 trySend(persons.sortedByDescending { it.createdAt })
             }
         awaitClose { registration.remove() }
@@ -328,10 +319,7 @@ class DebtsRepository {
 
     suspend fun restorePerson(person: Person, debts: List<Debt>) = withTimeout(WRITE_TIMEOUT_MS) {
         db.collection("persons").document(person.id).set(
-            mapOf(
-                "name" to person.name, "amount" to person.amount, "date" to person.date,
-                "createdAt" to person.createdAt, "phone" to person.phone
-            )
+            person.toFields()
         ).awaitQueued()
         restoreDebtsNoTimeout(debts)
     }
@@ -355,16 +343,7 @@ class DebtsRepository {
     suspend fun fetchAllForBackup(): Pair<List<Person>, List<Debt>> = withTimeout(WRITE_TIMEOUT_MS) {
         val personsSnap = db.collection("persons").get().await()
         val debtsSnap = db.collection("debts").get().await()
-        val persons = personsSnap.documents.map { doc ->
-            Person(
-                id = doc.id,
-                name = doc.getString("name") ?: "",
-                amount = doc.getDouble("amount") ?: 0.0,
-                date = doc.getString("date") ?: "",
-                createdAt = doc.getLong("createdAt") ?: 0L,
-                phone = doc.getString("phone") ?: ""
-            )
-        }
+        val persons = personsSnap.documents.map { it.toPerson() }
         val debts = debtsSnap.documents.map { it.toDebt() }
         persons to debts
     }
@@ -384,10 +363,7 @@ class DebtsRepository {
         val existingDebts = db.collection("debts").get().await()
 
         val personWrites = persons.filter { it.id.isNotBlank() }.map {
-            db.collection("persons").document(it.id) to mapOf(
-                "name" to it.name, "amount" to it.amount, "date" to it.date, "createdAt" to it.createdAt,
-                "phone" to it.phone
-            )
+            db.collection("persons").document(it.id) to it.toFields()
         }
         val debtWrites = debts.filter { it.id.isNotBlank() }.map {
             db.collection("debts").document(it.id) to mapOf(
@@ -414,6 +390,44 @@ class DebtsRepository {
         }
         Unit
     }
+
+    suspend fun updateSchedule(personId: String, dueDate: Long, installments: List<Installment>) =
+        withTimeout(WRITE_TIMEOUT_MS) {
+            db.collection("persons").document(personId).update(
+                mapOf(
+                    "dueDate" to dueDate,
+                    "installments" to installments.map { it.toMap() }
+                )
+            ).awaitQueued()
+            Unit
+        }
+
+    private fun Installment.toMap(): Map<String, Any> =
+        mapOf("id" to id, "amount" to amount, "date" to date, "paid" to paid)
+
+    private fun Person.toFields(): Map<String, Any> = mapOf(
+        "name" to name, "amount" to amount, "date" to date, "createdAt" to createdAt,
+        "phone" to phone, "dueDate" to dueDate, "installments" to installments.map { it.toMap() }
+    )
+
+    private fun com.google.firebase.firestore.DocumentSnapshot.toPerson() = Person(
+        id = id,
+        name = getString("name") ?: "",
+        amount = getDouble("amount") ?: 0.0,
+        date = getString("date") ?: "",
+        createdAt = getLong("createdAt") ?: 0L,
+        phone = getString("phone") ?: "",
+        dueDate = getLong("dueDate") ?: 0L,
+        installments = (get("installments") as? List<*>)?.mapNotNull { raw ->
+            val m = raw as? Map<*, *> ?: return@mapNotNull null
+            Installment(
+                id = m["id"] as? String ?: "",
+                amount = (m["amount"] as? Number)?.toDouble() ?: 0.0,
+                date = (m["date"] as? Number)?.toLong() ?: 0L,
+                paid = m["paid"] as? Boolean ?: false
+            )
+        } ?: emptyList()
+    )
 
     private fun com.google.firebase.firestore.DocumentSnapshot.toDebt() = Debt(
         id = id,

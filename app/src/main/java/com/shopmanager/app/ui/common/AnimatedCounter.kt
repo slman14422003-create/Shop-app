@@ -91,7 +91,7 @@ fun AnimatedCounterText(
             progress.snapTo(0f)
             progress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = (380 * durationScale).toInt(), easing = MotionSpecs.claudeEasing)
+                animationSpec = tween(durationMillis = (MotionSpecs.emphasizedMs * durationScale).toInt(), easing = MotionSpecs.claudeEasing)
             )
         }
     }

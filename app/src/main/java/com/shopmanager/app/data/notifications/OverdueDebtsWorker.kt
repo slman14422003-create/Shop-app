@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.shopmanager.app.data.FirebaseModule
 import com.shopmanager.app.data.debts.DebtsRepository
+import com.shopmanager.app.data.debts.OverdueRule
 import com.shopmanager.app.data.settings.SettingsRepository
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -32,16 +33,7 @@ class OverdueDebtsWorker(appContext: Context, params: WorkerParameters) :
         return try {
             val (persons, debts) = DebtsRepository().fetchAllForBackup()
             val days = settings.overdueDays
-            val limit = now - days * DAY_MS
-            val format = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
-            val overduePersonIds = debts
-                .filter { debt ->
-                    debt.amount > 0 && runCatching { format.parse(debt.date.trim())?.time }.getOrNull()
-                        ?.let { it < limit } == true
-                }
-                .map { it.personId }
-                .toSet()
-            val names = persons.filter { it.id in overduePersonIds }.map { it.name }.sorted()
+            val names = OverdueRule.compute(persons, debts, days, now).map { it.name }.sorted()
             if (names.isNotEmpty()) {
                 NotificationHelper.showOverdueDebtsNotification(applicationContext, names, days)
                 prefs.edit().putLong(KEY_LAST_NOTIFIED, now).apply()

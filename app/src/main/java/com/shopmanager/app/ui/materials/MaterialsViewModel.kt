@@ -13,6 +13,8 @@ import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
 import com.shopmanager.app.data.materials.MissingFinderStore
 import com.shopmanager.app.data.materials.PendingMaterial
+import com.shopmanager.app.data.materials.PriceChange
+import com.shopmanager.app.data.materials.PriceHistoryStore
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.notifications.RemoteChangeProcessor
 import com.shopmanager.app.data.notifications.SelfChangeLedger
@@ -120,6 +122,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     private val usage = LearningHub.usage(application)
     private val learnVersion = MutableStateFlow(0)
 
+    val priceHistory: StateFlow<Map<String, List<PriceChange>>> = PriceHistoryStore.flow(application)
+
     init {
         viewModelScope.launch(LearningHub.io) {
             finderStore.preload()
@@ -127,6 +131,21 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             learnVersion.update { it + 1 }
         }
         observeResolved()
+        observePriceChanges()
+    }
+
+    private fun observePriceChanges() {
+        viewModelScope.launch(Dispatchers.Default) {
+            var prev: Map<String, Double>? = null
+            uiState.collect { st ->
+                if (st.isLoading) return@collect
+                val before = prev
+                if (before != null && before.isNotEmpty() && before != st.prices) {
+                    PriceHistoryStore.recordDiff(getApplication(), before, st.prices)
+                }
+                prev = st.prices
+            }
+        }
     }
 
     /**
@@ -194,8 +213,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         LearningHub.scope.launch { usage.record(area) }
     }
 
-    private val _homeSuggestion = MutableStateFlow<HomeSuggestion?>(null)
-    val homeSuggestion: StateFlow<HomeSuggestion?> = _homeSuggestion
+    private val _homeSuggestions = MutableStateFlow<List<HomeSuggestion>>(emptyList())
+    val homeSuggestions: StateFlow<List<HomeSuggestion>> = _homeSuggestions
 
     private var enterJob: Job? = null
     private var lastEnterAt = 0L
@@ -210,23 +229,21 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             val items = withTimeoutOrNull(2500L) { catalog.first { it.isNotEmpty() } } ?: catalog.value
             val current = (withTimeoutOrNull(2500L) { uiState.first { !it.isLoading } } ?: uiState.value)
                 .materials.map { it.name }
-            val pick = withContext(LearningHub.io) {
+            val picks = withContext(LearningHub.io) {
                 finderStore.preload()
-                usage.pickSuggestion(finderStore, items, current)
+                usage.pickSuggestions(finderStore, items, current, 4)
             }
-            _homeSuggestion.value = pick
+            _homeSuggestions.value = picks
         }
     }
 
-    fun onSuggestionAccepted() {
-        val s = _homeSuggestion.value ?: return
-        _homeSuggestion.value = null
+    fun onSuggestionAccepted(s: HomeSuggestion) {
+        _homeSuggestions.value = _homeSuggestions.value.filter { it.kind != s.kind }
         LearningHub.scope.launch { usage.recordFeedback(s.kind, true) }
     }
 
-    fun onSuggestionDismissed() {
-        val s = _homeSuggestion.value ?: return
-        _homeSuggestion.value = null
+    fun onSuggestionDismissed(s: HomeSuggestion) {
+        _homeSuggestions.value = _homeSuggestions.value.filter { it.kind != s.kind }
         LearningHub.scope.launch { usage.recordFeedback(s.kind, false) }
         if (s.names.isNotEmpty()) finderStore.recordSkipped(s.names)
     }
@@ -346,11 +363,26 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    private val _undo = MutableStateFlow<(() -> Unit)?>(null)
+    val undo: StateFlow<(() -> Unit)?> = _undo
+    fun clearUndo() { _undo.value = null }
+    fun performUndo() {
+        val action = _undo.value ?: return
+        _undo.value = null
+        action()
+    }
+
     fun deleteMaterial(id: String) {
+        val snapshot = uiState.value.materials.firstOrNull { it.id == id }
         viewModelScope.launch {
             try {
                 markDeletedHere(listOf(id))
                 repo.deleteMaterial(id)
+                if (snapshot != null) {
+                    _undo.value = {
+                        addMaterial(snapshot.name, snapshot.quantity, snapshot.unit, snapshot.notes, snapshot.important)
+                    }
+                }
                 _message.value = "تم حذف المادة بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
@@ -419,9 +451,11 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setPrice(materialName: String, price: Double) {
+        val before = uiState.value.prices[materialName]
         viewModelScope.launch {
             try {
                 repo.setPrice(materialName, price)
+                PriceHistoryStore.record(getApplication(), materialName, before, price)
                 _message.value = "تم حفظ السعر"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
@@ -433,9 +467,11 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     /** حفظ كل الأسعار المعدّلة دفعة واحدة في السحابة مع رسالة واحدة. */
     fun setPrices(prices: Map<String, Double>) {
         if (prices.isEmpty()) return
+        val before = uiState.value.prices
         viewModelScope.launch {
             try {
                 repo.setPrices(prices)
+                PriceHistoryStore.recordAll(getApplication(), before, prices)
                 _message.value = if (prices.size == 1) "تم حفظ السعر" else "تم حفظ ${prices.size} أسعار"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {

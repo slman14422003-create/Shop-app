@@ -3,6 +3,7 @@ package com.shopmanager.app.data.backup
 import android.content.Context
 import com.shopmanager.app.data.debts.Debt
 import com.shopmanager.app.data.debts.DebtsRepository
+import com.shopmanager.app.data.debts.Installment
 import com.shopmanager.app.data.debts.Person
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
@@ -154,6 +155,10 @@ object BackupManager {
                 }.getOrNull()
             } ?: emptyList()
 
+    /** Time of the newest local snapshot (file timestamp only, no parsing), or null if none exist. */
+    fun lastBackupAt(context: Context): Long? =
+        backupFiles(context).maxOfOrNull { it.lastModified() }?.takeIf { it > 0L }
+
     private fun backupFiles(context: Context): List<File> =
         backupDir(context)
             .listFiles { f -> f.name.startsWith(LEGACY_PREFIX) && f.name.endsWith(SUFFIX) }
@@ -235,6 +240,12 @@ object BackupManager {
     private fun Person.toJson() = JSONObject().apply {
         put("id", id); put("name", name); put("amount", amount); put("date", date); put("createdAt", createdAt)
         put("phone", phone)
+        put("dueDate", dueDate)
+        put("installments", JSONArray().apply {
+            installments.forEach { i ->
+                put(JSONObject().put("id", i.id).put("amount", i.amount).put("date", i.date).put("paid", i.paid))
+            }
+        })
     }
 
     private fun Debt.toJson() = JSONObject().apply {
@@ -253,7 +264,20 @@ object BackupManager {
     private fun JSONObject.toPerson() = Person(
         id = optString("id"), name = optString("name"), amount = optDouble("amount", 0.0),
         date = optString("date"), createdAt = optLong("createdAt", 0L),
-        phone = optString("phone")
+        phone = optString("phone"),
+        dueDate = optLong("dueDate", 0L),
+        installments = optJSONArray("installments")?.let { arr ->
+            (0 until arr.length()).mapNotNull { idx ->
+                arr.optJSONObject(idx)?.let { o ->
+                    Installment(
+                        id = o.optString("id"),
+                        amount = o.optDouble("amount", 0.0),
+                        date = o.optLong("date", 0L),
+                        paid = o.optBoolean("paid", false)
+                    )
+                }
+            }
+        } ?: emptyList()
     )
 
     private fun JSONObject.toDebt() = Debt(

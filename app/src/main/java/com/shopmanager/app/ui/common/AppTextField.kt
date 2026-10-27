@@ -136,7 +136,7 @@ fun AppTextField(
                                 Text(
                                     placeholder,
                                     style = MaterialTheme.typography.bodyLarge,
-                                    color = cs.onSurfaceVariant.copy(alpha = 0.5f)
+                                    color = cs.onSurfaceVariant.copy(alpha = 0.9f)
                                 )
                             }
                             innerTextField()

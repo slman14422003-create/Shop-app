@@ -10,7 +10,9 @@ import com.shopmanager.app.data.debts.DebtActivityLog
 import com.shopmanager.app.data.history.ChangeHistory
 import com.shopmanager.app.data.retryOnError
 import com.shopmanager.app.data.debts.DebtsRepository
+import com.shopmanager.app.data.debts.Installment
 import com.shopmanager.app.data.debts.Person
+import com.shopmanager.app.data.notifications.DueDateReminders
 import com.shopmanager.app.data.notes.NotesRepository
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.notifications.SelfChangeLedger
@@ -140,6 +142,14 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.debounce(200).flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DebtsUiState())
+
+    init {
+        viewModelScope.launch(Dispatchers.Default) {
+            uiState.collect { st ->
+                if (!st.isLoading) runCatching { DueDateReminders.sync(getApplication(), st.persons) }
+            }
+        }
+    }
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message
@@ -389,6 +399,65 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                         getApplication(), personName, Formatters.number(debt.amount), settings.currencySymbol, debt.id
                     )
                 }
+            } catch (e: Exception) {
+                _message.value = "تعذر تسجيل السداد: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+            }
+        }
+    }
+
+    fun saveSchedule(person: Person, dueDate: Long, installments: List<Installment>, onDone: (Boolean) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                repo.updateSchedule(person.id, dueDate, installments)
+                logChange("تحديث موعد وأقساط العميل \"${person.name}\"")
+                _message.value = "تم حفظ الموعد والأقساط"
+                InstantBackupWorker.requestNow(getApplication())
+                onDone(true)
+            } catch (e: Exception) {
+                _message.value = "تعذر الحفظ: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+                onDone(false)
+            }
+        }
+    }
+
+    fun payInstallment(person: Person, installment: Installment) {
+        val current = uiState.value.persons.firstOrNull { it.id == person.id } ?: person
+        val debtsSnapshot = uiState.value.debts.filter { it.personId == person.id }
+        val previousInstallments = current.installments
+        viewModelScope.launch {
+            try {
+                var remaining = minOf(installment.amount, debtsSnapshot.sumOf { it.amount }).coerceAtLeast(0.0)
+                val paidAmount = remaining
+                val ordered = debtsSnapshot
+                    .filter { it.amount > 0 }
+                    .sortedWith(compareBy<Debt>({ it.date }, { it.createdAt }))
+                for (d in ordered) {
+                    if (remaining <= 0.000001) break
+                    if (d.amount <= remaining + 0.000001) {
+                        repo.markDebtAsPaid(d.id)
+                        remaining -= d.amount
+                    } else {
+                        repo.updateDebt(d.id, d.amount - remaining, d.date, d.note)
+                        remaining = 0.0
+                    }
+                }
+                val updated = previousInstallments.map { if (it.id == installment.id) it.copy(paid = true) else it }
+                repo.updateSchedule(person.id, current.dueDate, updated)
+                _undo.value = UndoAction {
+                    repo.restoreDebts(debtsSnapshot)
+                    repo.updateSchedule(person.id, current.dueDate, previousInstallments)
+                }
+                if (paidAmount > 0.0) {
+                    logChange("سداد قسط للعميل \"${person.name}\" بمبلغ ${Formatters.number(paidAmount)}")
+                    logActivity(DebtActivityLog.Kind.PAID, person.name, paidAmount)
+                    if (settings.notificationsEnabled) {
+                        NotificationHelper.showDebtPaidNotification(
+                            getApplication(), person.name, Formatters.number(paidAmount), settings.currencySymbol, installment.id
+                        )
+                    }
+                }
+                _message.value = "تم تسجيل سداد القسط ✅"
+                InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذر تسجيل السداد: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
             }

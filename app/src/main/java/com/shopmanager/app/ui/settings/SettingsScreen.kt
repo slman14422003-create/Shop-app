@@ -1,5 +1,9 @@
 package com.shopmanager.app.ui.settings
 
+import com.shopmanager.app.ui.common.AppSpace10
+import com.shopmanager.app.ui.common.AppSpace6
+import com.shopmanager.app.ui.common.AppSpaceLg
+import com.shopmanager.app.ui.common.AppSpaceSm
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import android.net.Uri
@@ -10,20 +14,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
@@ -49,9 +42,7 @@ import androidx.compose.material.icons.outlined.SettingsBrightness
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.repeatOnLifecycle
 import com.shopmanager.app.data.cache.AppCacheManager
 import androidx.compose.material3.*
@@ -83,9 +74,6 @@ import com.shopmanager.app.data.updates.UpdateDownloadService
 import com.shopmanager.app.data.updates.UpdateDownloadState
 import com.shopmanager.app.data.updates.UpdateChecker
 import com.shopmanager.app.data.updates.UpdateManifest
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import com.shopmanager.app.ui.common.AppCard
 import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppInfoRow
@@ -93,12 +81,10 @@ import com.shopmanager.app.ui.common.AppPillButton
 import com.shopmanager.app.ui.common.AppSheet
 import com.shopmanager.app.ui.common.groupedRowShape
 import com.shopmanager.app.ui.common.AppSettingsState
-import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassCard
 import com.shopmanager.app.ui.common.ShareFormatDialog
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.debts.DebtsViewModel
-import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.notifications.NotificationSync
 import com.shopmanager.app.ui.materials.MaterialsViewModel
@@ -108,12 +94,9 @@ import com.shopmanager.app.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Locale
 import com.shopmanager.app.data.performance.MotionSpecs
-
-private val CURRENCY_OPTIONS = listOf("ل.س", "$", "SAR", "AED", "TRY")
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -521,7 +504,7 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(start = ScreenGap, end = ScreenGap, top = 6.dp, bottom = 28.dp),
+            contentPadding = PaddingValues(start = ScreenGap, end = ScreenGap, top = AppSpace6, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(ScreenGap)
         ) {
             // بطاقة الحساب العلوية (اسم التطبيق + شارة الإصدار)
@@ -554,26 +537,26 @@ fun SettingsScreen(
                         shape = MaterialTheme.shapes.large,
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     ) {
-                        Column(Modifier.padding(16.dp)) {
+                        Column(Modifier.padding(AppSpaceLg)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(AppSpaceSm))
                                 Text(
                                     "تعذّر الاتصال بالخادم",
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(AppSpace6))
                             Text(
                                 "يمكنك استعادة آخر نسخة احتياطية محلية (${formatBackupDate(backups.first().createdAt)}) لحين عودة الاتصال.",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(AppSpace10))
                             Row {
                                 Button(onClick = { pendingRestore = backups.first() }) { Text("استعادة الآن") }
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(AppSpaceSm))
                                 TextButton(onClick = { dismissedServerErrorBanner = true }) { Text("لاحقاً") }
                             }
                         }
@@ -668,7 +651,7 @@ fun SettingsScreen(
 
             // مدير أصوات الإشعارات والأذونات
             item(key = "notificationSounds", contentType = "group") {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(AppSpace6)) {
                 val postPermissionGranted = systemNotificationsAllowed.let { isPostPermissionGranted() }
                 SettingsGroup {
                     NotifKind.values().forEach { kind ->
@@ -715,17 +698,17 @@ fun SettingsScreen(
                         shape = MaterialTheme.shapes.large,
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     ) {
-                        Column(Modifier.padding(16.dp)) {
+                        Column(Modifier.padding(AppSpaceLg)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                                Spacer(Modifier.width(8.dp))
+                                Spacer(Modifier.width(AppSpaceSm))
                                 Text(
                                     "الإشعارات موقوفة من نظام الجهاز",
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(AppSpace6))
                             Text(
                                 if (blockedChannelLabels.isNotEmpty())
                                     "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع تحديداً هذه الإشعارات: ${blockedChannelLabels.joinToString("، ")} — لن تصلك حتى تُفعّلها من إعدادات إشعارات التطبيق."
@@ -734,7 +717,7 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
-                            Spacer(Modifier.height(10.dp))
+                            Spacer(Modifier.height(AppSpace10))
                             Button(onClick = {
                                 val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                                     .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
@@ -846,7 +829,7 @@ fun SettingsScreen(
 
             // النسخ الاحتياطي التلقائي المحلي + الاستعادة
             item(key = "restore", contentType = "group") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(AppSpaceSm)) {
                     SettingsGroup {
                         item(
                             icon = Icons.Outlined.Restore,
@@ -890,7 +873,7 @@ fun SettingsScreen(
                         LinearProgressIndicator(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp)
+                                .padding(horizontal = AppSpaceSm)
                                 .clip(RoundedCornerShape(50))
                         )
                     }
@@ -1028,445 +1011,59 @@ fun SettingsScreen(
     }
 
     if (showExportShareChoice && debtsViewModel != null && materialsViewModel != null) {
-        ShareFormatDialog(
-            onDismiss = { showExportShareChoice = false },
-            onPickImage = {
-                // PERF: this is the largest of the three reports (debts +
-                // materials combined), so moving the Canvas work off the
-                // main thread matters most here — same reasoning as
-                // MaterialsScreen/DebtsScreen's onPickImage.
-                val debtsState = debtsViewModel.uiState.value
-                val materialsState = materialsViewModel.uiState.value
-                scope.launch {
-                    val uri = withContext(Dispatchers.Default) {
-                        WholeAppReportImage.generate(
-                            context = context,
-                            persons = debtsState.persons,
-                            totalDebt = debtsState.totalAmount,
-                            materials = materialsState.materials,
-                            prices = materialsState.prices,
-                            currency = currency,
-                            brandColor = brandColor
-                        )
-                    }
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "image/png"
-                        putExtra(Intent.EXTRA_STREAM, uri)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(Intent.createChooser(intent, "مشاركة النسخة الاحتياطية"))
-                }
-            },
-            onPickText = {
-                val text = buildBackupText(
-                    debtsState = debtsViewModel.uiState.value,
-                    materialsState = materialsViewModel.uiState.value,
-                    currency = currency
-                )
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_SUBJECT, "نسخة احتياطية - إدارة المحل")
-                    putExtra(Intent.EXTRA_TEXT, text)
-                }
-                context.startActivity(Intent.createChooser(intent, "مشاركة النسخة الاحتياطية"))
-            }
+        ExportShareChoiceDialog(
+            debtsViewModel = debtsViewModel,
+            materialsViewModel = materialsViewModel,
+            currency = currency,
+            brandColor = brandColor,
+            onDismiss = { showExportShareChoice = false }
         )
     }
 
-    // مربع التحديث: ورقة سفلية بنفس لغة تصميم الإعدادات (صفوف مسطّحة مجمّعة +
-    // أزرار حبّة بعرض كامل) بدل مربع حوار بدائرة أيقونة نابضة. أثناء التنزيل لا
-    // يمكن إغلاقها حتى لا يضيع شريط التقدم.
     pendingUpdate?.let { manifest ->
-        AppSheet(
-            title = "تحديث جديد متاح",
-            onDismiss = { pendingUpdate = null },
-            dismissible = !isDownloadingUpdate
-        ) { close ->
-            Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
-                AppInfoRow("الإصدار الجديد", manifest.versionName, groupedRowShape(0, 1))
-                AppInfoRow("إصدارك الحالي", appVersion.name, groupedRowShape(1, 1))
-            }
-            if (isDownloadingUpdate) {
-                AppCard {
-                    Column(Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "جاري التنزيل...",
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                "$downloadPercent%",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        LinearProgressIndicator(
-                            progress = { downloadPercent / 100f },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(50)),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                        )
-                    }
-                }
-            }
-            AppPillButton(
-                label = if (isDownloadingUpdate) "جاري التنزيل..." else "تحميل وتثبيت",
-                enabled = !isDownloadingUpdate,
-                onClick = { startDownload(manifest) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            if (!isDownloadingUpdate) {
-                AppPillButton(
-                    label = "لاحقاً",
-                    tonal = true,
-                    onClick = close,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
+        UpdateAvailableSheet(
+            manifest = manifest,
+            currentVersionName = appVersion.name,
+            isDownloading = isDownloadingUpdate,
+            percent = downloadPercent,
+            onStartDownload = { startDownload(manifest) },
+            onDismiss = { pendingUpdate = null }
+        )
     }
 
     if (needsInstallPermission) {
-        AppSheet(title = "يلزم إذن التثبيت", onDismiss = { needsInstallPermission = false }) { _ ->
-            Text(
-                "لتثبيت التحديث من داخل التطبيق، فعّل \"السماح من هذا المصدر\" لهذا التطبيق ثم عد وحاول مجدداً.",
-                modifier = Modifier.padding(horizontal = 6.dp),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            AppPillButton(
-                label = "فتح الإعدادات",
-                onClick = {
-                    needsInstallPermission = false
-                    context.startActivity(ApkDownloader.unknownSourcesSettingsIntent(context))
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-            AppPillButton(
-                label = "حاول التثبيت الآن",
-                tonal = true,
-                onClick = {
-                    needsInstallPermission = false
-                    downloadedApk?.let { ApkDownloader.install(context, it) }
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
+        InstallPermissionSheet(downloadedApk = downloadedApk, onDismiss = { needsInstallPermission = false })
     }
 
     // ======================================================================
     // أوراق الاختيار السفلية (بدل سرد كل الخيارات داخل الصفحة)
     // ======================================================================
     if (showThemeSheet) {
-        SettingsSheet(title = "وضع الألوان", onDismiss = { showThemeSheet = false }) { close ->
-            SettingsGroup {
-                AppThemeMode.entries.forEach { mode ->
-                    selectItem(
-                        icon = when (mode) {
-                            AppThemeMode.SYSTEM -> Icons.Outlined.SettingsBrightness
-                            AppThemeMode.LIGHT -> Icons.Outlined.LightMode
-                            AppThemeMode.DARK -> Icons.Outlined.DarkMode
-                        },
-                        title = when (mode) {
-                            AppThemeMode.SYSTEM -> "حسب النظام"
-                            AppThemeMode.LIGHT -> "فاتح"
-                            AppThemeMode.DARK -> "داكن"
-                        },
-                        selected = themeMode == mode,
-                        onClick = {
-                            themeMode = mode
-                            settings.themeMode = mode
-                            onThemeChanged(mode)
-                            close()
-                        }
-                    )
-                }
-            }
-        }
+        ThemeModeSheet(
+            current = themeMode,
+            onPick = {
+                themeMode = it
+                settings.themeMode = it
+                onThemeChanged(it)
+            },
+            onDismiss = { showThemeSheet = false }
+        )
     }
 
     if (showPerformanceSheet) {
-        SettingsSheet(title = "الأداء", onDismiss = { showPerformanceSheet = false }) { close ->
-            SettingsFootnote(
-                "مرتفع: أنيميشن أكثر وظلال ورموز متحركة. منخفض: إيقاف التأثيرات والاكتفاء بانتقالات بسيطة. تلقائي: يختار التطبيق وحده ما يناسب جهازك (قوي، متوسط، أو ضعيف)، وينزل بالتأثيرات تلقائياً عند توفير الطاقة أو إذا لاحظ تقطعاً في الحركة."
-            )
-            SettingsGroup {
-                listOf(
-                    PerformanceMode.AUTO to "تلقائي (يضبط نفسه حسب الجهاز)",
-                    PerformanceMode.HIGH to "مرتفع (كل التأثيرات)",
-                    PerformanceMode.LOW to "منخفض (بدون تأثيرات، للأجهزة القديمة)"
-                ).forEach { (mode, label) ->
-                    selectItem(
-                        title = label,
-                        selected = performanceMode == mode,
-                        onClick = {
-                            performanceMode = mode
-                            settings.performanceMode = mode
-                            onPerformancePreferenceChanged(mode)
-                            close()
-                        }
-                    )
-                }
-            }
-            // إعادة الفحص تعني شيئاً فقط في وضع "تلقائي" (HIGH/LOW يتجاوزان الفحص).
-            if (performanceMode == PerformanceMode.AUTO) {
-                val deviceInfo = remember(recheckTick) {
-                    com.shopmanager.app.data.performance.DevicePerformance.currentDeviceInfo(context)
-                }
-                val deviceText = "الجهاز الحالي: ${deviceInfo.totalRamMb} MB رام، ${deviceInfo.cores} أنوية" +
-                    (if (deviceInfo.osFlaggedLowRam) " — مصنّف من النظام كجهاز منخفض الموارد" else "") +
-                    (if (deviceInfo.weakGpu) " — معالج رسوميات ضعيف/قديم" else "") +
-                    (if (deviceInfo.weakMemoryClass) " — ذاكرة تطبيق محدودة (${deviceInfo.memoryClassMb}MB)" else "")
-                SettingsGroup {
-                    item(
-                        icon = Icons.Outlined.Refresh,
-                        title = "إعادة فحص أداء الجهاز",
-                        subtitle = deviceText,
-                        onClick = {
-                            onRecheckDevicePerformance()
-                            recheckTick++
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-/**
- * iOS 26 REDESIGN: replaces a plain [RadioButton] + label row with the
- * way iOS itself shows a single-choice list — the whole row is tappable,
- * the selected option gets a trailing checkmark instead of a filled
- * circle on the leading edge, and there's no visible "control" at all on
- * the unselected rows (just the label) the way a Material RadioButton
- * always draws its empty ring.
- */
-@Composable
-private fun IosOptionRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
-            .padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            label,
-            color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+        PerformanceModeSheet(
+            current = performanceMode,
+            recheckTick = recheckTick,
+            onPick = {
+                performanceMode = it
+                settings.performanceMode = it
+                onPerformancePreferenceChanged(it)
+            },
+            onRecheck = {
+                onRecheckDevicePerformance()
+                recheckTick++
+            },
+            onDismiss = { showPerformanceSheet = false }
         )
-        AnimatedVisibility(
-            visible = selected,
-            enter = MotionSpecs.popEnter(),
-            exit = MotionSpecs.popExit()
-        ) {
-            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        }
     }
-}
-
-@Composable
-private fun NotificationSoundDialog(
-    kind: NotifKind,
-    current: NotifSound,
-    initialUri: String?,
-    onDismiss: () -> Unit,
-    onSelect: (NotifSound, String?) -> Unit
-) {
-    val context = LocalContext.current
-    var picked by remember { mutableStateOf(current) }
-    var pickedUri by remember { mutableStateOf(initialUri) }
-    // منتقي نغمات النظام: يعرض كل نغمات الإشعارات الموجودة على الهاتف (بما فيها أي نغمات مثبّتة).
-    val ringtonePicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
-        val uri: Uri? = res.data?.let {
-            if (android.os.Build.VERSION.SDK_INT >= 33)
-                it.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
-            else @Suppress("DEPRECATION") it.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
-        }
-        if (uri != null) {
-            pickedUri = uri.toString()
-            picked = NotifSound.DEVICE
-            NotificationSounds.preview(context, NotifSound.DEVICE, pickedUri)
-        }
-    }
-    fun choose(sound: NotifSound) {
-        picked = sound
-        if (sound == NotifSound.DEVICE) {
-            ringtonePicker.launch(
-                Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER)
-                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_NOTIFICATION)
-                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, false)
-                    .putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false)
-                    .putExtra(
-                        android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,
-                        pickedUri?.let { Uri.parse(it) }
-                    )
-            )
-        } else NotificationSounds.preview(context, sound)
-    }
-    DisposableEffect(Unit) { onDispose { NotificationSounds.stopPreview() } }
-
-    GlassAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("صوت: ${kind.label}") },
-        text = {
-            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                NotifSound.values().forEach { sound ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { choose(sound) }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = picked == sound, onClick = { choose(sound) })
-                        Spacer(Modifier.width(4.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                sound.label,
-                                fontWeight = if (picked == sound) FontWeight.SemiBold else FontWeight.Normal
-                            )
-                            Text(
-                                sound.hint,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (sound != NotifSound.SILENT && (sound != NotifSound.DEVICE || pickedUri != null)) {
-                            IconButton(onClick = { NotificationSounds.preview(context, sound, pickedUri) }) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = "تشغيل")
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                shape = RectangleShape,
-                enabled = picked != NotifSound.DEVICE || pickedUri != null,
-                onClick = { onSelect(picked, pickedUri) }
-            ) { Text("حفظ") }
-        },
-        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
-    )
-}
-
-@Composable
-private fun CurrencyPickerDialog(current: String, onDismiss: () -> Unit, onSelect: (String) -> Unit) {
-    var custom by remember { mutableStateOf(current.takeIf { it !in CURRENCY_OPTIONS } ?: "") }
-
-    GlassAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("اختر العملة") },
-        text = {
-            Column {
-                CURRENCY_OPTIONS.forEach { option ->
-                    IosOptionRow(label = option, selected = current == option, onClick = { onSelect(option) })
-                }
-                Spacer(Modifier.height(8.dp))
-                AppTextField(
-                    value = custom,
-                    onValueChange = { custom = it },
-                    label = "عملة أخرى",
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = custom.isNotBlank(),
-                shape = RectangleShape,
-                onClick = { onSelect(custom.trim()) }
-            ) { Text("استخدام") }
-        },
-        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
-    )
-}
-
-@Composable
-private fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var pin by remember { mutableStateOf("") }
-    var confirm by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-
-    GlassAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("تعيين رمز PIN") },
-        text = {
-            Column {
-                AppTextField(
-                    value = pin, onValueChange = { pin = it.filter { c -> c.isDigit() }.take(6) },
-                    label = "رمز من 4 إلى 6 أرقام",
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                AppTextField(
-                    value = confirm, onValueChange = { confirm = it.filter { c -> c.isDigit() }.take(6) },
-                    label = "تأكيد الرمز",
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                )
-                error?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
-            }
-        },
-        confirmButton = {
-            TextButton(shape = RectangleShape, onClick = {
-                when {
-                    pin.length < 4 -> error = "الرمز لازم يكون 4 أرقام على الأقل"
-                    pin != confirm -> error = "الرمزان غير متطابقين"
-                    else -> onConfirm(pin)
-                }
-            }) { Text("حفظ") }
-        },
-        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
-    )
-}
-
-private fun formatBackupDate(timestampMillis: Long): String =
-    runCatching {
-        // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
-        SimpleDateFormat("yyyy/MM/dd — h:mm a", Locale("ar")).format(java.util.Date(timestampMillis))
-    }.getOrDefault("—")
-
-private fun buildBackupText(
-    debtsState: com.shopmanager.app.ui.debts.DebtsUiState,
-    materialsState: com.shopmanager.app.ui.materials.MaterialsUiState,
-    currency: String
-): String {
-    val nf = NumberFormat.getNumberInstance(Locale("ar"))
-    val sb = StringBuilder()
-    sb.append("📋 نسخة احتياطية — إدارة المحل\n")
-    sb.append("=".repeat(24)).append("\n\n")
-
-    sb.append("💰 الديون (${debtsState.persons.size} عميل، الإجمالي ${nf.format(debtsState.totalAmount)} $currency)\n")
-    debtsState.persons.sortedByDescending { it.amount }.forEach { p ->
-        sb.append("• ${p.name}: ${nf.format(p.amount)} $currency\n")
-    }
-
-    sb.append("\n📦 المواد (${materialsState.materials.size})\n")
-    materialsState.materials.sortedBy { it.name }.forEach { m ->
-        val price = materialsState.prices[m.name]
-        sb.append("• ${m.name}: ${m.quantityLabel()}")
-        if (price != null) sb.append(" — ${nf.format(price)} $currency")
-        sb.append("\n")
-    }
-
-    sb.append("\nتم الإنشاء تلقائيًا من التطبيق.")
-    return sb.toString()
 }

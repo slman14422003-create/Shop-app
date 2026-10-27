@@ -36,6 +36,7 @@ import com.shopmanager.app.ui.common.ActionIconButton
 import com.shopmanager.app.ui.common.DeleteIconButton
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.GlassSnackbarHost
+import com.shopmanager.app.ui.common.showWithOptionalUndo
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.SimpleDateFormat
@@ -130,7 +131,9 @@ fun NotesScreen(
 
     LaunchedEffect(message) {
         message?.let {
-            snackbarHost.showSnackbar(it)
+            val hasUndo = viewModel.undo.value != null
+            val undone = snackbarHost.showWithOptionalUndo(it, hasUndo)
+            if (undone) viewModel.performUndo() else viewModel.clearUndo()
             viewModel.clearMessage()
         }
     }
