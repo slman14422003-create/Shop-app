@@ -1,0 +1,4 @@
+-keepattributes SourceFile,LineNumberTable
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+-dontwarn org.slf4j.**
+-dontwarn javax.annotation.**

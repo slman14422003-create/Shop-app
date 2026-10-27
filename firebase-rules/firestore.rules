@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- دوال مساعدة ----------
+    // حقل نصي اختياري: إن وُجد يجب أن يكون نصاً بطول معقول.
+    function okStr(d, f, max) { return !(f in d) || (d[f] is string && d[f].size() <= max); }
+    // حقل رقمي اختياري.
+    function okNum(d, f) { return !(f in d) || d[f] is number; }
+    // حقل منطقي اختياري.
+    function okBool(d, f) { return !(f in d) || d[f] is bool; }
+
+    // ---------- الديون ----------
+    match /persons/{id} {
+      allow read, delete: if true;
+      allow create, update: if okStr(request.resource.data, 'name', 200)
+                            && okStr(request.resource.data, 'phone', 40)
+                            && okStr(request.resource.data, 'date', 40)
+                            && okNum(request.resource.data, 'amount')
+                            && okNum(request.resource.data, 'createdAt');
+    }
+
+    match /debts/{id} {
+      allow read, delete: if true;
+      allow create, update: if okStr(request.resource.data, 'personId', 100)
+                            && okStr(request.resource.data, 'date', 40)
+                            && okStr(request.resource.data, 'note', 2000)
+                            && okNum(request.resource.data, 'amount')
+                            && okNum(request.resource.data, 'createdAt');
+    }
+
+    // ---------- سجل عمليات الديون (جديد) ----------
+    match /debt_activity/{id} {
+      allow read, delete: if true;            // delete لزر "مسح السجل"
+      allow create: if request.resource.data.kind in
+                         ['ADDED','NEW_CUSTOMER','PAID','PAID_ALL','EDITED','DELETED','DELETED_CUSTOMER','UNDO']
+                    && okStr(request.resource.data, 'person', 200)
+                    && okStr(request.resource.data, 'device', 100)
+                    && okNum(request.resource.data, 'amount')
+                    && request.resource.data.createdAt is number;
+      allow update: if false;                 // السجل لا يُعدَّل
+    }
+
+    // ---------- المواد (قائمة النواقص) ----------
+    match /spices_final_v12/{id} {
+      allow read, delete: if true;
+      allow create, update: if okStr(request.resource.data, 'name', 200)
+                            && okStr(request.resource.data, 'unit', 40)
+                            && okStr(request.resource.data, 'section', 100)
+                            && okStr(request.resource.data, 'notes', 2000)
+                            && okNum(request.resource.data, 'quantity')
+                            && okNum(request.resource.data, 'timestamp')
+                            && okNum(request.resource.data, 'order')
+                            && okBool(request.resource.data, 'important');
+    }
+
+    match /material_prices/{id} {
+      allow read, delete: if true;
+      allow create, update: if okStr(request.resource.data, 'name', 200)
+                            && okNum(request.resource.data, 'price');
+    }
+
+    match /materials_catalog/{id} {
+      allow read, delete: if true;
+      allow create, update: if okStr(request.resource.data, 'name', 200);
+    }
+
+    // ---------- الملاحظات ----------
+    match /important_notes/{id} {
+      allow read, delete: if true;
+      allow create, update: if okStr(request.resource.data, 'title', 300)
+                            && okStr(request.resource.data, 'content', 20000)
+                            && okStr(request.resource.data, 'linkedId', 100)
+                            && okStr(request.resource.data, 'linkedName', 200)
+                            && okNum(request.resource.data, 'reminderAt')
+                            && okBool(request.resource.data, 'isPinned')
+                            && okBool(request.resource.data, 'isDone');
+    }
+
+    // ---------- الإعدادات ----------
+    // كلمة مرور لوحة المطوّر: التطبيق يقرؤها فقط، والتعديل من الكونسول.
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // مفتاح "إظهار التحديث الاختياري": يكتبه التطبيق من لوحة المسؤول.
+    match /app_config/{doc} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasOnly(['optionalUpdateEnabled'])
+                   && request.resource.data.optionalUpdateEnabled is bool;
+    }
+
+    // أي مجموعة أخرى مرفوضة تلقائياً.
+  }
+}
