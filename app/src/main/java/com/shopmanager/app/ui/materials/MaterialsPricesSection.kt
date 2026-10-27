@@ -285,3 +285,4 @@ internal fun String.toPriceOrNull(): Double? {
 /** نص قابل للتحرير لسعر محفوظ: بلا ".0" ولا صيغة علمية (1.1E7). */
 internal fun Double.toEditText(): String =
     if (this == this.toLong().toDouble()) this.toLong().toString()
+    else java.math.BigDecimal(this).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()

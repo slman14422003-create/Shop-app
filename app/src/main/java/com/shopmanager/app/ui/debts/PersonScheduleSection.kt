@@ -60,6 +60,7 @@ import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppSpaceLg
 import com.shopmanager.app.ui.common.AppSpaceMd
 import com.shopmanager.app.ui.common.AppSpaceSm
+import com.shopmanager.app.ui.common.AppSpaceXl
 import com.shopmanager.app.ui.common.AppSpaceXs
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassAlertDialog

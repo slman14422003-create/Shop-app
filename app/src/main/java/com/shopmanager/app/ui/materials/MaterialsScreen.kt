@@ -356,5 +356,3 @@ fun MaterialsScreen(
         )
     }
 }
-
-    else java.math.BigDecimal(this).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
