@@ -18,7 +18,15 @@ enum class UsageArea(val key: String) {
 enum class SuggestionKind(val key: String) {
     DUE_MATERIALS("d"),
     USUAL_CHECK("c"),
-    PRICES_REVIEW("r")
+    PRICES_REVIEW("r"),
+    /** مواد تأخرت عن عادتها بكثير (ما عادت تُجلب). */
+    STALE_MATERIALS("s"),
+    /** الأكثر طلباً مؤخراً بحسب إحصائيات جمع النواقص. */
+    FREQUENT_MATERIALS("f"),
+    /** مواد اعتادت أن تنقص مع ما هو ناقص الآن. */
+    WITH_PENDING("w"),
+    /** مواد تنقص عادةً في مثل هذا اليوم من الأسبوع. */
+    WEEKDAY_MATERIALS("k")
 }
 
 data class HomeSuggestion(
@@ -84,11 +92,30 @@ class UsageLearner(context: Context) {
         preload()
         val slot = slotNow()
         data class Cand(val s: HomeSuggestion, val p: Double)
-        val cands = ArrayList<Cand>(3)
+        val cands = ArrayList<Cand>(6)
 
         val due = store.dueNames(currentShortages, catalog, 3)
         if (due.isNotEmpty()) {
             cands += Cand(HomeSuggestion(SuggestionKind.DUE_MATERIALS, due), 3.0 + due.size * 0.3)
+        }
+        // مواد تُطلب كثيراً هذا الشهر ولم تُسجَّل بعد.
+        val frequent = store.frequentNames(currentShortages, catalog, 3)
+        if (frequent.isNotEmpty()) {
+            cands += Cand(HomeSuggestion(SuggestionKind.FREQUENT_MATERIALS, frequent), 2.6 + frequent.size * 0.25)
+        }
+        // نواقص حالية ← مواد تنقص معها عادةً.
+        val partners = store.partnerNames(currentShortages, catalog, 3)
+        if (partners.isNotEmpty()) {
+            cands += Cand(HomeSuggestion(SuggestionKind.WITH_PENDING, partners), 2.8 + partners.size * 0.2)
+        }
+        val weekday = store.weekdayNames(currentShortages, catalog, 3)
+        if (weekday.isNotEmpty()) {
+            cands += Cand(HomeSuggestion(SuggestionKind.WEEKDAY_MATERIALS, weekday), 2.7 + weekday.size * 0.2)
+        }
+        // مواد غابت عن القائمة أطول بكثير من عادتها.
+        val stale = store.staleNames(currentShortages, catalog, 3)
+        if (stale.isNotEmpty()) {
+            cands += Cand(HomeSuggestion(SuggestionKind.STALE_MATERIALS, stale), 2.4 + stale.size * 0.2)
         }
         habit(UsageArea.MISSING_FINDER, slot)?.let {
             cands += Cand(HomeSuggestion(SuggestionKind.USUAL_CHECK), 2.0 + it)

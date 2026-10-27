@@ -125,7 +125,8 @@ fun SettingsScreen(
     debtsViewModel: DebtsViewModel? = null,
     materialsViewModel: MaterialsViewModel? = null,
     onOpenHelp: () -> Unit = {},
-    onOpenPrivacyPolicy: () -> Unit = {}
+    onOpenPrivacyPolicy: () -> Unit = {},
+    onOpenAbout: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsRepository(context) }
@@ -432,7 +433,6 @@ fun SettingsScreen(
     // ======================================================================
     var showThemeSheet by remember { mutableStateOf(false) }
     var showPerformanceSheet by remember { mutableStateOf(false) }
-    var showAboutSheet by remember { mutableStateOf(false) }
     var cacheSizeBytes by remember { mutableStateOf<Long?>(null) }
     var isClearingCache by remember { mutableStateOf(false) }
     var cacheStatus by remember { mutableStateOf<String?>(null) }
@@ -509,7 +509,7 @@ fun SettingsScreen(
             SettingsTopBar(
                 title = "الإعدادات",
                 onBack = onBack,
-                onInfo = { showAboutSheet = true }
+                onInfo = onOpenAbout
             )
         }
     ) { padding ->
@@ -1235,39 +1235,6 @@ fun SettingsScreen(
                         }
                     )
                 }
-            }
-        }
-    }
-
-    if (showAboutSheet) {
-        SettingsSheet(title = "حول التطبيق", onDismiss = { showAboutSheet = false }) { _ ->
-            Column(Modifier.padding(horizontal = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    "إدارة المحل",
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    "تطبيق واحد لإدارة الديون والمواد والأسعار، مبني خصيصًا لمحلك ويعمل حتى بدون اتصال دائم بالإنترنت.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "الإصدار ${appVersion.name} (${appVersion.code}) — تطوير سلمان",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            SettingsGroup {
-                item(
-                    icon = Icons.Outlined.PrivacyTip,
-                    title = "سياسة الخصوصية",
-                    onClick = {
-                        showAboutSheet = false
-                        onOpenPrivacyPolicy()
-                    }
-                )
             }
         }
     }

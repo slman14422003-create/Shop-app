@@ -27,6 +27,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.animation.core.animateFloat
+import com.shopmanager.app.ui.common.LogoMotion
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -50,7 +53,7 @@ import com.shopmanager.app.data.performance.MotionSpecs
  * (فاتح/داكن) المختار من الإعدادات وليس وضع النظام فقط.
  */
 @Composable
-fun AppSplashScreen(modifier: Modifier = Modifier) {
+fun AppSplashScreen(modifier: Modifier = Modifier, motion: LogoMotion = LogoMotion.ONCE) {
     var settled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { settled = true }
 
@@ -75,6 +78,21 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
 
     val cs = MaterialTheme.colorScheme
 
+    // رمز التطبيق: اقتصادي = ثابت، متوازن = قفزة دخول نابضة، مرتفع = + نبضة حلقة مستمرة.
+    val pop = remember { androidx.compose.animation.core.Animatable(if (motion == LogoMotion.NONE) 1f else 0.7f) }
+    LaunchedEffect(motion) {
+        if (motion == LogoMotion.NONE) pop.snapTo(1f)
+        else pop.animateTo(1f, androidx.compose.animation.core.spring(androidx.compose.animation.core.Spring.DampingRatioMediumBouncy, androidx.compose.animation.core.Spring.StiffnessLow))
+    }
+    val ring = if (motion == LogoMotion.LOOP) {
+        androidx.compose.animation.core.rememberInfiniteTransition(label = "splashRing").animateFloat(
+            0f, 1f,
+            androidx.compose.animation.core.infiniteRepeatable(tween(1800, easing = androidx.compose.animation.core.LinearEasing)),
+            label = "ring"
+        )
+    } else null
+    val ringColor = cs.primary
+
     Box(
         modifier
             .fillMaxSize()
@@ -86,8 +104,14 @@ fun AppSplashScreen(modifier: Modifier = Modifier) {
             Box(
                 Modifier
                     .size(124.dp)
+                    .drawBehind {
+                        ring?.let { r ->
+                            val t = r.value
+                            drawCircle(ringColor.copy(alpha = 0.28f * (1f - t)), radius = size.minDimension / 2f * (1f + 0.55f * t))
+                        }
+                    }
                     .graphicsLayer {
-                        val s = 0.9f + 0.1f * tileProgress
+                        val s = (0.9f + 0.1f * tileProgress) * pop.value
                         scaleX = s
                         scaleY = s
                         alpha = tileProgress

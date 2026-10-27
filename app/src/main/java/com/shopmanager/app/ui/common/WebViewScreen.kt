@@ -59,6 +59,24 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 
+
+/**
+ * صفحات الـ HTML المحلية (دليل الاستخدام / سياسة الخصوصية) تتبع ثيم التطبيق نفسه
+ * (فاتح/داكن حسب إعداد المظهر داخل التطبيق لا حسب النظام فقط): نقرأ الملف من الـ assets
+ * ونحقن data-theme في وسم html ثم نحمّله، دون الحاجة لتفعيل JavaScript.
+ */
+private fun loadLocalPage(webView: WebView, url: String, dark: Boolean): Boolean {
+    val prefix = "file:///android_asset/"
+    if (!url.startsWith(prefix)) return false
+    return runCatching {
+        val name = url.removePrefix(prefix).substringBefore('#').substringBefore('?')
+        val html = webView.context.assets.open(name).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            .replace("data-theme=\"auto\"", "data-theme=\"${if (dark) "dark" else "light"}\"")
+        webView.loadDataWithBaseURL(prefix + name, html, "text/html", "UTF-8", null)
+        true
+    }.getOrDefault(false)
+}
+
 /**
  * A small, self-contained in-app browser used for the "دليل الاستخدام"
  * (help) and "سياسة الخصوصية" (privacy) pages and any future in-app link,
@@ -124,6 +142,10 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
         loadError = false
         isLoading = true
         webViewRef?.reload()
+    }
+
+    LaunchedEffect(isDark) {
+        webViewRef?.let { wv -> loadLocalPage(wv, url, isDark) }
     }
 
     LaunchedEffect(showSearch) {
@@ -273,7 +295,8 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
                         // behaves correctly from Android 11 up without per-version
                         // branching in this file.
                         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-                            WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, isDark)
+                            // صفحاتنا تُصمَّم بثيمها الخاص (فاتح/داكن) فلا نحتاج تغميقاً آلياً فوقها.
+                            WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, isDark && !url.startsWith("file:///android_asset/"))
                         }
 
                         setFindListener { activeMatchIndex, numberOfMatches, _ ->
@@ -324,7 +347,7 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
                                 }
                             }
                         }
-                        loadUrl(url)
+                        if (!loadLocalPage(this, url, isDark)) loadUrl(url)
                         webViewRef = this
                     }
                 }

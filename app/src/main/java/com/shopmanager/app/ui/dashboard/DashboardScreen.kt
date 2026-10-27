@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -810,11 +811,18 @@ private fun HomeSuggestionCard(
         SuggestionKind.DUE_MATERIALS -> "\u0645\u0648\u0627\u062F \u0642\u062F \u062A\u062D\u062A\u0627\u062C\u0647\u0627"
         SuggestionKind.USUAL_CHECK -> "\u0648\u0642\u062A \u0641\u062D\u0635 \u0627\u0644\u0646\u0648\u0627\u0642\u0635"
         SuggestionKind.PRICES_REVIEW -> "\u0645\u0631\u0627\u062C\u0639\u0629 \u0627\u0644\u0623\u0633\u0639\u0627\u0631"
+        SuggestionKind.STALE_MATERIALS -> "مواد غابت من فترة"
+        SuggestionKind.FREQUENT_MATERIALS -> "الأكثر طلباً هذا الشهر"
+        SuggestionKind.WITH_PENDING -> "غالباً بتنقص مع نواقصك"
+        SuggestionKind.WEEKDAY_MATERIALS -> "عادةً بتنقص بمثل هذا اليوم"
     }
     val body = when (suggestion.kind) {
         SuggestionKind.DUE_MATERIALS -> suggestion.names.joinToString("\u060C ")
         SuggestionKind.USUAL_CHECK -> "\u0639\u0627\u062F\u0629 \u062A\u0631\u0627\u062C\u0639 \u0627\u0644\u0646\u0648\u0627\u0642\u0635 \u0641\u064A \u0647\u0630\u0627 \u0627\u0644\u0648\u0642\u062A"
         SuggestionKind.PRICES_REVIEW -> "\u062A\u0631\u0627\u062C\u0639 \u0627\u0644\u0623\u0633\u0639\u0627\u0631 \u0639\u0627\u062F\u0629 \u0641\u064A \u0647\u0630\u0627 \u0627\u0644\u0648\u0642\u062A"
+        SuggestionKind.STALE_MATERIALS, SuggestionKind.FREQUENT_MATERIALS, SuggestionKind.WITH_PENDING,
+        SuggestionKind.WEEKDAY_MATERIALS ->
+            suggestion.names.joinToString("، ")
     }
     val action = when (suggestion.kind) {
         SuggestionKind.PRICES_REVIEW -> "\u0627\u0641\u062A\u062D \u0627\u0644\u0645\u0648\u0627\u062F"
@@ -835,7 +843,8 @@ private fun HomeSuggestionCard(
                 Modifier.size(38.dp).clip(CircleShape).background(accent.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = accent, modifier = Modifier.size(19.dp))
+                val tw = com.shopmanager.app.ui.common.twinkleScale()
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = accent, modifier = Modifier.size(19.dp).graphicsLayer { scaleX = tw; scaleY = tw })
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {

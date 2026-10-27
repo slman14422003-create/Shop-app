@@ -157,6 +157,7 @@ private const val ROUTE_MISSING_FINDER = "missingFinder"
 private const val ROUTE_HELP = "help"
 private const val ROUTE_DEBT_ACTIVITY = "debtActivity"
 private const val ROUTE_PRIVACY = "privacy"
+private const val ROUTE_ABOUT = "about"
 private const val ROUTE_PERSON_DETAIL = "personDetail/{personId}"
 
 // The in-app liquid-glass splash (see AppSplashScreen) is a calm branded
@@ -511,7 +512,7 @@ class MainActivity : FragmentActivity() {
                         transitionSpec = { MotionSpecs.handoffTransition(performanceTier) }
                     ) { ready ->
                         if (!ready) {
-                            AppSplashScreen()
+                            AppSplashScreen(motion = com.shopmanager.app.ui.common.logoMotionFor(performanceTier))
                         } else {
                             // Runs exactly once, right as the splash hands
                             // off to the real UI. Uses `ready` as the key
@@ -1211,7 +1212,15 @@ private fun ShopManagerApp(
                     debtsViewModel = debtsViewModel,
                     materialsViewModel = materialsViewModel,
                     onOpenHelp = { navController.safeNavigate(ROUTE_HELP) },
-                    onOpenPrivacyPolicy = { navController.safeNavigate(ROUTE_PRIVACY) }
+                    onOpenPrivacyPolicy = { navController.safeNavigate(ROUTE_PRIVACY) },
+                    onOpenAbout = { navController.safeNavigate(ROUTE_ABOUT) }
+                )
+            }
+            composable(ROUTE_ABOUT) {
+                com.shopmanager.app.ui.settings.AboutScreen(
+                    onBack = { navController.safePopBackStack() },
+                    onOpenPrivacyPolicy = { navController.safeNavigate(ROUTE_PRIVACY) },
+                    onOpenHelp = { navController.safeNavigate(ROUTE_HELP) }
                 )
             }
             composable(ROUTE_ADMIN) {

@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
@@ -125,16 +126,47 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             usage.preload()
             learnVersion.update { it + 1 }
         }
+        observeResolved()
     }
 
-    val suggestions: StateFlow<List<MaterialCatalogItem>> = combine(catalog, learnVersion) { items, _ ->
-        finderStore.suggested(items)
+    /**
+     * أي مادة تختفي من قائمة النواقص (حذفتها هنا أو من جهاز آخر، أو "مسح الكل")
+     * تعني أنها صارت متوفرة: نسجّلها كذلك فلا تُقترح من جديد قبل وقتها الطبيعي.
+     * التعديل (إعادة تسمية) لا يُحسب حذفاً لأن المقارنة بالـ id، وتغيير القسم يعيد البداية.
+     */
+    private fun observeResolved() {
+        viewModelScope.launch(Dispatchers.Default) {
+            var prevSection: String? = null
+            var prev: Map<String, String> = emptyMap()
+            uiState.collect { st ->
+                if (st.isLoading) return@collect
+                val sec = section.value
+                val now = st.materials.associate { it.id to it.name }
+                if (prevSection == sec && prev.isNotEmpty()) {
+                    val gone = prev.filterKeys { it !in now }.values.filter { n -> n !in now.values }
+                    if (gone.isNotEmpty()) finderStore.recordResolved(gone) { learnVersion.update { it + 1 } }
+                }
+                prevSection = sec
+                prev = now
+            }
+        }
+    }
+
+    /** أسماء ما هو ناقص الآن — لا يُقترح أبداً لأنه موجود على القائمة أصلاً. */
+    private fun pendingNames(): List<String> = uiState.value.materials.map { it.name }
+
+    val suggestions: StateFlow<List<MaterialCatalogItem>> = combine(
+        catalog, learnVersion, uiState.map { st -> st.materials.map { it.name } }.distinctUntilChanged()
+    ) { items, _, pending ->
+        finderStore.suggested(items, 12, pending)
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun rankedCatalog(items: List<MaterialCatalogItem>): List<MaterialCatalogItem> = finderStore.ranked(items)
+    fun rankedCatalog(items: List<MaterialCatalogItem>): List<MaterialCatalogItem> =
+        finderStore.ranked(items, pendingNames())
 
-    fun suggestedNow(items: List<MaterialCatalogItem>): List<MaterialCatalogItem> = finderStore.suggested(items, 60)
+    fun suggestedNow(items: List<MaterialCatalogItem>): List<MaterialCatalogItem> =
+        finderStore.suggested(items, 60, pendingNames())
 
     fun suggestionFor(name: String): Pair<Int, MaterialUnit>? = finderStore.suggestion(name)
 
