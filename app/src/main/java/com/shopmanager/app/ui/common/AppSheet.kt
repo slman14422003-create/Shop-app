@@ -1,6 +1,8 @@
 package com.shopmanager.app.ui.common
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -53,12 +56,33 @@ fun AppSheet(
     )
     val scope = rememberCoroutineScope()
     val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
+    val glass = blurEnabled()
     ModalBottomSheet(
         onDismissRequest = { if (dismissible) onDismiss() },
         sheetState = state,
-        containerColor = MaterialTheme.colorScheme.surface,
+        dragHandle = {
+            Box(Modifier.fillMaxWidth()) {
+                if (glass) {
+                    BlurBackdrop(
+                        Modifier.matchParentSize(),
+                        tint = MaterialTheme.colorScheme.surface.copy(alpha = 0.74f),
+                        radius = 16f
+                    )
+                }
+                BottomSheetDefaults.DragHandle(Modifier.align(Alignment.Center))
+            }
+        },
+        containerColor = if (glass) Color.Transparent else MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     ) {
+        Box(Modifier.fillMaxWidth()) {
+        if (glass) {
+            BlurBackdrop(
+                Modifier.matchParentSize(),
+                tint = MaterialTheme.colorScheme.surface.copy(alpha = 0.74f),
+                radius = 16f
+            )
+        }
         Column(
             Modifier
                 .fillMaxWidth()
@@ -74,6 +98,7 @@ fun AppSheet(
                 color = MaterialTheme.colorScheme.onSurface
             )
             content(close)
+        }
         }
     }
 }

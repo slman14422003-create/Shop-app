@@ -110,6 +110,29 @@ private fun BlurLayer(
 }
 
 @Composable
+fun blurEnabled(strongOnly: Boolean = false): Boolean {
+    val tier = LocalPerformanceTier.current
+    val target = (LocalContext.current.findActivity() as? MainActivity)?.blurTarget
+    return target != null && (tier == PerformanceTier.STANDARD || (!strongOnly && tier == PerformanceTier.BALANCED))
+}
+
+@Composable
+fun BlurBackdrop(modifier: Modifier, tint: Color, radius: Float? = null) {
+    val tier = LocalPerformanceTier.current
+    val target = (LocalContext.current.findActivity() as? MainActivity)?.blurTarget ?: return
+    val strong = tier == PerformanceTier.STANDARD
+    BlurLayer(
+        target = target,
+        radius = radius ?: if (strong) 9f else 5f,
+        scale = if (strong) 3f else 6f,
+        noise = strong,
+        tint = tint,
+        backdrop = MaterialTheme.colorScheme.background,
+        modifier = modifier
+    )
+}
+
+@Composable
 fun BlurContextMenu(
     anchor: Rect,
     actions: List<BlurMenuAction>,
