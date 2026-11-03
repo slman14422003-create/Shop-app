@@ -3,15 +3,23 @@ package com.shopmanager.app.data.materials
 import android.content.Context
 import com.shopmanager.app.data.learning.DebouncedTask
 import com.shopmanager.app.data.learning.LearningHub
+import com.shopmanager.app.data.retryOnError
 import com.shopmanager.app.ui.common.ArabicText
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.Calendar
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 data class PendingMaterial(
     val name: String,
@@ -22,15 +30,22 @@ data class PendingMaterial(
 )
 
 /**
- * Local learning model for missing materials.
+ * الذكاء المحلي لقائمة النواقص — نسخة مشتركة بين كل المستخدمين.
  *
- * Threading: every mutation is posted to the single learning thread and persisted with a
- * debounce; queries are in-memory reads that never touch disk and return empty results
- * until [preload] has finished.
+ * كيف يعمل:
+ *  1. كل ما يحدث (إضافة نقص، صار متوفراً، "موجودة"، تخطّي…) يُسجَّل كـ**حدث** في فايربيس
+ *     ([AiEventSync]) ويُحفظ نسخة منه على الجهاز ليعمل دون اتصال.
+ *  2. كل جهاز يعيد بناء الإحصائيات من نفس الأحداث بترتيب الزمن بنفس الخوارزمية، فتظهر
+ *     نفس الاقتراحات عند الجميع بلا تعارض ولا عدّادات تتضارب.
+ *  3. الاستعلامات قراءات من الذاكرة فقط ولا تلمس القرص.
+ *
+ * الخيوط: كل التعديلات تمر على خيط التعلّم الواحد؛ [events] و[statsMap] محميتان بـ synchronized.
  */
 class MissingFinderStore(context: Context) {
 
-    private val prefs = context.applicationContext.getSharedPreferences("shop_missing_finder", Context.MODE_PRIVATE)
+    private val appCtx = context.applicationContext
+    private val prefs = appCtx.getSharedPreferences("shop_missing_finder", Context.MODE_PRIVATE)
+    private val cacheFile = File(appCtx.filesDir, "ai_events_cache.json")
 
     data class Stat(
         val added: Int = 0,
@@ -43,7 +58,11 @@ class MissingFinderStore(context: Context) {
         val qty: Int = 1,
         val unit: String = MaterialUnit.KG.label,
         val name: String = "",
+        /** عدد مرات الإضافة في كل يوم من الأسبوع (0 = الاثنين … 6 = الأحد). */
         val weekdays: IntArray = IntArray(7),
+        /** نفس العدّاد لكن بأوزان تتناقص مع الزمن (نصف عمر [WD_HALF_LIFE_DAYS] يوماً). */
+        val wdW: FloatArray = FloatArray(7),
+        val wdT: Long = 0L,
         /** آخر مرة صارت فيها المادة متوفرة (حُذفت من النواقص أو أُجيب "موجودة"). */
         val lastResolved: Long = 0L,
         /** متوسط المدة (بالأيام) التي تبقى فيها المادة متوفرة قبل أن تنقص من جديد. */
@@ -62,257 +81,422 @@ class MissingFinderStore(context: Context) {
         val qty: Int,
         val unit: MaterialUnit,
         val avgGapDays: Int?,
-        val due: Boolean
+        val due: Boolean,
+        /** وصف نمط التكرار: "عادةً تنقص يوم الأحد (4 من 5 مرات)" أو "بلا يوم ثابت…". */
+        val pattern: String? = null,
+        /** اليوم هو أحد أيام النمط الثابت لهذه المادة. */
+        val patternToday: Boolean = false
     )
 
-    private val statsMap = HashMap<String, Stat>()
-    private val pairsMap = HashMap<String, MutableMap<String, Int>>()
-    private val keyCache = HashMap<String, String>()
-    @Volatile private var loaded = false
+    /** نمط أيام الأسبوع المكتشف لمادة: [days] أيام ثابتة، [hits] من [total] مرات. */
+    private data class Pattern(val days: List<Int>, val hits: Int, val total: Int, val weekly: Boolean)
 
-    private val writer = DebouncedTask(700L) { writeToPrefs() }
+    private val events = HashMap<String, AiEvent>()
+    private var statsMap = HashMap<String, Stat>()
+    private var pairsMap = HashMap<String, MutableMap<String, Int>>()
+    private val keyCache = ConcurrentHashMap<String, String>()
+    @Volatile private var loaded = false
+    private var syncJob: Job? = null
+
+    private val _version = MutableStateFlow(0)
+
+    /** يزيد مع كل إعادة بناء (حدث محلي أو قادم من جهاز آخر) ليحدّث الواجهة اقتراحاتها. */
+    val version: StateFlow<Int> = _version
+
+    private val saver = DebouncedTask(1200L) { saveCache() }
 
     private fun key(name: String): String {
         if (keyCache.size > 3000) keyCache.clear()
         return keyCache.getOrPut(name) { ArabicText.normalize(name) }
     }
 
+    // ───────────────────────── التحميل والمزامنة ─────────────────────────
+
     fun preload() {
         synchronized(this) { ensureLoaded() }
+        startSync()
     }
 
     private fun ensureLoaded() {
         if (loaded) return
-        prefs.getString(KEY_STATS, null)?.let { raw ->
-            runCatching {
-                val obj = JSONObject(raw)
-                obj.keys().forEach { k ->
-                    val o = obj.getJSONObject(k)
-                    val wd = IntArray(7)
-                    o.optJSONArray("w")?.let { a -> for (i in 0 until min(7, a.length())) wd[i] = a.optInt(i) }
-                    statsMap[k] = Stat(
-                        added = o.optInt("a"), important = o.optInt("i"), exists = o.optInt("e"),
-                        skipped = o.optInt("s"), lastAdded = o.optLong("t"),
-                        avgGapDays = o.optDouble("g", 0.0).toFloat(),
-                        gapDev = o.optDouble("d", 0.0).toFloat(),
-                        qty = o.optInt("q", 1).coerceAtLeast(1),
-                        unit = o.optString("u", MaterialUnit.KG.label),
-                        name = o.optString("n", ""),
-                        weekdays = wd,
-                        lastResolved = o.optLong("r", 0L),
-                        avgLife = o.optDouble("l", 0.0).toFloat(),
-                        recent = o.optJSONArray("ts")?.let { a -> LongArray(a.length()) { i -> a.optLong(i) } } ?: LongArray(0),
-                        recentQty = o.optJSONArray("rq")?.let { a -> IntArray(a.length()) { i -> a.optInt(i, 1) } } ?: IntArray(0),
-                        recentUnits = o.optJSONArray("ru")?.let { a -> List(a.length()) { i -> a.optString(i) } } ?: emptyList()
-                    )
-                }
-            }
-        }
-        prefs.getString(KEY_PAIRS, null)?.let { raw ->
-            runCatching {
-                val obj = JSONObject(raw)
-                obj.keys().forEach { k ->
-                    val o = obj.getJSONObject(k)
-                    val m = HashMap<String, Int>()
-                    o.keys().forEach { k2 -> m[k2] = o.optInt(k2) }
-                    pairsMap[k] = m
-                }
-            }
-        }
-        loaded = true
+        loadCache()
+        rebuildLocked()
     }
 
-    private fun writeToPrefs() {
-        val statsCopy: Map<String, Stat>
-        val pairsCopy: Map<String, Map<String, Int>>
-        synchronized(this) {
-            if (!loaded) return
-            statsCopy = HashMap(statsMap)
-            pairsCopy = pairsMap.mapValues { HashMap(it.value) }
+    @Synchronized
+    private fun startSync() {
+        if (syncJob != null) return
+        syncJob = LearningHub.scope.launch {
+            runCatching { migrateLegacyOnce() }
+            runCatching { purgeWeekly() }
+            AiEventSync.listen().retryOnError { }.collect { incoming ->
+                var changed = false
+                synchronized(this@MissingFinderStore) {
+                    ensureLoaded()
+                    for (e in incoming) if (events.put(e.id, e) == null) changed = true
+                    if (changed) rebuildLocked()
+                }
+                if (changed) saver.trigger()
+            }
         }
-        val so = JSONObject()
-        statsCopy.forEach { (k, s) ->
-            so.put(
-                k,
-                JSONObject().put("a", s.added).put("i", s.important).put("e", s.exists)
-                    .put("s", s.skipped).put("t", s.lastAdded).put("g", s.avgGapDays.toDouble())
-                    .put("d", s.gapDev.toDouble()).put("q", s.qty).put("u", s.unit).put("n", s.name)
-                    .put("w", JSONArray(s.weekdays.toList()))
-                    .put("r", s.lastResolved).put("l", s.avgLife.toDouble())
-                    .put("ts", JSONArray(s.recent.toList()))
-                    .put("rq", JSONArray(s.recentQty.toList()))
-                    .put("ru", JSONArray(s.recentUnits))
-            )
-        }
-        val po = JSONObject()
-        pairsCopy.forEach { (k, m) ->
-            val o = JSONObject()
-            m.forEach { (k2, c) -> o.put(k2, c) }
-            po.put(k, o)
-        }
-        prefs.edit().putString(KEY_STATS, so.toString()).putString(KEY_PAIRS, po.toString()).apply()
     }
 
-    fun flushNow() = writer.flushNow()
+    private suspend fun purgeWeekly() {
+        val last = prefs.getLong(KEY_PURGE_AT, 0L)
+        val now = System.currentTimeMillis()
+        if (now - last < 7 * DAY_MS) return
+        AiEventSync.purgeOld()
+        prefs.edit().putLong(KEY_PURGE_AT, now).apply()
+    }
 
-    private fun post(onDone: () -> Unit = {}, block: () -> Unit) {
-        LearningHub.scope.launch {
-            synchronized(this@MissingFinderStore) {
+    /**
+     * ترحيل إحصائيات النسخة القديمة (المحلية فقط) مرة واحدة: تتحول إلى أحداث ذات معرّفات
+     * حتمية فتُرفع لفايربيس ويراها الجميع دون تكرار حتى لو رحّلها أكثر من جهاز.
+     */
+    private fun migrateLegacyOnce() {
+        if (prefs.getBoolean(KEY_MIGRATED, false)) return
+        val raw = prefs.getString(KEY_LEGACY_STATS, null)
+        val seeds = ArrayList<AiEvent>()
+        if (raw != null) runCatching {
+            val obj = JSONObject(raw)
+            obj.keys().forEach { k ->
+                val o = obj.getJSONObject(k)
+                val name = o.optString("n", "").ifBlank { k }
+                val added = o.optInt("a")
+                val last = o.optLong("t")
+                if (added <= 0 && o.optInt("i") <= 0 && o.optInt("e") <= 0) return@forEach
+                val ts = o.optJSONArray("ts")?.let { a -> List(a.length()) { i -> a.optLong(i) } } ?: emptyList()
+                val rq = o.optJSONArray("rq")?.let { a -> List(a.length()) { i -> a.optInt(i, 1) } } ?: emptyList()
+                val ru = o.optJSONArray("ru")?.let { a -> List(a.length()) { i -> a.optString(i) } } ?: emptyList()
+                val stamps = if (ts.isNotEmpty()) ts else if (last > 0L) listOf(last) else emptyList()
+                stamps.forEachIndexed { idx, t ->
+                    if (t <= 0L) return@forEachIndexed
+                    val fromEnd = stamps.size - 1 - idx
+                    val q = rq.getOrNull(rq.size - 1 - fromEnd) ?: o.optInt("q", 1)
+                    val u = ru.getOrNull(ru.size - 1 - fromEnd) ?: o.optString("u", MaterialUnit.KG.label)
+                    seeds += seed(AiEvent.ADDED, name, t, qty = q.coerceAtLeast(1), unit = u)
+                }
+                val anchor = if (last > 0L) last - 1 else 0L
+                if (anchor > 0L) {
+                    val ex = o.optInt("e")
+                    if (ex > 0) seeds += seed(AiEvent.EXISTS, name, anchor, count = ex)
+                    val sk = o.optInt("s")
+                    if (sk > 0) seeds += seed(AiEvent.SKIPPED, name, anchor, count = sk)
+                    val im = o.optInt("i")
+                    if (im > 0) seeds += seed(AiEvent.IMPORTANT, name, anchor, count = im)
+                }
+                val r = o.optLong("r", 0L)
+                if (r > 0L) seeds += seed(AiEvent.RESOLVED, name, r)
+            }
+        }
+        if (seeds.isNotEmpty()) {
+            synchronized(this) {
                 ensureLoaded()
-                block()
-                if (statsMap.size > MAX_ITEMS) prune()
+                seeds.forEach { events[it.id] = it }
+                rebuildLocked()
             }
-            writer.trigger()
+            AiEventSync.writeAll(seeds)
+            saver.trigger()
+        }
+        prefs.edit().putBoolean(KEY_MIGRATED, true).apply()
+    }
+
+    private fun seed(type: String, name: String, ts: Long, qty: Int = 1, unit: String = "", count: Int = 1): AiEvent =
+        ev(type, name, ts, qty = qty, unit = unit, count = count)
+
+    // ───────────────────────── نسخة الأحداث على الجهاز ─────────────────────────
+
+    private fun loadCache() {
+        if (!cacheFile.exists()) return
+        runCatching {
+            val arr = JSONArray(cacheFile.readText())
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val id = o.optString("id")
+                if (id.isEmpty()) continue
+                events[id] = AiEvent(
+                    id = id, key = o.optString("k"), name = o.optString("n"), type = o.optString("t"),
+                    ts = o.optLong("ts"), qty = o.optInt("q", 1), unit = o.optString("u"),
+                    important = o.optBoolean("i"), batch = o.optString("b"), to = o.optString("to"),
+                    count = o.optInt("c", 1).coerceAtLeast(1)
+                )
+            }
+        }
+    }
+
+    private fun saveCache() {
+        val snapshot = synchronized(this) { events.values.toList() }
+        runCatching {
+            val arr = JSONArray()
+            snapshot.forEach { e ->
+                arr.put(
+                    JSONObject().put("id", e.id).put("k", e.key).put("n", e.name).put("t", e.type)
+                        .put("ts", e.ts).put("q", e.qty).put("u", e.unit).put("i", e.important)
+                        .put("b", e.batch).put("to", e.to).put("c", e.count)
+                )
+            }
+            val tmp = File(cacheFile.parentFile, cacheFile.name + ".tmp")
+            tmp.writeText(arr.toString())
+            if (!tmp.renameTo(cacheFile)) {
+                cacheFile.writeText(arr.toString())
+                tmp.delete()
+            }
+        }
+    }
+
+    fun flushNow() = saver.flushNow()
+
+    // ───────────────────────── إعادة بناء الإحصائيات من الأحداث ─────────────────────────
+
+    /** يُستدعى داخل synchronized(this). */
+    private fun rebuildLocked() {
+        val now = System.currentTimeMillis()
+        val from = now - AiEventSync.WINDOW_DAYS * DAY_MS
+        if (events.size > MAX_EVENTS) {
+            val drop = events.values.sortedBy { it.ts }.take(events.size - MAX_EVENTS + 200).map { it.id }
+            drop.forEach { events.remove(it) }
+        }
+        val list = events.values
+            .filter { it.key.isNotEmpty() && it.ts in from..(now + DAY_MS) }
+            .sortedWith(compareBy<AiEvent> { it.ts }.thenBy { it.id })
+        val st = HashMap<String, Stat>()
+        val alias = HashMap<String, String>()
+        val batches = HashMap<String, MutableList<String>>()
+        for (e in list) applyEvent(st, alias, batches, e)
+
+        fun canon(k: String): String {
+            var cur = k
+            var guard = 0
+            while (guard++ < 6) cur = alias[cur] ?: break
+            return cur
+        }
+        val pairs = HashMap<String, MutableMap<String, Int>>()
+        for (members in batches.values) {
+            val keys = members.map { canon(it) }.distinct().take(MAX_BATCH)
+            if (keys.size < 2) continue
+            for (a in keys) {
+                val m = pairs.getOrPut(a) { HashMap() }
+                for (b in keys) if (a != b) m[b] = (m[b] ?: 0) + 1
+            }
+        }
+        for (m in pairs.values) {
+            if (m.size > MAX_PARTNERS) {
+                val keep = m.entries.sortedByDescending { it.value }.take(MAX_PARTNERS).associate { it.key to it.value }
+                m.clear(); m.putAll(keep)
+            }
+        }
+        statsMap = st
+        pairsMap = pairs
+        loaded = true
+        _version.value = _version.value + 1
+    }
+
+    private fun decayed(s: Stat, now: Long): FloatArray {
+        val out = s.wdW.copyOf()
+        if (s.wdT in 1 until now) {
+            val f = 0.5.pow((now - s.wdT).toDouble() / (WD_HALF_LIFE_DAYS * DAY_MS)).toFloat()
+            for (i in out.indices) out[i] *= f
+        }
+        return out
+    }
+
+    private fun applyEvent(
+        st: HashMap<String, Stat>,
+        alias: HashMap<String, String>,
+        batches: HashMap<String, MutableList<String>>,
+        e: AiEvent
+    ) {
+        val k = e.key
+        val now = e.ts
+        when (e.type) {
+            AiEvent.ADDED -> {
+                val old = st[k] ?: Stat()
+                val gap = if (old.lastAdded > 0L) (now - old.lastAdded).toFloat() / DAY_MS else 0f
+                var avg = old.avgGapDays
+                var dev = old.gapDev
+                if (gap >= 0.5f) {
+                    if (avg <= 0f) {
+                        avg = gap
+                    } else {
+                        dev = dev * 0.6f + kotlin.math.abs(gap - avg) * 0.4f
+                        avg = avg * 0.6f + gap * 0.4f
+                    }
+                }
+                val di = weekdayOf(now)
+                val wd = old.weekdays.copyOf()
+                wd[di]++
+                val w = decayed(old, now)
+                w[di] += 1f
+                // كم بقيت المادة متوفرة بعد آخر مرة صارت فيها متوفرة؟
+                var life = old.avgLife
+                if (old.lastResolved > 0L && old.lastResolved >= old.lastAdded) {
+                    val l = (now - old.lastResolved).toFloat() / DAY_MS
+                    if (l >= 0.5f) life = if (life <= 0f) l else life * 0.6f + l * 0.4f
+                }
+                val q = e.qty.coerceAtLeast(1)
+                st[k] = old.copy(
+                    added = old.added + 1,
+                    important = old.important + if (e.important) 1 else 0,
+                    lastAdded = now,
+                    avgGapDays = avg,
+                    gapDev = dev,
+                    qty = q,
+                    unit = e.unit.ifEmpty { old.unit },
+                    name = e.name,
+                    weekdays = wd,
+                    wdW = w,
+                    wdT = now,
+                    avgLife = life,
+                    recent = (old.recent.toList() + now).takeLast(MAX_TS).toLongArray(),
+                    recentQty = (old.recentQty.toList() + q).takeLast(MAX_Q).toIntArray(),
+                    recentUnits = (old.recentUnits + e.unit).takeLast(MAX_Q)
+                )
+                if (e.batch.isNotEmpty()) batches.getOrPut(e.batch) { ArrayList() }.add(k)
+            }
+            AiEvent.RESOLVED -> {
+                val old = st[k] ?: return
+                if (old.added == 0) return
+                // حذف مكرر خلال دقيقة (جهازان، أو حذف + مزامنة) لا يُحسب مرتين.
+                if (old.lastResolved >= old.lastAdded && now - old.lastResolved < 60_000L) return
+                st[k] = old.copy(lastResolved = now)
+            }
+            AiEvent.EXISTS -> {
+                val old = st[k] ?: Stat(name = e.name)
+                st[k] = old.copy(
+                    exists = old.exists + e.count,
+                    lastResolved = if (old.added > 0) now else old.lastResolved
+                )
+            }
+            AiEvent.SKIPPED -> {
+                val old = st[k] ?: Stat(name = e.name)
+                st[k] = old.copy(skipped = old.skipped + e.count)
+            }
+            AiEvent.IMPORTANT -> {
+                val old = st[k] ?: Stat(name = e.name)
+                st[k] = old.copy(important = old.important + e.count)
+            }
+            AiEvent.RENAMED -> {
+                val to = e.to
+                if (to.isEmpty() || to == k) return
+                val moved = st.remove(k) ?: run { alias[k] = to; return }
+                alias[k] = to
+                val ex = st[to]
+                st[to] = if (ex == null) moved.copy(name = e.name) else ex.copy(
+                    added = ex.added + moved.added,
+                    important = ex.important + moved.important,
+                    exists = ex.exists + moved.exists,
+                    skipped = ex.skipped + moved.skipped,
+                    lastAdded = max(ex.lastAdded, moved.lastAdded),
+                    lastResolved = max(ex.lastResolved, moved.lastResolved),
+                    avgLife = if (ex.avgLife > 0f) ex.avgLife else moved.avgLife,
+                    avgGapDays = if (ex.avgGapDays > 0f) ex.avgGapDays else moved.avgGapDays,
+                    gapDev = if (ex.avgGapDays > 0f) ex.gapDev else moved.gapDev,
+                    recent = (ex.recent.toList() + moved.recent.toList()).sorted().takeLast(MAX_TS).toLongArray(),
+                    name = e.name,
+                    weekdays = IntArray(7) { ex.weekdays[it] + moved.weekdays[it] },
+                    wdW = FloatArray(7) { decayed(ex, e.ts)[it] + decayed(moved, e.ts)[it] },
+                    wdT = e.ts
+                )
+            }
+        }
+    }
+
+    // ───────────────────────── تسجيل الأحداث ─────────────────────────
+
+    private fun ev(
+        type: String,
+        name: String,
+        ts: Long = System.currentTimeMillis(),
+        qty: Int = 1,
+        unit: String = "",
+        important: Boolean = false,
+        batch: String = "",
+        to: String = "",
+        count: Int = 1
+    ): AiEvent {
+        val k = key(name)
+        return AiEvent(AiEventSync.idFor(type, k, ts), k, name, type, ts, qty, unit, important, batch, to, count)
+    }
+
+    /** يضيف الأحداث محلياً فوراً ويرسلها لفايربيس؛ الاستعلامات ترى أثرها مباشرة. */
+    private fun post(onDone: () -> Unit = {}, block: () -> List<AiEvent>) {
+        LearningHub.scope.launch {
+            val created = synchronized(this@MissingFinderStore) {
+                ensureLoaded()
+                val list = block()
+                if (list.isNotEmpty()) {
+                    list.forEach { events[it.id] = it }
+                    rebuildLocked()
+                }
+                list
+            }
+            if (created.isNotEmpty()) {
+                if (created.size == 1) AiEventSync.write(created[0]) else AiEventSync.writeAll(created)
+                saver.trigger()
+            }
+            startSync()
             onDone()
         }
     }
 
-    private fun prune() {
-        val now = System.currentTimeMillis()
-        val drop = statsMap.entries
-            .sortedBy { if (inCooldown(it.value, now)) Double.MAX_VALUE else score(it.value, now) }
-            .take(statsMap.size - MAX_ITEMS + 50)
-            .map { it.key }
-        drop.forEach { statsMap.remove(it); pairsMap.remove(it) }
-        pairsMap.values.forEach { m -> drop.forEach { m.remove(it) } }
-    }
-
-    fun recordAdded(name: String, quantity: Double, unit: String, important: Boolean, onDone: () -> Unit = {}) {
+    fun recordAdded(
+        name: String,
+        quantity: Double,
+        unit: String,
+        important: Boolean,
+        batch: String = "",
+        onDone: () -> Unit = {}
+    ) {
         post(onDone) {
-            val k = key(name)
-            val old = statsMap[k] ?: Stat()
-            val now = System.currentTimeMillis()
-            val gap = if (old.lastAdded > 0L) (now - old.lastAdded).toFloat() / DAY_MS else 0f
-            var avg = old.avgGapDays
-            var dev = old.gapDev
-            if (gap >= 0.5f) {
-                if (avg <= 0f) {
-                    avg = gap
-                } else {
-                    dev = dev * 0.6f + kotlin.math.abs(gap - avg) * 0.4f
-                    avg = avg * 0.6f + gap * 0.4f
-                }
-            }
-            val wd = old.weekdays.copyOf()
-            wd[weekdayIndex()]++
-            // كم بقيت المادة متوفرة بعد آخر مرة صارت فيها متوفرة؟
-            var life = old.avgLife
-            if (old.lastResolved > 0L && old.lastResolved >= old.lastAdded) {
-                val l = (now - old.lastResolved).toFloat() / DAY_MS
-                if (l >= 0.5f) life = if (life <= 0f) l else life * 0.6f + l * 0.4f
-            }
-            val recent = (old.recent.toList() + now).takeLast(MAX_TS).toLongArray()
-            statsMap[k] = old.copy(
-                added = old.added + 1,
-                important = old.important + if (important) 1 else 0,
-                lastAdded = now,
-                avgGapDays = avg,
-                gapDev = dev,
-                qty = quantity.toInt().coerceAtLeast(1),
-                unit = unit,
-                name = name,
-                weekdays = wd,
-                avgLife = life,
-                recent = recent,
-                recentQty = (old.recentQty.toList() + quantity.toInt().coerceAtLeast(1)).takeLast(MAX_Q).toIntArray(),
-                recentUnits = (old.recentUnits + unit).takeLast(MAX_Q)
-            )
+            listOf(ev(AiEvent.ADDED, name, qty = quantity.toInt().coerceAtLeast(1), unit = unit, important = important, batch = batch))
         }
     }
 
     /**
      * المادة صارت متوفرة (حُذفت من قائمة النواقص): لا تُقترح حتى يحين وقتها الطبيعي.
-     * لا ننشئ سجلاً لمادة لم تُسجَّل كنقص قط.
+     * لا ننشئ سجلاً لمادة لم تُسجَّل كنقص قط، ولا نكرر حدثاً سجّله جهاز آخر قبل لحظات.
      */
     fun recordResolved(names: Collection<String>, onDone: () -> Unit = {}) {
         if (names.isEmpty()) return
         val copy = names.toList()
         post(onDone) {
             val now = System.currentTimeMillis()
-            copy.forEach { n ->
-                val k = key(n)
-                val old = statsMap[k] ?: return@forEach
-                if (old.added == 0) return@forEach
-                // حذف مكرر خلال دقيقة (جهازان، أو حذف + مزامنة) لا يُحسب مرتين.
-                if (old.lastResolved >= old.lastAdded && now - old.lastResolved < 60_000L) return@forEach
-                statsMap[k] = old.copy(lastResolved = now)
+            copy.mapNotNull { n ->
+                val old = statsMap[key(n)] ?: return@mapNotNull null
+                if (old.added == 0) return@mapNotNull null
+                if (old.lastResolved >= old.lastAdded && now - old.lastResolved < 60_000L) return@mapNotNull null
+                ev(AiEvent.RESOLVED, n, now)
             }
         }
     }
 
     fun recordImportant(name: String, onDone: () -> Unit = {}) {
-        post(onDone) {
-            val k = key(name)
-            val old = statsMap[k] ?: Stat(name = name)
-            statsMap[k] = old.copy(important = old.important + 1)
-        }
+        post(onDone) { listOf(ev(AiEvent.IMPORTANT, name)) }
     }
 
     fun recordExists(names: Collection<String>, onDone: () -> Unit = {}) {
         if (names.isEmpty()) return
         val copy = names.toList()
-        post(onDone) {
-            copy.forEach { n ->
-                val k = key(n)
-                val old = statsMap[k] ?: Stat(name = n)
-                statsMap[k] = old.copy(
-                    exists = old.exists + 1,
-                    lastResolved = if (old.added > 0) System.currentTimeMillis() else old.lastResolved
-                )
-            }
-        }
+        post(onDone) { copy.map { ev(AiEvent.EXISTS, it) } }
     }
 
     fun recordSkipped(names: Collection<String>, onDone: () -> Unit = {}) {
         if (names.isEmpty()) return
         val copy = names.toList()
-        post(onDone) {
-            copy.forEach { n ->
-                val k = key(n)
-                val old = statsMap[k] ?: Stat(name = n)
-                statsMap[k] = old.copy(skipped = old.skipped + 1)
-            }
-        }
-    }
-
-    /** Learns which materials go missing together in one session. */
-    fun recordBatch(names: Collection<String>, onDone: () -> Unit = {}) {
-        val copy = names.toList()
-        post(onDone) {
-            val keys = copy.map { key(it) }.distinct().take(MAX_BATCH)
-            if (keys.size < 2) return@post
-            for (a in keys) {
-                val m = pairsMap.getOrPut(a) { HashMap() }
-                for (b in keys) if (a != b) m[b] = (m[b] ?: 0) + 1
-                if (m.size > MAX_PARTNERS) {
-                    val keep = m.entries.sortedByDescending { it.value }.take(MAX_PARTNERS).associate { it.key to it.value }
-                    m.clear(); m.putAll(keep)
-                }
-            }
-        }
+        post(onDone) { copy.map { ev(AiEvent.SKIPPED, it) } }
     }
 
     fun rename(oldName: String, newName: String, onDone: () -> Unit = {}) {
         post(onDone) {
             val from = key(oldName)
             val to = key(newName)
-            if (from == to) return@post
-            val moved = statsMap.remove(from) ?: return@post
-            val existing = statsMap[to]
-            statsMap[to] = if (existing == null) moved.copy(name = newName) else existing.copy(
-                added = existing.added + moved.added,
-                important = existing.important + moved.important,
-                exists = existing.exists + moved.exists,
-                skipped = existing.skipped + moved.skipped,
-                lastAdded = max(existing.lastAdded, moved.lastAdded),
-                lastResolved = max(existing.lastResolved, moved.lastResolved),
-                avgLife = if (existing.avgLife > 0f) existing.avgLife else moved.avgLife,
-                recent = (existing.recent.toList() + moved.recent.toList()).sorted().takeLast(MAX_TS).toLongArray(),
-                name = newName,
-                weekdays = IntArray(7) { existing.weekdays[it] + moved.weekdays[it] }
+            if (from == to) return@post emptyList()
+            listOf(
+                AiEvent(
+                    AiEventSync.idFor(AiEvent.RENAMED, from, System.currentTimeMillis()),
+                    from, newName, AiEvent.RENAMED, System.currentTimeMillis(), to = to
+                )
             )
-            pairsMap.remove(from)?.let { pairsMap.getOrPut(to) { HashMap() }.putAll(it) }
-            pairsMap.values.forEach { m -> m.remove(from)?.let { c -> m[to] = (m[to] ?: 0) + c } }
         }
     }
 
@@ -328,6 +512,8 @@ class MissingFinderStore(context: Context) {
         }
         return best
     }
+
+    // ───────────────────────── المنطق الزمني ─────────────────────────
 
     /** المادة صارت متوفرة بعد آخر طلب لها (وليست بانتظار الشراء). */
     private fun isResolved(s: Stat) = s.lastResolved > 0L && s.lastResolved >= s.lastAdded
@@ -365,6 +551,61 @@ class MissingFinderStore(context: Context) {
         return days >= threshold
     }
 
+    /**
+     * هل تنقص هذه المادة في أيام ثابتة من الأسبوع؟
+     *  - يوم واحد إن كان ≥ 50% من الإضافات (بأوزان تُفضّل الأحدث)،
+     *  - أو يومان إن جمعا ≥ 80% ولكلٍّ منهما ≥ 25%.
+     * يلزم ≥ 3 مرات و≥ 60% من كل المرات على هذه الأيام؛ وإلا فلا يوجد يوم ثابت.
+     * [Pattern.weekly] = تتكرر أسبوعياً تقريباً (متوسط الفاصل ≤ 16 يوماً)، وإلا فاليوم مجرد ميل.
+     */
+    private fun patternOf(s: Stat, now: Long): Pattern? {
+        val total = s.weekdays.sum()
+        if (total < 3) return null
+        val w = decayed(s, now)
+        val sum = w.sum()
+        if (sum <= 0f) return null
+        val order = (0..6).sortedByDescending { w[it] }
+        val d0 = order[0]
+        val d1 = order[1]
+        val s0 = w[d0] / sum
+        val s1 = w[d1] / sum
+        val days: List<Int> = when {
+            s0 >= 0.5f -> listOf(d0)
+            s0 + s1 >= 0.8f && s1 >= 0.25f -> listOf(d0, d1).sorted()
+            else -> return null
+        }
+        val hits = days.sumOf { s.weekdays[it] }
+        if (hits < 3 || hits.toFloat() / total < 0.6f) return null
+        return Pattern(days, hits, total, weekly = s.avgGapDays in 1f..16f)
+    }
+
+    /** اليوم أحد أيام نمطها الأسبوعي الثابت، ولم تُطلب بعد في هذا الأسبوع. */
+    private fun isWeekdayDue(s: Stat, now: Long): Boolean {
+        val p = patternOf(s, now) ?: return false
+        if (!p.weekly) return false
+        if (weekdayOf(now) !in p.days) return false
+        if (inCooldown(s, now) || s.exists > s.added) return false
+        if (s.lastAdded == 0L) return false
+        val sinceLast = (now - s.lastAdded).toFloat() / DAY_MS
+        val minGap = if (p.days.size >= 2) 1.5f else 3.5f
+        if (sinceLast < minGap) return false
+        if (sinceLast > 90f) return false
+        return true
+    }
+
+    private fun patternText(s: Stat, now: Long): String? {
+        val p = patternOf(s, now)
+        if (p != null) {
+            val label = if (p.days.size == 1) "يوم ${DAY_NAMES[p.days[0]]}"
+            else "يومي ${DAY_NAMES[p.days[0]]} و${DAY_NAMES[p.days[1]]}"
+            return "عادةً تنقص $label (${p.hits} من ${p.total} مرات)"
+        }
+        if (s.added >= 3 && s.avgGapDays >= 1f) {
+            return "بلا يوم ثابت — تنقص كل ~${s.avgGapDays.roundToInt()} يوم تقريباً"
+        }
+        return null
+    }
+
     /** طُلبت كثيراً مؤخراً: عدد مرات الإضافة في آخر [FREQ_WINDOW_DAYS] يوماً. */
     private fun recentCount(s: Stat, now: Long): Int {
         val from = now - FREQ_WINDOW_DAYS * DAY_MS
@@ -392,11 +633,13 @@ class MissingFinderStore(context: Context) {
             val ratio = (days / expectedInterval(s)).coerceAtMost(2.0)
             due = 1.5 + (ratio - 0.6).coerceAtLeast(0.0)
         }
-        val total = s.weekdays.sum()
+        // يوم أسبوعي ثابت: كلما زاد عدد المرات (الثقة) وكان اليوم هو يومها زادت الأولوية.
         var weekday = 0.0
-        if (total >= 3) {
-            val share = s.weekdays[weekdayIndex()].toDouble() / total
-            if (share >= 0.4) weekday = 1.5 * share
+        val p = patternOf(s, now)
+        if (p != null && weekdayOf(now) in p.days) {
+            val share = p.hits.toDouble() / p.total
+            val conf = p.hits / (p.hits + 1.5)
+            weekday = (if (p.weekly) 2.8 else 1.0) * share * conf
         }
         val hot = min(recentCount(s, now), 5) * 0.6
         val stale = if (isStale(s, now)) 1.2 else 0.0
@@ -419,8 +662,8 @@ class MissingFinderStore(context: Context) {
 
     /**
      * الاقتراحات: تستثني ما هو على قائمة النواقص الآن ([exclude]) وما صار متوفراً
-     * مؤخراً (فترة الهدوء)، وترفع الأكثر طلباً مؤخراً والمستحق والمتأخر منذ مدة.
-     * وإن كانت هناك نواقص حالية، تُضاف المواد التي اعتادت أن تنقص معها.
+     * مؤخراً (فترة الهدوء)، وترفع الأكثر طلباً مؤخراً والمستحق والمتأخر منذ مدة وما يوافق
+     * يوم اليوم. وإن كانت هناك نواقص حالية، تُضاف المواد التي اعتادت أن تنقص معها.
      */
     @Synchronized
     fun suggested(
@@ -535,24 +778,22 @@ class MissingFinderStore(context: Context) {
         return qty to MaterialUnit.fromLabel(unit)
     }
 
-    /** مواد اعتادت أن تنقص في مثل هذا اليوم من الأسبوع (مثلاً كل أحد). */
+    /**
+     * مواد لها يوم أسبوعي ثابت يوافق اليوم (مثلاً تنقص كل أحد وهذا يوم الأحد)، لم تُطلب
+     * بعد في هذا الأسبوع. الأعلى ثقة (نسبة وعدد المرات) أولاً.
+     */
     @Synchronized
     fun weekdayNames(exclude: Collection<String>, catalog: List<MaterialCatalogItem>, limit: Int = 3): List<String> {
         if (!loaded) return emptyList()
         val now = System.currentTimeMillis()
         val skip = exclude.map { key(it) }.toHashSet()
         val nameOf = displayName(catalog)
-        val wd = weekdayIndex()
         return statsMap.entries
-            .filter { e ->
-                val s = e.value
-                val total = s.weekdays.sum()
-                e.key !in skip && total >= 4 && s.weekdays[wd].toDouble() / total >= 0.5 &&
-                    !inCooldown(s, now) && s.exists <= s.added &&
-                    // لم تُطلب في آخر يومين (لا نكرر ما طُلب للتو)
-                    (s.lastAdded == 0L || now - s.lastAdded > 2 * DAY_MS)
+            .filter { it.key !in skip && isWeekdayDue(it.value, now) }
+            .sortedByDescending { e ->
+                val p = patternOf(e.value, now)
+                if (p == null) 0.0 else (p.hits.toDouble() / p.total) * (p.hits / (p.hits + 1.5))
             }
-            .sortedByDescending { it.value.weekdays[wd] }
             .map { nameOf(it) }
             .filter { it.isNotBlank() }
             .take(limit)
@@ -565,6 +806,7 @@ class MissingFinderStore(context: Context) {
         if (s.added == 0 && s.exists == 0) return null
         val now = System.currentTimeMillis()
         val days = if (s.lastAdded > 0L) ((now - s.lastAdded) / DAY_MS).toInt() else null
+        val p = patternOf(s, now)
         return Insight(
             added = s.added,
             exists = s.exists,
@@ -572,23 +814,34 @@ class MissingFinderStore(context: Context) {
             qty = s.qty,
             unit = MaterialUnit.fromLabel(s.unit),
             avgGapDays = if (s.avgGapDays >= 1f) s.avgGapDays.toInt() else null,
-            due = isDue(s, now)
+            due = isDue(s, now),
+            pattern = patternText(s, now),
+            patternToday = p != null && weekdayOf(now) in p.days
         )
     }
 
-    private fun weekdayIndex(): Int = (Calendar.getInstance().get(Calendar.DAY_OF_WEEK) + 5) % 7
+    private fun weekdayOf(ts: Long): Int {
+        val c = Calendar.getInstance()
+        c.timeInMillis = ts
+        return (c.get(Calendar.DAY_OF_WEEK) + 5) % 7
+    }
 
     private companion object {
-        const val KEY_STATS = "stats_json"
-        const val KEY_PAIRS = "pairs_json"
+        const val KEY_LEGACY_STATS = "stats_json"
+        const val KEY_MIGRATED = "events_migrated_v1"
+        const val KEY_PURGE_AT = "events_purge_at"
         const val DAY_MS = 24L * 60 * 60 * 1000
         const val MAX_PARTNERS = 8
         const val MAX_BATCH = 30
-        const val MAX_ITEMS = 800
+        const val MAX_EVENTS = 6000
         const val MAX_TS = 10
         const val MAX_Q = 7
         const val FREQ_WINDOW_DAYS = 30L
+        const val WD_HALF_LIFE_DAYS = 60.0
         const val MIN_COOLDOWN_DAYS = 3f
         const val DEFAULT_COOLDOWN_DAYS = 7f
+
+        /** مرتّبة كما يرجعها weekdayOf: 0 = الاثنين … 6 = الأحد. */
+        val DAY_NAMES = arrayOf("الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد")
     }
 }
