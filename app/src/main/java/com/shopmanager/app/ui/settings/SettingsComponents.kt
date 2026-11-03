@@ -428,30 +428,7 @@ internal fun SettingsSheet(
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.(close: () -> Unit) -> Unit
 ) {
-    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-    val close: () -> Unit = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = state,
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-    ) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(start = ScreenGap, end = ScreenGap, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(ScreenGap)
-        ) {
-            Text(
-                title,
-                modifier = Modifier.padding(horizontal = 6.dp),
-                style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            content(close)
-        }
+    com.shopmanager.app.ui.common.AppSheet(title = title, onDismiss = onDismiss) { close ->
+        content(close)
     }
 }
