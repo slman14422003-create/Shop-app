@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ShopManager"
 include(":app")
+include(":blurview")

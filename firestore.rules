@@ -133,10 +133,12 @@ service cloud.firestore {
     match /materials_catalog/{id} {
       allow read: if true;
       allow delete: if true;
-      allow create: if request.resource.data.keys().hasOnly(['name'])
-                    && reqStr(request.resource.data, 'name', 1, 200);
-      allow update: if changedOnly(['name'])
-                    && reqStr(request.resource.data, 'name', 1, 200);
+      allow create: if request.resource.data.keys().hasOnly(['name', 'group'])
+                    && reqStr(request.resource.data, 'name', 1, 200)
+                    && optStr(request.resource.data, 'group', 80);
+      allow update: if changedOnly(['name', 'group'])
+                    && reqStr(request.resource.data, 'name', 1, 200)
+                    && optStr(request.resource.data, 'group', 80);
     }
 
     // ───────────── أحداث الذكاء المحلي المشتركة ─────────────
