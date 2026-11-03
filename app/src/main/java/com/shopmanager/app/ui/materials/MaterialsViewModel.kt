@@ -132,6 +132,20 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
         observeResolved()
         observePriceChanges()
+        observeSharedLearning()
+    }
+
+    /**
+     * الذكاء مشترك عبر فايربيس: أي حدث جديد (من هذا الجهاز أو من جهاز آخر) يغيّر الإحصائيات،
+     * فنحدّث الاقتراحات وبطاقة الصفحة الرئيسية تلقائياً بدل انتظار الدخول القادم للتطبيق.
+     */
+    private fun observeSharedLearning() {
+        viewModelScope.launch {
+            finderStore.version.debounce(800).collect {
+                learnVersion.update { v -> v + 1 }
+                if (lastEnterAt != 0L) refreshHomeSuggestions()
+            }
+        }
     }
 
     private fun observePriceChanges() {
@@ -205,8 +219,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun partnerFor(name: String, pendingNames: Collection<String>): String? = finderStore.partnerOf(name, pendingNames)
 
-    private fun learn(name: String, quantity: Double, unit: String, important: Boolean) {
-        finderStore.recordAdded(name, quantity, unit, important) { learnVersion.update { it + 1 } }
+    private fun learn(name: String, quantity: Double, unit: String, important: Boolean, batch: String = "") {
+        finderStore.recordAdded(name, quantity, unit, important, batch) { learnVersion.update { it + 1 } }
     }
 
     fun recordUsage(area: UsageArea) {
@@ -219,13 +233,22 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     private var enterJob: Job? = null
     private var lastEnterAt = 0L
 
+    /** أنواع البطاقات التي قبلها/رفضها المستخدم في هذه الجلسة: لا تعود حتى لو تغيّرت الإحصائيات. */
+    private val sessionHidden: MutableSet<com.shopmanager.app.data.learning.SuggestionKind> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     fun onAppEntered() {
         val now = android.os.SystemClock.elapsedRealtime()
         if (lastEnterAt != 0L && now - lastEnterAt < 10_000L) return
         lastEnterAt = now
+        sessionHidden.clear()
+        LearningHub.scope.launch { usage.record(UsageArea.APP_OPEN) }
+        refreshHomeSuggestions()
+    }
+
+    private fun refreshHomeSuggestions() {
         enterJob?.cancel()
         enterJob = viewModelScope.launch(Dispatchers.Default) {
-            LearningHub.scope.launch { usage.record(UsageArea.APP_OPEN) }
             val items = withTimeoutOrNull(2500L) { catalog.first { it.isNotEmpty() } } ?: catalog.value
             val current = (withTimeoutOrNull(2500L) { uiState.first { !it.isLoading } } ?: uiState.value)
                 .materials.map { it.name }
@@ -233,16 +256,18 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 finderStore.preload()
                 usage.pickSuggestions(finderStore, items, current, 4)
             }
-            _homeSuggestions.value = picks
+            _homeSuggestions.value = picks.filter { it.kind !in sessionHidden }
         }
     }
 
     fun onSuggestionAccepted(s: HomeSuggestion) {
+        sessionHidden += s.kind
         _homeSuggestions.value = _homeSuggestions.value.filter { it.kind != s.kind }
         LearningHub.scope.launch { usage.recordFeedback(s.kind, true) }
     }
 
     fun onSuggestionDismissed(s: HomeSuggestion) {
+        sessionHidden += s.kind
         _homeSuggestions.value = _homeSuggestions.value.filter { it.kind != s.kind }
         LearningHub.scope.launch { usage.recordFeedback(s.kind, false) }
         if (s.names.isNotEmpty()) finderStore.recordSkipped(s.names)
@@ -326,6 +351,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     fun addMaterialsBatch(items: List<PendingMaterial>, onDone: (Int) -> Unit) {
         viewModelScope.launch {
             var ok = 0
+            val batchId = java.util.UUID.randomUUID().toString().take(12)
             val baseOrder = (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
             for (p in items) {
                 try {
@@ -333,14 +359,13 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                         markWrittenHere(newId, p.name, p.quantity, p.unit)
                     }
                     if (p.important) repo.setImportant(id, true, baseOrder - ok)
-                    learn(p.name, p.quantity, p.unit, p.important)
+                    learn(p.name, p.quantity, p.unit, p.important, batchId)
                     ok++
                 } catch (e: Exception) {
                     _message.value = "تعذرت إضافة \"${p.name}\": ${e.message ?: "تحقق من الاتصال"}"
                 }
             }
             if (ok > 0) {
-                finderStore.recordBatch(items.map { it.name })
                 _message.value = "تمت إضافة $ok مادة إلى النواقص"
                 InstantBackupWorker.requestNow(getApplication())
             }

@@ -1064,7 +1064,12 @@ internal fun HomeSuggestionCard(
         SuggestionKind.STALE_MATERIALS -> "مواد غابت من فترة"
         SuggestionKind.FREQUENT_MATERIALS -> "الأكثر طلباً هذا الشهر"
         SuggestionKind.WITH_PENDING -> "غالباً بتنقص مع نواقصك"
-        SuggestionKind.WEEKDAY_MATERIALS -> "عادةً بتنقص بمثل هذا اليوم"
+        SuggestionKind.WEEKDAY_MATERIALS -> {
+            val todayName = arrayOf("الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت")[
+                java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK) - 1
+            ]
+            "عادةً بتنقص يوم $todayName"
+        }
     }
     val body = when (suggestion.kind) {
         SuggestionKind.DUE_MATERIALS -> suggestion.names.joinToString("\u060C ")

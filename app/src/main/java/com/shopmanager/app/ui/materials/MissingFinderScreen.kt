@@ -406,6 +406,13 @@ private fun ItemStep(
                         }
                     }
                 }
+                insight?.pattern?.let { pattern ->
+                    Spacer(Modifier.height(8.dp))
+                    PillBadge(
+                        text = if (insight.patternToday) "$pattern — اليوم يومها" else pattern,
+                        color = if (insight.patternToday) semantic.success else semantic.info
+                    )
+                }
                 if (partner != null) {
                     Spacer(Modifier.height(8.dp))
                     PillBadge(text = "غالباً تنقص مع $partner", color = semantic.info)
