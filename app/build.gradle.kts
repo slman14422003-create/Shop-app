@@ -301,6 +301,7 @@ dependencies {
     // androidx/Compose/Firebase/Kotlin dependency in this file was bumped
     // from what it pinned before to its own current stable release, not
     // just the BOMs. Nothing here is an alpha/beta/RC.
+    implementation(project(":blurview"))
     implementation("androidx.core:core-ktx:1.19.1")
     // Standard AndroidX SplashScreen API — shows a static app icon on a
     // flat background immediately at cold start instead of a blank/white

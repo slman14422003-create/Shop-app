@@ -111,6 +111,34 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    var blurTarget: eightbitlab.com.blurview.BlurTarget? = null
+        private set
+
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        if (blurTarget != null) return
+        val content = findViewById<android.view.ViewGroup>(android.R.id.content) ?: return
+        val inner = content.getChildAt(0) ?: return
+        content.removeViewAt(0)
+        val target = eightbitlab.com.blurview.BlurTarget(this)
+        target.addView(
+            inner,
+            android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        content.addView(
+            target,
+            0,
+            android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        blurTarget = target
+    }
+
     override fun onResume() {
         super.onResume()
         systemMotionLimit = com.shopmanager.app.data.performance.SystemMotion.read(this)

@@ -92,7 +92,7 @@ class MaterialsRepository {
                     return@addSnapshotListener
                 }
                 val items = snapshot?.documents
-                    ?.map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "") }
+                    ?.map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "", group = it.getString("group") ?: "") }
                     ?.sortedBy { it.name }
                     ?: emptyList()
                 trySend(items)
@@ -260,8 +260,22 @@ class MaterialsRepository {
         !snapshot.isEmpty
     }
 
-    suspend fun addCatalogItem(name: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(catalogCollection).document().set(mapOf("name" to name)).awaitQueued()
+    suspend fun addCatalogItem(name: String, group: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
+        val data = HashMap<String, Any>()
+        data["name"] = name
+        if (group.isNotBlank()) data["group"] = group
+        db.collection(catalogCollection).document().set(data).awaitQueued()
+        Unit
+    }
+
+    suspend fun setCatalogGroup(ids: List<String>, group: String) = withTimeout(60_000L) {
+        ids.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { id ->
+                batch.update(db.collection(catalogCollection).document(id), "group", group)
+            }
+            batch.commit().awaitQueued(30_000L)
+        }
         Unit
     }
 
@@ -276,8 +290,8 @@ class MaterialsRepository {
      * would also silently drop its saved price in [pricesCollection], since
      * prices are keyed by name).
      */
-    suspend fun updateCatalogItem(id: String, name: String) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(catalogCollection).document(id).update("name", name).awaitQueued()
+    suspend fun updateCatalogItem(id: String, name: String, group: String = "") = withTimeout(WRITE_TIMEOUT_MS) {
+        db.collection(catalogCollection).document(id).update("name", name, "group", group).awaitQueued()
         Unit
     }
 
@@ -314,7 +328,7 @@ class MaterialsRepository {
                 )
             }
             val prices = pricesSnap.documents.associate { (it.getString("name") ?: it.id) to (it.getDouble("price") ?: 0.0) }
-            val catalog = catalogSnap.documents.map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "") }
+            val catalog = catalogSnap.documents.map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "", group = it.getString("group") ?: "") }
             Triple(materials, prices, catalog)
         }
 
@@ -346,7 +360,9 @@ class MaterialsRepository {
             db.collection(pricesCollection).document(priceDocId(name)) to priceData(name, price)
         }
         val catalogWrites = catalog.filter { it.id.isNotBlank() }.map {
-            db.collection(catalogCollection).document(it.id) to mapOf("name" to it.name)
+            db.collection(catalogCollection).document(it.id) to (
+                if (it.group.isBlank()) mapOf("name" to it.name) else mapOf("name" to it.name, "group" to it.group)
+            )
         }
         (materialWrites + priceWrites + catalogWrites).chunked(400).forEach { chunk ->
             val batch = db.batch()

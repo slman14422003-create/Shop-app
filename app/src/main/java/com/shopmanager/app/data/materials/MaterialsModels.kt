@@ -76,7 +76,8 @@ data class Material(
 /** A fixed catalog entry (the shop's own standing list of spice names). */
 data class MaterialCatalogItem(
     val id: String = "",
-    val name: String = ""
+    val name: String = "",
+    val group: String = ""
 )
 
 /**
