@@ -29,6 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -86,19 +88,13 @@ fun GlassAlertDialog(
         // Springy pop-in instead of Dialog's default hard cut.
         var visible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { visible = true }
-        val blurTier = LocalPerformanceTier.current
         val dialogView = LocalView.current
-        LaunchedEffect(blurTier) {
-            if (blurTier == PerformanceTier.STANDARD && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                runCatching {
-                    val window = (dialogView.parent as? DialogWindowProvider)?.window
-                    if (window != null) {
-                        window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                        val attrs = window.attributes
-                        attrs.blurBehindRadius = 24
-                        window.attributes = attrs
-                    }
-                }
+        val blurOn = blurEnabled()
+        SideEffect {
+            val window = (dialogView.parent as? DialogWindowProvider)?.window
+            if (window != null && blurOn) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+                window.setDimAmount(0f)
             }
         }
         val scale by animateFloatAsState(
@@ -128,6 +124,13 @@ fun GlassAlertDialog(
         // lets a tall card still reach its buttons on a small screen. The
         // scroll keeps the incoming min height, so the card stays centered
         // when there's room.
+        Box(Modifier.fillMaxSize()) {
+        if (blurOn) {
+            BlurBackdrop(
+                Modifier.fillMaxSize(),
+                tint = if (MaterialTheme.colorScheme.background.luminance() < 0.5f) Color.Black.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.34f)
+            )
+        }
         Box(
             Modifier
                 .fillMaxSize()
@@ -261,6 +264,7 @@ fun GlassAlertDialog(
                     }
                 }
             }
+        }
         }
     }
 }
