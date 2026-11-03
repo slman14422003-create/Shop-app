@@ -1,67 +1,74 @@
 package com.shopmanager.app.ui.materials
 
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialUnit
-import com.shopmanager.app.ui.common.AppSectionTitle
-import com.shopmanager.app.ui.common.AppTextField
-import com.shopmanager.app.ui.common.GlassSnackbarHost
-import com.shopmanager.app.ui.common.avatarColorFor
-import com.shopmanager.app.ui.common.GlassAlertDialog
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.background
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Shape
+import com.shopmanager.app.data.performance.listItemEntrance
+import com.shopmanager.app.ui.common.AppCapsuleSearchField
+import com.shopmanager.app.ui.common.AppChip
 import com.shopmanager.app.ui.common.AppEmptyState
 import com.shopmanager.app.ui.common.AppFootnote
 import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppIconCircle
-import com.shopmanager.app.ui.common.AppRowSurface
 import com.shopmanager.app.ui.common.AppScreenPadding
-import com.shopmanager.app.ui.common.AppCapsuleSearchField
-import androidx.compose.foundation.lazy.LazyListScope
-import com.shopmanager.app.ui.common.AppPillButton
-import com.shopmanager.app.ui.common.ActionSpec
-import com.shopmanager.app.ui.common.AppActionPill
-import com.shopmanager.app.ui.common.rememberSmartSearch
-import com.shopmanager.app.ui.theme.LocalSemanticColors
-import androidx.compose.material.icons.filled.Close
+import com.shopmanager.app.ui.common.AppSectionTitle
+import com.shopmanager.app.ui.common.AppTextField
+import com.shopmanager.app.ui.common.BlurContextMenu
+import com.shopmanager.app.ui.common.BlurMenuAction
+import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.ScreenIconButton
 import com.shopmanager.app.ui.common.ScreenTopBar
+import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.groupedRowShape
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import com.shopmanager.app.data.performance.listItemEntrance
+import com.shopmanager.app.ui.common.rememberSmartSearch
 
-/**
- * Standalone screen for picking which shortage to add: pick a name from the
- * shop's standing spice catalog instead of typing it every time, then enter
- * the quantity needed - like ticking an item off at the market. New names
- * can be added to the catalog inline the first time they're needed, and
- * removed later if no longer carried. Saving one item keeps you on this
- * screen so you can add several shortages in a row.
- */
+private class ItemMenu(val item: MaterialCatalogItem, val hint: String?, val shape: Shape, val anchor: Rect)
+
+private class GroupMenu(val name: String, val count: Int, val expanded: Boolean, val anchor: Rect)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
@@ -72,10 +79,12 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     var showAddDialog by remember { mutableStateOf(false) }
     var pickedItem by remember { mutableStateOf<MaterialCatalogItem?>(null) }
     var deleteTarget by remember { mutableStateOf<MaterialCatalogItem?>(null) }
-    // FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): the catalog item
-    // currently open for renaming, if any — same one-dialog-at-a-time
-    // pattern as `pickedItem`/`deleteTarget` above.
     var editTarget by remember { mutableStateOf<MaterialCatalogItem?>(null) }
+    var itemMenu by remember { mutableStateOf<ItemMenu?>(null) }
+    var groupMenu by remember { mutableStateOf<GroupMenu?>(null) }
+    var renameGroupTarget by remember { mutableStateOf<String?>(null) }
+    var deleteGroupTarget by remember { mutableStateOf<String?>(null) }
+    val collapsed = remember { mutableStateListOf<String>() }
     val snackbarHost = remember { SnackbarHostState() }
     val suggested by viewModel.suggestions.collectAsStateWithLifecycle()
 
@@ -83,26 +92,32 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    // PERF: same remember-keyed fix as MaterialsScreen — skip re-filtering
-    // the whole catalog on every unrelated recomposition (dialogs opening,
-    // the snackbar message clearing), only on an actual search/catalog
-    // change.
     val filtered = rememberSmartSearch(catalog, search) { it.name }
-    val showSuggested = search.isBlank() && suggested.isNotEmpty()
+    val searching = search.isNotBlank()
+    val showSuggested = !searching && suggested.isNotEmpty()
     val rest = remember(filtered, suggested, showSuggested) {
         if (showSuggested) {
             val ids = suggested.map { it.id }.toSet()
             filtered.filter { it.id !in ids }
         } else filtered
     }
+    val groups = remember(catalog) {
+        catalog.map { it.group.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
+    }
+    val sections = remember(rest, groups) {
+        val byGroup = rest.groupBy { it.group.trim() }
+        val out = ArrayList<Pair<String, List<MaterialCatalogItem>>>()
+        groups.forEach { g -> byGroup[g]?.let { out.add(g to it) } }
+        byGroup[""]?.let { out.add("" to it) }
+        out
+    }
+
+    val onPick: (MaterialCatalogItem) -> Unit = { pickedItem = it }
+    val onItemLong: (MaterialCatalogItem, String?, Shape, Rect) -> Unit = { item, hint, shape, anchor ->
+        itemMenu = ItemMenu(item, hint, shape, anchor)
+    }
 
     Scaffold(
-        // Off-pager screen (no bottom nav bar of its own) — the outer app
-        // Scaffold already reserves the real bottom/horizontal safe-area
-        // space one level up in NavHost's padding, so this Scaffold's own
-        // content insets are zeroed to avoid reserving that same space
-        // twice. The TopAppBar below still handles the status bar inset
-        // entirely on its own regardless of this setting.
         contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
@@ -167,25 +182,52 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                         item(key = "suggestedTitle") {
                             AppSectionTitle(text = "مقترحة لك (${suggested.size})", modifier = Modifier.padding(bottom = 4.dp))
                         }
-                        catalogRows(suggested, "s_", true, viewModel, { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
+                        catalogRows(suggested, "s_", true, viewModel, onPick, onItemLong)
+                    }
+                    if (groups.isEmpty()) {
                         if (rest.isNotEmpty()) {
-                            item(key = "restTitle") {
-                                AppSectionTitle(text = "كل المواد (${rest.size})", modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+                            item(key = "catalogTitle") {
+                                AppSectionTitle(
+                                    text = when {
+                                        searching -> "النتائج (${rest.size})"
+                                        showSuggested -> "كل المواد (${rest.size})"
+                                        else -> "اختر مادة (${rest.size})"
+                                    },
+                                    modifier = Modifier.padding(top = if (showSuggested) 10.dp else 0.dp, bottom = 4.dp)
+                                )
+                            }
+                            catalogRows(rest, "a_", false, viewModel, onPick, onItemLong)
+                        }
+                    } else {
+                        if (searching) {
+                            item(key = "resultsTitle") {
+                                AppSectionTitle(text = "النتائج (${filtered.size})", modifier = Modifier.padding(bottom = 4.dp))
                             }
                         }
-                        catalogRows(rest, "r_", false, viewModel, { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
-                    } else {
-                        item(key = "catalogTitle") {
-                            AppSectionTitle(
-                                text = if (search.isBlank()) "اختر مادة (${filtered.size})" else "النتائج (${filtered.size})",
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
+                        sections.forEach { (g, list) ->
+                            val open = searching || g !in collapsed
+                            item(key = "h_$g", contentType = "groupHeader") {
+                                GroupHeader(
+                                    name = g,
+                                    count = list.size,
+                                    expanded = open,
+                                    onToggle = {
+                                        if (g in collapsed) collapsed.remove(g) else collapsed.add(g)
+                                    },
+                                    onLongPress = { anchor ->
+                                        if (g.isNotEmpty()) groupMenu = GroupMenu(g, list.size, open, anchor)
+                                    },
+                                    modifier = Modifier.padding(top = if (showSuggested || g != sections.first().first) 12.dp else 4.dp, bottom = 4.dp)
+                                )
+                            }
+                            if (open) {
+                                catalogRows(list, "g_${g}_", false, viewModel, onPick, onItemLong)
+                            }
                         }
-                        catalogRows(filtered, "a_", false, viewModel, { pickedItem = it }, { editTarget = it }, { deleteTarget = it })
                     }
                     item(key = "catalogHint") {
                         AppFootnote(
-                            "اضغط على اسم المادة لإدخال الكمية",
+                            "اضغط على المادة لإدخال الكمية • اضغط مطولاً للتعديل أو الحذف",
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
                         )
                     }
@@ -194,13 +236,42 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         }
     }
 
+    itemMenu?.let { m ->
+        BlurContextMenu(
+            anchor = m.anchor,
+            actions = listOf(
+                BlurMenuAction("تعديل", Icons.Default.Edit) { editTarget = m.item },
+                BlurMenuAction("حذف", Icons.Default.Delete, danger = true) { deleteTarget = m.item }
+            ),
+            onDismiss = { itemMenu = null },
+            preview = { CatalogRowCard(m.item, m.hint, m.shape, Modifier, Modifier) }
+        )
+    }
+
+    groupMenu?.let { m ->
+        BlurContextMenu(
+            anchor = m.anchor,
+            actions = listOf(
+                BlurMenuAction("تعديل", Icons.Default.Edit) { renameGroupTarget = m.name },
+                BlurMenuAction("حذف", Icons.Default.Delete, danger = true) { deleteGroupTarget = m.name }
+            ),
+            onDismiss = { groupMenu = null },
+            preview = { GroupHeaderCard(m.name, m.count, m.expanded, Modifier, Modifier) }
+        )
+    }
+
     if (showAddDialog) {
-        AddCatalogItemDialog(
+        CatalogItemDialog(
+            title = "مادة جديدة للقائمة الثابتة",
+            confirmLabel = "إضافة",
+            initialName = "",
+            initialGroup = "",
+            groups = groups,
             isSaving = isAddingCatalogItem,
             onDismiss = { showAddDialog = false },
-            onSave = { name ->
+            onSave = { name, group ->
                 isAddingCatalogItem = true
-                viewModel.addCatalogItem(name) { success ->
+                viewModel.addCatalogItem(name, group) { success ->
                     isAddingCatalogItem = false
                     if (success) showAddDialog = false
                 }
@@ -209,16 +280,36 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     }
 
     editTarget?.let { item ->
-        var isSavingRename by remember { mutableStateOf(false) }
-        EditCatalogItemDialog(
+        var isSavingEdit by remember { mutableStateOf(false) }
+        CatalogItemDialog(
+            title = "تعديل المادة",
+            confirmLabel = "حفظ",
             initialName = item.name,
-            isSaving = isSavingRename,
-            onDismiss = { if (!isSavingRename) editTarget = null },
-            onSave = { newName ->
-                isSavingRename = true
-                viewModel.updateCatalogItem(item.id, item.name, newName) { success ->
-                    isSavingRename = false
+            initialGroup = item.group.trim(),
+            groups = groups,
+            isSaving = isSavingEdit,
+            onDismiss = { if (!isSavingEdit) editTarget = null },
+            onSave = { newName, group ->
+                isSavingEdit = true
+                viewModel.updateCatalogItem(item.id, item.name, newName, group) { success ->
+                    isSavingEdit = false
                     if (success) editTarget = null
+                }
+            }
+        )
+    }
+
+    renameGroupTarget?.let { name ->
+        var isSavingGroup by remember { mutableStateOf(false) }
+        GroupNameDialog(
+            initialName = name,
+            isSaving = isSavingGroup,
+            onDismiss = { if (!isSavingGroup) renameGroupTarget = null },
+            onSave = { newName ->
+                isSavingGroup = true
+                viewModel.renameCatalogGroup(name, newName) { success ->
+                    isSavingGroup = false
+                    if (success) renameGroupTarget = null
                 }
             }
         )
@@ -234,10 +325,6 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             isSaving = isAddingMaterial,
             onDismiss = { if (!isAddingMaterial) pickedItem = null },
             onSave = { quantity, unit, notes, important ->
-                // Every material added here is, by the nature of this list,
-                // something the shop is short on and needs to buy - so it's
-                // simply added with the quantity needed, no threshold or
-                // stock-level bookkeeping involved.
                 isAddingMaterial = true
                 viewModel.addMaterial(item.name, quantity, unit, notes, important) { success ->
                     isAddingMaterial = false
@@ -258,6 +345,18 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteTarget = null }) { Text("إلغاء") } }
         )
     }
+
+    deleteGroupTarget?.let { name ->
+        GlassAlertDialog(
+            onDismissRequest = { deleteGroupTarget = null },
+            title = { Text("حذف المجموعة") },
+            text = { Text("هل تريد حذف مجموعة \"$name\"؟ ستنتقل موادها إلى \"بدون مجموعة\" ولن تُحذف.") },
+            confirmButton = {
+                TextButton(shape = RectangleShape, onClick = { viewModel.deleteCatalogGroup(name); deleteGroupTarget = null }) { Text("حذف") }
+            },
+            dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteGroupTarget = null }) { Text("إلغاء") } }
+        )
+    }
 }
 
 private fun LazyListScope.catalogRows(
@@ -266,18 +365,18 @@ private fun LazyListScope.catalogRows(
     learned: Boolean,
     viewModel: MaterialsViewModel,
     onPick: (MaterialCatalogItem) -> Unit,
-    onEdit: (MaterialCatalogItem) -> Unit,
-    onDelete: (MaterialCatalogItem) -> Unit
+    onLongPress: (MaterialCatalogItem, String?, Shape, Rect) -> Unit
 ) {
     itemsIndexed(list, key = { _, c -> keyPrefix + c.id }, contentType = { _, _ -> "catalogItem" }) { index, item ->
+        val hint = if (learned) remember(item.name) { learnedHint(viewModel, item.name) } else null
+        val shape = groupedRowShape(index, list.lastIndex)
         Box(Modifier.listItemEntrance(index)) {
             CatalogRow(
                 item = item,
-                hint = if (learned) remember(item.name) { learnedHint(viewModel, item.name) } else null,
-                shape = groupedRowShape(index, list.lastIndex),
+                hint = hint,
+                shape = shape,
                 onClick = { onPick(item) },
-                onEdit = { onEdit(item) },
-                onDelete = { onDelete(item) }
+                onLongPress = { anchor -> onLongPress(item, hint, shape, anchor) }
             )
         }
     }
@@ -294,19 +393,51 @@ private fun learnedHint(viewModel: MaterialsViewModel, name: String): String? {
     return parts.joinToString(" • ")
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CatalogRow(
     item: MaterialCatalogItem,
     hint: String?,
     shape: Shape,
     onClick: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onLongPress: (Rect) -> Unit
+) {
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val haptics = LocalHapticFeedback.current
+    CatalogRowCard(
+        item = item,
+        hint = hint,
+        shape = shape,
+        surfaceModifier = Modifier.onGloballyPositioned { coords = it },
+        rowModifier = Modifier.combinedClickable(
+            onClick = onClick,
+            onLongClick = {
+                val c = coords
+                if (c != null && c.isAttached) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongPress(Rect(c.localToScreen(Offset.Zero), c.size.toSize()))
+                }
+            }
+        )
+    )
+}
+
+@Composable
+private fun CatalogRowCard(
+    item: MaterialCatalogItem,
+    hint: String?,
+    shape: Shape,
+    surfaceModifier: Modifier,
+    rowModifier: Modifier
 ) {
     val color = remember(item.name) { avatarColorFor(item.name) }
-    AppRowSurface(shape = shape, onClick = onClick) {
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = surfaceModifier.fillMaxWidth()
+    ) {
         Row(
-            Modifier
+            rowModifier
                 .fillMaxWidth()
                 .heightIn(min = 64.dp)
                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -331,54 +462,208 @@ private fun CatalogRow(
                 }
             }
             Spacer(Modifier.width(8.dp))
-            AppActionPill(
-                height = 36.dp,
-                actions = listOf(
-                    ActionSpec(Icons.Default.Edit, "تعديل الاسم", null, onEdit),
-                    ActionSpec(Icons.Default.Close, "حذف من القائمة", LocalSemanticColors.current.danger, onDelete)
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GroupHeader(
+    name: String,
+    count: Int,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onLongPress: (Rect) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val haptics = LocalHapticFeedback.current
+    GroupHeaderCard(
+        name = name,
+        count = count,
+        expanded = expanded,
+        surfaceModifier = modifier.onGloballyPositioned { coords = it },
+        rowModifier = Modifier.combinedClickable(
+            onClick = onToggle,
+            onLongClick = {
+                val c = coords
+                if (c != null && c.isAttached && name.isNotEmpty()) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongPress(Rect(c.localToScreen(Offset.Zero), c.size.toSize()))
+                }
+            }
+        )
+    )
+}
+
+@Composable
+private fun GroupHeaderCard(
+    name: String,
+    count: Int,
+    expanded: Boolean,
+    surfaceModifier: Modifier,
+    rowModifier: Modifier
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val ungrouped = name.isEmpty()
+    val accent = remember(name) { if (ungrouped) Color(0xFF8A8A8A) else avatarColorFor(name) }
+    val rotation by animateFloatAsState(targetValue = if (expanded) 0f else 90f, label = "groupChevron")
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = surfaceModifier.fillMaxWidth()
+    ) {
+        Row(
+            rowModifier
+                .fillMaxWidth()
+                .heightIn(min = 52.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = 0.22f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (ungrouped) Icons.Default.Inventory2 else Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                if (ungrouped) "بدون مجموعة" else name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                    .padding(horizontal = 9.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    "$count",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Icon(
+                Icons.Default.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp).graphicsLayer { rotationZ = rotation }
             )
         }
     }
 }
 
 @Composable
-private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+private fun CatalogItemDialog(
+    title: String,
+    confirmLabel: String,
+    initialName: String,
+    initialGroup: String,
+    groups: List<String>,
+    isSaving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, group: String) -> Unit
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var group by remember { mutableStateOf(initialGroup) }
+    var creating by remember { mutableStateOf(false) }
+    var newGroup by remember { mutableStateOf("") }
+    val nameFocus = remember { FocusRequester() }
+    val groupFocus = remember { FocusRequester() }
+    val finalGroup = if (creating) newGroup.trim() else group
+    val canSave = name.isNotBlank() && (!creating || newGroup.isNotBlank()) && !isSaving
 
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) { nameFocus.requestFocus() }
+    LaunchedEffect(creating) { if (creating) groupFocus.requestFocus() }
 
     GlassAlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text("مادة جديدة للقائمة الثابتة") },
+        title = { Text(title) },
         text = {
-            AppTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = "اسم المادة",
-                placeholder = "اسم المادة...",
-                enabled = !isSaving,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                    imeAction = androidx.compose.ui.text.input.ImeAction.Done
-                ),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
-                    onDone = { if (name.isNotBlank() && !isSaving) onSave(name.trim()) }
+            Column {
+                AppTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = "اسم المادة",
+                    placeholder = "اسم المادة...",
+                    enabled = !isSaving,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().focusRequester(nameFocus),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = { if (canSave) onSave(name.trim(), finalGroup) }
+                    )
                 )
-            )
+                AppSectionTitle("المجموعة", Modifier.padding(top = 18.dp, bottom = 8.dp))
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AppChip("بدون", selected = !creating && group.isEmpty(), onClick = { creating = false; group = "" })
+                    groups.forEach { g ->
+                        AppChip(g, selected = !creating && group == g, onClick = { creating = false; group = g })
+                    }
+                    AppChip("+ مجموعة جديدة", selected = creating, onClick = { creating = true })
+                }
+                if (creating) {
+                    AppTextField(
+                        value = newGroup,
+                        onValueChange = { newGroup = it },
+                        label = "اسم المجموعة",
+                        placeholder = "اسم المجموعة...",
+                        enabled = !isSaving,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp).focusRequester(groupFocus),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                        ),
+                        keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                            onDone = { if (canSave) onSave(name.trim(), finalGroup) }
+                        )
+                    )
+                }
+            }
         },
         confirmButton = {
             TextButton(
-                enabled = name.isNotBlank() && !isSaving,
+                enabled = canSave,
                 shape = RectangleShape,
-                onClick = { onSave(name.trim()) }
+                onClick = { onSave(name.trim(), finalGroup) }
             ) {
                 if (isSaving) {
                     com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
                 } else {
-                    Text("إضافة")
+                    Text(confirmLabel)
                 }
             }
         },
@@ -386,28 +671,22 @@ private fun AddCatalogItemDialog(isSaving: Boolean, onDismiss: () -> Unit, onSav
     )
 }
 
-/**
- * FEATURE ADDED ("تعديل المواد الثابتة بعد إضافتها"): renames one existing
- * catalog entry in place — same shape as [AddCatalogItemDialog], pre-filled
- * with the current name, but wired to `updateCatalogItem` instead of
- * `addCatalogItem`.
- */
 @Composable
-private fun EditCatalogItemDialog(initialName: String, isSaving: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+private fun GroupNameDialog(initialName: String, isSaving: Boolean, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var name by remember { mutableStateOf(initialName) }
-    val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
+    val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     GlassAlertDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text("تعديل اسم المادة") },
+        title = { Text("تعديل اسم المجموعة") },
         text = {
             AppTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = "اسم المادة",
-                placeholder = "اسم المادة...",
+                label = "اسم المجموعة",
+                placeholder = "اسم المجموعة...",
                 enabled = !isSaving,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),

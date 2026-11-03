@@ -505,7 +505,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun addCatalogItem(name: String, onDone: (Boolean) -> Unit) {
+    fun addCatalogItem(name: String, group: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
                 if (repo.catalogNameExists(name)) {
@@ -513,7 +513,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                     onDone(false)
                     return@launch
                 }
-                repo.addCatalogItem(name)
+                repo.addCatalogItem(name, group)
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)
             } catch (e: Exception) {
@@ -529,7 +529,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
      * elsewhere in the catalog, same duplicate check as adding a new one -
      * but allows saving with no change (renaming "X" to "X" again).
      */
-    fun updateCatalogItem(id: String, currentName: String, newName: String, onDone: (Boolean) -> Unit) {
+    fun updateCatalogItem(id: String, currentName: String, newName: String, group: String, onDone: (Boolean) -> Unit) {
         viewModelScope.launch {
             try {
                 if (newName != currentName && repo.catalogNameExists(newName)) {
@@ -537,7 +537,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                     onDone(false)
                     return@launch
                 }
-                repo.updateCatalogItem(id, newName)
+                repo.updateCatalogItem(id, newName, group)
                 if (newName != currentName) {
                     finderStore.rename(currentName, newName) { learnVersion.update { it + 1 } }
                 }
@@ -546,6 +546,33 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             } catch (e: Exception) {
                 _message.value = "تعذر التعديل: ${e.message ?: "تحقق من الاتصال"}"
                 onDone(false)
+            }
+        }
+    }
+
+    fun renameCatalogGroup(oldName: String, newName: String, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val target = newName.trim()
+                val ids = catalog.value.filter { it.group == oldName }.map { it.id }
+                if (target.isNotEmpty() && ids.isNotEmpty()) repo.setCatalogGroup(ids, target)
+                InstantBackupWorker.requestNow(getApplication())
+                onDone(true)
+            } catch (e: Exception) {
+                _message.value = "تعذر التعديل: ${e.message ?: "تحقق من الاتصال"}"
+                onDone(false)
+            }
+        }
+    }
+
+    fun deleteCatalogGroup(name: String) {
+        viewModelScope.launch {
+            try {
+                val ids = catalog.value.filter { it.group == name }.map { it.id }
+                if (ids.isNotEmpty()) repo.setCatalogGroup(ids, "")
+                InstantBackupWorker.requestNow(getApplication())
+            } catch (e: Exception) {
+                _message.value = "تعذر الحذف: ${e.message}"
             }
         }
     }
