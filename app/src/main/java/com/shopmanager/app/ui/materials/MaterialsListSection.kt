@@ -106,7 +106,7 @@ internal fun MaterialsHeader(
     Column(Modifier.fillMaxWidth()) {
         ScreenTopBar(
             title = if (tab == 0) "المواد والأسعار" else "الأسعار",
-            reservedIcons = if (tab == 0) 3 else 2,
+            reservedIcons = 2,
             navigation = {
                 ScreenIconButton(
                     icon = Icons.Default.Menu,
@@ -118,8 +118,7 @@ internal fun MaterialsHeader(
                 AppActionPill(
                     height = 42.dp,
                     container = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    actions = listOfNotNull(
-                        if (tab == 0) ActionSpec(Icons.Default.Add, "مادة جديدة") { onAddNew() } else null,
+                    actions = listOf(
                         if (tab == 0) ActionSpec(Icons.Default.Sell, "الأسعار") { onTogglePrices() }
                         else ActionSpec(Icons.Default.Inventory2, "المواد") { onTogglePrices() },
                         ActionSpec(Icons.Rounded.Share, "مشاركة") { onShare() }
@@ -131,6 +130,7 @@ internal fun MaterialsHeader(
             query = searchQuery,
             onQueryChange = onSearchQueryChange,
             placeholder = if (tab == 0) "ابحث عن مادة..." else "ابحث عن سعر مادة...",
+            onAdd = if (tab == 0) onAddNew else null,
             modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = AppSpaceSm)
         )
     }
