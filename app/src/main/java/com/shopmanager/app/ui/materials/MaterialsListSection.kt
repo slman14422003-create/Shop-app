@@ -69,6 +69,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.shopmanager.app.ui.common.ActionSpec
+import com.shopmanager.app.ui.common.sortedArabicBy
 import com.shopmanager.app.ui.common.AppActionPill
 import androidx.compose.material.icons.filled.Close
 import com.shopmanager.app.data.performance.MotionSpecs
@@ -170,12 +171,15 @@ internal fun MaterialsList(
     // searching (see `canReorder` below) — dragging a filtered subset
     // would silently scramble the position of every hidden item too.
     var listTab by rememberSaveable { mutableStateOf(0) }
-    val importantItems = remember(materials) { materials.filter { it.important } }
-    val regularItems = remember(materials) { materials.filter { !it.important } }
+    val sortedMaterials = remember(materials, searching) {
+        if (searching) materials else materials.sortedArabicBy { it.name }
+    }
+    val importantItems = remember(sortedMaterials) { sortedMaterials.filter { it.important } }
+    val regularItems = remember(sortedMaterials) { sortedMaterials.filter { !it.important } }
     val visibleItems = when (listTab) {
         0 -> importantItems
         1 -> regularItems
-        else -> materials
+        else -> sortedMaterials
     }
     LaunchedEffect(Unit) { if (importantItems.isEmpty()) listTab = 2 }
     var orderedItems by remember { mutableStateOf(visibleItems) }
@@ -183,7 +187,7 @@ internal fun MaterialsList(
     LaunchedEffect(visibleItems) {
         if (draggingId == null) orderedItems = visibleItems
     }
-    val canReorder = !searching && listTab == 2
+    val canReorder = false
     // Real per-row height in px (row height + the 8.dp spacedBy gap),
     // measured live via onSizeChanged below — used to decide, as the
     // finger moves, when it's dragged far enough past a neighbor to swap

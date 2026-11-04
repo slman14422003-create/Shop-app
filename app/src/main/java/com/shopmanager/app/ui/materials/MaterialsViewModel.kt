@@ -191,7 +191,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     val suggestions: StateFlow<List<MaterialCatalogItem>> = combine(
         catalog, learnVersion, uiState.map { st -> st.materials.map { it.name } }.distinctUntilChanged()
     ) { items, _, pending ->
-        finderStore.suggested(items, 12, pending)
+        finderStore.suggested(items, 12, pending, frequentOnly = true)
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

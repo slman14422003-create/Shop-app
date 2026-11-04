@@ -1,6 +1,12 @@
 package com.shopmanager.app.ui.materials
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -14,7 +20,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
@@ -23,6 +31,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +73,7 @@ import com.shopmanager.app.ui.common.ScreenTopBar
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.groupedRowShape
 import com.shopmanager.app.ui.common.rememberSmartSearch
+import com.shopmanager.app.ui.common.sortedArabicBy
 
 private class ItemMenu(val item: MaterialCatalogItem, val hint: String?, val shape: Shape, val anchor: Rect)
 
@@ -84,7 +94,8 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     var groupMenu by remember { mutableStateOf<GroupMenu?>(null) }
     var renameGroupTarget by remember { mutableStateOf<String?>(null) }
     var deleteGroupTarget by remember { mutableStateOf<String?>(null) }
-    val collapsed = remember { mutableStateListOf<String>() }
+    val expanded = remember { mutableStateListOf<String>() }
+    var suggestedOpen by rememberSaveable { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val suggested by viewModel.suggestions.collectAsStateWithLifecycle()
 
@@ -95,14 +106,13 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     val filtered = rememberSmartSearch(catalog, search) { it.name }
     val searching = search.isNotBlank()
     val showSuggested = !searching && suggested.isNotEmpty()
-    val rest = remember(filtered, suggested, showSuggested) {
-        if (showSuggested) {
-            val ids = suggested.map { it.id }.toSet()
-            filtered.filter { it.id !in ids }
-        } else filtered
+    val orderedFiltered = remember(filtered, searching) {
+        if (searching) filtered else filtered.sortedArabicBy { it.name }
     }
+    val sortedSuggested = remember(suggested) { suggested.sortedArabicBy { it.name } }
+    val rest = orderedFiltered
     val groups = remember(catalog) {
-        catalog.map { it.group.trim() }.filter { it.isNotEmpty() }.distinct().sorted()
+        catalog.map { it.group.trim() }.filter { it.isNotEmpty() }.distinct().sortedArabicBy { it }
     }
     val sections = remember(rest, groups) {
         val byGroup = rest.groupBy { it.group.trim() }
@@ -117,6 +127,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         itemMenu = ItemMenu(item, hint, shape, anchor)
     }
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
@@ -179,10 +190,13 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
                     if (showSuggested) {
-                        item(key = "suggestedTitle") {
-                            AppSectionTitle(text = "مقترحة لك (${suggested.size})", modifier = Modifier.padding(bottom = 4.dp))
+                        item(key = "suggestedCard") {
+                            SuggestedCard(
+                                count = suggested.size,
+                                onClick = { suggestedOpen = true },
+                                modifier = Modifier.padding(bottom = 4.dp)
+                            )
                         }
-                        catalogRows(suggested, "s_", true, viewModel, onPick, onItemLong)
                     }
                     if (groups.isEmpty()) {
                         if (rest.isNotEmpty()) {
@@ -190,8 +204,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                                 AppSectionTitle(
                                     text = when {
                                         searching -> "النتائج (${rest.size})"
-                                        showSuggested -> "كل المواد (${rest.size})"
-                                        else -> "اختر مادة (${rest.size})"
+                                        else -> "كل المواد (${rest.size})"
                                     },
                                     modifier = Modifier.padding(top = if (showSuggested) 10.dp else 0.dp, bottom = 4.dp)
                                 )
@@ -205,14 +218,14 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                             }
                         }
                         sections.forEach { (g, list) ->
-                            val open = searching || g !in collapsed
+                            val open = searching || g in expanded
                             item(key = "h_$g", contentType = "groupHeader") {
                                 GroupHeader(
                                     name = g,
                                     count = list.size,
                                     expanded = open,
                                     onToggle = {
-                                        if (g in collapsed) collapsed.remove(g) else collapsed.add(g)
+                                        if (g in expanded) expanded.remove(g) else expanded.add(g)
                                     },
                                     onLongPress = { anchor ->
                                         if (g.isNotEmpty()) groupMenu = GroupMenu(g, list.size, open, anchor)
@@ -234,6 +247,23 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    BackHandler(enabled = suggestedOpen) { suggestedOpen = false }
+    AnimatedVisibility(
+        visible = suggestedOpen && sortedSuggested.isNotEmpty(),
+        enter = slideInHorizontally { -it } + fadeIn(),
+        exit = slideOutHorizontally { -it } + fadeOut(),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        SuggestedFullScreen(
+            items = sortedSuggested,
+            viewModel = viewModel,
+            onBack = { suggestedOpen = false },
+            onPick = onPick,
+            onItemLong = onItemLong
+        )
+    }
     }
 
     itemMenu?.let { m ->
@@ -356,6 +386,84 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteGroupTarget = null }) { Text("إلغاء") } }
         )
+    }
+}
+
+@Composable
+private fun SuggestedFullScreen(
+    items: List<MaterialCatalogItem>,
+    viewModel: MaterialsViewModel,
+    onBack: () -> Unit,
+    onPick: (MaterialCatalogItem) -> Unit,
+    onItemLong: (MaterialCatalogItem, String?, Shape, Rect) -> Unit
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0.dp),
+        topBar = {
+            ScreenTopBar(
+                title = "مقترحة لك (${items.size})",
+                navigation = {
+                    ScreenIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "رجوع",
+                        onClick = onBack
+                    )
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 48.dp),
+            verticalArrangement = Arrangement.spacedBy(AppGroupGap)
+        ) {
+            catalogRows(items, "s_", true, viewModel, onPick, onItemLong)
+            item(key = "suggestedHint") {
+                AppFootnote(
+                    "اضغط على المادة لإدخال الكمية • اضغط مطولاً للتعديل أو الحذف",
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestedCard(count: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 76.dp).padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(48.dp).clip(CircleShape).background(accent.copy(alpha = 0.2f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = accent, modifier = Modifier.size(24.dp))
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("مقترحة لك", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "$count مادة حسب استخدامك",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(26.dp)
+            )
+        }
     }
 }
 
