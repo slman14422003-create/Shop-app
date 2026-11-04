@@ -9,7 +9,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -230,7 +229,6 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                                     onToggle = {
                                         if (g in expanded) expanded.remove(g) else expanded.add(g)
                                     },
-                                    onSelect = if (g.isNotEmpty()) ({ membersTarget = g }) else null,
                                     onLongPress = { anchor ->
                                         if (g.isNotEmpty()) groupMenu = GroupMenu(g, list.size, open, anchor)
                                     },
@@ -759,8 +757,7 @@ private fun GroupHeader(
     expanded: Boolean,
     onToggle: () -> Unit,
     onLongPress: (Rect) -> Unit,
-    modifier: Modifier = Modifier,
-    onSelect: (() -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val haptics = LocalHapticFeedback.current
@@ -768,7 +765,6 @@ private fun GroupHeader(
         name = name,
         count = count,
         expanded = expanded,
-        onSelect = onSelect,
         surfaceModifier = modifier.onGloballyPositioned { coords = it },
         rowModifier = Modifier.combinedClickable(
             onClick = onToggle,
@@ -789,8 +785,7 @@ private fun GroupHeaderCard(
     count: Int,
     expanded: Boolean,
     surfaceModifier: Modifier,
-    rowModifier: Modifier,
-    onSelect: (() -> Unit)? = null
+    rowModifier: Modifier
 ) {
     val shape = RoundedCornerShape(16.dp)
     val ungrouped = name.isEmpty()
@@ -845,24 +840,6 @@ private fun GroupHeaderCard(
                 )
             }
             Spacer(Modifier.weight(1f))
-            if (onSelect != null) {
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                        .clickable(onClick = onSelect),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Checklist,
-                        contentDescription = "اختيار المواد",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(Modifier.width(6.dp))
-            }
             Icon(
                 Icons.Default.ExpandMore,
                 contentDescription = null,
