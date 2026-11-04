@@ -1,21 +1,27 @@
 package com.shopmanager.app.ui.splash
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,11 +29,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.animation.core.animateFloat
-import com.shopmanager.app.ui.common.LogoMotion
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -37,26 +44,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shopmanager.app.R
 import com.shopmanager.app.data.performance.MotionSpecs
+import com.shopmanager.app.ui.common.LogoMotion
+import com.shopmanager.app.ui.theme.LocalBrandGradientColors
 
-/**
- * شاشة البداية بلغة التصميم الموحّدة (نفس الإعدادات والحوارات):
- *  - خلفية surface مسطّحة بلا توهّج ولا تدرجات ولا دوران.
- *  - أيقونة التطبيق داخل لوح مسطّح بزوايا 28dp على تعبئة surfaceContainerHigh،
- *    تظهر بتكبير خفيف (0.9 ← 1) مع تلاشٍ، بنفس منحنى الحركة المستعمل بالتطبيق.
- *  - اسم التطبيق بخط السيريف (نفس عناوين الشاشات) ينزلق من تحت قليلاً.
- *  - الاعتماد "SEMO STUDIO" في حبّة مسطّحة صغيرة (نفس شارة الإصدار) تظهر أخيراً.
- *
- * حركة واحدة تُشغَّل مرة وحدة: لا تكرار ولا حلقات، وتتبع [MotionSpecs.durationScale]
- * بحيث تقصر على الشاشات 60Hz. الألوان كلها من MaterialTheme لتتبع وضع التطبيق
- * (فاتح/داكن) المختار من الإعدادات وليس وضع النظام فقط.
- */
-/** Whole splash animation length (ms) before the 60Hz scale; kept under ~600ms. */
-private const val SPLASH_ANIM_MS = 600
+/** Total splash animation length (ms) before the 60Hz scale. */
+private const val SPLASH_ANIM_MS = 900
 
 @Composable
 fun AppSplashScreen(modifier: Modifier = Modifier, motion: LogoMotion = LogoMotion.ONCE) {
-    // One progress value (0..1) drives the whole splash; tile, title and credit are
-    // staggered slices of it, so there is a single animation to run and to hand off from.
     val progress = remember { Animatable(0f) }
     val reduce = MotionSpecs.reduceMotion()
     val scale = MotionSpecs.durationScale()
@@ -76,91 +71,162 @@ fun AppSplashScreen(modifier: Modifier = Modifier, motion: LogoMotion = LogoMoti
     fun slice(from: Float, to: Float): Float = ((progress.value - from) / (to - from)).coerceIn(0f, 1f)
 
     val cs = MaterialTheme.colorScheme
+    val brand = LocalBrandGradientColors.current
+    val brandA = brand.first()
+    val brandB = brand.last()
 
-    // رمز التطبيق: اقتصادي = ثابت، متوازن = قفزة دخول نابضة، مرتفع = + نبضة حلقة مستمرة.
-    val pop = remember { Animatable(if (motion == LogoMotion.NONE) 1f else 0.7f) }
+    val pop = remember { Animatable(if (motion == LogoMotion.NONE) 1f else 0.72f) }
     val popSpec = MotionSpecs.popInSpring()
     LaunchedEffect(motion, reduce) {
         if (motion == LogoMotion.NONE || reduce) pop.snapTo(1f)
         else pop.animateTo(1f, popSpec)
     }
     val ring = if (motion == LogoMotion.LOOP) {
-        androidx.compose.animation.core.rememberInfiniteTransition(label = "splashRing").animateFloat(
+        rememberInfiniteTransition(label = "splashRing").animateFloat(
             0f, 1f,
-            androidx.compose.animation.core.infiniteRepeatable(tween(MotionSpecs.floatMs, easing = androidx.compose.animation.core.LinearEasing)),
+            infiniteRepeatable(tween(MotionSpecs.floatMs, easing = LinearEasing)),
             label = "ring"
         )
     } else null
-    val ringColor = cs.primary
 
     Box(
         modifier
             .fillMaxSize()
-            .background(cs.surface),
+            .background(cs.surface)
+            // Soft brand glow rising from the top and bottom corners; static, so no per-frame cost.
+            .drawBehind {
+                val glow = slice(0f, 0.6f)
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(brandA.copy(alpha = 0.20f * glow), Color.Transparent),
+                        center = Offset(size.width * 0.5f, size.height * 0.36f),
+                        radius = size.minDimension * 0.95f
+                    )
+                )
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(brandB.copy(alpha = 0.10f * glow), Color.Transparent),
+                        center = Offset(size.width * 0.5f, size.height * 1.02f),
+                        radius = size.minDimension * 0.8f
+                    )
+                )
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            // لوح مسطّح بتعبئة الصفوف خلف أيقونة التطبيق الحقيقية.
             Box(
                 Modifier
-                    .size(124.dp)
+                    .size(168.dp)
                     .drawBehind {
                         ring?.let { r ->
                             val t = r.value
-                            drawCircle(ringColor.copy(alpha = 0.28f * (1f - t)), radius = size.minDimension / 2f * (1f + 0.55f * t))
+                            drawCircle(
+                                brandA.copy(alpha = 0.30f * (1f - t)),
+                                radius = size.minDimension / 2f * (1f + 0.5f * t)
+                            )
                         }
                     }
                     .graphicsLayer {
-                        val tileProgress = slice(0f, 0.7f)
-                        val s = (0.9f + 0.1f * tileProgress) * pop.value
+                        val p = slice(0f, 0.6f)
+                        val s = (0.88f + 0.12f * p) * pop.value
                         scaleX = s
                         scaleY = s
-                        alpha = tileProgress
-                    }
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(cs.surfaceContainerHigh),
+                        alpha = p
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_splash_mark),
-                    contentDescription = null,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier
-                        .size(84.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                // Outer halo ring.
+                Box(
+                    Modifier
+                        .size(168.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(brandA.copy(alpha = 0.22f), brandB.copy(alpha = 0.06f))
+                            )
+                        )
+                        .border(1.dp, brandA.copy(alpha = 0.25f), CircleShape)
                 )
+                // Icon tile.
+                Box(
+                    Modifier
+                        .size(120.dp)
+                        .shadow(18.dp, RoundedCornerShape(34.dp), ambientColor = brandA, spotColor = brandA)
+                        .clip(RoundedCornerShape(34.dp))
+                        .background(cs.surfaceContainerHigh)
+                        .border(1.dp, cs.onSurface.copy(alpha = 0.08f), RoundedCornerShape(34.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_splash_mark),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .size(84.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                    )
+                }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(32.dp))
 
             Text(
                 "إدارة المحل",
                 color = cs.onSurface,
-                style = MaterialTheme.typography.titleLarge.copy(fontSize = 28.sp, lineHeight = 34.sp),
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 32.sp, lineHeight = 38.sp),
+                fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.graphicsLayer {
-                    val titleProgress = slice(0.2f, 0.85f)
-                    alpha = titleProgress
-                    translationY = (1f - titleProgress) * 12.dp.toPx()
+                    val p = slice(0.25f, 0.8f)
+                    alpha = p
+                    translationY = (1f - p) * 16.dp.toPx()
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "الديون  •  المواد  •  الأسعار",
+                color = cs.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.5.sp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.graphicsLayer {
+                    val p = slice(0.4f, 0.95f)
+                    alpha = p
+                    translationY = (1f - p) * 10.dp.toPx()
                 }
             )
         }
 
-        Surface(
-            shape = CircleShape,
-            color = cs.surfaceContainerHigh,
-            modifier = Modifier
+        Column(
+            Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
                 .padding(bottom = 40.dp)
-                .graphicsLayer { alpha = slice(0.4f, 1f) }
+                .graphicsLayer { alpha = slice(0.45f, 1f) },
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Thin progress track that fills with the intro animation.
+            Box(
+                Modifier
+                    .width(96.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(cs.onSurface.copy(alpha = 0.08f))
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = progress.value
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0.5f)
+                        }
+                        .background(Brush.horizontalGradient(listOf(brandB, brandA)))
+                )
+            }
+            Spacer(Modifier.height(18.dp))
             Text(
                 "SEMO STUDIO",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 7.dp),
                 color = cs.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 2.sp),
+                style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 3.sp),
                 fontWeight = FontWeight.Medium
             )
         }
