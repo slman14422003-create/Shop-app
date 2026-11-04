@@ -660,13 +660,7 @@ internal fun ShopManagerApp(
             // الأسعار" otherwise); tapping it just raises
             // `savePricesRequested`, which MaterialsScreen watches and
             // clears once the save actually runs.
-            val secondaryAction = if (pagerState.currentPage == PAGE_MATERIALS && materialsPricesTabActive) {
-                QuickAction(
-                    icon = Icons.Default.Save,
-                    contentDescription = if (pricesChangedCount > 0) "حفظ $pricesChangedCount من الأسعار" else "حفظ كل الأسعار",
-                    onClick = { savePricesRequested = true }
-                )
-            } else null
+            val secondaryAction: QuickAction? = null
             FloatingQuickActions(
                 quickAction = quickAction,
                 secondaryAction = secondaryAction,

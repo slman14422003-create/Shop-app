@@ -305,6 +305,8 @@ class MainActivity : FragmentActivity() {
             // التحديث الاختياري (الحالة الطبيعية): مربع "تحديث الآن / لاحقاً".
             // شاشة الإجبار أعلاه لا تظهر إلا إذا وُضعت علامة [force] في إصدار GitHub.
             var optionalUpdateManifest by remember { mutableStateOf<com.shopmanager.app.data.updates.UpdateManifest?>(null) }
+            // شرح أول تثبيت / ملاحظات التحديث: تُحسب مرة واحدة عند فتح التطبيق.
+            var introAction by remember { mutableStateOf(com.shopmanager.app.data.onboarding.OnboardingStore.pending(applicationContext)) }
 
             // "تفضيل الأداء": loaded once here (not re-read from disk on
             // every recomposition), then kept in sync live when changed in
@@ -600,6 +602,32 @@ class MainActivity : FragmentActivity() {
                     // notification dialogs further down this file — it has
                     // to be able to appear over whichever screen the person
                     // is already on.
+                    // شرح أول تثبيت أو ملاحظات التحديث: فوق التطبيق بعد انتهاء السبلاش وفتح القفل.
+                    val intro = introAction
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = intro != null && isReady && unlocked && forceUpdateManifest == null,
+                        enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(400)),
+                        exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))
+                    ) {
+                        if (intro != null) {
+                            val finish = {
+                                com.shopmanager.app.data.onboarding.OnboardingStore.markDone(applicationContext, intro)
+                                introAction = null
+                            }
+                            when (intro) {
+                                is com.shopmanager.app.data.onboarding.IntroAction.Welcome ->
+                                    com.shopmanager.app.ui.onboarding.WelcomeIntroScreen(
+                                        pages = com.shopmanager.app.data.onboarding.IntroContent.welcomePages,
+                                        onFinish = finish
+                                    )
+                                is com.shopmanager.app.data.onboarding.IntroAction.WhatsNew ->
+                                    com.shopmanager.app.ui.onboarding.WhatsNewScreen(
+                                        releases = intro.releases,
+                                        onDone = finish
+                                    )
+                            }
+                        }
+                    }
                     forceUpdateManifest?.let { manifest ->
                         com.shopmanager.app.ui.update.ForceUpdateScreen(
                             manifest = manifest,
