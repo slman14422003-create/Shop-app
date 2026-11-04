@@ -9,6 +9,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -93,6 +95,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     var itemMenu by remember { mutableStateOf<ItemMenu?>(null) }
     var groupMenu by remember { mutableStateOf<GroupMenu?>(null) }
     var renameGroupTarget by remember { mutableStateOf<String?>(null) }
+    var membersTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var deleteGroupTarget by remember { mutableStateOf<String?>(null) }
     val expanded = remember { mutableStateListOf<String>() }
     var suggestedOpen by rememberSaveable { mutableStateOf(false) }
@@ -227,6 +230,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                                     onToggle = {
                                         if (g in expanded) expanded.remove(g) else expanded.add(g)
                                     },
+                                    onSelect = if (g.isNotEmpty()) ({ membersTarget = g }) else null,
                                     onLongPress = { anchor ->
                                         if (g.isNotEmpty()) groupMenu = GroupMenu(g, list.size, open, anchor)
                                     },
@@ -249,7 +253,8 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         }
     }
 
-    BackHandler(enabled = suggestedOpen) { suggestedOpen = false }
+    BackHandler(enabled = suggestedOpen && membersTarget == null) { suggestedOpen = false }
+    BackHandler(enabled = membersTarget != null) { membersTarget = null }
     AnimatedVisibility(
         visible = suggestedOpen && sortedSuggested.isNotEmpty(),
         enter = slideInHorizontally { -it } + fadeIn(),
@@ -263,6 +268,27 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             onPick = onPick,
             onItemLong = onItemLong
         )
+    }
+    AnimatedVisibility(
+        visible = membersTarget != null,
+        enter = slideInHorizontally { -it } + fadeIn(),
+        exit = slideOutHorizontally { -it } + fadeOut(),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        val target = membersTarget
+        if (target != null) {
+            GroupMembersScreen(
+                groupName = target,
+                catalog = catalog,
+                onBack = { membersTarget = null },
+                onSave = { ids, done ->
+                    viewModel.setGroupMembers(target, ids) { ok ->
+                        done()
+                        if (ok) membersTarget = null
+                    }
+                }
+            )
+        }
     }
     }
 
@@ -282,7 +308,8 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         BlurContextMenu(
             anchor = m.anchor,
             actions = listOf(
-                BlurMenuAction("تعديل", Icons.Default.Edit) { renameGroupTarget = m.name },
+                BlurMenuAction("اختيار المواد", Icons.Default.Checklist) { membersTarget = m.name },
+                BlurMenuAction("تعديل الاسم", Icons.Default.Edit) { renameGroupTarget = m.name },
                 BlurMenuAction("حذف", Icons.Default.Delete, danger = true) { deleteGroupTarget = m.name }
             ),
             onDismiss = { groupMenu = null },
@@ -425,6 +452,142 @@ private fun SuggestedFullScreen(
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun GroupMembersScreen(
+    groupName: String,
+    catalog: List<MaterialCatalogItem>,
+    onBack: () -> Unit,
+    onSave: (Set<String>, () -> Unit) -> Unit
+) {
+    val initial = remember(groupName) { catalog.filter { it.group.trim() == groupName }.map { it.id }.toSet() }
+    val selected = remember(groupName) { mutableStateListOf<String>().also { it.addAll(initial) } }
+    var query by remember { mutableStateOf("") }
+    var saving by remember { mutableStateOf(false) }
+    val filtered = rememberSmartSearch(catalog, query) { it.name }
+    val items = remember(filtered, query) {
+        if (query.isBlank()) filtered.sortedArabicBy { it.name } else filtered
+    }
+    val changed = selected.toSet() != initial
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets(0.dp),
+        topBar = {
+            ScreenTopBar(
+                title = groupName,
+                navigation = {
+                    ScreenIconButton(
+                        icon = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "رجوع",
+                        onClick = { if (!saving) onBack() }
+                    )
+                }
+            )
+        },
+        bottomBar = {
+            Surface(color = MaterialTheme.colorScheme.background) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = AppScreenPadding, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        onClick = {
+                            if (!saving) {
+                                saving = true
+                                onSave(selected.toSet()) { saving = false }
+                            }
+                        },
+                        enabled = changed && !saving,
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (changed) 1f else 0.3f),
+                        contentColor = MaterialTheme.colorScheme.surface,
+                        modifier = Modifier.weight(1f).height(52.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (saving) {
+                                com.shopmanager.app.ui.common.AppSpinner(size = 20.dp, color = MaterialTheme.colorScheme.surface)
+                            } else {
+                                Text("حفظ (${selected.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            AppCapsuleSearchField(
+                query = query,
+                onQueryChange = { query = it },
+                placeholder = "ابحث عن مادة...",
+                modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 8.dp)
+            )
+            if (items.isEmpty()) {
+                AppEmptyState(icon = Icons.Default.Inventory2, text = "لا توجد نتائج")
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(AppGroupGap)
+                ) {
+                    itemsIndexed(items, key = { _, c -> "m_" + c.id }, contentType = { _, _ -> "memberRow" }) { index, item ->
+                        val checked = item.id in selected
+                        val other = item.group.trim().takeIf { it.isNotEmpty() && it != groupName }
+                        MemberRow(
+                            item = item,
+                            checked = checked,
+                            otherGroup = other,
+                            shape = groupedRowShape(index, items.lastIndex),
+                            onToggle = { if (checked) selected.remove(item.id) else selected.add(item.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MemberRow(
+    item: MaterialCatalogItem,
+    checked: Boolean,
+    otherGroup: String?,
+    shape: Shape,
+    onToggle: () -> Unit
+) {
+    val color = remember(item.name) { avatarColorFor(item.name) }
+    Surface(
+        onClick = onToggle,
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AppIconCircle(color = color, size = 40.dp) {
+                Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(item.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                if (otherGroup != null) {
+                    Text(
+                        "ضمن مجموعة $otherGroup",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Checkbox(checked = checked, onCheckedChange = { onToggle() })
         }
     }
 }
@@ -596,7 +759,8 @@ private fun GroupHeader(
     expanded: Boolean,
     onToggle: () -> Unit,
     onLongPress: (Rect) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onSelect: (() -> Unit)? = null
 ) {
     var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val haptics = LocalHapticFeedback.current
@@ -604,6 +768,7 @@ private fun GroupHeader(
         name = name,
         count = count,
         expanded = expanded,
+        onSelect = onSelect,
         surfaceModifier = modifier.onGloballyPositioned { coords = it },
         rowModifier = Modifier.combinedClickable(
             onClick = onToggle,
@@ -624,7 +789,8 @@ private fun GroupHeaderCard(
     count: Int,
     expanded: Boolean,
     surfaceModifier: Modifier,
-    rowModifier: Modifier
+    rowModifier: Modifier,
+    onSelect: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(16.dp)
     val ungrouped = name.isEmpty()
@@ -679,6 +845,24 @@ private fun GroupHeaderCard(
                 )
             }
             Spacer(Modifier.weight(1f))
+            if (onSelect != null) {
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                        .clickable(onClick = onSelect),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Checklist,
+                        contentDescription = "اختيار المواد",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+            }
             Icon(
                 Icons.Default.ExpandMore,
                 contentDescription = null,

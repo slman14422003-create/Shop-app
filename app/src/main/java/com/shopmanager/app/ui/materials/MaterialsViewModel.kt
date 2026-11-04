@@ -565,6 +565,23 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun setGroupMembers(group: String, selectedIds: Set<String>, onDone: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val current = catalog.value.filter { it.group.trim() == group }.map { it.id }.toSet()
+                val toAdd = (selectedIds - current).toList()
+                val toRemove = (current - selectedIds).toList()
+                if (toAdd.isNotEmpty()) repo.setCatalogGroup(toAdd, group)
+                if (toRemove.isNotEmpty()) repo.setCatalogGroup(toRemove, "")
+                InstantBackupWorker.requestNow(getApplication())
+                onDone(true)
+            } catch (e: Exception) {
+                _message.value = "تعذر الحفظ: ${e.message ?: "تحقق من الاتصال"}"
+                onDone(false)
+            }
+        }
+    }
+
     fun deleteCatalogGroup(name: String) {
         viewModelScope.launch {
             try {
