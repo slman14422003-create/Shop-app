@@ -668,7 +668,9 @@ class MissingFinderStore(context: Context) {
     private fun isOccasional(s: Stat?, now: Long): Boolean {
         if (s == null) return true
         val from = now - RARE_WINDOW_DAYS * DAY_MS
-        return s.recent.count { it >= from } < MIN_ADDS_FOR_FREQUENT
+        val recentBurst = s.recent.count { it >= from } >= MIN_ADDS_FOR_FREQUENT
+        val weeklyOrMore = s.added >= 2 && s.avgGapDays >= 0.5f && s.avgGapDays < WEEKLY_GAP_DAYS
+        return !(recentBurst || weeklyOrMore)
     }
 
     @Synchronized
@@ -845,8 +847,9 @@ class MissingFinderStore(context: Context) {
         const val MAX_TS = 10
         const val MAX_Q = 7
         const val FREQ_WINDOW_DAYS = 30L
-        const val RARE_WINDOW_DAYS = 28L
-        const val MIN_ADDS_FOR_FREQUENT = 5
+        const val RARE_WINDOW_DAYS = 14L
+        const val MIN_ADDS_FOR_FREQUENT = 3
+        const val WEEKLY_GAP_DAYS = 7f
         const val WD_HALF_LIFE_DAYS = 60.0
         const val MIN_COOLDOWN_DAYS = 3f
         const val DEFAULT_COOLDOWN_DAYS = 7f
