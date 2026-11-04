@@ -30,6 +30,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -164,7 +165,10 @@ fun AppCapsuleSearchField(
     placeholder: String,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
-    onAdd: (() -> Unit)? = null
+    onAdd: (() -> Unit)? = null,
+    onSave: (() -> Unit)? = null,
+    saveActive: Boolean = false,
+    saveLabel: String = ""
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val cs = MaterialTheme.colorScheme
@@ -264,6 +268,36 @@ fun AppCapsuleSearchField(
                     tint = cs.surface,
                     modifier = Modifier.size(20.dp)
                 )
+            }
+        }
+        if (onSave != null) {
+            if (query.isNotEmpty() || onAdd != null) Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier
+                    .height(38.dp)
+                    .clip(CircleShape)
+                    .background(if (saveActive) cs.onSurface else cs.surfaceContainerHighest)
+                    .clickable(onClick = onSave)
+                    .padding(horizontal = if (saveLabel.isNotEmpty()) 12.dp else 9.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Save,
+                        contentDescription = "حفظ الأسعار",
+                        tint = if (saveActive) cs.surface else cs.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    if (saveLabel.isNotEmpty()) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            saveLabel,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (saveActive) cs.surface else cs.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     }
