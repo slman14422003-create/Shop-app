@@ -107,7 +107,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
 
     val filtered = rememberSmartSearch(catalog, search) { it.name }
     val searching = search.isNotBlank()
-    val showSuggested = !searching && suggested.isNotEmpty()
+    val showSuggested = !searching
     val orderedFiltered = remember(filtered, searching) {
         if (searching) filtered else filtered.sortedArabicBy { it.name }
     }
@@ -254,7 +254,7 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     BackHandler(enabled = suggestedOpen && membersTarget == null) { suggestedOpen = false }
     BackHandler(enabled = membersTarget != null) { membersTarget = null }
     AnimatedVisibility(
-        visible = suggestedOpen && sortedSuggested.isNotEmpty(),
+        visible = suggestedOpen,
         enter = slideInHorizontally { -it } + fadeIn(),
         exit = slideOutHorizontally { -it } + fadeOut(),
         modifier = Modifier.fillMaxSize()
@@ -438,6 +438,12 @@ private fun SuggestedFullScreen(
             )
         }
     ) { padding ->
+        if (items.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                AppEmptyState(icon = Icons.Default.AutoAwesome, text = "لا توجد مقترحات حالياً")
+            }
+            return@Scaffold
+        }
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 6.dp, bottom = 48.dp),
@@ -613,7 +619,7 @@ private fun SuggestedCard(count: Int, onClick: () -> Unit, modifier: Modifier = 
             Column(Modifier.weight(1f)) {
                 Text("مقترحة لك", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    "$count مادة حسب استخدامك",
+                    if (count == 0) "لا توجد مقترحات حالياً" else "$count مادة حسب استخدامك",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
