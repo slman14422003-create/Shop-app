@@ -158,6 +158,22 @@ fun MaterialsScreen(
             }
         }.distinctUntilChanged().collect { latestOnChangedCount(it) }
     }
+    var changedPricesCount by remember { mutableStateOf(0) }
+    val savePricesNow: () -> Unit = {
+        val toSave = editedPrices.mapNotNull { (name, value) -> value.toPriceOrNull()?.let { name to it } }.toMap()
+        if (toSave.isNotEmpty()) {
+            viewModel.setPrices(toSave)
+            editedPrices.clear()
+        }
+    }
+    LaunchedEffect(editedPrices) {
+        snapshotFlow {
+            editedPrices.count { (name, value) ->
+                val parsed = value.toPriceOrNull()
+                parsed != null && parsed != latestPrices[name]
+            }
+        }.distinctUntilChanged().collect { changedPricesCount = it }
+    }
     LaunchedEffect(tab) { onPricesTabActiveChanged(tab == 1) }
     LaunchedEffect(savePricesRequested) {
         if (savePricesRequested) {
@@ -187,7 +203,9 @@ fun MaterialsScreen(
                 onOpenDrawer = onOpenDrawer,
                 onAddNew = onAddNew,
                 searchQuery = search,
-                onSearchQueryChange = { search = it }
+                onSearchQueryChange = { search = it },
+                onSavePrices = { savePricesNow() },
+                pricesChangedCount = changedPricesCount
             )
         }
         // REDESIGN: no `floatingActionButton` slot here anymore — "مادة
@@ -317,7 +335,7 @@ fun MaterialsScreen(
                 // final startActivity hop is back on Main.
                 scope.launch {
                     val uri = withContext(Dispatchers.Default) {
-                        MaterialsReportImage.generate(context, state.materials, state.prices, brandColor)
+                        MaterialsReportImage.generate(context, state.materials, state.prices, brandColor, groupOf)
                     }
                     val intent = Intent(Intent.ACTION_SEND).apply {
                         type = "image/png"

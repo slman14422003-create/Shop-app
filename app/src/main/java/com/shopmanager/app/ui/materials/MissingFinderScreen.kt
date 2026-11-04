@@ -481,6 +481,8 @@ private fun ItemStep(
             }
 
             if (!asking) {
+                val showCount = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
+                if (showCount) {
                 Spacer(Modifier.height(16.dp))
                 QuantityStepper(
                     value = qty,
@@ -509,8 +511,12 @@ private fun ItemStep(
                         }
                     }
                 }
+                }
                 AppSectionTitle("الوحدة", Modifier.padding(top = 16.dp, bottom = 8.dp))
-                UnitPicker(selected = unit, onSelected = { unit = it })
+                UnitPicker(selected = unit, onSelected = {
+                    unit = it
+                    if (it != MaterialUnit.KG && it != MaterialUnit.NONE) qty = 1
+                })
                 if (showNote) {
                     AppTextField(
                         value = notes,
@@ -567,7 +573,7 @@ private fun ItemStep(
                         label = "تأكيد",
                         icon = Icons.Default.Check,
                         onClick = {
-                            onMissing(PendingMaterial(item.name, qty.toDouble(), unit.label, notes.trim(), important))
+                            onMissing(PendingMaterial(item.name, (if (unit == MaterialUnit.KG || unit == MaterialUnit.NONE) qty else 1).toDouble(), unit.label, notes.trim(), important))
                         },
                         modifier = Modifier.weight(1f)
                     )

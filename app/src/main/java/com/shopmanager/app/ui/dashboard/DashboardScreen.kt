@@ -60,7 +60,9 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material.icons.filled.WbSunny
@@ -346,6 +348,31 @@ fun DashboardScreen(
                 DashboardHeader(onOpenDrawer = onOpenDrawer)
             }
 
+            item(key = "home_search", contentType = "search") {
+                AppCapsuleSearchField(
+                    query = homeQuery,
+                    onQueryChange = { homeQuery = it },
+                    placeholder = "ابحث عن عميل أو مادة أو ملاحظة",
+                    modifier = Modifier.padding(horizontal = AppScreenPadding)
+                )
+            }
+
+            if (searchActive) {
+                item(key = "home_search_results", contentType = "search_results") {
+                    HomeSearchResults(
+                        hits = searchHits,
+                        onHit = { hit ->
+                            homeQuery = ""
+                            when (hit.kind) {
+                                SearchHit.PERSON -> onOpenPerson(hit.id)
+                                SearchHit.MATERIAL -> onOpenMaterial(hit.title)
+                                else -> onOpenNotes()
+                            }
+                        }
+                    )
+                }
+            }
+
             // Order: hero stats first (what do I owe / need), then connection warnings, the
             // learned suggestions, quick actions and search, then the data cards.
             item(key = "hero", contentType = "hero") {
@@ -360,7 +387,19 @@ fun DashboardScreen(
                     marketAccent = marketAccent,
                     topDebtorName = topDebtors.firstOrNull()?.name,
                     nf = nf,
+                    onOpenShortages = onNavigateToMaterials,
+                    onOpenDebts = onNavigateToDebts,
                     modifier = cardFx(0)
+                )
+            }
+
+            item(key = "quick_actions", contentType = "quick_actions") {
+                QuickActionsRow(
+                    onAddPerson = onNavigateToDebts,
+                    onAddMaterial = onNavigateToMaterials,
+                    onFindMissing = onOpenMissingFinder,
+                    onOpenNotes = onOpenNotes,
+                    modifier = cardFx(3)
                 )
             }
 
@@ -389,39 +428,6 @@ fun DashboardScreen(
                         },
                         onDismiss = { s -> materialsViewModel.onSuggestionDismissed(s) },
                         modifier = cardFx(2)
-                    )
-                }
-            }
-
-            item(key = "quick_actions", contentType = "quick_actions") {
-                QuickActionsRow(
-                    onAddPerson = onNavigateToDebts,
-                    onAddMaterial = onNavigateToMaterials,
-                    modifier = cardFx(3)
-                )
-            }
-
-            item(key = "home_search", contentType = "search") {
-                AppCapsuleSearchField(
-                    query = homeQuery,
-                    onQueryChange = { homeQuery = it },
-                    placeholder = "ابحث عن عميل أو مادة أو ملاحظة",
-                    modifier = Modifier.padding(horizontal = AppScreenPadding)
-                )
-            }
-
-            if (searchActive) {
-                item(key = "home_search_results", contentType = "search_results") {
-                    HomeSearchResults(
-                        hits = searchHits,
-                        onHit = { hit ->
-                            homeQuery = ""
-                            when (hit.kind) {
-                                SearchHit.PERSON -> onOpenPerson(hit.id)
-                                SearchHit.MATERIAL -> onOpenMaterial(hit.title)
-                                else -> onOpenNotes()
-                            }
-                        }
                     )
                 }
             }
@@ -812,23 +818,21 @@ private fun DashboardHeader(
 }
 
 @Composable
-private fun QuickActionsRow(onAddPerson: () -> Unit, onAddMaterial: () -> Unit, modifier: Modifier = Modifier) {
+private fun QuickActionsRow(
+    onAddPerson: () -> Unit,
+    onAddMaterial: () -> Unit,
+    onFindMissing: () -> Unit,
+    onOpenNotes: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
         modifier.fillMaxWidth().padding(horizontal = AppScreenPadding),
         horizontalArrangement = Arrangement.spacedBy(AppSpace10)
     ) {
-        QuickActionButton(
-            modifier = Modifier.weight(1f),
-            icon = Icons.Default.PersonAdd,
-            label = "عميل جديد",
-            onClick = onAddPerson
-        )
-        QuickActionButton(
-            modifier = Modifier.weight(1f),
-            icon = Icons.Default.Inventory2,
-            label = "مادة جديدة",
-            onClick = onAddMaterial
-        )
+        QuickActionButton(Modifier.weight(1f), Icons.Default.PersonAdd, "عميل جديد", onAddPerson)
+        QuickActionButton(Modifier.weight(1f), Icons.Default.Inventory2, "مادة جديدة", onAddMaterial)
+        QuickActionButton(Modifier.weight(1f), Icons.Default.Search, "فحص النواقص", onFindMissing)
+        QuickActionButton(Modifier.weight(1f), Icons.Default.StickyNote2, "الملاحظات", onOpenNotes)
     }
 }
 
@@ -840,23 +844,24 @@ private fun QuickActionButton(
     onClick: () -> Unit
 ) {
     AppRowSurface(shape = RoundedCornerShape(AppGroupLargeRadius), modifier = modifier, onClick = onClick) {
-        Row(
-            Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = AppScreenPadding, vertical = AppSpaceMd),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = AppSpaceMd),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Box(
-                Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(22.dp))
             }
-            Spacer(Modifier.width(AppSpace10))
+            Spacer(Modifier.height(AppSpace6))
             Text(
                 label,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -879,13 +884,15 @@ private fun HeroStatsCard(
     marketAccent: Color,
     topDebtorName: String?,
     nf: NumberFormat,
+    onOpenShortages: () -> Unit = {},
+    onOpenDebts: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val success = LocalSemanticColors.current.success
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     AppCard(modifier = modifier.padding(horizontal = AppScreenPadding)) {
         // الأداء القوي: لمعة ضوء ناعمة تمسح البطاقة الرئيسية (sheenSweep لا تفعل شيئاً في غيره).
-        Column(Modifier.sheenSweep().padding(horizontal = AppSpace20, vertical = 18.dp)) {
+        Column(Modifier.sheenSweep().clickable(onClick = onOpenDebts).padding(horizontal = AppSpace20, vertical = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(38.dp).clip(CircleShape).background(success.copy(alpha = 0.18f)),
@@ -915,24 +922,23 @@ private fun HeroStatsCard(
             AnimatedCounterText(
                 targetValue = totalDebt,
                 format = { "${nf.format(it)} ${AppSettingsState.currencySymbol}" },
-                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 34.sp, lineHeight = 40.sp),
+                style = MaterialTheme.typography.headlineLarge.copy(fontSize = 38.sp, lineHeight = 44.sp),
                 animate = !debtsLoading
             )
             Spacer(Modifier.height(AppSpaceLg))
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            Spacer(Modifier.height(AppSectionGap))
-            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpace10)) {
                 HeroMiniStat(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Inventory2,
                     accentColor = if (hasShortages) marketAccent else MaterialTheme.colorScheme.secondary,
                     title = "قائمة النواقص",
+                    onClick = onOpenShortages,
                     valueContent = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             AnimatedCounterText(
                                 targetValue = shortagesCount.toDouble(),
                                 format = { it.toInt().toString() },
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleLarge,
                                 animate = !materialsLoading
                             )
                             Spacer(Modifier.width(AppSpace6))
@@ -945,24 +951,18 @@ private fun HeroStatsCard(
                         }
                     }
                 )
-                Box(
-                    Modifier
-                        .padding(horizontal = AppSpaceMd)
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                )
                 HeroMiniStat(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Star,
                     accentColor = LocalSemanticColors.current.warning,
                     title = "مواد هامة",
+                    onClick = onOpenShortages,
                     valueContent = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             AnimatedCounterText(
                                 targetValue = importantCount.toDouble(),
                                 format = { it.toInt().toString() },
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleLarge,
                                 animate = !materialsLoading
                             )
                             Spacer(Modifier.width(AppSpace6))
@@ -986,9 +986,17 @@ private fun HeroMiniStat(
     icon: ImageVector,
     accentColor: Color,
     title: String,
+    onClick: () -> Unit = {},
     valueContent: @Composable () -> Unit
 ) {
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = AppSpaceMd, vertical = AppSpaceMd),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(
             Modifier.size(30.dp).clip(CircleShape).background(accentColor.copy(alpha = 0.16f)),
             contentAlignment = Alignment.Center

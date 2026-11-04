@@ -100,32 +100,6 @@ fun MaterialEditDialog(
                             shape = groupedRowShape(1, 1),
                             onValueChange = { quantity = it.coerceAtLeast(1) }
                         )
-                    } else {
-                        // Quantity is implicitly 1 for a fixed fraction size -
-                        // nothing to step, so this just confirms what will be
-                        // saved instead of showing a stepper with nothing to do.
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 64.dp)
-                                .clip(groupedRowShape(1, 1))
-                                .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                                .padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "الكمية المطلوبة",
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                unit.label,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
                     }
                 }
 
@@ -211,20 +185,13 @@ fun QuantityStepper(
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 64.dp)
+            .heightIn(min = 84.dp)
             .clip(shape)
             .background(cs.surfaceContainerHighest)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            unitLabel,
-            modifier = Modifier.weight(1f).padding(start = 4.dp),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = cs.onSurfaceVariant
-        )
-
         StepButton(
             icon = Icons.Default.Remove,
             contentDescription = "إنقاص",
@@ -232,23 +199,38 @@ fun QuantityStepper(
             onClick = { onValueChange(value - 1) }
         )
 
-        BasicTextField(
-            value = value.toString(),
-            onValueChange = { raw ->
-                val digitsOnly = raw.filter { it.isDigit() }
-                onValueChange(digitsOnly.toIntOrNull() ?: 0)
-            },
-            modifier = Modifier.width(64.dp),
-            enabled = enabled,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 20.sp,
-                color = cs.onSurface,
-                textAlign = TextAlign.Center
-            ),
-            cursorBrush = SolidColor(cs.onSurface),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
+        Column(
+            Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            BasicTextField(
+                value = value.toString(),
+                onValueChange = { raw ->
+                    val digitsOnly = raw.filter { it.isDigit() }
+                    onValueChange(digitsOnly.toIntOrNull() ?: 0)
+                },
+                modifier = Modifier.width(96.dp),
+                enabled = enabled,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = cs.onSurface,
+                    textAlign = TextAlign.Center
+                ),
+                cursorBrush = SolidColor(cs.onSurface),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            if (unitLabel.isNotBlank()) {
+                Text(
+                    unitLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = cs.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
 
         StepButton(
             icon = Icons.Default.Add,

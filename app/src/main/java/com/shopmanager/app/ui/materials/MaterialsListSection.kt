@@ -101,7 +101,9 @@ internal fun MaterialsHeader(
     onOpenDrawer: () -> Unit = {},
     onAddNew: () -> Unit = {},
     searchQuery: String = "",
-    onSearchQueryChange: (String) -> Unit = {}
+    onSearchQueryChange: (String) -> Unit = {},
+    onSavePrices: () -> Unit = {},
+    pricesChangedCount: Int = 0
 ) {
     Column(Modifier.fillMaxWidth()) {
         ScreenTopBar(
@@ -131,6 +133,9 @@ internal fun MaterialsHeader(
             onQueryChange = onSearchQueryChange,
             placeholder = if (tab == 0) "ابحث عن مادة..." else "ابحث عن سعر مادة...",
             onAdd = if (tab == 0) onAddNew else null,
+            onSave = if (tab == 1) onSavePrices else null,
+            saveActive = pricesChangedCount > 0,
+            saveLabel = if (pricesChangedCount > 0) "$pricesChangedCount" else "",
             modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = AppSpaceSm)
         )
     }
