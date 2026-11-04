@@ -1,5 +1,13 @@
 package com.shopmanager.app.ui.materials
 
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import com.shopmanager.app.ui.common.AppMinTouchTarget
 import com.shopmanager.app.ui.common.AppSpace10
 import com.shopmanager.app.ui.common.AppSpace2
@@ -91,13 +99,14 @@ internal fun MaterialsHeader(
     onTogglePrices: () -> Unit,
     onShare: () -> Unit,
     onOpenDrawer: () -> Unit = {},
+    onAddNew: () -> Unit = {},
     searchQuery: String = "",
     onSearchQueryChange: (String) -> Unit = {}
 ) {
     Column(Modifier.fillMaxWidth()) {
         ScreenTopBar(
             title = if (tab == 0) "المواد والأسعار" else "الأسعار",
-            reservedIcons = 2,
+            reservedIcons = if (tab == 0) 3 else 2,
             navigation = {
                 ScreenIconButton(
                     icon = Icons.Default.Menu,
@@ -109,7 +118,8 @@ internal fun MaterialsHeader(
                 AppActionPill(
                     height = 42.dp,
                     container = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    actions = listOf(
+                    actions = listOfNotNull(
+                        if (tab == 0) ActionSpec(Icons.Default.Add, "مادة جديدة") { onAddNew() } else null,
                         if (tab == 0) ActionSpec(Icons.Default.Sell, "الأسعار") { onTogglePrices() }
                         else ActionSpec(Icons.Default.Inventory2, "المواد") { onTogglePrices() },
                         ActionSpec(Icons.Rounded.Share, "مشاركة") { onShare() }
@@ -137,7 +147,7 @@ internal fun MaterialsList(
     onEdit: (Material) -> Unit,
     onDelete: (Material) -> Unit,
     onToggleImportant: (Material) -> Unit,
-    onReordered: (List<Material>) -> Unit
+    groupOf: (String) -> String
 ) {
     if (materials.isEmpty()) {
         EmptyState(
@@ -161,15 +171,6 @@ internal fun MaterialsList(
     val bottomSafetyMargin = 56.dp + 24.dp
     val bottomClearance = LocalFloatingBottomNavHeight.current + bottomSafetyMargin
 
-    // FEATURE ADDED ("ترتيب المواد بالضغط المطول وتحريكها"): a local copy
-    // that the drag gesture below reorders live, in real time, as the
-    // finger moves — synced back to the real `materials` list on every
-    // change from Firestore *except* while a drag is actually in progress,
-    // so an incoming snapshot (e.g. from another device) never yanks the
-    // row out from under the finger mid-drag. Reordering only makes sense
-    // against the full, unfiltered list, so it's disabled entirely while
-    // searching (see `canReorder` below) — dragging a filtered subset
-    // would silently scramble the position of every hidden item too.
     var listTab by rememberSaveable { mutableStateOf(0) }
     val sortedMaterials = remember(materials, searching) {
         if (searching) materials else materials.sortedArabicBy { it.name }
@@ -182,18 +183,14 @@ internal fun MaterialsList(
         else -> sortedMaterials
     }
     LaunchedEffect(Unit) { if (importantItems.isEmpty()) listTab = 2 }
-    var orderedItems by remember { mutableStateOf(visibleItems) }
-    var draggingId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(visibleItems) {
-        if (draggingId == null) orderedItems = visibleItems
+    val sections = remember(visibleItems, groupOf) {
+        val byGroup = visibleItems.groupBy { groupOf(it.name) }
+        val out = ArrayList<Pair<String, List<Material>>>()
+        byGroup.keys.filter { it.isNotEmpty() }.sortedArabicBy { it }.forEach { out.add(it to byGroup.getValue(it)) }
+        byGroup[""]?.let { out.add("" to it) }
+        out
     }
-    val canReorder = false
-    // Real per-row height in px (row height + the 8.dp spacedBy gap),
-    // measured live via onSizeChanged below — used to decide, as the
-    // finger moves, when it's dragged far enough past a neighbor to swap
-    // places with it.
-    val itemHeightsPx = remember { mutableStateMapOf<String, Int>() }
-    var dragOffset by remember { mutableStateOf(0f) }
+    val showSectionHeaders = sections.any { it.first.isNotEmpty() }
 
     // تُحسب مرة لكل تغيّر فعلي في القائمة المعروضة أو في الأسعار.
     val weightSummary = remember(visibleItems) { visibleItems.weightSummary() }
@@ -203,22 +200,6 @@ internal fun MaterialsList(
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        // BUG FIXED ("السحب والافلات... كلشي يخفتي فوقها فما بقدر ارجع
-        // للأعلى"): this screen sits inside PullToRefreshContent, whose
-        // pull-to-refresh gesture and this LazyColumn's own scroll both
-        // listen for the same vertical drag through Compose's nested-
-        // scroll system. A row's reorder-drag only consumes pointer
-        // *events* (`change.consume()` below), which stops the LazyColumn
-        // from treating that drag as a scroll — but it doesn't stop the
-        // list from being a live nested-scroll participant, so a drag that
-        // starts right at the top of the list (dragging the very first
-        // item) could still get read as a pull-to-refresh gesture at the
-        // same time, leaving the refresh indicator dimming the top of the
-        // list and stuck mid-gesture, unable to scroll, until released.
-        // Disabling the list's own scrolling for the whole duration of a
-        // row-drag removes it from nested scroll entirely, so no drag can
-        // ever be mistaken for a pull-to-refresh again.
-        userScrollEnabled = draggingId == null,
         contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = AppSpace2, bottom = bottomClearance),
         verticalArrangement = Arrangement.spacedBy(AppGroupGap)
     ) {
@@ -274,138 +255,87 @@ internal fun MaterialsList(
                 )
             }
         }
-        itemsIndexed(
-            orderedItems,
-            key = { _, m -> m.id },
-            // PERF: كل الصفوف من نوع واحد — يسمح لـ Compose بإعادة استخدام تركيبها بين الصفوف.
-            contentType = { _, _ -> "materialRow" }
-        ) { rowIndex, m ->
-            val isDragging = m.id == draggingId
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    // Items not currently being dragged still animate into
-                    // their new slot when a drag (or a delete/search
-                    // change) shifts them — skipped for the dragged item
-                    // itself so its own manual `dragOffset` below (which
-                    // already tracks the finger exactly) isn't fought by a
-                    // second, competing placement animation.
-                    .then(if (!isDragging) Modifier.animateItem(
-                        // السلاسة: المادة المضافة حديثاً تظهر بتلاشٍ قصير بدل القفز المفاجئ.
-                        fadeInSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
-                        else tween(durationMillis = MotionSpecs.fadeMillis(), easing = MotionSpecs.claudeEasing),
-                        placementSpec = MotionSpecs.reorderSpring(),
-                        fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
-                        else MotionSpecs.listItemFadeOut()
-                    ) else Modifier)
-                    .onSizeChanged { itemHeightsPx[m.id] = it.height }
-                    .zIndex(if (isDragging) 1f else 0f)
-                    .graphicsLayer { translationY = if (isDragging) dragOffset else 0f }
-                    // حركة دخول لأول ظهور للصف (تُعطَّل تلقائياً على الأجهزة الضعيفة).
-                    .listItemEntrance(rowIndex)
-                    .then(
-                        if (canReorder) {
-                            Modifier.pointerInput(m.id) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        draggingId = m.id
-                                        dragOffset = 0f
-                                    },
-                                    onDragEnd = {
-                                        if (draggingId != null) onReordered(orderedItems)
-                                        draggingId = null
-                                        dragOffset = 0f
-                                    },
-                                    onDragCancel = {
-                                        draggingId = null
-                                        dragOffset = 0f
-                                    },
-                                    // BUG FIXED ("تقنية السحب والافلات... بدها تحسين وتطوير
-                                    // بآلية العمل بشكل دقيق"): the swap threshold and the
-                                    // amount `dragOffset` got corrected by on every swap used
-                                    // to both be the *dragged* item's own height alone (`step`
-                                    // above). That's only correct when every row is the same
-                                    // height. Rows here aren't — a material whose name wraps
-                                    // to two lines (e.g. "بذور القرع / اليقطين") is visibly
-                                    // taller than a one-line row like "بيتزا" right next to it
-                                    // (see the reference screenshot). Using only the dragged
-                                    // row's own height meant swapping past a taller neighbor
-                                    // triggered too early (threshold too small) and left the
-                                    // dragged row's finger-relative offset wrong by the
-                                    // difference in height (correction too small), so the row
-                                    // under the finger visibly snapped to the wrong spot —
-                                    // worse the more the two rows' heights differed.
-                                    // Fixed by looking up the *actual* neighbor being swapped
-                                    // past (not assuming it's the same height as the dragged
-                                    // row): the swap now triggers at the midpoint between the
-                                    // two rows' real heights, and the offset is corrected by
-                                    // the neighbor's real height (the exact distance the
-                                    // dragged row visually jumps as it trades places), so the
-                                    // row tracks the finger precisely regardless of how the
-                                    // heights differ.
-                                    onDrag = { change, delta ->
-                                        change.consume()
-                                        dragOffset += delta.y
-                                        val gap = AppGroupGap.toPx()
-                                        val myHeight = (itemHeightsPx[m.id] ?: 0).toFloat()
-                                        val currentIndex = orderedItems.indexOfFirst { it.id == m.id }
-                                        // BUG FIXED (part of the same
-                                        // "السحب... فما بقدر ارجع للأعلى" fix
-                                        // as userScrollEnabled above): the
-                                        // first item has no neighbor above it
-                                        // to swap with, so nothing here ever
-                                        // stopped `dragOffset` itself from
-                                        // still climbing negative as the
-                                        // finger kept moving up — the row
-                                        // just kept sliding up past its own
-                                        // resting slot with no floor,
-                                        // visually detaching from the list
-                                        // (and symmetrically for the last
-                                        // item dragged past the bottom).
-                                        // Clamped to 0 in whichever
-                                        // direction has no neighbor to swap
-                                        // into, so the dragged row never
-                                        // moves further than the real list
-                                        // actually allows.
-                                        if (currentIndex == 0 && dragOffset < 0f) dragOffset = 0f
-                                        if (currentIndex == orderedItems.lastIndex && dragOffset > 0f) dragOffset = 0f
-                                        if (dragOffset > 0f && currentIndex < orderedItems.lastIndex) {
-                                            val neighbor = orderedItems[currentIndex + 1]
-                                            val neighborHeight = (itemHeightsPx[neighbor.id] ?: myHeight.toInt()).toFloat()
-                                            val threshold = (myHeight + neighborHeight) / 2f + gap
-                                            if (dragOffset > threshold) {
-                                                orderedItems = orderedItems.toMutableList().apply {
-                                                    add(currentIndex + 1, removeAt(currentIndex))
-                                                }
-                                                dragOffset -= (neighborHeight + gap)
-                                            }
-                                        } else if (dragOffset < 0f && currentIndex > 0) {
-                                            val neighbor = orderedItems[currentIndex - 1]
-                                            val neighborHeight = (itemHeightsPx[neighbor.id] ?: myHeight.toInt()).toFloat()
-                                            val threshold = (myHeight + neighborHeight) / 2f + gap
-                                            if (-dragOffset > threshold) {
-                                                orderedItems = orderedItems.toMutableList().apply {
-                                                    add(currentIndex - 1, removeAt(currentIndex))
-                                                }
-                                                dragOffset += (neighborHeight + gap)
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        } else Modifier
+        sections.forEach { (group, list) ->
+            if (showSectionHeaders) {
+                item(key = "section_$group", contentType = "sectionHeader") {
+                    ShortageSectionHeader(
+                        name = group,
+                        count = list.size,
+                        modifier = Modifier.padding(top = AppSpaceSm, bottom = 2.dp)
                     )
-            ) {
-                MaterialRow(
-                    material = m,
-                    shape = groupedRowShape(rowIndex, orderedItems.lastIndex),
-                    onEdit = { onEdit(m) },
-                    onDelete = { onDelete(m) },
-                    onToggleImportant = { onToggleImportant(m) },
-                    isDragging = isDragging,
-                    linePrice = m.linePrice(prices)
-                )
+                }
             }
+            itemsIndexed(
+                list,
+                key = { _, m -> m.id },
+                contentType = { _, _ -> "materialRow" }
+            ) { rowIndex, m ->
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .animateItem(
+                            fadeInSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
+                            else tween(durationMillis = MotionSpecs.fadeMillis(), easing = MotionSpecs.claudeEasing),
+                            placementSpec = MotionSpecs.reorderSpring(),
+                            fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
+                            else MotionSpecs.listItemFadeOut()
+                        )
+                        .listItemEntrance(rowIndex)
+                ) {
+                    MaterialRow(
+                        material = m,
+                        shape = groupedRowShape(rowIndex, list.lastIndex),
+                        onEdit = { onEdit(m) },
+                        onDelete = { onDelete(m) },
+                        onToggleImportant = { onToggleImportant(m) },
+                        linePrice = m.linePrice(prices)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShortageSectionHeader(name: String, count: Int, modifier: Modifier = Modifier) {
+    val ungrouped = name.isEmpty()
+    val accent = remember(name) { if (ungrouped) Color(0xFF8A8A8A) else avatarColorFor(name) }
+    Row(
+        modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier.size(28.dp).clip(CircleShape).background(accent.copy(alpha = 0.22f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                if (ungrouped) Icons.Default.Inventory2 else Icons.Default.Folder,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            if (ungrouped) "بدون مجموعة" else name,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                .padding(horizontal = 9.dp, vertical = 2.dp)
+        ) {
+            Text(
+                "$count",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -449,15 +379,38 @@ internal fun MaterialRow(
                     .padding(start = AppSpace2, end = AppSpace10, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onToggleImportant, modifier = Modifier.size(AppMinTouchTarget)) {
-                    Icon(
-                        if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                        contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
-                        tint = if (material.important) LocalSemanticColors.current.warning else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                AppIconCircle(color = avatarColor, size = 38.dp) {
-                    Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                val gold = LocalSemanticColors.current.warning
+                val ringColor = if (material.important) gold else MaterialTheme.colorScheme.outlineVariant
+                Box(Modifier.width(46.dp).height(56.dp)) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .size(44.dp)
+                            .border(if (material.important) 2.dp else 1.5.dp, ringColor, CircleShape)
+                            .padding(3.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppIconCircle(color = avatarColor, size = 36.dp) {
+                            Icon(Icons.Default.Spa, contentDescription = null, tint = Color.White, modifier = Modifier.size(19.dp))
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .size(24.dp)
+                            .clip(CircleShape)
+                            .background(fill)
+                            .border(1.5.dp, ringColor, CircleShape)
+                            .clickable(onClick = onToggleImportant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                            contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
+                            tint = if (material.important) gold else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
                 }
                 Spacer(Modifier.width(AppSpace10))
                 Column(Modifier.weight(1f)) {

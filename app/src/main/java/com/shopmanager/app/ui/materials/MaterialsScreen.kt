@@ -129,6 +129,13 @@ fun MaterialsScreen(
 
     BackHandler(enabled = tab == 1) { tab = 0 }
 
+    val groupOf: (String) -> String = remember(catalog) {
+        val map = HashMap<String, String>(catalog.size * 2)
+        catalog.forEach { map[com.shopmanager.app.ui.common.arabicSortKey(it.name)] = it.group.trim() }
+        val lookup: (String) -> String = { name -> map[com.shopmanager.app.ui.common.arabicSortKey(name)] ?: "" }
+        lookup
+    }
+
     // MOVED UP from PricesList: this in-progress price-edits buffer used to
     // live entirely inside PricesList, private to that tab, since only its
     // own full-width save button ever read it. Now that saving is
@@ -178,6 +185,7 @@ fun MaterialsScreen(
                 onTogglePrices = { tab = if (tab == 1) 0 else 1 },
                 onShare = { showShareChoice = true },
                 onOpenDrawer = onOpenDrawer,
+                onAddNew = onAddNew,
                 searchQuery = search,
                 onSearchQueryChange = { search = it }
             )
@@ -226,18 +234,6 @@ fun MaterialsScreen(
                 // `onAddNew` callback MainActivity already wires to the
                 // catalog-picker screen.
                 Column(Modifier.fillMaxSize()) {
-                    // زر الإضافة نحيف (44dp بدل 52dp)، أما بطاقة الملخّص وعنوان
-                    // القائمة فصارا أول عناصر القائمة نفسها (انظر MaterialsList) فيرتفعان
-                    // مع التمرير وتأخذ المواد كامل الشاشة بدل أن تُدفع للأسفل.
-                    AppPillButton(
-                        label = "مادة جديدة",
-                        icon = Icons.Default.Add,
-                        onClick = onAddNew,
-                        height = 44.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = AppScreenPadding, end = AppScreenPadding, top = AppSpace2, bottom = AppSpaceSm)
-                    )
                     if (state.isLoading && filtered.isEmpty()) {
                         com.shopmanager.app.ui.common.SkeletonRowList(
                             kind = com.shopmanager.app.ui.common.SkeletonRowKind.MATERIAL,
@@ -255,7 +251,7 @@ fun MaterialsScreen(
                             if (!it.important) viewModel.recordImportant(it.name)
                             viewModel.setImportant(it, !it.important)
                         },
-                        onReordered = { viewModel.reorderMaterials(it.map(Material::id)) }
+                        groupOf = groupOf
                     )
                 }
             } else {
