@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.common
 
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -162,7 +163,8 @@ fun AppCapsuleSearchField(
     onQueryChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
-    focusRequester: FocusRequester? = null
+    focusRequester: FocusRequester? = null,
+    onAdd: (() -> Unit)? = null
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     val cs = MaterialTheme.colorScheme
@@ -243,6 +245,24 @@ fun AppCapsuleSearchField(
                     contentDescription = "مسح",
                     tint = cs.onSurfaceVariant,
                     modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        if (onAdd != null) {
+            if (query.isNotEmpty()) Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(cs.onSurface)
+                    .clickable(onClick = onAdd),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "مادة جديدة",
+                    tint = cs.surface,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
