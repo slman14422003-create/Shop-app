@@ -1,5 +1,6 @@
 package com.shopmanager.app.data.materials
 
+import com.shopmanager.app.ui.common.sortedArabicBy
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.shopmanager.app.data.FirebaseModule
@@ -55,13 +56,8 @@ class MaterialsRepository {
                             order = doc.getLong("order") ?: (doc.getLong("timestamp") ?: 0L)
                         )
                     }
-                    // FEATURE ADDED ("ترتيب المواد بالضغط المطول"): sort is
-                    // now by the manual `order` field instead of
-                    // alphabetically by name - a manual drag reorder (and
-                    // marking something important, which pins it to the
-                    // top) wouldn't mean anything if the list snapped back
-                    // to A-Z on every recomposition.
-                    ?.sortedBy { it.order }
+                    // Alphabetical (Arabic) order is the single source of truth for every list.
+                    ?.sortedArabicBy { it.name }
                     ?: emptyList()
                 trySend(items)
             }
@@ -93,7 +89,7 @@ class MaterialsRepository {
                 }
                 val items = snapshot?.documents
                     ?.map { MaterialCatalogItem(id = it.id, name = it.getString("name") ?: "", group = it.getString("group") ?: "") }
-                    ?.sortedBy { it.name }
+                    ?.sortedArabicBy { it.name }
                     ?: emptyList()
                 trySend(items)
             }

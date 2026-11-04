@@ -665,11 +665,18 @@ class MissingFinderStore(context: Context) {
      * مؤخراً (فترة الهدوء)، وترفع الأكثر طلباً مؤخراً والمستحق والمتأخر منذ مدة وما يوافق
      * يوم اليوم. وإن كانت هناك نواقص حالية، تُضاف المواد التي اعتادت أن تنقص معها.
      */
+    private fun isOccasional(s: Stat?, now: Long): Boolean {
+        if (s == null) return true
+        val from = now - RARE_WINDOW_DAYS * DAY_MS
+        return s.recent.count { it >= from } < MIN_ADDS_FOR_FREQUENT
+    }
+
     @Synchronized
     fun suggested(
         items: List<MaterialCatalogItem>,
         limit: Int = 12,
-        exclude: Collection<String> = emptyList()
+        exclude: Collection<String> = emptyList(),
+        frequentOnly: Boolean = false
     ): List<MaterialCatalogItem> {
         if (!loaded) return emptyList()
         val now = System.currentTimeMillis()
@@ -682,6 +689,7 @@ class MissingFinderStore(context: Context) {
             }
         }
         return items.filter { key(it.name) !in skip }
+            .filter { !frequentOnly || !isOccasional(statsMap[key(it.name)], now) }
             .map { it to (score(statsMap[key(it.name)], now).let { sc ->
                 if (sc <= 0.0) 0.0 else sc + (partnerBoost[key(it.name)] ?: 0.0)
             }) }
@@ -837,6 +845,8 @@ class MissingFinderStore(context: Context) {
         const val MAX_TS = 10
         const val MAX_Q = 7
         const val FREQ_WINDOW_DAYS = 30L
+        const val RARE_WINDOW_DAYS = 28L
+        const val MIN_ADDS_FOR_FREQUENT = 5
         const val WD_HALF_LIFE_DAYS = 60.0
         const val MIN_COOLDOWN_DAYS = 3f
         const val DEFAULT_COOLDOWN_DAYS = 7f
