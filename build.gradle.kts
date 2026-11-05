@@ -3,8 +3,8 @@ plugins {
     // افتراضيًا، فلا حاجة لإضافة org.jetbrains.kotlin.android إطلاقًا. نسخة
     // Kotlin (2.4.20) تُحدَّد عبر إضافة الـ Compose أدناه (تجلب
     // kotlin-gradle-plugin بنفس النسخة).
-    id("com.android.application") version "9.4.0" apply false
-    id("com.android.library") version "9.4.0" apply false
+    id("com.android.application") version "9.5.0" apply false
+    id("com.android.library") version "9.5.0" apply false
     // Since Kotlin 2.0, the Compose compiler is no longer a separate
     // artifact pinned via composeOptions{kotlinCompilerExtensionVersion}
     // (see the old comment removed from app/build.gradle.kts) — Kotlin
