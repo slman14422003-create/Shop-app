@@ -269,12 +269,30 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         }
     }
 
+    // FIX (لوحات المواد المقترحة/أعضاء المجموعة): كانت تنزلق بنابض/تلاشٍ افتراضيَين مختلفَين عن بقية
+    // الانتقالات، وتتجاهل مستوى الأداء. الآن نفس المدة والمنحنى والاتجاه (RTL) كدفع الشاشات، وفي
+    // الأداء الاقتصادي تلاشٍ فقط بلا انزلاق.
+    val panelMs = com.shopmanager.app.data.performance.MotionSpecs.navMillis()
+    val panelEasing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing
+    val panelLow = com.shopmanager.app.data.performance.LocalPerformanceTier.current ==
+        com.shopmanager.app.data.performance.PerformanceTier.LOW
+    val panelDir = if (androidx.compose.ui.platform.LocalLayoutDirection.current ==
+        androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
+    val panelEnter = if (panelLow) fadeIn(androidx.compose.animation.core.tween(panelMs, easing = panelEasing))
+        else slideInHorizontally(androidx.compose.animation.core.tween(panelMs, easing = panelEasing)) { panelDir * it } +
+            fadeIn(androidx.compose.animation.core.tween(panelMs / 2, easing = panelEasing))
+    val panelExit = if (panelLow) fadeOut(androidx.compose.animation.core.tween(panelMs, easing = panelEasing))
+        else slideOutHorizontally(androidx.compose.animation.core.tween(panelMs, easing = panelEasing)) { panelDir * it } +
+            fadeOut(androidx.compose.animation.core.tween(panelMs, easing = panelEasing))
+    // FIX: عند الإغلاق يصير membersTarget = null فيختفي المحتوى فوراً قبل الانزلاق (لوحة فارغة تنزلق).
+    var lastMembersTarget by remember { mutableStateOf(membersTarget) }
+    SideEffect { if (membersTarget != null) lastMembersTarget = membersTarget }
     BackHandler(enabled = suggestedOpen && membersTarget == null) { suggestedOpen = false }
     BackHandler(enabled = membersTarget != null) { membersTarget = null }
     AnimatedVisibility(
         visible = suggestedOpen,
-        enter = slideInHorizontally { -it } + fadeIn(),
-        exit = slideOutHorizontally { -it } + fadeOut(),
+        enter = panelEnter,
+        exit = panelExit,
         modifier = Modifier.fillMaxSize()
     ) {
         SuggestedFullScreen(
@@ -287,11 +305,11 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     }
     AnimatedVisibility(
         visible = membersTarget != null,
-        enter = slideInHorizontally { -it } + fadeIn(),
-        exit = slideOutHorizontally { -it } + fadeOut(),
+        enter = panelEnter,
+        exit = panelExit,
         modifier = Modifier.fillMaxSize()
     ) {
-        val target = membersTarget
+        val target = membersTarget ?: lastMembersTarget
         if (target != null) {
             GroupMembersScreen(
                 groupName = target,

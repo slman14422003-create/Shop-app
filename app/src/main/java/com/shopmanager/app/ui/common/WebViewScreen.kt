@@ -137,6 +137,15 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
     var searchTotalCount by remember { mutableIntStateOf(0) }
     var textZoom by remember { mutableStateOf(100) }
     val searchFocusRequester = remember { FocusRequester() }
+    // FIX (تقطيع أول الانتقال + وميض أبيض): إنشاء WebView وقراءة الـ HTML من الـ assets كانا يحدثان في أول
+    // إطار من انزلاق الشاشة فيتجمّد الانزلاق لحظة ثم يقفز. الآن لا يُنشأ الـ WebView إلا بعد انتهاء مدة
+    // الانتقال (وخلالها يظهر المؤشر الدائري فوق خلفية الثيم)، وخلفيته شفافة فلا يبرق بالأبيض في الوضع الداكن.
+    val settleMs = com.shopmanager.app.data.performance.MotionSpecs.navMillis().toLong() + 40L
+    var transitionSettled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(settleMs)
+        transitionSettled = true
+    }
 
     fun reload() {
         loadError = false
@@ -281,10 +290,11 @@ fun WebViewScreen(url: String, title: String, onBack: () -> Unit) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            AndroidView(
+            if (transitionSettled) AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
                     WebView(ctx).apply {
+                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
                         settings.javaScriptEnabled = false // static help content only — keeps the surface area minimal
                         settings.domStorageEnabled = false
                         settings.allowFileAccess = false
