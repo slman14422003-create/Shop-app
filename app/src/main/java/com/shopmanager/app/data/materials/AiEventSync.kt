@@ -56,6 +56,7 @@ object AiEventSync {
 
     private const val DAY_MS = 24L * 60 * 60 * 1000
     private const val BATCH_LIMIT = 400
+    private const val RETRY_MAX = 2000
 
     private val db: FirebaseFirestore get() = FirebaseModule.materialsDb
 
@@ -68,21 +69,32 @@ object AiEventSync {
         "b" to e.batch, "to" to e.to, "c" to e.count
     )
 
+    private val retryQueue = java.util.concurrent.ConcurrentLinkedQueue<AiEvent>()
+
     /** كتابة بلا انتظار: تُصَفّ محلياً وتُرفع عند توفر الاتصال. */
     fun write(e: AiEvent) {
-        runCatching {
+        val ok = runCatching {
             db.collection(COLLECTION).document(e.id).set(toMap(e)).addOnFailureListener { }
-        }
+        }.isSuccess
+        if (!ok && retryQueue.size < RETRY_MAX) retryQueue.add(e)
     }
 
     fun writeAll(events: List<AiEvent>) {
-        runCatching {
-            events.chunked(BATCH_LIMIT).forEach { chunk ->
+        events.chunked(BATCH_LIMIT).forEach { chunk ->
+            val ok = runCatching {
                 val batch = db.batch()
                 chunk.forEach { batch.set(db.collection(COLLECTION).document(it.id), toMap(it)) }
                 batch.commit().addOnFailureListener { }
-            }
+            }.isSuccess
+            if (!ok) chunk.forEach { if (retryQueue.size < RETRY_MAX) retryQueue.add(it) }
         }
+    }
+
+    private fun drainRetryQueue() {
+        if (retryQueue.isEmpty()) return
+        val pending = ArrayList<AiEvent>()
+        while (true) pending.add(retryQueue.poll() ?: break)
+        writeAll(pending)
     }
 
     /** يبث الأحداث الجديدة/المعدّلة فقط (أول لقطة تحمل كل المحفوظ). */
@@ -120,6 +132,7 @@ object AiEventSync {
                 }
                 if (list.isNotEmpty()) trySend(list)
             }
+        drainRetryQueue()
         awaitClose { reg.remove() }
     }
 

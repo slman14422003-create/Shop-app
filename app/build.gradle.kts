@@ -199,7 +199,7 @@ android {
     // JAVA VERSION (٢٠٢٦-٠٩): bumped from 21 to 25 — JDK 25 is now the
     // current LTS (released Sept 2025) and JDK 21's own free-updates
     // window closes this same month (Sept 2026), a year after JDK 25
-    // shipped; AGP 9.4.0 / Gradle 9.7.1 / Kotlin 2.4.20 (see the root
+    // shipped; AGP 9.5.0 / Gradle 9.7.1 / Kotlin 2.4.20 (see the root
     // build.gradle.kts and CI workflow) all officially build with and run
     // on JDK 25. minSdk 24 is unaffected: D8 still desugars whatever the
     // target device's runtime can't run natively, exactly as it did for
@@ -337,7 +337,7 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     // BUILD UPDATE: previously pinned to 2.10.0 because lifecycle 2.11.0's
     // AAR metadata requires compileSdk 37 + AGP 9.1.0+, which this project
-    // didn't have yet. Now that compileSdk is 37 and AGP is 9.4.0 (see
+    // didn't have yet. Now that compileSdk is 37 and AGP is 9.5.0 (see
     // android{} above and the root build.gradle.kts), that requirement is
     // met and the pin is no longer needed — bumped straight to the current
     // stable release.
@@ -362,12 +362,12 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Firebase — initialized manually via FirebaseOptions (no google-services.json / plugin needed)
-    val firebaseBom = platform("com.google.firebase:firebase-bom:34.17.0")
+    val firebaseBom = platform("com.google.firebase:firebase-bom:35.1.0")
     implementation(firebaseBom)
     // BUILD FIX: "Could not find com.google.firebase:firebase-firestore-ktx:"
     // (empty version, same for firebase-common-ktx) — Firebase stopped
     // releasing the standalone -ktx modules and dropped them from the BoM
-    // entirely as of BoM v34.0.0 (this project pins 34.17.0), so there's no
+    // entirely as of BoM v34.0.0 (this project pins 35.1.0), so there's no
     // version left here for Gradle to resolve against. The KTX extension
     // APIs were merged into these same main modules back in BoM 32.5.0+
     // under the same package names, so no source change is needed — every

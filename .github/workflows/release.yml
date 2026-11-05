@@ -58,7 +58,7 @@ jobs:
         with:
           packages: ''
 
-      # يطابق الحد الأدنى المطلوب لـ AGP 9.4 (Gradle 9.6.0+). كاش Gradle
+      # يطابق الحد الأدنى المطلوب لـ AGP 9.5 (Gradle 9.6.0+). كاش Gradle
       # والتبعيات يديره هذا الـ action تلقائيًا.
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6

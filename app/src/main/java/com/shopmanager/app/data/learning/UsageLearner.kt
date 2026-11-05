@@ -44,9 +44,10 @@ class UsageLearner(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("shop_usage_learner", Context.MODE_PRIVATE)
 
     private val counts = HashMap<UsageArea, FloatArray>()
-    private val accepted = IntArray(SuggestionKind.values().size)
-    private val dismissed = IntArray(SuggestionKind.values().size)
+    private val accepted = FloatArray(SuggestionKind.values().size)
+    private val dismissed = FloatArray(SuggestionKind.values().size)
     private var lastKind: Int = -1
+    private var rotateFrom: Int = -1
     private var loaded = false
 
     private val writer = DebouncedTask(900L) { persist() }
@@ -63,8 +64,8 @@ class UsageLearner(context: Context) {
                 for (i in 0 until minOf(SLOTS, arr.length())) f[i] = arr.optDouble(i, 0.0).toFloat()
                 counts[a] = f
             }
-            o.optJSONArray("a")?.let { for (i in accepted.indices) accepted[i] = it.optInt(i) }
-            o.optJSONArray("x")?.let { for (i in dismissed.indices) dismissed[i] = it.optInt(i) }
+            o.optJSONArray("a")?.let { for (i in accepted.indices) accepted[i] = it.optDouble(i, 0.0).toFloat() }
+            o.optJSONArray("x")?.let { for (i in dismissed.indices) dismissed[i] = it.optDouble(i, 0.0).toFloat() }
             lastKind = o.optInt("l", -1)
         }
         loaded = true
@@ -80,7 +81,10 @@ class UsageLearner(context: Context) {
 
     fun recordFeedback(kind: SuggestionKind, accept: Boolean) {
         preload()
-        if (accept) accepted[kind.ordinal]++ else dismissed[kind.ordinal]++
+        val k = kind.ordinal
+        accepted[k] *= FEEDBACK_DECAY
+        dismissed[k] *= FEEDBACK_DECAY
+        if (accept) accepted[k] += 1f else dismissed[k] += 1f
         writer.trigger()
     }
 
@@ -88,16 +92,18 @@ class UsageLearner(context: Context) {
         store: MissingFinderStore,
         catalog: List<MaterialCatalogItem>,
         currentShortages: Collection<String>
-    ): HomeSuggestion? = pickSuggestions(store, catalog, currentShortages, 1).firstOrNull()
+    ): HomeSuggestion? = pickSuggestions(store, catalog, currentShortages, 1, true).firstOrNull()
 
     /** Ranked suggestions (best first), at most [max]; empty when nothing is strong enough. */
     fun pickSuggestions(
         store: MissingFinderStore,
         catalog: List<MaterialCatalogItem>,
         currentShortages: Collection<String>,
-        max: Int
+        max: Int,
+        rotate: Boolean = true
     ): List<HomeSuggestion> {
         preload()
+        if (rotate) rotateFrom = lastKind
         val slot = slotNow()
         data class Cand(val s: HomeSuggestion, val p: Double)
         val cands = ArrayList<Cand>(6)
@@ -136,7 +142,7 @@ class UsageLearner(context: Context) {
             .map { c ->
                 val k = c.s.kind.ordinal
                 var p = c.p * feedbackFactor(k)
-                if (k == lastKind) p *= 0.6
+                if (k == rotateFrom) p *= 0.6
                 Cand(c.s, p)
             }
             .filter { it.p >= 0.8 }
@@ -144,7 +150,7 @@ class UsageLearner(context: Context) {
             .take(max.coerceAtLeast(1))
             .map { it.s }
 
-        ranked.firstOrNull()?.let {
+        if (rotate) ranked.firstOrNull()?.let {
             lastKind = it.kind.ordinal
             writer.trigger()
         }
@@ -156,7 +162,7 @@ class UsageLearner(context: Context) {
     private fun feedbackFactor(k: Int): Double {
         val a = accepted[k].toDouble()
         val d = dismissed[k].toDouble()
-        return 2.0 * (a + 1.0) / (a + d + 2.0)
+        return (2.0 * (a + 1.0) / (a + d + 2.0)).coerceAtLeast(0.45)
     }
 
     private fun habit(area: UsageArea, slot: Int): Double? {
@@ -199,8 +205,8 @@ class UsageLearner(context: Context) {
         }
         val o = JSONObject()
             .put("c", c)
-            .put("a", JSONArray(accepted.toList()))
-            .put("x", JSONArray(dismissed.toList()))
+            .put("a", JSONArray().also { ja -> accepted.forEach { ja.put((Math.round(it * 100f) / 100f).toDouble()) } })
+            .put("x", JSONArray().also { ja -> dismissed.forEach { ja.put((Math.round(it * 100f) / 100f).toDouble()) } })
             .put("l", lastKind)
         prefs.edit().putString(KEY, o.toString()).apply()
     }
@@ -210,5 +216,6 @@ class UsageLearner(context: Context) {
         const val PARTS = 4
         const val SLOTS = 7 * PARTS
         const val DECAY = 0.985f
+        const val FEEDBACK_DECAY = 0.92f
     }
 }

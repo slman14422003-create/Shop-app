@@ -9,6 +9,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -107,7 +108,7 @@ class MissingFinderStore(context: Context) {
 
     private fun key(name: String): String {
         if (keyCache.size > 3000) keyCache.clear()
-        return keyCache.getOrPut(name) { ArabicText.normalize(name) }
+        return keyCache.getOrPut(name) { ArabicText.normalize(name).take(MAX_KEY) }
     }
 
     // ───────────────────────── التحميل والمزامنة ─────────────────────────
@@ -127,8 +128,10 @@ class MissingFinderStore(context: Context) {
     private fun startSync() {
         if (syncJob != null) return
         syncJob = LearningHub.scope.launch {
-            runCatching { migrateLegacyOnce() }
-            runCatching { purgeWeekly() }
+            launch {
+                runCatching { migrateLegacyOnce() }
+                runCatching { withTimeoutOrNull(PURGE_TIMEOUT_MS) { purgeWeekly() } }
+            }
             AiEventSync.listen().retryOnError { }.collect { incoming ->
                 var changed = false
                 synchronized(this@MissingFinderStore) {
@@ -189,13 +192,15 @@ class MissingFinderStore(context: Context) {
                 if (r > 0L) seeds += seed(AiEvent.RESOLVED, name, r)
             }
         }
-        if (seeds.isNotEmpty()) {
+        val nowTs = System.currentTimeMillis()
+        val valid = seeds.filter { it.key.isNotEmpty() && it.ts in (nowTs - MIGRATE_MAX_AGE_DAYS * DAY_MS)..nowTs }
+        if (valid.isNotEmpty()) {
             synchronized(this) {
                 ensureLoaded()
-                seeds.forEach { events[it.id] = it }
+                valid.forEach { events[it.id] = it }
                 rebuildLocked()
             }
-            AiEventSync.writeAll(seeds)
+            AiEventSync.writeAll(valid)
             saver.trigger()
         }
         prefs.edit().putBoolean(KEY_MIGRATED, true).apply()
@@ -415,7 +420,10 @@ class MissingFinderStore(context: Context) {
         count: Int = 1
     ): AiEvent {
         val k = key(name)
-        return AiEvent(AiEventSync.idFor(type, k, ts), k, name, type, ts, qty, unit, important, batch, to, count)
+        return AiEvent(
+            AiEventSync.idFor(type, k, ts), k, name.take(MAX_KEY), type, ts,
+            qty.coerceIn(1, MAX_QTY), unit.take(40), important, batch.take(60), to.take(MAX_KEY), count.coerceIn(1, 1000)
+        )
     }
 
     /** يضيف الأحداث محلياً فوراً ويرسلها لفايربيس؛ الاستعلامات ترى أثرها مباشرة. */
@@ -423,7 +431,7 @@ class MissingFinderStore(context: Context) {
         LearningHub.scope.launch {
             val created = synchronized(this@MissingFinderStore) {
                 ensureLoaded()
-                val list = block()
+                val list = block().filter { it.key.isNotEmpty() }
                 if (list.isNotEmpty()) {
                     list.forEach { events[it.id] = it }
                     rebuildLocked()
@@ -491,12 +499,8 @@ class MissingFinderStore(context: Context) {
             val from = key(oldName)
             val to = key(newName)
             if (from == to) return@post emptyList()
-            listOf(
-                AiEvent(
-                    AiEventSync.idFor(AiEvent.RENAMED, from, System.currentTimeMillis()),
-                    from, newName, AiEvent.RENAMED, System.currentTimeMillis(), to = to
-                )
-            )
+            if (from.isEmpty() || to.isEmpty()) return@post emptyList()
+            listOf(ev(AiEvent.RENAMED, oldName, to = to).copy(name = newName.take(MAX_KEY)))
         }
     }
 
@@ -690,15 +694,28 @@ class MissingFinderStore(context: Context) {
                 partnerBoost[other] = (partnerBoost[other] ?: 0.0) + min(c, 6) * 0.35
             }
         }
-        return items.filter { key(it.name) !in skip }
-            .filter { !frequentOnly || !isOccasional(statsMap[key(it.name)], now) }
-            .map { it to (score(statsMap[key(it.name)], now).let { sc ->
-                if (sc <= 0.0) 0.0 else sc + (partnerBoost[key(it.name)] ?: 0.0)
-            }) }
-            .filter { it.second > 0.0 }
-            .sortedByDescending { it.second }
+        class Row(val item: MaterialCatalogItem, val score: Double, val tier: Int)
+        val rows = ArrayList<Row>()
+        for (item in items) {
+            val k = key(item.name)
+            if (k in skip) continue
+            val st = statsMap[k]
+            val sc = score(st, now)
+            if (sc > 0.0) {
+                rows += Row(item, sc + (partnerBoost[k] ?: 0.0), if (isOccasional(st, now)) 1 else 0)
+            } else if (st != null && st.added > 0 && isResolved(st) &&
+                (now - st.lastResolved).toFloat() / DAY_MS >= 1f
+            ) {
+                rows += Row(item, ln(1.0 + st.added), 2)
+            }
+        }
+        return rows
+            .sortedWith(
+                compareBy<Row> { if (it.tier == 2) 2 else if (frequentOnly) it.tier else 0 }
+                    .thenByDescending { it.score }
+            )
             .take(limit)
-            .map { it.first }
+            .map { it.item }
     }
 
     private fun displayName(catalog: List<MaterialCatalogItem>): (Map.Entry<String, Stat>) -> String {
@@ -844,6 +861,10 @@ class MissingFinderStore(context: Context) {
         const val MAX_PARTNERS = 8
         const val MAX_BATCH = 30
         const val MAX_EVENTS = 6000
+        const val MAX_KEY = 200
+        const val MAX_QTY = 100000
+        const val MIGRATE_MAX_AGE_DAYS = 380L
+        const val PURGE_TIMEOUT_MS = 20_000L
         const val MAX_TS = 10
         const val MAX_Q = 7
         const val FREQ_WINDOW_DAYS = 30L
