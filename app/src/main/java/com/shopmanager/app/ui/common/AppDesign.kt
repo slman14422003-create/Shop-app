@@ -36,6 +36,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -169,34 +173,46 @@ fun ScreenTopBar(
     topInset: Boolean = true
 ) {
     val reserved = reservedIcons.coerceAtLeast(1)
-    Box(
-        modifier
+    val titleStyle = MaterialTheme.typography.titleLarge.copy(fontSize = if (reserved >= 2) 22.sp else 24.sp)
+    val titleColor = MaterialTheme.colorScheme.onSurface
+    Layout(
+        content = {
+            Box(Modifier.layoutId("nav"), contentAlignment = Alignment.CenterStart) { navigation?.invoke() }
+            Row(Modifier.layoutId("actions"), verticalAlignment = Alignment.CenterVertically) { actions?.invoke(this) }
+            Text(
+                title,
+                modifier = Modifier.layoutId("title"),
+                style = titleStyle,
+                fontWeight = FontWeight.SemiBold,
+                color = titleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        },
+        modifier = modifier
             .fillMaxWidth()
             .then(if (topInset) Modifier.statusBarsPadding() else Modifier)
             .height(64.dp)
             .padding(horizontal = 6.dp)
-    ) {
-        if (navigation != null) {
-            Box(Modifier.align(Alignment.CenterStart)) { navigation() }
-        }
-        Text(
-            title,
-            modifier = Modifier
-                .align(Alignment.Center)
-                .padding(horizontal = 48.dp * reserved),
-            style = MaterialTheme.typography.titleLarge.copy(fontSize = if (reserved >= 2) 22.sp else 24.sp),
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-        if (actions != null) {
-            Row(
-                Modifier.align(Alignment.CenterEnd),
-                verticalAlignment = Alignment.CenterVertically,
-                content = actions
-            )
+    ) { measurables, constraints ->
+        val w = constraints.maxWidth
+        val h = constraints.maxHeight
+        val loose = Constraints(maxWidth = w, maxHeight = h)
+        val nav = measurables.first { it.layoutId == "nav" }.measure(loose)
+        val act = measurables.first { it.layoutId == "actions" }.measure(loose)
+        val gap = 8.dp.roundToPx()
+        val titleMax = (w - nav.width - act.width - 2 * gap).coerceAtLeast(0)
+        val titleP = measurables.first { it.layoutId == "title" }.measure(Constraints(maxWidth = titleMax, maxHeight = h))
+        val lo = nav.width + gap
+        val hi = (w - act.width - gap - titleP.width).coerceAtLeast(lo)
+        val titleX = ((w - titleP.width) / 2).coerceIn(lo, hi)
+        val rtl = layoutDirection == LayoutDirection.Rtl
+        fun xOf(logical: Int, width: Int) = if (rtl) w - logical - width else logical
+        layout(w, h) {
+            nav.place(xOf(0, nav.width), (h - nav.height) / 2)
+            act.place(xOf(w - act.width, act.width), (h - act.height) / 2)
+            titleP.place(xOf(titleX, titleP.width), (h - titleP.height) / 2)
         }
     }
 }
