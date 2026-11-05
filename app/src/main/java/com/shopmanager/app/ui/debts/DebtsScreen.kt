@@ -130,7 +130,7 @@ fun DebtsScreen(
     val payTarget = remember { mutableStateOf<Person?>(null) }
     val showShareChoice = remember { mutableStateOf(false) }
     val showShareConfirm = remember { mutableStateOf(false) }
-    var filter by remember { mutableStateOf(DebtFilter.ALL) }
+    var filter by remember { mutableStateOf(DebtFilter.NEWEST) }
     val haptics = LocalHapticFeedback.current
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current

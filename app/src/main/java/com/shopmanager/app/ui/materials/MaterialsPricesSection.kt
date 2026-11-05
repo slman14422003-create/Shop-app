@@ -33,7 +33,9 @@ import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.materials.linePrice
 import com.shopmanager.app.data.materials.priceOf
 import androidx.compose.ui.text.input.KeyboardType
-import com.shopmanager.app.ui.common.rememberSmartSearch
+import com.shopmanager.app.ui.common.rememberSmartSearchSplit
+import com.shopmanager.app.data.materials.PriceHistoryStore
+import androidx.compose.foundation.lazy.LazyListScope
 import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.avatarColorFor
@@ -86,15 +88,32 @@ internal fun PricesList(
     }
 
     val currency = AppSettingsState.currencySymbol
-    val filtered = rememberSmartSearch(catalogItems, search) { it.name }
+    val searching = search.isNotBlank()
+    val split = rememberSmartSearchSplit(catalogItems, search) { it.name }
+    val filtered = split.all
 
     // صفوف النواقص مجمّعة باسم المادة (مقصوص) لربطها بعنصر الكتالوج نفسه.
     val shortageByName = remember(materials) { materials.groupBy { it.name.trim() } }
 
-    // إعادة ترتيب: المواد الموجودة حالياً في قائمة النواقص أولاً (هي التي تحتاج سعراً الآن
-    // ويظهر لها حساب الإجمالي)، ثم بقية الكتالوج بترتيبها الأصلي.
-    val inShortage = remember(filtered, shortageByName) { filtered.filter { shortageByName.containsKey(it.name.trim()) } }
-    val others = remember(filtered, shortageByName) { filtered.filter { !shortageByName.containsKey(it.name.trim()) } }
+    val recentlyEdited = remember(filtered, history, searching) {
+        if (searching) emptyList()
+        else {
+            val now = System.currentTimeMillis()
+            filtered.mapNotNull { c ->
+                val last = history[c.name.trim()]?.firstOrNull() ?: return@mapNotNull null
+                if (now - last.at in 0..PriceHistoryStore.RECENT_WINDOW_MS) c to last.at else null
+            }.sortedByDescending { it.second }.map { it.first }
+        }
+    }
+    val recentIds = remember(recentlyEdited) { recentlyEdited.mapTo(HashSet()) { it.id } }
+    val inShortage = remember(filtered, shortageByName, recentIds, searching) {
+        if (searching) emptyList()
+        else filtered.filter { it.id !in recentIds && shortageByName.containsKey(it.name.trim()) }
+    }
+    val others = remember(filtered, shortageByName, recentIds, searching) {
+        if (searching) emptyList()
+        else filtered.filter { it.id !in recentIds && !shortageByName.containsKey(it.name.trim()) }
+    }
 
     var historyTarget by remember { mutableStateOf<String?>(null) }
     historyTarget?.let { target ->
@@ -123,50 +142,79 @@ internal fun PricesList(
                         modifier = Modifier.padding(bottom = AppSpaceSm)
                     )
                 }
-                if (inShortage.isNotEmpty()) {
-                    item(key = "titleShortage") {
-                        AppSectionTitle(text = "في قائمة النواقص (${inShortage.size})", modifier = Modifier.padding(bottom = AppSpace2))
+                if (searching) {
+                    if (split.matches.isNotEmpty()) {
+                        item(key = "titleMatches") {
+                            AppSectionTitle(text = "المطابقة (${split.matches.size})", modifier = Modifier.padding(bottom = AppSpace2))
+                        }
+                        priceRows(split.matches, "m_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
                     }
-                    itemsIndexed(inShortage, key = { _, c -> c.id }, contentType = { _, _ -> "priceRow" }) { rowIndex, item ->
-                        val effective = edited[item.name]?.toPriceOrNull() ?: prices.priceOf(item.name)
-                        PriceRow(
-                            shape = groupedRowShape(rowIndex, inShortage.lastIndex),
-                            item = item,
-                            currency = currency,
-                            // قيمة الحقل نص قابل للتحليل مجدداً (بلا ".0" ولا 1.1E7).
-                            value = edited[item.name] ?: prices[item.name]?.toEditText() ?: "",
-                            effectivePrice = effective,
-                            history = history[item.name.trim()].orEmpty(),
-                            onShowHistory = { historyTarget = item.name },
-                            shortageRows = shortageByName[item.name.trim()].orEmpty(),
-                            onValueChange = { edited[item.name] = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '٫' } }
-                        )
+                    if (split.suggestions.isNotEmpty()) {
+                        item(key = "titleSuggestions") {
+                            AppSectionTitle(
+                                text = "اقتراحات (${split.suggestions.size})",
+                                modifier = Modifier.padding(top = if (split.matches.isEmpty()) 0.dp else 10.dp, bottom = AppSpace2)
+                            )
+                        }
+                        priceRows(split.suggestions, "x_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
                     }
-                }
-                if (others.isNotEmpty()) {
-                    item(key = "titleOthers") {
-                        AppSectionTitle(
-                            text = if (inShortage.isEmpty()) "القائمة الثابتة (${others.size})" else "بقية القائمة (${others.size})",
-                            modifier = Modifier.padding(top = if (inShortage.isEmpty()) 0.dp else 10.dp, bottom = AppSpace2)
-                        )
+                } else {
+                    if (recentlyEdited.isNotEmpty()) {
+                        item(key = "titleRecent") {
+                            AppSectionTitle(text = "عُدّلت أسعارها مؤخراً (${recentlyEdited.size})", modifier = Modifier.padding(bottom = AppSpace2))
+                        }
+                        priceRows(recentlyEdited, "r_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
                     }
-                    itemsIndexed(others, key = { _, c -> c.id }, contentType = { _, _ -> "priceRow" }) { rowIndex, item ->
-                        val effective = edited[item.name]?.toPriceOrNull() ?: prices.priceOf(item.name)
-                        PriceRow(
-                            shape = groupedRowShape(rowIndex, others.lastIndex),
-                            item = item,
-                            currency = currency,
-                            value = edited[item.name] ?: prices[item.name]?.toEditText() ?: "",
-                            effectivePrice = effective,
-                            history = history[item.name.trim()].orEmpty(),
-                            onShowHistory = { historyTarget = item.name },
-                            shortageRows = emptyList(),
-                            onValueChange = { edited[item.name] = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '٫' } }
-                        )
+                    if (inShortage.isNotEmpty()) {
+                        item(key = "titleShortage") {
+                            AppSectionTitle(
+                                text = "في قائمة النواقص (${inShortage.size})",
+                                modifier = Modifier.padding(top = if (recentlyEdited.isEmpty()) 0.dp else 10.dp, bottom = AppSpace2)
+                            )
+                        }
+                        priceRows(inShortage, "s_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
+                    }
+                    if (others.isNotEmpty()) {
+                        item(key = "titleOthers") {
+                            val first = recentlyEdited.isEmpty() && inShortage.isEmpty()
+                            AppSectionTitle(
+                                text = if (first) "القائمة الثابتة (${others.size})" else "بقية القائمة (${others.size})",
+                                modifier = Modifier.padding(top = if (first) 0.dp else 10.dp, bottom = AppSpace2)
+                            )
+                        }
+                        priceRows(others, "o_", currency, prices, edited, history, shortageByName, false) { historyTarget = it }
                     }
                 }
             }
         }
+    }
+}
+
+private fun LazyListScope.priceRows(
+    list: List<MaterialCatalogItem>,
+    keyPrefix: String,
+    currency: String,
+    prices: Map<String, Double>,
+    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
+    history: Map<String, List<PriceChange>>,
+    shortageByName: Map<String, List<Material>>,
+    showShortage: Boolean,
+    onShowHistory: (String) -> Unit
+) {
+    itemsIndexed(list, key = { _, c -> keyPrefix + c.id }, contentType = { _, _ -> "priceRow" }) { rowIndex, item ->
+        val effective = edited[item.name]?.toPriceOrNull() ?: prices.priceOf(item.name)
+        PriceRow(
+            shape = groupedRowShape(rowIndex, list.lastIndex),
+            item = item,
+            currency = currency,
+            // قيمة الحقل نص قابل للتحليل مجدداً (بلا ".0" ولا 1.1E7).
+            value = edited[item.name] ?: prices[item.name]?.toEditText() ?: "",
+            effectivePrice = effective,
+            history = history[item.name.trim()].orEmpty(),
+            onShowHistory = { onShowHistory(item.name) },
+            shortageRows = if (showShortage) shortageByName[item.name.trim()].orEmpty() else emptyList(),
+            onValueChange = { edited[item.name] = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '٫' } }
+        )
     }
 }
 

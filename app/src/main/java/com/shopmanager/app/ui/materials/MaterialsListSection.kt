@@ -148,6 +148,7 @@ internal fun MaterialsList(
     prices: Map<String, Double>,
     animateSummary: Boolean,
     searching: Boolean,
+    suggestionIds: Set<String> = emptySet(),
     onClearAll: () -> Unit,
     onEdit: (Material) -> Unit,
     onDelete: (Material) -> Unit,
@@ -188,14 +189,28 @@ internal fun MaterialsList(
         else -> sortedMaterials
     }
     LaunchedEffect(Unit) { if (importantItems.isEmpty()) listTab = 2 }
-    val sections = remember(visibleItems, groupOf) {
-        val byGroup = visibleItems.groupBy { groupOf(it.name) }
-        val out = ArrayList<Pair<String, List<Material>>>()
-        byGroup.keys.filter { it.isNotEmpty() }.sortedArabicBy { it }.forEach { out.add(it to byGroup.getValue(it)) }
-        byGroup[""]?.let { out.add("" to it) }
-        out
+    val searchSections = remember(visibleItems, suggestionIds, searching) {
+        if (!searching) emptyList()
+        else {
+            val m = visibleItems.filter { it.id !in suggestionIds }
+            val x = visibleItems.filter { it.id in suggestionIds }
+            val out = ArrayList<Pair<String, List<Material>>>(2)
+            if (m.isNotEmpty()) out.add("المطابقة" to m)
+            if (x.isNotEmpty()) out.add("اقتراحات" to x)
+            out
+        }
     }
-    val showSectionHeaders = sections.any { it.first.isNotEmpty() }
+    val sections = remember(visibleItems, groupOf, searching, searchSections) {
+        if (searching) searchSections
+        else {
+            val byGroup = visibleItems.groupBy { groupOf(it.name) }
+            val out = ArrayList<Pair<String, List<Material>>>()
+            byGroup.keys.filter { it.isNotEmpty() }.sortedArabicBy { it }.forEach { out.add(it to byGroup.getValue(it)) }
+            byGroup[""]?.let { out.add("" to it) }
+            out
+        }
+    }
+    val showSectionHeaders = if (searching) searchSections.size > 1 else sections.any { it.first.isNotEmpty() }
 
     // تُحسب مرة لكل تغيّر فعلي في القائمة المعروضة أو في الأسعار.
     val weightSummary = remember(visibleItems) { visibleItems.weightSummary() }
@@ -261,7 +276,14 @@ internal fun MaterialsList(
             }
         }
         sections.forEach { (group, list) ->
-            if (showSectionHeaders) {
+            if (showSectionHeaders && searching) {
+                item(key = "section_$group", contentType = "sectionHeader") {
+                    AppSectionTitle(
+                        text = "$group (${list.size})",
+                        modifier = Modifier.padding(top = AppSpaceSm, bottom = 2.dp)
+                    )
+                }
+            } else if (showSectionHeaders) {
                 item(key = "section_$group", contentType = "sectionHeader") {
                     ShortageSectionHeader(
                         name = group,

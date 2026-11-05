@@ -143,7 +143,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             finderStore.version.debounce(800).collect {
                 learnVersion.update { v -> v + 1 }
-                if (lastEnterAt != 0L) refreshHomeSuggestions()
+                if (lastEnterAt != 0L) refreshHomeSuggestions(rotate = false)
             }
         }
     }
@@ -195,6 +195,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val learningVersion: StateFlow<Int> = finderStore.version
+
     fun rankedCatalog(items: List<MaterialCatalogItem>): List<MaterialCatalogItem> =
         finderStore.ranked(items, pendingNames())
 
@@ -243,10 +245,10 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         lastEnterAt = now
         sessionHidden.clear()
         LearningHub.scope.launch { usage.record(UsageArea.APP_OPEN) }
-        refreshHomeSuggestions()
+        refreshHomeSuggestions(rotate = true)
     }
 
-    private fun refreshHomeSuggestions() {
+    private fun refreshHomeSuggestions(rotate: Boolean) {
         enterJob?.cancel()
         enterJob = viewModelScope.launch(Dispatchers.Default) {
             val items = withTimeoutOrNull(2500L) { catalog.first { it.isNotEmpty() } } ?: catalog.value
@@ -254,7 +256,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 .materials.map { it.name }
             val picks = withContext(LearningHub.io) {
                 finderStore.preload()
-                usage.pickSuggestions(finderStore, items, current, 4)
+                usage.pickSuggestions(finderStore, items, current, 4, rotate)
             }
             _homeSuggestions.value = picks.filter { it.kind !in sessionHidden }
         }

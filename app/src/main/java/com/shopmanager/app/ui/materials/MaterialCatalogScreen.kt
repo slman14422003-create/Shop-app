@@ -74,6 +74,7 @@ import com.shopmanager.app.ui.common.ScreenTopBar
 import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.common.groupedRowShape
 import com.shopmanager.app.ui.common.rememberSmartSearch
+import com.shopmanager.app.ui.common.rememberSmartSearchSplit
 import com.shopmanager.app.ui.common.sortedArabicBy
 
 private class ItemMenu(val item: MaterialCatalogItem, val hint: String?, val shape: Shape, val anchor: Rect)
@@ -105,7 +106,8 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
         message?.let { snackbarHost.showSnackbar(it); viewModel.clearMessage() }
     }
 
-    val filtered = rememberSmartSearch(catalog, search) { it.name }
+    val split = rememberSmartSearchSplit(catalog, search) { it.name }
+    val filtered = split.all
     val searching = search.isNotBlank()
     val showSuggested = !searching
     val orderedFiltered = remember(filtered, searching) {
@@ -200,7 +202,23 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
                             )
                         }
                     }
-                    if (groups.isEmpty()) {
+                    if (searching) {
+                        if (split.matches.isNotEmpty()) {
+                            item(key = "matchesTitle") {
+                                AppSectionTitle(text = "المطابقة (${split.matches.size})", modifier = Modifier.padding(bottom = 4.dp))
+                            }
+                            catalogRows(split.matches, "m_", false, viewModel, onPick, onItemLong)
+                        }
+                        if (split.suggestions.isNotEmpty()) {
+                            item(key = "suggestionsTitle") {
+                                AppSectionTitle(
+                                    text = "اقتراحات (${split.suggestions.size})",
+                                    modifier = Modifier.padding(top = if (split.matches.isEmpty()) 0.dp else 10.dp, bottom = 4.dp)
+                                )
+                            }
+                            catalogRows(split.suggestions, "x_", false, viewModel, onPick, onItemLong)
+                        }
+                    } else if (groups.isEmpty()) {
                         if (rest.isNotEmpty()) {
                             item(key = "catalogTitle") {
                                 AppSectionTitle(

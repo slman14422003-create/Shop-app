@@ -115,21 +115,26 @@ fun MissingFinderScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
     val listedKeys = remember(ready) {
         if (!ready) emptySet() else state.materials.map { ArabicText.normalize(it.name) }.toSet()
     }
-    val suggestedAll = remember(ready) { if (ready) viewModel.suggestedNow(catalog) else emptyList() }
-    val rankedAll = remember(ready) { if (ready) viewModel.rankedCatalog(catalog) else emptyList() }
+    var index by remember { mutableIntStateOf(0) }
+    val answers = remember { mutableStateListOf<Answer>() }
+    var isSaving by remember { mutableStateOf(false) }
+    var finishedEarly by remember { mutableStateOf(false) }
+
+    val learnVer by viewModel.learningVersion.collectAsStateWithLifecycle()
+    val begun = answers.isNotEmpty() || index > 0 || finishedEarly
+    var stableVer by remember { mutableIntStateOf(learnVer) }
+    LaunchedEffect(learnVer, begun) { if (!begun) stableVer = learnVer }
+
+    val suggestedAll = remember(ready, stableVer) { if (ready) viewModel.suggestedNow(catalog) else emptyList() }
+    val rankedAll = remember(ready, stableVer) { if (ready) viewModel.rankedCatalog(catalog) else emptyList() }
     val hasSuggestions = suggestedAll.isNotEmpty()
-    val queue: List<MaterialCatalogItem> = remember(ready, onlySuggested) {
+    val queue: List<MaterialCatalogItem> = remember(ready, onlySuggested, stableVer) {
         if (!ready) emptyList()
         else (if (onlySuggested) suggestedAll else rankedAll).filter { ArabicText.normalize(it.name) !in listedKeys }
     }
     val alreadyListed = remember(ready) {
         if (!ready) 0 else catalog.count { ArabicText.normalize(it.name) in listedKeys }
     }
-
-    var index by remember { mutableIntStateOf(0) }
-    val answers = remember { mutableStateListOf<Answer>() }
-    var isSaving by remember { mutableStateOf(false) }
-    var finishedEarly by remember { mutableStateOf(false) }
 
     val done = ready && queue.isNotEmpty() && (index >= queue.size || finishedEarly)
     val fadeInSpec = MotionSpecs.contentTween<Float>()

@@ -147,59 +147,97 @@ class SmartSearchIndex<T>(private val items: List<T>, name: (T) -> String) {
         return maxOf(a, b)
     }
 
-    fun search(query: String): List<T> {
+    private fun literalScore(q: Tok, n: Tok): Double {
+        val ql = q.n.length
+        if (q.n == n.n) return 1.0
+        if (n.n.startsWith(q.n)) return 0.9 + 0.1 * ql.toDouble() / n.n.length
+        if (ql >= 2 && q.f == n.f) return 0.85
+        if (ql >= 2 && n.n.contains(q.n)) return 0.7
+        if (ql >= 2 && n.f.startsWith(q.f)) return 0.75
+        if (ql >= 3 && n.f.contains(q.f)) return 0.6
+        return 0.0
+    }
+
+    fun searchSplit(query: String): SearchSplit<T> {
         val qToks = ArabicText.tokens(query).map { Tok(it) }
-        if (qToks.isEmpty()) return items
+        if (qToks.isEmpty()) return SearchSplit(items, emptyList())
         val qCompact = qToks.joinToString("") { it.n }
         val qCompactFolded = ArabicText.fold(qCompact)
 
-        val strict = ArrayList<Pair<Entry, Double>>()
+        val exact = ArrayList<Pair<Entry, Double>>()
+        val fuzzy = ArrayList<Pair<Entry, Double>>()
         val partial = ArrayList<Pair<Entry, Double>>()
         for (e in entries) {
             if (e.tokens.isEmpty()) continue
-            val per = qToks.map { q -> e.tokens.maxOf { tokenScore(q, it) } }
-            var score = per.average()
-            val all = per.all { it > 0.0 }
-            if (qCompact.length >= 2) {
+            val lit = qToks.map { q -> e.tokens.maxOf { literalScore(q, it) } }
+            var litScore = lit.average()
+            var isMatch = lit.all { it > 0.0 }
+            if (!isMatch && qCompact.length >= 2) {
                 if (e.compact.contains(qCompact)) {
-                    score = maxOf(score, 0.7)
-                    if (e.compact.startsWith(qCompact)) score += 0.05
-                    strict.add(e to score); continue
-                }
-                if (e.compactFolded.contains(qCompactFolded)) {
-                    strict.add(e to maxOf(score, 0.55)); continue
+                    isMatch = true
+                    litScore = maxOf(litScore, 0.7) + if (e.compact.startsWith(qCompact)) 0.05 else 0.0
+                } else if (e.compactFolded.contains(qCompactFolded)) {
+                    isMatch = true
+                    litScore = maxOf(litScore, 0.55)
                 }
             }
-            if (all) strict.add(e to score)
+            if (isMatch) {
+                exact.add(e to litScore)
+                continue
+            }
+            val per = qToks.map { q -> e.tokens.maxOf { tokenScore(q, it) } }
+            val score = per.average()
+            if (per.all { it > 0.0 }) fuzzy.add(e to score)
             else if (score > 0.0) partial.add(e to score * 0.5)
         }
-        val chosen = when {
-            strict.isNotEmpty() -> strict
-            partial.isNotEmpty() -> partial
-            else -> entries.mapNotNull { e ->
+        val byScore = compareByDescending<Pair<Entry, Double>> { it.second }.thenBy { it.first.index }
+        val suggestions = ArrayList<Pair<Entry, Double>>()
+        suggestions.addAll(fuzzy.sortedWith(byScore))
+        suggestions.addAll(partial.sortedWith(byScore))
+        if (exact.isEmpty() && suggestions.isEmpty()) {
+            entries.mapNotNullTo(suggestions) { e ->
                 if (e.tokens.isEmpty()) null
                 else {
                     val sim = qToks.map { q -> e.tokens.maxOf { similarity(q, it) } }.average()
                     if (sim >= 0.34) e to sim else null
                 }
-            }.sortedWith(compareByDescending<Pair<Entry, Double>> { it.second }.thenBy { it.first.index }).take(3)
+            }
+            suggestions.sortWith(byScore)
+            while (suggestions.size > 3) suggestions.removeAt(suggestions.lastIndex)
         }
-        return chosen
-            .sortedWith(compareByDescending<Pair<Entry, Double>> { it.second }.thenBy { it.first.index })
-            .map { items[it.first.index] }
+        return SearchSplit(
+            exact.sortedWith(byScore).map { items[it.first.index] },
+            suggestions.take(MAX_SUGGESTIONS).map { items[it.first.index] }
+        )
+    }
+
+    fun search(query: String): List<T> = searchSplit(query).all
+
+    private companion object {
+        const val MAX_SUGGESTIONS = 10
     }
 }
 
+class SearchSplit<T>(val matches: List<T>, val suggestions: List<T>) {
+    val all: List<T> by lazy(LazyThreadSafetyMode.NONE) { if (suggestions.isEmpty()) matches else matches + suggestions }
+    val isEmpty: Boolean get() = matches.isEmpty() && suggestions.isEmpty()
+}
+
 @Composable
-fun <T> rememberSmartSearch(items: List<T>, query: String, name: (T) -> String): List<T> {
+fun <T> rememberSmartSearchSplit(items: List<T>, query: String, name: (T) -> String): SearchSplit<T> {
     val lowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     val index = remember(items) { SmartSearchIndex(items, name) }
     // Matching runs off the main thread, and on weak devices it waits for a
     // short typing pause so every keystroke doesn't trigger a re-rank + relayout.
-    val result by produceState(items, index, query) {
-        if (query.isBlank()) { value = items; return@produceState }
+    val blank = remember(items) { SearchSplit(items, emptyList()) }
+    val result by produceState(blank, index, query) {
+        if (query.isBlank()) { value = blank; return@produceState }
         if (lowTier) delay(140)
-        value = withContext(Dispatchers.Default) { index.search(query) }
+        value = withContext(Dispatchers.Default) { index.searchSplit(query) }
     }
-    return if (query.isBlank()) items else result
+    return if (query.isBlank()) blank else result
 }
+
+@Composable
+fun <T> rememberSmartSearch(items: List<T>, query: String, name: (T) -> String): List<T> =
+    rememberSmartSearchSplit(items, query, name).all

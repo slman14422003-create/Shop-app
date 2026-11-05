@@ -25,7 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.shopmanager.app.data.materials.Material
-import com.shopmanager.app.ui.common.rememberSmartSearch
+import com.shopmanager.app.ui.common.rememberSmartSearchSplit
 import androidx.activity.compose.BackHandler
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.showWithOptionalUndo
@@ -125,7 +125,9 @@ fun MaterialsScreen(
     // `state.materials` change. `remember` keyed on the two inputs this
     // computation actually depends on makes it skip that rescan unless
     // one of them genuinely changed.
-    val filtered = rememberSmartSearch(state.materials, search) { it.name }
+    val searchSplit = rememberSmartSearchSplit(state.materials, search) { it.name }
+    val filtered = searchSplit.all
+    val suggestionIds = remember(searchSplit) { searchSplit.suggestions.mapTo(HashSet()) { it.id } }
 
     BackHandler(enabled = tab == 1) { tab = 0 }
 
@@ -262,6 +264,7 @@ fun MaterialsScreen(
                         prices = state.prices,
                         animateSummary = !state.isLoading,
                         searching = search.isNotBlank(),
+                        suggestionIds = suggestionIds,
                         onClearAll = { showClearAllConfirm = true },
                         onEdit = { editingMaterial = it },
                         onDelete = { deleteTarget = it },
