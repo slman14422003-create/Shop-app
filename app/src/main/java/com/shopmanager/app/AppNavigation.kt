@@ -13,8 +13,16 @@ import androidx.navigation.compose.NavHost
  * empty - a blank screen with no way out but killing the app. This only pops
  * while there is still a screen below the current one.
  */
-internal fun androidx.navigation.NavController.safePopBackStack() {
-    if (previousBackStackEntry != null) popBackStack()
+internal fun androidx.navigation.NavController.safePopBackStack(force: Boolean = false) {
+    if (previousBackStackEntry == null) return
+    // FIX: ضغطتان سريعتان على سهم الرجوع أثناء انتقال الرجوع نفسه كانتا تسحبان شاشتين معاً في مكدس
+    // أعمق من اثنتين (إعدادات ← حول ← الخصوصية) وتقطعان الحركة. الآن لا نسحب إلا والشاشة الحالية
+    // مستقرة (RESUMED). force=true فقط للخروج التلقائي من شاشة فارغة (عميل محذوف) قد لا تكون استقرت بعد.
+    if (!force) {
+        val state = currentBackStackEntry?.lifecycle?.currentState
+        if (state != null && state != androidx.lifecycle.Lifecycle.State.RESUMED) return
+    }
+    popBackStack()
 }
 
 // حاجز التنقل المزدوج (مأخوذ من تطبيق الملاحظات: SmoothActivity.isDuplicateNavigation): ضغطتان

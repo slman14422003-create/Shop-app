@@ -567,7 +567,19 @@ class MainActivity : FragmentActivity() {
                                 // they were (same tab / same open screen) instead of at the
                                 // dashboard. Touches and Back are swallowed so nothing under it
                                 // can be reached.
-                                if (lockedByLeave && unlocked) {
+                                // FIX: كان يظهر/يختفي بقطع حاد. الاختفاء الآن بتلاشٍ ناعم عند فتح القفل، أما
+                                // الظهور فيبقى فورياً عمداً (EnterTransition.None) كي لا يلتقط النظام لقطة
+                                // "التطبيقات الأخيرة" والمحتوى مكشوف أثناء تلاشٍ داخل.
+                                androidx.compose.animation.AnimatedVisibility(
+                                    visible = lockedByLeave && unlocked,
+                                    enter = androidx.compose.animation.EnterTransition.None,
+                                    exit = androidx.compose.animation.fadeOut(
+                                        androidx.compose.animation.core.tween(
+                                            MotionSpecs.fadeMillis().coerceAtLeast(120) + 80,
+                                            easing = MotionSpecs.claudeEasing
+                                        )
+                                    )
+                                ) {
                                     BackHandler { moveTaskToBack(true) }
                                     Box(
                                         Modifier
@@ -603,18 +615,23 @@ class MainActivity : FragmentActivity() {
                     // to be able to appear over whichever screen the person
                     // is already on.
                     // شرح أول تثبيت أو ملاحظات التحديث: فوق التطبيق بعد انتهاء السبلاش وفتح القفل.
+                    // FIX: عند الإنهاء يصير introAction = null فيختفي المحتوى فوراً قبل أن يعمل
+                    // fadeOut (كان الخروج بلا حركة فعلياً). نحتفظ بآخر محتوى غير فارغ أثناء التلاشي.
                     val intro = introAction
+                    var lastIntro by remember { mutableStateOf(intro) }
+                    SideEffect { if (intro != null) lastIntro = intro }
+                    val shownIntro = intro ?: lastIntro
                     androidx.compose.animation.AnimatedVisibility(
                         visible = intro != null && isReady && unlocked && forceUpdateManifest == null,
                         enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(400)),
                         exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(300))
                     ) {
-                        if (intro != null) {
+                        if (shownIntro != null) {
                             val finish = {
-                                com.shopmanager.app.data.onboarding.OnboardingStore.markDone(applicationContext, intro)
+                                com.shopmanager.app.data.onboarding.OnboardingStore.markDone(applicationContext, shownIntro)
                                 introAction = null
                             }
-                            when (intro) {
+                            when (shownIntro) {
                                 is com.shopmanager.app.data.onboarding.IntroAction.Welcome ->
                                     com.shopmanager.app.ui.onboarding.WelcomeIntroScreen(
                                         pages = com.shopmanager.app.data.onboarding.IntroContent.welcomePages,
@@ -622,7 +639,7 @@ class MainActivity : FragmentActivity() {
                                     )
                                 is com.shopmanager.app.data.onboarding.IntroAction.WhatsNew ->
                                     com.shopmanager.app.ui.onboarding.WhatsNewScreen(
-                                        releases = intro.releases,
+                                        releases = shownIntro.releases,
                                         onDone = finish
                                     )
                             }

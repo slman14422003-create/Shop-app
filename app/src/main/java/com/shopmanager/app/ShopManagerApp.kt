@@ -175,12 +175,17 @@ internal fun ShopManagerApp(
         tween(MotionSpecs.pagerMillis().coerceAtLeast(150), easing = MotionSpecs.claudeEasing)
 
     @OptIn(ExperimentalFoundationApi::class)
-    fun openPager(page: Int) {
+    fun openPager(page: Int, animate: Boolean = true) {
+        // FIX (تعارض حركتين): كان openPager يشغّل انزلاق الـ pager بالتوازي مع (أ) سحب شاشة مدفوعة
+        // (popUpTo داخل navigateTopLevel) أو (ب) دفع شاشة جديدة فوقه مباشرة (فتح عميل من الرئيسية/الملاحظات)،
+        // فتتحرك الشاشة المغطّاة بحركتين مختلفتين معاً وتظهر اهتزازاً. الآن: الانزلاق المتحرك فقط عندما
+        // نكون فعلاً على الـ pager ولا تُشغَّل حركة تنقل أخرى؛ وإلا يقفز التبويب فوراً خلف الانتقال.
+        val alreadyOnPager = navController.currentDestination?.route == ROUTE_MAIN_PAGER
         navigateTopLevel(navController, ROUTE_MAIN_PAGER)
         pagerScope.launch {
             // LOW: تبديل التبويب فوري — انزلاق صفحتين كاملتين (مع تركيب الصفحة الجديدة في أول
             // إطار) هو أثقل ما في التنقل على المعالج الرسومي القديم.
-            if (isLowTierForPager) pagerState.scrollToPage(page)
+            if (isLowTierForPager || !animate || !alreadyOnPager) pagerState.scrollToPage(page)
             else pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec)
         }
     }
@@ -335,6 +340,12 @@ internal fun ShopManagerApp(
         // same no-overshoot curve every other transition in the app now
         // uses — instead of a separately-tuned iOS curve.
         val navMs = MotionSpecs.navMillis()
+        // FIX (اتجاه الانتقال في واجهة RTL): الواجهة كلها مفروضة RTL (انظر Theme.kt) وانتقال تبويبات
+        // المواد/الأسعار يتبع RTL أصلاً، بينما دفع/سحب الشاشات كان بإحداثيات LTR ثابتة: الشاشة الجديدة
+        // تدخل من اليمين وسهم الرجوع (→ في RTL) يشير لنفس الجهة التي تدخل منها، فتتعاكس الحركة مع
+        // السهم ومع بقية التطبيق. الآن dirSign = -1 في RTL: الدفع من اليسار والسحب نحو اليسار.
+        val dirSign = if (androidx.compose.ui.platform.LocalLayoutDirection.current ==
+            androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
         val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(navMs, easing = MotionSpecs.claudeEasing)
         val navFadeSpec: FiniteAnimationSpec<Float> = tween(navMs, easing = MotionSpecs.claudeEasing)
         // REPLACED THE OLD ALPHA-DIM ("الانميشن غير جميل / بدي ياه متكامل
@@ -391,7 +402,7 @@ internal fun ShopManagerApp(
             enterTransition = {
                 when {
                     isLowTier -> fadeIn(navFadeSpec)
-                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> dirSign * fullWidth }
                 }
             },
             exitTransition = {
@@ -399,23 +410,23 @@ internal fun ShopManagerApp(
                     // LOW: طبقة واحدة فقط تتحرك (الشاشة الجديدة تتلاشى فوق القديمة الثابتة)،
                     // بدل تلاشٍ متقاطع لشاشتين كاملتين = نصف عمل المعالج الرسومي على 40Hz.
                     isLowTier -> ExitTransition.None
-                    isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 4 }
-                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                    isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 3 } +
                         scaleOut(pushScaleSpec, targetScale = 0.94f)
                 }
             },
             popEnterTransition = {
                 when {
                     isLowTier -> EnterTransition.None
-                    isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 4 }
-                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -fullWidth / 3 } +
+                    isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 3 } +
                         scaleIn(pushScaleSpec, initialScale = 0.94f)
                 }
             },
             popExitTransition = {
                 when {
                     isLowTier -> fadeOut(navFadeSpec)
-                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> fullWidth }
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> dirSign * fullWidth }
                 }
             }
         ) {
@@ -480,7 +491,7 @@ internal fun ShopManagerApp(
                             onOpenMissingFinder = { navController.safeNavigate(ROUTE_MISSING_FINDER) },
                             onOpenDrawer = { drawerScope.launch { drawerState.open() } },
                             notesViewModel = notesViewModel,
-                            onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.safeNavigate("personDetail/$personId") },
+                            onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
                             onOpenMaterial = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
                             onOpenNotes = { openPager(PAGE_NOTES) },
                             onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) }
@@ -508,7 +519,7 @@ internal fun ShopManagerApp(
                             viewModel = notesViewModel,
                             persons = debtsViewModel.uiState.collectAsStateWithLifecycle().value.persons,
                             materials = materialsViewModel.uiState.collectAsStateWithLifecycle().value.materials,
-                            onOpenPerson = { personId -> openPager(PAGE_DEBTS); navController.safeNavigate("personDetail/$personId") },
+                            onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
                             onOpenMaterials = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
                             addNoteRequested = addNoteRequested,
                             onAddNoteRequestHandled = { addNoteRequested = false },
@@ -590,7 +601,7 @@ internal fun ShopManagerApp(
                 // blank page. Once the first real data has loaded and the
                 // customer still isn't there, leave the page instead.
                 LaunchedEffect(person == null, personsState.isLoading) {
-                    if (person == null && !personsState.isLoading) navController.safePopBackStack()
+                    if (person == null && !personsState.isLoading) navController.safePopBackStack(force = true)
                 }
                 if (person != null) {
                     PersonDetailScreen(
