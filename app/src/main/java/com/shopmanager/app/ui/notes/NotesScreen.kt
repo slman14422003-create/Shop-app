@@ -94,7 +94,10 @@ fun NotesScreen(
     viewModel: NotesViewModel = viewModel(),
     addNoteRequested: Boolean = false,
     onAddNoteRequestHandled: () -> Unit = {},
-    onOpenDrawer: () -> Unit = {}
+    onOpenDrawer: () -> Unit = {},
+    // الشاشة صارت تُفتح كشاشة مدفوعة (من الرئيسية/الإشعارات) فيمرّر المستدعي سهم رجوع بدل القائمة.
+    navigationIcon: ImageVector = Icons.Default.Menu,
+    navigationLabel: String = "القائمة"
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
     val message = viewModel.message.collectAsStateWithLifecycle().value
@@ -167,8 +170,8 @@ fun NotesScreen(
                 title = "ملاحظات هامة",
                 navigation = {
                     ScreenIconButton(
-                        icon = Icons.Default.Menu,
-                        contentDescription = "القائمة",
+                        icon = navigationIcon,
+                        contentDescription = navigationLabel,
                         onClick = onOpenDrawer
                     )
                 }

@@ -29,10 +29,20 @@ internal const val PAGE_DEBTS = 1
 
 internal const val PAGE_MATERIALS = 2
 
-// ملاحظات هامة (Important Notes) - the 4th main tab, added alongside
-// Home/Debts/Materials in the same HorizontalPager/FloatingBottomNav so it
-// shares the exact same tab-switch animation described above for free.
+// الدردشة المحلية (كانت "ملاحظات هامة") - الصفحة الرابعة في نفس الـ HorizontalPager.
+// شاشة الملاحظات نفسها ما انحذفت: صارت شاشة مدفوعة (ROUTE_NOTES) تُفتح من الرئيسية
+// (بطاقة/اختصار الملاحظات) ومن إشعارات التذكير، وبياناتها وربطها بالعملاء كما هي.
 internal const val PAGE_NOTES = 3
+
+internal const val ROUTE_NOTES = "notes"
+
+// الدردشة: اختيار مستخدم لبدء محادثة، وشاشة المحادثة (اسم الطرف الآخر يُمرَّر كتلميح للعرض فقط).
+internal const val ROUTE_CHAT_USERS = "chatUsers"
+
+internal const val ROUTE_CHAT_CONVERSATION = "chatConversation/{otherUid}?name={name}"
+
+internal fun chatConversationRoute(uid: String, name: String) =
+    "chatConversation/$uid?name=${android.net.Uri.encode(name)}"
 
 internal const val ROUTE_SETTINGS = "settings"
 

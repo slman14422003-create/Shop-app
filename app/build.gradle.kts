@@ -375,6 +375,9 @@ dependencies {
     // uses the plain com.google.firebase(.firestore) package, never a
     // .ktx sub-package.
     implementation("com.google.firebase:firebase-firestore")
+    // الدردشة المحلية: مشروع Firebase مستقل تماماً عن مشروع الديون/المواد (راجع
+    // data/chat/ChatFirebase.kt) — هذه المكتبة للحسابات (بريد + كلمة مرور) فقط.
+    implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-common")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")

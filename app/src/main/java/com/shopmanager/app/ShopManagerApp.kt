@@ -12,6 +12,11 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -63,6 +68,12 @@ import com.shopmanager.app.ui.materials.MaterialsScreen
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.notes.NotesScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
+import com.shopmanager.app.ui.chat.ChatRoot
+import com.shopmanager.app.ui.chat.ChatSessionViewModel
+import com.shopmanager.app.ui.chat.ConversationScreen
+import com.shopmanager.app.ui.chat.ConversationViewModel
+import com.shopmanager.app.ui.chat.UserPickerScreen
+import com.shopmanager.app.ui.chat.UserPickerViewModel
 import com.shopmanager.app.ui.common.AppDrawerContent
 import com.shopmanager.app.ui.common.FloatingQuickActions
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
@@ -89,6 +100,8 @@ internal fun ShopManagerApp(
     val debtsViewModel: DebtsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val materialsViewModel: MaterialsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     val notesViewModel: NotesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    // الدردشة المحلية: جلسة واحدة مشتركة (لا تبدأ أي اتصال Firebase قبل فتح تبويب الدردشة فعلاً).
+    val chatSessionViewModel: ChatSessionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
 
     // Hoisted above the NavHost (rather than inside the pager's own
     // composable) so it survives navigating away to Settings/Help and back,
@@ -197,7 +210,7 @@ internal fun ShopManagerApp(
         when (pendingNotificationAction) {
             is NotificationAction.DebtPaid, is NotificationAction.NewDebt -> openPager(PAGE_DEBTS)
             is NotificationAction.ShoppingList -> openPager(PAGE_MATERIALS)
-            is NotificationAction.NoteReminder -> openPager(PAGE_NOTES)
+            is NotificationAction.NoteReminder -> { openPager(PAGE_DASHBOARD, animate = false); navController.safeNavigate(ROUTE_NOTES) }
             null -> {}
         }
     }
@@ -493,7 +506,7 @@ internal fun ShopManagerApp(
                             notesViewModel = notesViewModel,
                             onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
                             onOpenMaterial = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
-                            onOpenNotes = { openPager(PAGE_NOTES) },
+                            onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
                             onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) }
                         )
                         PAGE_DEBTS -> DebtsScreen(
@@ -515,19 +528,87 @@ internal fun ShopManagerApp(
                             onInitialSearchConsumed = { pendingMaterialHighlight = null },
                             onOpenDrawer = { drawerScope.launch { drawerState.open() } }
                         )
-                        else -> NotesScreen(
-                            viewModel = notesViewModel,
-                            persons = debtsViewModel.uiState.collectAsStateWithLifecycle().value.persons,
-                            materials = materialsViewModel.uiState.collectAsStateWithLifecycle().value.materials,
-                            onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
-                            onOpenMaterials = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
-                            addNoteRequested = addNoteRequested,
-                            onAddNoteRequestHandled = { addNoteRequested = false },
-                            onOpenDrawer = { drawerScope.launch { drawerState.open() } }
+                        else -> ChatRoot(
+                            viewModel = chatSessionViewModel,
+                            onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                            onOpenConversation = { uid, name ->
+                                navController.safeNavigate(chatConversationRoute(uid, name))
+                            },
+                            onOpenUserPicker = { navController.safeNavigate(ROUTE_CHAT_USERS) }
                         )
                     }
                     }
                 }
+            }
+            composable(ROUTE_NOTES) {
+                // شاشة الملاحظات القديمة كما هي، لكن كشاشة مدفوعة: سهم رجوع + زر "+" خاص بها
+                // (زر الإضافة السريع المشترك يظهر فقط على صفحات الـ pager).
+                var addNote by remember { mutableStateOf(false) }
+                Box(Modifier.fillMaxSize()) {
+                    NotesScreen(
+                        viewModel = notesViewModel,
+                        persons = debtsViewModel.uiState.collectAsStateWithLifecycle().value.persons,
+                        materials = materialsViewModel.uiState.collectAsStateWithLifecycle().value.materials,
+                        onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
+                        onOpenMaterials = { materialName ->
+                            pendingMaterialHighlight = materialName
+                            navController.safePopBackStack(force = true)
+                            openPager(PAGE_MATERIALS)
+                        },
+                        addNoteRequested = addNote,
+                        onAddNoteRequestHandled = { addNote = false },
+                        onOpenDrawer = { navController.safePopBackStack() },
+                        navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        navigationLabel = "رجوع"
+                    )
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(20.dp)
+                            .size(56.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface)
+                            .clickable(role = androidx.compose.ui.semantics.Role.Button) { addNote = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, "ملاحظة جديدة", tint = MaterialTheme.colorScheme.surface)
+                    }
+                }
+            }
+            composable(ROUTE_CHAT_USERS) {
+                val vm: UserPickerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                UserPickerScreen(
+                    viewModel = vm,
+                    onBack = { navController.safePopBackStack() },
+                    onPick = { uid, name ->
+                        navController.navigate(chatConversationRoute(uid, name)) {
+                            popUpTo(ROUTE_CHAT_USERS) { inclusive = true }
+                        }
+                    }
+                )
+            }
+            composable(
+                ROUTE_CHAT_CONVERSATION,
+                arguments = listOf(
+                    navArgument("otherUid") { type = NavType.StringType },
+                    navArgument("name") { type = NavType.StringType; defaultValue = "" }
+                )
+            ) { entry ->
+                val otherUid = entry.arguments?.getString("otherUid").orEmpty()
+                val nameHint = entry.arguments?.getString("name").orEmpty()
+                val app = LocalContext.current.applicationContext as android.app.Application
+                val vm: ConversationViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    key = "conversation_$otherUid",
+                    factory = ConversationViewModel.Factory(app, otherUid, nameHint)
+                )
+                ConversationScreen(
+                    viewModel = vm,
+                    onBack = { navController.safePopBackStack() },
+                    onSignOut = {
+                        chatSessionViewModel.signOut()
+                        navController.safePopBackStack(force = true)
+                    }
+                )
             }
             composable(ROUTE_MATERIAL_CATALOG) {
                 MaterialCatalogScreen(
@@ -653,14 +734,8 @@ internal fun ShopManagerApp(
             // redundant control for the exact same action on those two
             // pages. It now only shows on الملاحظات, which has no on-screen
             // add button of its own yet.
-            val quickAction = when (pagerState.currentPage) {
-                PAGE_NOTES -> QuickAction(
-                    icon = Icons.Default.Add,
-                    contentDescription = "ملاحظة جديدة",
-                    onClick = { addNoteRequested = true }
-                )
-                else -> null
-            }
+            // الدردشة المحلية: زر + موجود أعلى شاشتها نفسها، فلا حاجة لزر إضافة سريع عائم على أي صفحة.
+            val quickAction: QuickAction? = null
             // "من الجهة اليسرى حسب الصورة": rendered via `secondaryAction`,
             // the opposite end of the same pill row from `quickAction`
             // above (see FloatingBottomNav's own doc comment on that

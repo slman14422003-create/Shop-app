@@ -31,6 +31,9 @@
          لمزامنة Firestore. بدونها ترفض الأنظمة الحديثة بدء الخدمة أصلاً. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- الدردشة المحلية: تسجيل الرسائل الصوتية (يُطلب وقت الاستخدام فقط، بالضغط المطوّل على زر المايك). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
 
     <!--
       FEATURE ADDED (package visibility, Android 11+/API 30+): declares the

@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.rounded.AdminPanelSettings
@@ -62,7 +62,7 @@ import com.shopmanager.app.data.performance.MotionSpecs
  * جزء مقروء من الشاشة خلفه بدل شريط رفيع من البطاقات المعتمة على الحافة،
  * والزاوية الداخلية بانحناء 28dp لتطابق نوافذ الحوار.
  *
- * ترتيب الوجهات (الرئيسية، الديون، المواد، الملاحظات) وزر الإعدادات وزر لوحة
+ * ترتيب الوجهات (الرئيسية، الديون، المواد، الدردشة المحلية) وزر الإعدادات وزر لوحة
  * المسؤول ومنطق الاستدعاءات كلها كما كانت — تغيير بصري فقط.
  */
 private data class DrawerNavItem(val icon: ImageVector, val label: String, val page: Int)
@@ -71,7 +71,7 @@ private val drawerNavItems = listOf(
     DrawerNavItem(Icons.Default.Home, "الشاشة الرئيسية", page = 0),
     DrawerNavItem(Icons.Default.AttachMoney, "الديون", page = 1),
     DrawerNavItem(Icons.Default.Inventory2, "المواد والأسعار", page = 2),
-    DrawerNavItem(Icons.Default.Notes, "ملاحظات هامة", page = 3)
+    DrawerNavItem(Icons.Default.Forum, "الدردشة المحلية", page = 3)
 )
 
 private val DrawerWidth = 316.dp
