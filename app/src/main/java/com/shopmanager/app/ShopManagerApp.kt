@@ -441,13 +441,15 @@ internal fun ShopManagerApp(
                     // LOW: طبقة واحدة فقط تتحرك (الشاشة الجديدة تتلاشى فوق القديمة الثابتة)،
                     // بدل تلاشٍ متقاطع لشاشتين كاملتين = نصف عمل المعالج الرسومي على 40Hz.
                     isLowTier -> ExitTransition.None
-                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
+                    isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 }
                 }
             },
             popEnterTransition = {
                 when {
                     isLowTier -> EnterTransition.None
-                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
+                    isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 }
                 }
             },
             popExitTransition = {

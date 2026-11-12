@@ -82,6 +82,7 @@ fun AssistantChatScreen(
 ) {
     val messages by assistant.messages.collectAsState()
     val mood by assistant.mood.collectAsState()
+    val assistantData by assistant.data.collectAsState()
     val thinking by assistant.thinking.collectAsState()
     val settings by assistant.settings.collectAsState()
     val undoable by assistant.undoable.collectAsState()
@@ -135,7 +136,7 @@ fun AssistantChatScreen(
         // ---- الرسائل
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (messages.isEmpty() && !thinking) {
-                EmptyState(mood, settings.robotAnimation) { assistant.send(it) }
+                EmptyState(mood, settings.robotAnimation, assistantData) { assistant.send(it) }
             } else {
                 LazyColumn(
                     state = listState,
@@ -305,7 +306,8 @@ internal fun InputBar(value: String, onChange: (String) -> Unit, onSend: () -> U
 }
 
 @Composable
-private fun EmptyState(mood: RobotMood, animate: Boolean, onExample: (String) -> Unit) {
+private fun EmptyState(mood: RobotMood, animate: Boolean, data: com.shopmanager.app.assistant.AssistantData, onExample: (String) -> Unit) {
+    val groups = remember(data) { AssistantQueries.dynamicGroups(data) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -314,13 +316,14 @@ private fun EmptyState(mood: RobotMood, animate: Boolean, onExample: (String) ->
         RobotAvatar(mood, size = 110.dp, animate = animate)
         Text("أنا مساعدك المحلي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
-            "أفهم العربية بلهجاتها وأنفّذ بدون إنترنت. جرّب أحد الأمثلة:",
+            if (groups.isEmpty()) "أفهم العربية بلهجاتها وأنفّذ بدون إنترنت. أضف ديونًا أو مواد لتظهر لك اقتراحات من بياناتك."
+            else "أفهم العربية بلهجاتها وأنفّذ بدون إنترنت. جرّب أحد الاقتراحات:",
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        AssistantQueries.capabilityGroups.forEach { (group, examples) ->
+        groups.forEach { (group, examples) ->
             Text(group, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth())
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                examples.take(5).forEach { ex ->
+                examples.forEach { ex ->
                     Surface(
                         shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         modifier = Modifier.clip(CircleShape).clickable { onExample(ex) }

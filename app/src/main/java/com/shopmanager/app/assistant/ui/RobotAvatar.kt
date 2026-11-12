@@ -1,6 +1,11 @@
 package com.shopmanager.app.assistant.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.runtime.State
 import androidx.compose.animation.core.animateFloat
@@ -61,26 +66,74 @@ fun RobotAvatar(mood: RobotMood, modifier: Modifier = Modifier, size: Dp = 140.d
     val animated = animate && LocalPerformanceTier.current != PerformanceTier.LOW
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 
+    // وضع الأداء العالي (STANDARD): حركات إضافية — ميلان الرأس، تمايل الأنتينا ونبض توهّجها،
+    // تنفّس الجسم، نظر الروبوت يمنة ويسرة، قفزة عند النجاح وهزّة رأس عند عدم الفهم.
+    val rich = animated && LocalPerformanceTier.current == PerformanceTier.STANDARD
+
     val floatState: State<Float>
     val wanderState: State<Float>
+    val tiltState: State<Float>
+    val swayState: State<Float>
+    val glowState: State<Float>
+    val breatheState: State<Float>
     if (animated) {
         val t = rememberInfiniteTransition(label = "robot")
         floatState = t.animateFloat(-1f, 1f, infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Reverse), label = "float")
         wanderState = t.animateFloat(-1f, 1f, infiniteRepeatable(tween(650, easing = LinearEasing), RepeatMode.Reverse), label = "wander")
+        if (rich) {
+            tiltState = t.animateFloat(-1f, 1f, infiniteRepeatable(tween(3600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "tilt")
+            swayState = t.animateFloat(-1f, 1f, infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "sway")
+            glowState = t.animateFloat(0f, 1f, infiniteRepeatable(tween(1300, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "glow")
+            breatheState = t.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "breathe")
+        } else {
+            tiltState = remember { mutableFloatStateOf(0f) }
+            swayState = remember { mutableFloatStateOf(0f) }
+            glowState = remember { mutableFloatStateOf(0f) }
+            breatheState = remember { mutableFloatStateOf(0f) }
+        }
     } else {
         floatState = remember { mutableFloatStateOf(0f) }
         wanderState = remember { mutableFloatStateOf(0f) }
+        tiltState = remember { mutableFloatStateOf(0f) }
+        swayState = remember { mutableFloatStateOf(0f) }
+        glowState = remember { mutableFloatStateOf(0f) }
+        breatheState = remember { mutableFloatStateOf(0f) }
     }
     var blink by remember { mutableStateOf(false) }
     LaunchedEffect(animated, mood) {
         blink = false
         if (animated && mood == RobotMood.READY) {
             while (true) {
-                delay(4000L + Random.nextLong(0L, 1000L))
+                delay(rich.let { if (it) 2600L else 4000L } + Random.nextLong(0L, 1000L))
                 blink = true
                 delay(140L)
                 blink = false
+                // رمشة مزدوجة أحياناً في الأداء العالي
+                if (rich && Random.nextInt(4) == 0) {
+                    delay(170L); blink = true; delay(120L); blink = false
+                }
             }
+        }
+    }
+    // نظرة جانبية عشوائية (READY فقط).
+    val look = remember { Animatable(0f) }
+    LaunchedEffect(rich, mood) {
+        if (rich && mood == RobotMood.READY) {
+            while (true) {
+                delay(1800L + Random.nextLong(0L, 2200L))
+                look.animateTo(if (Random.nextBoolean()) 1f else -1f, tween(360, easing = FastOutSlowInEasing))
+                delay(800L + Random.nextLong(0L, 900L))
+                look.animateTo(0f, tween(420, easing = FastOutSlowInEasing))
+            }
+        } else look.snapTo(0f)
+    }
+    // ردّ فعل عند تغيّر الحالة: قفزة (نجاح) أو هزّة (لم يفهم) أو إيماءة (يفكر).
+    val kick = remember { Animatable(0f) }
+    LaunchedEffect(rich, mood) {
+        kick.snapTo(0f)
+        if (rich && mood != RobotMood.READY) {
+            kick.animateTo(1f, tween(170, easing = FastOutSlowInEasing))
+            kick.animateTo(0f, spring(dampingRatio = 0.38f, stiffness = Spring.StiffnessMediumLow))
         }
     }
 
@@ -94,19 +147,34 @@ fun RobotAvatar(mood: RobotMood, modifier: Modifier = Modifier, size: Dp = 140.d
             RobotMood.CONFUSED -> AssistantWarnOrange
         }
         val bob = if (animated) floatState.value * w * 0.018f else 0f
-        translate(top = bob) {
-            drawRobot(w, mood, moodColor, outline, wanderState.value, blink)
+        val k = kick.value
+        val jump = if (mood == RobotMood.SUCCESS) -k * w * 0.07f else 0f
+        val shake = if (mood == RobotMood.CONFUSED) k * 7f else if (mood == RobotMood.THINKING) k * 3f else 0f
+        val tilt = tiltState.value * 2.4f + shake
+        val breathe = 1f + breatheState.value * 0.014f
+        translate(top = bob + jump) {
+            rotate(tilt, Offset(w * .5f, w * .9f)) {
+                scale(breathe, breathe, Offset(w * .5f, w * .9f)) {
+                    drawRobot(w, mood, moodColor, outline, wanderState.value, blink, look.value, glowState.value, swayState.value * 7f)
+                }
+            }
         }
     }
 }
 
-private fun DrawScope.drawRobot(w: Float, mood: RobotMood, moodColor: Color, outline: Color, wander: Float, blink: Boolean) {
+private fun DrawScope.drawRobot(
+    w: Float, mood: RobotMood, moodColor: Color, outline: Color, wander: Float, blink: Boolean,
+    look: Float = 0f, glow: Float = 0f, sway: Float = 0f
+) {
     val line = Stroke(width = (w * 0.012f).coerceAtLeast(1.5f))
 
     // الأنتينا
-    drawLine(outline, Offset(w * .5f, w * .2f), Offset(w * .5f, w * .115f), strokeWidth = w * .014f, cap = StrokeCap.Round)
-    drawCircle(moodColor, w * .036f, Offset(w * .5f, w * .09f))
-    drawCircle(outline, w * .036f, Offset(w * .5f, w * .09f), style = line)
+    rotate(sway, Offset(w * .5f, w * .2f)) {
+        if (glow > 0f) drawCircle(moodColor.copy(alpha = 0.28f * (1f - glow)), w * (.036f + .05f * glow), Offset(w * .5f, w * .09f))
+        drawLine(outline, Offset(w * .5f, w * .2f), Offset(w * .5f, w * .115f), strokeWidth = w * .014f, cap = StrokeCap.Round)
+        drawCircle(moodColor, w * .036f, Offset(w * .5f, w * .09f))
+        drawCircle(outline, w * .036f, Offset(w * .5f, w * .09f), style = line)
+    }
 
     // الأذنان
     for (x in listOf(w * .115f, w * .835f)) {
@@ -133,8 +201,9 @@ private fun DrawScope.drawRobot(w: Float, mood: RobotMood, moodColor: Color, out
                 drawLine(EyeColor, Offset(lx - er, eyeY), Offset(lx + er, eyeY), strokeWidth = w * .014f, cap = StrokeCap.Round)
                 drawLine(EyeColor, Offset(rx - er, eyeY), Offset(rx + er, eyeY), strokeWidth = w * .014f, cap = StrokeCap.Round)
             } else {
-                drawOval(EyeColor, Offset(lx - er, eyeY - er * 1.3f), Size(er * 2, er * 2.6f))
-                drawOval(EyeColor, Offset(rx - er, eyeY - er * 1.3f), Size(er * 2, er * 2.6f))
+                val ld = look * w * .026f
+                drawOval(EyeColor, Offset(lx - er + ld, eyeY - er * 1.3f), Size(er * 2, er * 2.6f))
+                drawOval(EyeColor, Offset(rx - er + ld, eyeY - er * 1.3f), Size(er * 2, er * 2.6f))
             }
             smile(w, EyeColor, 0.05f, eyeStroke)
         }

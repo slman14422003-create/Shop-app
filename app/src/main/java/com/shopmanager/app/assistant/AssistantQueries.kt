@@ -166,4 +166,42 @@ object AssistantQueries {
             "ذكرني بكرة العصر أتصل بالمورد", "3 كيس × 18500 كم يصير؟", "تراجع", "كرر"
         )
     )
+
+    /**
+     * اقتراحات من البيانات الفعلية فقط (أشخاص عليهم دين، مواد في النواقص، مواد مسعّرة) بدل أمثلة ثابتة.
+     * المجموعة التي لا بيانات لها لا تظهر.
+     */
+    fun dynamicGroups(d: AssistantData): List<Pair<String, List<String>>> {
+        val groups = mutableListOf<Pair<String, List<String>>>()
+
+        val debtors = d.persons.filter { it.amount > 0 }.sortedByDescending { it.amount }
+        if (debtors.isNotEmpty()) {
+            val l = mutableListOf<String>()
+            debtors.take(2).forEach { l += "كم على ${it.name}؟" }
+            debtors.getOrNull(2)?.let { l += "افتح ديون ${it.name}" }
+            debtors.take(2).forEach { l += "سدد ${it.name} الباقي" }
+            l += "مجموع الديون"
+            if (debtors.size > 1) l += "أكثر 5 مدينين"
+            groups += "الديون" to l.distinct()
+        }
+
+        val shortages = d.materials.sortedByDescending { it.updatedAt }
+        if (shortages.isNotEmpty()) {
+            val l = mutableListOf("شو النواقص")
+            shortages.take(3).forEach { l += "اشتريت ${it.name}" }
+            l += "إيجاد المواد الناقصة"
+            groups += "النواقص" to l.distinct()
+        }
+
+        val priced = d.prices.keys.filter { it.isNotBlank() }.take(4)
+        val priceNames = priced.ifEmpty { d.catalog.map { it.name }.filter { it.isNotBlank() }.take(4) }
+        if (priceNames.isNotEmpty()) {
+            groups += "الأسعار" to priceNames.map { n -> "كم سعر $n؟" }
+        }
+
+        if (debtors.isNotEmpty() || shortages.isNotEmpty()) {
+            groups += "ملخصات وعام" to listOf("ملخص اليوم", "ملخص الأسبوع")
+        }
+        return groups
+    }
 }

@@ -1,6 +1,13 @@
 package com.shopmanager.app.ui.common
 
 import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Color
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.updateTransition
@@ -86,13 +93,22 @@ fun AppMenuPopup(
     val dismiss = rememberUpdatedState(onDismiss)
 
     val transition = updateTransition(state, label = "menuPopup")
+    val tier = LocalPerformanceTier.current
+    // الأداء العالي: انبثاق نابض + بلور؛ المتوازن: تلاشٍ وتكبير خفيف بلا بلور؛ المنخفض: ظهور فوري.
+    val rich = tier == PerformanceTier.STANDARD
+    val glass = rich && blurEnabled(strongOnly = true)
     val progress = transition.animateFloat(
         transitionSpec = {
-            if (targetState) tween(260, easing = MotionSpecs.claudeEasing)
-            else tween(140, easing = MotionSpecs.standardEasing)
+            when {
+                tier == PerformanceTier.LOW -> snap()
+                targetState && rich -> spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMedium)
+                targetState -> tween(180, easing = MotionSpecs.claudeEasing)
+                else -> tween(if (rich) 170 else 110, easing = MotionSpecs.standardEasing)
+            }
         },
         label = "menuProgress"
     ) { if (it) 1f else 0f }
+    val shape = RoundedCornerShape(AppGroupLargeRadius + 2.dp)
 
     Popup(
         alignment = Alignment.TopStart,
@@ -105,17 +121,27 @@ fun AppMenuPopup(
                 .width(264.dp)
                 .graphicsLayer {
                     val p = progress.value
-                    val s = 0.82f + 0.18f * p
+                    val from = if (rich) 0.5f else 0.9f
+                    val s = from + (1f - from) * p
                     scaleX = s
                     scaleY = s
-                    alpha = p
+                    alpha = p.coerceIn(0f, 1f)
                     transformOrigin = TransformOrigin(0f, 0f)
                 },
-            shape = RoundedCornerShape(AppGroupLargeRadius + 2.dp),
-            color = cs.surfaceContainerHigh,
-            shadowElevation = 12.dp
+            shape = shape,
+            color = if (glass) Color.Transparent else cs.surfaceContainerHigh,
+            shadowElevation = if (tier == PerformanceTier.LOW) 0.dp else 12.dp,
+            border = if (tier == PerformanceTier.LOW) BorderStroke(0.5.dp, cs.outlineVariant) else null
         ) {
-            Column(Modifier.clip(RoundedCornerShape(AppGroupLargeRadius + 2.dp))) {
+            Box {
+            if (glass) {
+                BlurBackdrop(
+                    Modifier.matchParentSize().clip(shape),
+                    tint = cs.surfaceContainerHigh.copy(alpha = 0.62f),
+                    radius = 14f
+                )
+            }
+            Column(Modifier.clip(shape)) {
                 menuEntries.forEachIndexed { index, e ->
                     if (index > 0) HorizontalDivider(thickness = 0.5.dp, color = cs.outlineVariant.copy(alpha = 0.6f))
                     val selected = e.page != null && e.page == selectedPage
@@ -158,6 +184,7 @@ fun AppMenuPopup(
                         Icon(e.icon, null, tint = cs.onSurface, modifier = Modifier.size(22.dp))
                     }
                 }
+            }
             }
         }
     }

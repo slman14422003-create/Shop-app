@@ -407,8 +407,8 @@ object MotionSpecs {
     /** منحنى Claude.ai: بداية سريعة وتباطؤ ناعم حتى سكون تام بلا ارتداد. */
     val claudeEasing: Easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
 
-    /** منحنى انتقال الشاشات بأسلوب الواتساب: تسارع لطيف ثم تباطؤ طويل ناعم (Emphasized Decelerate). */
-    val navEasing: Easing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+    /** منحنى انتقال الشاشات بأسلوب iOS (UINavigationController): بداية سريعة وتباطؤ طويل ناعم بلا ارتداد. */
+    val navEasing: Easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
     // ───────────────────────── رموز الزمن الموحّدة (المتوازن) ─────────────────────────
     // كل حركة في المتوازن تأخذ واحدة فقط من ثلاث مدد: سريعة (تفاعل لحظي)، أساسية
@@ -523,17 +523,17 @@ object MotionSpecs {
     /** مدة انتقال دفع/سحب الشاشة (ms). */
     @Composable
     fun navMillis(): Int = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 180
-        PerformanceTier.BALANCED -> 280
-        PerformanceTier.STANDARD -> 340
+        PerformanceTier.LOW -> 160
+        PerformanceTier.BALANCED -> 320
+        PerformanceTier.STANDARD -> 400
     }
 
     /** مدة انتقال التبويبات (الـ pager) بالـ ms. */
     @Composable
     fun pagerMillis(): Int = when (LocalPerformanceTier.current) {
         PerformanceTier.LOW -> 175
-        PerformanceTier.BALANCED -> 260
-        PerformanceTier.STANDARD -> 320
+        PerformanceTier.BALANCED -> 300
+        PerformanceTier.STANDARD -> 380
     }
 
     /** مدة ظهور صف القائمة عند أول عرض (انظر [listItemEntrance]). */
