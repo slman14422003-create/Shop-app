@@ -340,7 +340,7 @@ class AssistantEngineTest {
     }
 
     @Test fun performance_under_50ms_for_large_data() {
-        val bigPersons = (1..1500).map { KnownPerson("x$it", "عميل رقم $it") } + persons
+        val bigPersons = (1..1500).map { KnownPerson("x$it", "عميل رقم $it", 0.0) } + persons
         val bigMaterials = (1..1500).map { KnownMaterial("مادة $it") } + materials
         val s = snap.copy(persons = bigPersons, materials = bigMaterials)
         engine.understand("سجل على سامر 20 ألف", s) // إحماء JIT

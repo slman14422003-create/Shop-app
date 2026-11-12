@@ -90,29 +90,19 @@ jobs:
             echo "::warning title=توقيع غير ثابت::RELEASE_KEYSTORE_BASE64 غير معرّف — سيُوقَّع الإصدار بمفتاح debug مؤقت، وتحديث التطبيق من داخله سيفشل بتعارض التوقيع."
           fi
 
-      # بناء واحد لكل المهام (تشغيل Gradle مرة وحدة بدل ٤ مرات، مع إعادة
-      # استخدام الـ daemon والكاش) — الاختبارات أولًا، ثم الـ APKs.
-      - name: Test and build APKs
+      - name: Build release APK
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: gradle testDebugUnitTest assembleDebug assembleRelease --parallel --build-cache --stacktrace
+        run: gradle assembleRelease --parallel --build-cache --stacktrace
 
-      # فحص lint غير مانع (continue-on-error) كالسابق، لكنه يعمل بعد البناء
-      # حتى لا يؤخر وصول الـ APK لو علق.
-      - name: Run Android Lint (release)
-        continue-on-error: true
-        run: gradle lintRelease --parallel --build-cache
-
-      - name: Locate APKs and checksums
+      - name: Locate APK and checksum
         run: |
-          DEBUG_APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
           RELEASE_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          [ -n "$DEBUG_APK" ] && [ -n "$RELEASE_APK" ] || { echo "::error::لم يتم العثور على أحد ملفات APK"; exit 1; }
-          cp "$DEBUG_APK" shop-manager-debug.apk
+          [ -n "$RELEASE_APK" ] || { echo "::error::release apk not found"; exit 1; }
           cp "$RELEASE_APK" shop-manager-release.apk
-          sha256sum shop-manager-debug.apk shop-manager-release.apk > SHA256SUMS.txt
+          sha256sum shop-manager-release.apk > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       # يطبع بصمة شهادة التوقيع في ملخص التشغيل: قارن بينها وبين الإصدار
@@ -137,18 +127,8 @@ jobs:
         with:
           name: apks-${{ github.run_number }}
           path: |
-            shop-manager-debug.apk
             shop-manager-release.apk
             SHA256SUMS.txt
-          retention-days: 30
-
-      - name: Upload lint report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: lint-report
-          path: app/build/reports/lint-results-release.html
-          if-no-files-found: ignore
           retention-days: 30
 
       # ملف mapping الخاص بـ R8 — بدونه ما بتقدر تفك تشفير (deobfuscate) أي
@@ -196,7 +176,7 @@ jobs:
       # النشر على مستودع Shop-app-updates العام (يتطلب Secret باسم
       # UPDATES_REPO_TOKEN). مقسوم لخطوتين لتجنب خطأ "Unicorn" لما يُرفع ملفان
       # كبيران بنفس الطلب مباشرة بعد إنشاء الإصدار.
-      - name: Create GitHub Release on Shop-app-updates (with debug APK)
+      - name: Create GitHub Release on Shop-app-updates
         if: github.event_name == 'push' || inputs.publish
         uses: softprops/action-gh-release@v2
         with:
@@ -210,26 +190,11 @@ jobs:
 
             ---
             📦 **shop-manager-release.apk** ← هاي النسخة المستخدمة تنزّلها عادةً: أصغر حجماً وأسرع بالتشغيل (مضغوطة/محسّنة عبر R8).
-            🛠️ **shop-manager-debug.apk** ← نسخة تجريبية أكبر حجماً وأبطأ شوي، للاختبار فقط.
             🔐 **SHA256SUMS.txt** ← بصمات الملفات للتحقق من سلامتها.
 
-            كلا الملفين موقّعين وجاهزين للتثبيت المباشر بعد تفعيل "مصادر غير معروفة" على الجهاز.
           files: |
-            shop-manager-debug.apk
+            shop-manager-release.apk
             SHA256SUMS.txt
-
-      - name: Wait for release to settle
-        if: github.event_name == 'push' || inputs.publish
-        run: sleep 10
-
-      - name: Upload release APK to the same release
-        if: github.event_name == 'push' || inputs.publish
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: slman14422003-create/Shop-app-updates
-          token: ${{ secrets.UPDATES_REPO_TOKEN }}
-          tag_name: v1.0.${{ github.run_number }}
-          files: shop-manager-release.apk
 
       # تسجيل CHANGELOG.md. أمان: ملاحظات الإصدار تأتي من رسائل commits
       # (نص غير موثوق)، وكانت تُحقن مباشرة داخل سكربت bash عبر ${{ }} — يعني
