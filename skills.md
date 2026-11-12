@@ -38,3 +38,7 @@
 - ChatMessageWatcher.kt (started/stopped from RemoteChangeWatcher): chats listener, baseline per chat in prefs "chat_notif_baseline", skips open chat via ChatOpenTracker; NotifKind.CHAT + NotifSound.DROP (water_drop_soft); NotificationHelper.showChatMessageNotification uses MessagingStyle; tap -> NotificationAction.OpenChat
 - sync notification: channel id changed to realtime_sync_hidden_v3 (IMPORTANCE_NONE); old channel id could not be lowered by the app after creation
 - not compiled here: verify via ci
+
+## login error fix
+- chatErrorMessage now walks the cause chain (transaction may wrap FirebaseFirestoreException) and the generic message appends exception type/code for diagnosis
+- deviceId fallback is a hash of Build fields (stable across clear data) instead of a random UUID stored in prefs

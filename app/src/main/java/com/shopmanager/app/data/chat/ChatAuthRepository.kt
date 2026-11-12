@@ -57,10 +57,10 @@ class ChatAuthRepository(private val context: Context) {
     private fun deviceId(): String {
         val id = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
         if (!id.isNullOrBlank() && id != BROKEN_ANDROID_ID) return id
-        val prefs = context.getSharedPreferences("chat_device", Context.MODE_PRIVATE)
-        return prefs.getString("id", null) ?: UUID.randomUUID().toString().also {
-            prefs.edit().putString("id", it).apply()
-        }
+        return UUID.nameUUIDFromBytes(
+            (android.os.Build.BOARD + android.os.Build.BRAND + android.os.Build.DEVICE +
+                android.os.Build.MANUFACTURER + android.os.Build.MODEL + android.os.Build.PRODUCT).toByteArray()
+        ).toString()
     }
 
     private fun baseName(displayName: String?, email: String?): String {
@@ -79,7 +79,7 @@ class ChatAuthRepository(private val context: Context) {
                 runBind(uid, device, name)
                 return
             } catch (e: FirebaseFirestoreException) {
-                if (e.code == FirebaseFirestoreException.Code.ALREADY_EXISTS && e.message.orEmpty().contains(NAME_TAKEN)) {
+                if (e.code == FirebaseFirestoreException.Code.ALREADY_EXISTS) {
                     lastError = e
                 } else {
                     throw e
@@ -133,18 +133,42 @@ class ChatAuthRepository(private val context: Context) {
     }
 }
 
+private fun Throwable.chainText(): String {
+    val sb = StringBuilder()
+    var t: Throwable? = this
+    var n = 0
+    while (t != null && n < 6) {
+        sb.append(t.message.orEmpty()).append('|')
+        t = t.cause
+        n++
+    }
+    return sb.toString()
+}
+
+private fun Throwable.firestoreCause(): FirebaseFirestoreException? {
+    var t: Throwable? = this
+    var n = 0
+    while (t != null && n < 6) {
+        if (t is FirebaseFirestoreException) return t
+        t = t.cause
+        n++
+    }
+    return null
+}
+
 fun chatErrorMessage(e: Throwable): String {
-    val msg = e.message.orEmpty()
+    val msg = e.chainText()
+    val fs = e.firestoreCause()
     return when {
-        e is FirebaseFirestoreException && msg.contains(DEVICE_TAKEN) ->
+        msg.contains(DEVICE_TAKEN) ->
             "هذا الجهاز مرتبط بحساب آخر، ولا يمكن استخدام أكثر من حساب على الجهاز"
-        e is FirebaseFirestoreException && msg.contains(ACCOUNT_OTHER_DEVICE) ->
+        msg.contains(ACCOUNT_OTHER_DEVICE) ->
             "هذا الحساب مرتبط بجهاز آخر، ولا يمكن الدخول به من هذا الجهاز"
-        e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.ALREADY_EXISTS ->
+        fs != null && fs.code == FirebaseFirestoreException.Code.ALREADY_EXISTS ->
             "تعذّر إنشاء اسم المستخدم، حاول مرة أخرى"
-        e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ->
+        fs != null && fs.code == FirebaseFirestoreException.Code.PERMISSION_DENIED ->
             "الصلاحيات مرفوضة. تأكد من نشر قواعد Firestore الخاصة بمشروع الدردشة"
-        e is FirebaseFirestoreException && e.code == FirebaseFirestoreException.Code.UNAVAILABLE ->
+        fs != null && fs.code == FirebaseFirestoreException.Code.UNAVAILABLE ->
             "لا يوجد اتصال بالإنترنت"
         e is FirebaseTooManyRequestsException -> "محاولات كثيرة، انتظر قليلاً ثم أعد المحاولة"
         e is FirebaseNetworkException -> "لا يوجد اتصال بالإنترنت"
@@ -155,6 +179,6 @@ fun chatErrorMessage(e: Throwable): String {
         e is FirebaseAuthException -> "تعذّر تسجيل الدخول (${e.errorCode})"
         msg.contains("API key", ignoreCase = true) || msg.contains("blocked", ignoreCase = true) ->
             "مفتاح Firebase مقيّد أو غير صالح، راجع إعدادات المفتاح في Google Cloud"
-        else -> "حدث خطأ غير متوقع، حاول مرة أخرى"
+        else -> "حدث خطأ غير متوقع (${(fs ?: e).javaClass.simpleName}${fs?.let { ":" + it.code } ?: ""}: ${e.message.orEmpty().take(80)})"
     }
 }
