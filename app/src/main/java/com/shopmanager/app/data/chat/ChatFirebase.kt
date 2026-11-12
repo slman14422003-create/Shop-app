@@ -31,8 +31,6 @@ internal object ChatFirebaseConfig {
 
 object ChatFirebase {
 
-    private const val APP_NAME = "chatApp"
-
     private var settingsApplied = false
 
     /** خيط خلفي واحد للمستمعات (نفس فكرة FirebaseModule.snapshotExecutor) فلا يُحلَّل شيء على الخيط الرئيسي. */
@@ -43,7 +41,7 @@ object ChatFirebase {
     @Synchronized
     fun app(context: Context): FirebaseApp {
         val app = try {
-            FirebaseApp.getInstance(APP_NAME)
+            FirebaseApp.getInstance()
         } catch (_: IllegalStateException) {
             val options = FirebaseOptions.Builder()
                 .setApiKey(ChatFirebaseConfig.API_KEY)
@@ -51,7 +49,7 @@ object ChatFirebase {
                 .setProjectId(ChatFirebaseConfig.PROJECT_ID)
                 .setGcmSenderId(ChatFirebaseConfig.SENDER_ID)
                 .build()
-            FirebaseApp.initializeApp(context.applicationContext, options, APP_NAME)
+            FirebaseApp.initializeApp(context.applicationContext, options)
         }
         if (!settingsApplied) {
             // الكاش المحلي محدود بـ 40MB: الرسائل الصوتية تُخزَّن كنص داخل المستندات، فبدون سقف قد تكبر

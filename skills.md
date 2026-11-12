@@ -42,3 +42,7 @@
 ## login error fix
 - chatErrorMessage now walks the cause chain (transaction may wrap FirebaseFirestoreException) and the generic message appends exception type/code for diagnosis
 - deviceId fallback is a hash of Build fields (stable across clear data) instead of a random UUID stored in prefs
+
+## chat login scoped to chat tab
+- cause of "Default FirebaseApp is not initialized": Google OAuthProvider flow needs the default FirebaseApp; ChatFirebase now initializes the chat project (shop-app-1670f) as the DEFAULT app; shop project stays the named "shopApp" instance
+- login gate removed from MainActivity (app opens normally); sign-in panel (ChatLoginPanel) now lives inside the chat tab only

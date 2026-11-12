@@ -136,7 +136,9 @@ fun ChatRoot(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (session) {
-                ChatSessionState.Loading, ChatSessionState.SignedOut -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ChatSessionState.SignedOut -> ChatLoginPanel(viewModel)
+
+                ChatSessionState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurfaceVariant, strokeWidth = 2.dp)
                 }
 

@@ -13,10 +13,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Storefront
@@ -45,20 +43,14 @@ import com.shopmanager.app.R
 import com.shopmanager.app.ui.common.AppScreenPadding
 
 @Composable
-fun AuthGate(content: @Composable () -> Unit) {
-    val vm: ChatSessionViewModel = viewModel()
-    val session by vm.session.collectAsStateWithLifecycle()
+fun ChatLoginPanel(vm: ChatSessionViewModel) {
     val auth by vm.auth.collectAsStateWithLifecycle()
     val activity = LocalContext.current.findActivity()
-    when (session) {
-        ChatSessionState.Loading -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
-        ChatSessionState.SignedOut -> GoogleLoginScreen(
-            state = auth,
-            onContinue = { activity?.let(vm::signInWithGoogle) },
-            onCancel = vm::cancelAuth
-        )
-        is ChatSessionState.SignedIn -> content()
-    }
+    GoogleLoginScreen(
+        state = auth,
+        onContinue = { activity?.let(vm::signInWithGoogle) },
+        onCancel = vm::cancelAuth
+    )
 }
 
 @Composable
@@ -71,9 +63,6 @@ private fun GoogleLoginScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(cs.background)
-            .statusBarsPadding()
-            .navigationBarsPadding()
             .padding(horizontal = AppScreenPadding + 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -107,7 +96,7 @@ private fun GoogleLoginScreen(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "سجّل الدخول بحساب Google للمتابعة",
+            "سجّل الدخول بحساب Google لاستخدام الدردشة",
             style = MaterialTheme.typography.bodyLarge,
             color = cs.onSurfaceVariant,
             textAlign = TextAlign.Center
