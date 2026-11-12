@@ -285,7 +285,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             actions.execute(c, _data.value)
         } catch (e: Exception) {
             val card = AssistantCard.Result("تعذر التنفيذ", e.message ?: "تحقق من الاتصال بالإنترنت", null, false)
-            if (messageId != null) replaceMessage(messageId) { it.copy(card = card) } else reply(line, RobotMood.CONFUSED, card)
+            if (messageId != null) replaceMessage(messageId) { it.copy(card = card, time = System.currentTimeMillis()) } else reply(line, RobotMood.CONFUSED, card)
             setMood(RobotMood.CONFUSED, 3000L)
             return
         }
@@ -302,7 +302,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val card = AssistantCard.Result(outcome.title, outcome.details, undoId, outcome.success)
         val chips = chipsFor(c)
         if (messageId != null) {
-            replaceMessage(messageId) { it.copy(card = card, chips = chips) }
+            replaceMessage(messageId) { it.copy(card = card, chips = chips, time = System.currentTimeMillis()) }
         } else {
             reply(line, if (outcome.success) RobotMood.SUCCESS else RobotMood.CONFUSED, card, chips)
         }
