@@ -46,6 +46,10 @@ internal fun chatConversationRoute(uid: String, name: String) =
 
 internal const val ROUTE_SETTINGS = "settings"
 
+// المساعد المحلي: شاشة المحادثة الكاملة وإعداداته.
+internal const val ROUTE_ASSISTANT = "assistant"
+internal const val ROUTE_ASSISTANT_SETTINGS = "assistantSettings"
+
 // لوحة المسؤول السرية: reached only via the small admin-panel button
 // pinned next to الإعدادات at the bottom of the side drawer (see
 // AppDrawerContent) + the PIN dialog it opens (AdminPinDialog below).

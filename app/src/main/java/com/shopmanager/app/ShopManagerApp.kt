@@ -59,6 +59,12 @@ import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.ui.admin.AdminPanelScreen
 import com.shopmanager.app.ui.dashboard.DashboardScreen
+import com.shopmanager.app.assistant.AssistantNav
+import com.shopmanager.app.assistant.AssistantViewModel
+import com.shopmanager.app.assistant.engine.Screen as AssistantScreen
+import com.shopmanager.app.assistant.ui.AssistantChatScreen
+import com.shopmanager.app.assistant.ui.AssistantHomeScreen
+import com.shopmanager.app.assistant.ui.AssistantSettingsScreen
 import com.shopmanager.app.ui.debts.DebtsScreen
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.debts.PersonDetailScreen
@@ -102,6 +108,10 @@ internal fun ShopManagerApp(
     val notesViewModel: NotesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
     // الدردشة المحلية: جلسة واحدة مشتركة (لا تبدأ أي اتصال Firebase قبل فتح تبويب الدردشة فعلاً).
     val chatSessionViewModel: ChatSessionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    // المساعد المحلي (بدون إنترنت/Firebase/نموذج لغوي): يُربط بنفس ViewModels المشتركة فلا مستمعين مكررين.
+    val assistantViewModel: AssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    androidx.compose.runtime.LaunchedEffect(assistantViewModel) { assistantViewModel.bind(debtsViewModel, materialsViewModel) }
+    val assistantSettings = assistantViewModel.settings.collectAsStateWithLifecycle().value
 
     // Hoisted above the NavHost (rather than inside the pager's own
     // composable) so it survives navigating away to Settings/Help and back,
@@ -200,6 +210,28 @@ internal fun ShopManagerApp(
             // إطار) هو أثقل ما في التنقل على المعالج الرسومي القديم.
             if (isLowTierForPager || !animate || !alreadyOnPager) pagerState.scrollToPage(page)
             else pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec)
+        }
+    }
+
+    // أحداث تنقل المساعد (افتح ديون فلان، افتح الإعدادات...).
+    androidx.compose.runtime.LaunchedEffect(assistantViewModel) {
+        assistantViewModel.navEvents.collect { ev ->
+            when (ev) {
+                is AssistantNav.Open -> when (ev.screen) {
+                    AssistantScreen.DEBTS -> openPager(PAGE_DEBTS)
+                    AssistantScreen.MATERIALS -> openPager(PAGE_MATERIALS)
+                    AssistantScreen.HOME -> openPager(PAGE_DASHBOARD)
+                    AssistantScreen.NOTES -> navController.safeNavigate(ROUTE_NOTES)
+                    AssistantScreen.SETTINGS -> navController.safeNavigate(ROUTE_SETTINGS)
+                    AssistantScreen.ACTIVITY -> navController.safeNavigate(ROUTE_DEBT_ACTIVITY)
+                    AssistantScreen.MISSING_FINDER -> navController.safeNavigate(ROUTE_MISSING_FINDER)
+                    AssistantScreen.CATALOG -> navController.safeNavigate(ROUTE_MATERIAL_CATALOG)
+                    AssistantScreen.ASSISTANT -> navController.safeNavigate(ROUTE_ASSISTANT)
+                }
+                is AssistantNav.OpenPerson -> { openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/${ev.personId}") }
+                is AssistantNav.OpenMaterial -> { pendingMaterialHighlight = ev.name; openPager(PAGE_MATERIALS) }
+                AssistantNav.OpenFinder -> navController.safeNavigate(ROUTE_MISSING_FINDER)
+            }
         }
     }
 
@@ -496,7 +528,16 @@ internal fun ShopManagerApp(
                     } else Modifier
                     Box(pageFx.fillMaxSize()) {
                     when (page) {
-                        PAGE_DASHBOARD -> DashboardScreen(
+                        PAGE_DASHBOARD -> if (assistantSettings.newHome) AssistantHomeScreen(
+                            assistant = assistantViewModel,
+                            materialsViewModel = materialsViewModel,
+                            onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                            onOpenActivity = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) },
+                            onOpenChat = { navController.safeNavigate(ROUTE_ASSISTANT) },
+                            onNavigateToDebts = { openPager(PAGE_DEBTS) },
+                            onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
+                            onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) }
+                        ) else DashboardScreen(
                             debtsViewModel = debtsViewModel,
                             materialsViewModel = materialsViewModel,
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
@@ -637,8 +678,19 @@ internal fun ShopManagerApp(
                     materialsViewModel = materialsViewModel,
                     onOpenHelp = { navController.safeNavigate(ROUTE_HELP) },
                     onOpenPrivacyPolicy = { navController.safeNavigate(ROUTE_PRIVACY) },
-                    onOpenAbout = { navController.safeNavigate(ROUTE_ABOUT) }
+                    onOpenAbout = { navController.safeNavigate(ROUTE_ABOUT) },
+                    onOpenAssistantSettings = { navController.safeNavigate(ROUTE_ASSISTANT_SETTINGS) }
                 )
+            }
+            composable(ROUTE_ASSISTANT) {
+                AssistantChatScreen(
+                    assistant = assistantViewModel,
+                    onBack = { navController.safePopBackStack() },
+                    onOpenSettings = { navController.safeNavigate(ROUTE_ASSISTANT_SETTINGS) }
+                )
+            }
+            composable(ROUTE_ASSISTANT_SETTINGS) {
+                AssistantSettingsScreen(assistant = assistantViewModel, onBack = { navController.safePopBackStack() })
             }
             composable(ROUTE_ABOUT) {
                 com.shopmanager.app.ui.settings.AboutScreen(

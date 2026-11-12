@@ -109,7 +109,8 @@ fun SettingsScreen(
     materialsViewModel: MaterialsViewModel? = null,
     onOpenHelp: () -> Unit = {},
     onOpenPrivacyPolicy: () -> Unit = {},
-    onOpenAbout: () -> Unit = {}
+    onOpenAbout: () -> Unit = {},
+    onOpenAssistantSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val settings = remember { SettingsRepository(context) }
@@ -519,6 +520,16 @@ fun SettingsScreen(
                     description = "تعرّف على كل ميزات التطبيق خطوة بخطوة: الديون والمواد والأسعار والنسخ الاحتياطي.",
                     buttonLabel = "فتح الدليل",
                     onClick = onOpenHelp
+                )
+            }
+
+            // المساعد المحلي: اقتراحات استباقية، التأكيد، الأسماء البديلة، حركة الروبوت.
+            item(key = "assistantSettings", contentType = "card") {
+                SettingsPromoCard(
+                    title = "المساعد المحلي",
+                    description = "تحكّم بالاقتراحات الاستباقية والتأكيد الدائم والأسماء البديلة وحركة الروبوت ومسح سجل المحادثة.",
+                    buttonLabel = "إعدادات المساعد",
+                    onClick = onOpenAssistantSettings
                 )
             }
 
