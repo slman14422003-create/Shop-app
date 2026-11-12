@@ -46,3 +46,6 @@
 ## chat login scoped to chat tab
 - cause of "Default FirebaseApp is not initialized": Google OAuthProvider flow needs the default FirebaseApp; ChatFirebase now initializes the chat project (shop-app-1670f) as the DEFAULT app; shop project stays the named "shopApp" instance
 - login gate removed from MainActivity (app opens normally); sign-in panel (ChatLoginPanel) now lives inside the chat tab only
+
+## chat firebase app id
+- ChatFirebaseConfig.APP_ID now 1:631188161296:android:bc4e11dc05e84448081b95 (registered for com.shopmanager.app); ERROR_INVALID_CERT_HASH means the APK signing SHA-1 is not added to that app in Firebase

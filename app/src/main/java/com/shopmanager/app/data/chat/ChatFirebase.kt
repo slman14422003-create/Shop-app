@@ -24,7 +24,7 @@ import java.util.concurrent.Executors
  */
 internal object ChatFirebaseConfig {
     const val API_KEY = "AIzaSyAraLFrEZKImJFWRlbGqD-3MXvvAWT-z8o"
-    const val APP_ID = "1:631188161296:android:47174e768b3e3032081b95"
+    const val APP_ID = "1:631188161296:android:bc4e11dc05e84448081b95"
     const val PROJECT_ID = "shop-app-1670f"
     const val SENDER_ID = "631188161296"
 }
