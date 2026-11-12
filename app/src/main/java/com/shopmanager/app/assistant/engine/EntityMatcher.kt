@@ -34,7 +34,19 @@ internal object EntityMatcher {
 
     private fun key(tokens: List<String>): List<String> {
         val kept = tokens.filter { !ArabicText.isTitle(it) }.ifEmpty { tokens }
-        return kept.map { ArabicText.stripAl(it) }
+        return kept.map { Synonyms.canon(ArabicText.stripAl(it)) }
+    }
+
+    fun formOf(name: String): List<String> = key(tokensOf(name))
+
+    /** تشابه متساهل للاقتراحات فقط: نسبة أجزاء النص القريبة من أجزاء الاسم. */
+    fun looseScore(spanIn: List<String>, form: List<String>): Double {
+        val span = key(spanIn)
+        if (span.isEmpty() || form.isEmpty()) return 0.0
+        var hit = 0
+        for (t in span) if (form.any { f -> t == f || ArabicText.similarity(t, f) >= 0.75 }) hit++
+        if (hit == 0) return 0.0
+        return hit.toDouble() / span.size * 0.7
     }
 
     fun buildIndex(names: List<Pair<String, String?>>, aliases: Map<String, String>): List<IndexEntry> {
@@ -62,6 +74,7 @@ internal object EntityMatcher {
             if (span.size == 1 && form.contains(span[0])) {
                 return if (form[0] in KUNYA && form.size >= 2 && form[1] == span[0]) 0.74 else 0.80
             }
+            if (span.size >= 2 && form.containsAll(span)) return 0.86
             return ArabicText.similarity(span.joinToString(" "), form.take(span.size).joinToString(" ")) * 0.95
         }
         if (span.size > form.size) {
@@ -170,6 +183,7 @@ internal object EntityMatcher {
     fun isAmbiguous(m: SpanMatch): Boolean {
         if (m.all.size < 2) return false
         val a = m.all[0]; val b = m.all[1]
+        if (a.score >= 0.999 && b.score < 0.999) return false
         return a.name != b.name && b.score >= MEDIUM && b.score >= a.score - 0.03
     }
 }

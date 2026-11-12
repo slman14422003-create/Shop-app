@@ -105,10 +105,17 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                 if (i in list.indices) {
                     val old = list[i]
                     list[i] = old.copy(name = name, score = 1.0, level = MatchLevel.EXACT, candidates = emptyList())
+                    for (j in list.indices) {
+                        if (j == i) continue
+                        val o = list[j]
+                        if (o.level != MatchLevel.EXACT && o.candidates.any { it.name == name }) {
+                            list[j] = o.copy(name = name, score = 1.0, level = MatchLevel.EXACT, candidates = emptyList())
+                        }
+                    }
                     val learn = if (amb.kind == AmbiguityKind.FUZZY_MATERIAL &&
                         ArabicText.normalize(old.rawSpan) != ArabicText.normalize(name)
                     ) AliasLearn(old.rawSpan, name) else null
-                    validate(command.copy(materials = list, ambiguity = null, aliasToLearn = learn ?: command.aliasToLearn), snapshot)
+                    validate(command.copy(materials = mergeDuplicates(list), ambiguity = null, aliasToLearn = learn ?: command.aliasToLearn), snapshot)
                 } else command
             }
             AmbiguityKind.INTENT -> {
@@ -819,7 +826,64 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                 )
             )
         }
-        return items
+        return mergeDuplicates(items)
+    }
+
+    private fun sameItem(a: MaterialRef, b: MaterialRef): Boolean {
+        if (ArabicText.normalize(a.name) == ArabicText.normalize(b.name)) return true
+        val ca = a.candidates.map { it.name }.toSet()
+        val cb = b.candidates.map { it.name }.toSet()
+        return ca.isNotEmpty() && ca == cb
+    }
+
+    private fun mergeDuplicates(items: List<MaterialRef>): List<MaterialRef> {
+        val out = ArrayList<MaterialRef>()
+        for (cur in items) {
+            val i = out.indexOfFirst { o -> sameItem(o, cur) }
+            if (i < 0) { out.add(cur); continue }
+            val o = out[i]
+            out[i] = o.copy(
+                quantity = o.quantity ?: cur.quantity,
+                unit = o.unit ?: cur.unit,
+                pack = o.pack ?: cur.pack,
+                score = maxOf(o.score, cur.score),
+                level = if (o.level.ordinal <= cur.level.ordinal) o.level else cur.level,
+                candidates = if (o.candidates.isNotEmpty()) o.candidates else cur.candidates
+            )
+        }
+        return out
+    }
+
+    private fun autoAccept(m: MaterialRef): MaterialRef {
+        if (m.level != MatchLevel.MEDIUM || m.candidates.size != 1) return m
+        val st = EntityMatcher.formOf(m.rawSpan)
+        val nt = EntityMatcher.formOf(m.name)
+        if (st.isNotEmpty() && nt.containsAll(st)) return m.copy(level = MatchLevel.HIGH, candidates = emptyList())
+        return m
+    }
+
+    private fun suggestMaterials(raw: String, snapshot: EngineSnapshot): List<String> {
+        val span = EntityMatcher.tokensOf(raw)
+        if (span.isEmpty()) return emptyList()
+        val scored = ArrayList<Pair<String, Double>>()
+        for (m in snapshot.materials) {
+            val form = EntityMatcher.formOf(m.name)
+            val sc = maxOf(EntityMatcher.scoreForm(span, form), EntityMatcher.looseScore(span, form))
+            if (sc >= 0.5) scored.add(m.name to sc)
+        }
+        return scored.sortedByDescending { it.second }.take(4).map { it.first }
+    }
+
+    private fun suggestPersons(raw: String, snapshot: EngineSnapshot): List<KnownPerson> {
+        val span = EntityMatcher.tokensOf(raw)
+        if (span.isEmpty()) return emptyList()
+        val scored = ArrayList<Pair<KnownPerson, Double>>()
+        for (p in snapshot.persons) {
+            val form = EntityMatcher.formOf(p.name)
+            val sc = maxOf(EntityMatcher.scoreForm(span, form), EntityMatcher.looseScore(span, form))
+            if (sc >= 0.5) scored.add(p to sc)
+        }
+        return scored.sortedByDescending { it.second }.take(4).map { it.first }
     }
 
     private fun freeSpan(an: Analysis, start: Int, end: Int): Span {
@@ -856,6 +920,15 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                     Intent.ADD_PERSON -> "شو اسم العميل الجديد؟"
                     else -> "عن أي عميل تقصد؟"
                 }
+            } else if (person.level == MatchLevel.NEW && intent == Intent.ADD_DEBT) {
+                val sugg = suggestPersons(person.rawSpan, snapshot)
+                if (sugg.isNotEmpty()) {
+                    val opts = sugg.map { AmbiguityOption(it.name, "${it.id}|${it.name}") }
+                    prompt = "تقصد مين؟"
+                    ambiguity = Ambiguity(AmbiguityKind.FUZZY_PERSON, "ما لقيت \"${person.rawSpan}\" بين العملاء. تقصد مين؟", opts)
+                } else {
+                    missing.add(Slot.PERSON); prompt = "ما لقيت \"${person.rawSpan}\" بين العملاء. اكتب الاسم مثل ما هو بالديون."
+                }
             } else if (person.level == MatchLevel.NONE) {
                 missing.add(Slot.PERSON); prompt = "ما لقيت \"${person.rawSpan}\" بين العملاء. اكتب الاسم مرة ثانية."
             } else if (person.candidates.size >= 2 && person.candidates[1].name != person.candidates[0].name &&
@@ -883,10 +956,25 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                     if (prompt == null) prompt = "ما لقيت \"${first.rawSpan}\" بالقائمة. اكتب اسم المادة مرة ثانية."
                 }
             }
+            if (intent in setOf(Intent.ADD_SHORTAGE, Intent.REMOVE_SHORTAGE, Intent.QUERY_PRICE, Intent.SEARCH_MATERIAL)) {
+                cmd = cmd.copy(materials = cmd.materials.map { autoAccept(it) })
+            }
             if (cmd.materials.isEmpty()) {
                 missing.add(Slot.MATERIAL); if (prompt == null) prompt = "أي مادة؟"
             } else if (ambiguity == null) {
                 for ((i, m) in cmd.materials.withIndex()) {
+                    if (intent == Intent.ADD_SHORTAGE && (m.level == MatchLevel.NEW || m.level == MatchLevel.NONE)) {
+                        val sugg = suggestMaterials(m.rawSpan, snapshot)
+                        if (sugg.isNotEmpty()) {
+                            val opts = sugg.map { AmbiguityOption(it, "$i|$it") }
+                            prompt = "تقصد أي مادة؟"
+                            ambiguity = Ambiguity(AmbiguityKind.FUZZY_MATERIAL, "ما لقيت \"${m.rawSpan}\" بالمواد. تقصد أي وحدة؟", opts)
+                        } else {
+                            missing.add(Slot.MATERIAL)
+                            if (prompt == null) prompt = "ما لقيت \"${m.rawSpan}\" بالمواد الثابتة. اكتب اسمها مثل ما هو بالقائمة."
+                        }
+                        break
+                    }
                     if (m.candidates.size >= 2 && m.candidates[1].name != m.candidates[0].name &&
                         m.candidates[1].score >= m.candidates[0].score - 0.03
                     ) {

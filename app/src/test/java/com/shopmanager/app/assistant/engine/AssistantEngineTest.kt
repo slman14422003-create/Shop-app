@@ -121,7 +121,17 @@ class AssistantEngineTest {
         c.case("add many") {
             val x = cmd("ضيف سكر وملح وبهارات للنواقص")
             assertEquals(Intent.ADD_SHORTAGE, x.intent); assertEquals(listOf("سكر", "ملح", "بهارات"), x.materials.map { it.name })
-            assertEquals(MatchLevel.NEW, x.materials[2].level)
+            assertEquals(MatchLevel.NEW, x.materials[2].level); assertTrue(!x.isReady)
+        }
+        c.case("synonym match") {
+            val s2 = snap.copy(materials = materials + KnownMaterial("نسكافيه جولد"))
+            val x = cmd("اضف كيلو نسكافية", ConversationContext(), s2)
+            assertEquals(Intent.ADD_SHORTAGE, x.intent); assertTrue(x.isReady)
+            assertEquals("نسكافيه جولد", x.materials[0].name)
+        }
+        c.case("unknown material not added") {
+            val x = cmd("اضف كيلو كافيار")
+            assertEquals(Intent.ADD_SHORTAGE, x.intent); assertTrue(!x.isReady)
         }
         c.case("qty pack") {
             val x = cmd("ضيف 3 كيس سكر للنواقص")
@@ -315,7 +325,7 @@ class AssistantEngineTest {
         }
         c.case("new person") {
             val x = cmd("سجل على فارس 5000")
-            assertEquals(MatchLevel.NEW, x.person?.level); assertEquals("فارس", x.person?.name); assertTrue(x.confirmReasons.isNotEmpty())
+            assertEquals(MatchLevel.NEW, x.person?.level); assertEquals("فارس", x.person?.name); assertTrue(!x.isReady)
         }
         c.case("confirm picks first fuzzy option") {
             val o1 = run("سجل على سمر 5000"); val o2 = run("نعم", o1.context)
