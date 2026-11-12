@@ -239,7 +239,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         // أوامر تغيّر البيانات
-        val mustConfirm = c.risky || c.confirmReasons.isNotEmpty() || _settings.value.alwaysConfirm ||
+        val quickAdd = c.intent == Intent.ADD_SHORTAGE && !c.risky && c.confirmReasons.isEmpty()
+        val mustConfirm = c.risky || c.confirmReasons.isNotEmpty() || (_settings.value.alwaysConfirm && !quickAdd) ||
             c.person?.level == MatchLevel.NEW || c.intent == Intent.DELETE_LAST
         if (mustConfirm) {
             reply(line, RobotMood.READY, confirmCard(c))
@@ -453,6 +454,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             Intent.ADD_SHORTAGE -> {
                 title = "إضافة للنواقص"
                 c.materials.forEach { f.add(CardField(it.name, materialQty(it))) }
+                if (c.important) f.add(CardField("الأهمية", "هامة ⭐"))
             }
             Intent.REMOVE_SHORTAGE -> {
                 title = "حذف من النواقص"

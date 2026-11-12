@@ -302,6 +302,9 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         val amountAny = an.money.isNotEmpty()
         val amountNum = an.amountNums.isNotEmpty()
         val shortCue = hasW(Lexicon.FINISHED_STRONG) && !(hasW(setOf("خلص")) && personPresent)
+        val importantW = hasW(Lexicon.IMPORTANT_WORDS)
+        val adderV = hasW(setOf("ضيف", "ضيفلي", "ضيفلنا", "ضيفو", "ضيفوا", "اضف", "اضيف", "اضيفلي", "اضيفلنا", "ضيفها", "ضيفه", "زودلي", "زود", "تضيف", "بضيف", "اضافه"))
+        val plainAdd = adderV && !prepOn && !debtW && !personPresent && !amountNum
 
         // حاسبة
         val calc = Calculator.evaluate(norm, an.numbers, hasW(Lexicon.CALC_WORDS))
@@ -380,6 +383,8 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         if (hasW(setOf("خلص")) && !personPresent && materialOrFree && payV) add(Intent.ADD_SHORTAGE, 3.5)
         if (shortageW && !materialOrFree && !recordV) add(Intent.ADD_SHORTAGE, -2.5)
         if (hint == Intent.ADD_SHORTAGE && recordV && materialOrFree) add(Intent.ADD_SHORTAGE, 2.5)
+        if (plainAdd && materialOrFree) { add(Intent.ADD_SHORTAGE, 2.5); add(Intent.ADD_DEBT, -1.5) }
+        if (importantW && materialOrFree && !personPresent && !debtW && (recordV || adderV || shortCue || hasW(Lexicon.NEED_WEAK))) add(Intent.ADD_SHORTAGE, 3.0)
 
         if (deleteV && materialOrFree) {
             add(Intent.REMOVE_SHORTAGE, 2.5)
@@ -415,6 +420,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
 
         if (hasW(Lexicon.MATERIAL_WORDS) && hasW(Lexicon.NEW_WORDS)) add(Intent.ADD_MATERIAL, 4.5)
         if (hasW(Lexicon.MATERIAL_WORDS) && recordV) add(Intent.ADD_MATERIAL, 2.5)
+        if (importantW && hasW(Lexicon.MATERIAL_WORDS) && !hasW(Lexicon.NEW_WORDS)) add(Intent.ADD_MATERIAL, -3.0)
         if (hasW(Lexicon.NEW_WORDS) && recordV && materialOrFree) add(Intent.ADD_MATERIAL, 2.0)
 
         if (hasW(Lexicon.SEARCH_VERBS)) {
@@ -537,6 +543,10 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             if (items.isEmpty() && base != null) items = base.materials
             if (intent == Intent.OPEN && items.none { it.level != MatchLevel.NEW }) items = emptyList()
             cmd = cmd.copy(materials = items)
+        }
+        if (intent == Intent.ADD_SHORTAGE) {
+            val imp = an.norm.any { v -> Lexicon.variantsOf(v).any { it in Lexicon.IMPORTANT_WORDS } }
+            cmd = cmd.copy(important = imp || base?.important == true)
         }
 
         val amountNeeded = intent in setOf(Intent.ADD_DEBT, Intent.REDUCE_DEBT, Intent.SET_PRICE, Intent.PAY_DEBT, Intent.DELETE_DEBT, Intent.ADD_MATERIAL)
@@ -866,7 +876,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             Intent.QUERY_TOTAL_DEBTS -> "السؤال عن مجموع الديون"
             Intent.QUERY_TOP_DEBTORS -> "أكثر ${c.limit ?: 5} مدينين"
             Intent.QUERY_STALE_DEBTORS -> "المدينون الذين لم يسددوا منذ مدة" + (c.date?.let { " (${it.label})" } ?: "")
-            Intent.ADD_SHORTAGE -> "إضافة للنواقص: $mats"
+            Intent.ADD_SHORTAGE -> "إضافة للنواقص: $mats" + if (c.important) " (هامة)" else ""
             Intent.REMOVE_SHORTAGE -> "حذف من النواقص: $mats"
             Intent.LIST_SHORTAGES -> "عرض قائمة النواقص"
             Intent.QUERY_PRICE -> "السؤال عن سعر $mats"

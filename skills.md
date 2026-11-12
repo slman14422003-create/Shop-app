@@ -22,3 +22,10 @@
 - stats, bento cards, chips, suggestions, notes, last actions moved into AppSheet opened from a Dashboard icon next to the bell in the top bar
 - AssistantViewModel.execute: message time refreshed when a confirm card turns into a result so the 30s counts from execution
 - not compiled here (no gradle offline): verify via ci
+
+## assistant requests task
+- Lexicon.kt: IMPORTANT_WORDS (هامة/مهم/ضروري/مستعجل...), more Levantine verbs, need/finished/confirm/cancel words, pack words (شوال/تنكة/دزينة...), filler stop words
+- EngineModels.Command.important; AssistantEngine: scoring boosts ADD_SHORTAGE for plain add verbs and importance words, penalizes ADD_MATERIAL when importance word present, build() sets important, describe() appends flag
+- AssistantActions.addShortages: sets star (setImportant with top order) on new items, or on existing shortage when asked important; undo removes added and unstars
+- AssistantViewModel.process: ADD_SHORTAGE skips the confirm card unless risky/reasons (undo button stays on result)
+- tests: shortage_important_and_levantine added in AssistantEngineTest (not run offline)

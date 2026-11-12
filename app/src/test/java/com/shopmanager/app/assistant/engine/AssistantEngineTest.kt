@@ -324,6 +324,28 @@ class AssistantEngineTest {
         c.assertNone()
     }
 
+    @Test fun shortage_important_and_levantine() {
+        val c = Collector()
+        c.case("important word") {
+            val x = cmd("اضف حلبة حب كمادة هامة")
+            assertEquals(Intent.ADD_SHORTAGE, x.intent); assertTrue(x.important)
+            assertEquals(listOf("حلبة حب"), x.materials.map { it.name })
+        }
+        c.case("plain add new material with unit") {
+            val x = cmd("اضف حلبة كيلو")
+            assertEquals(Intent.ADD_SHORTAGE, x.intent); assertTrue(!x.important)
+            assertEquals(listOf("حلبة"), x.materials.map { it.name }); assertEquals("كيلو", x.materials[0].unit)
+        }
+        c.case("important known material") {
+            val x = cmd("ضيفلي ملح مهم")
+            assertEquals(Intent.ADD_SHORTAGE, x.intent); assertTrue(x.important)
+        }
+        c.case("finished plural") { assertEquals(Intent.ADD_SHORTAGE, cmd("خلصو السكر").intent) }
+        c.case("empty") { assertEquals(Intent.ADD_SHORTAGE, cmd("الهيل فاضي").intent) }
+        c.case("confirm levantine") { assertEquals(Intent.CONFIRM, cmd("ماشي").intent) }
+        c.assertNone()
+    }
+
     @Test fun safety_rules() {
         val c = Collector()
         c.case("delete risky") { assertTrue(cmd("احذف دين سامر").risky) }

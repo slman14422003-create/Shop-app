@@ -121,7 +121,8 @@ data class Command(
     val understood: String = "",
     val prompt: String? = null,
     val ambiguity: Ambiguity? = null,
-    val aliasToLearn: AliasLearn? = null
+    val aliasToLearn: AliasLearn? = null,
+    val important: Boolean = false
 ) {
     /** مكتمل ولا غموض فيه، جاهز لبطاقة التأكيد/التنفيذ. */
     val isReady: Boolean get() = missing.isEmpty() && ambiguity == null && intent != Intent.UNKNOWN

@@ -175,25 +175,42 @@ class AssistantActions(private val app: Application) {
         val ids = ArrayList<String>()
         val added = ArrayList<String>()
         val skipped = ArrayList<String>()
+        val starredIds = ArrayList<String>()
+        val starredNames = ArrayList<String>()
+        var topOrder = (data.materials.minOfOrNull { it.order } ?: 0L) - 1
         for (m in cmd.materials) {
-            if (data.materials.any { same(it.name, m.name) }) { skipped.add(m.name); continue }
+            val existing = data.materials.firstOrNull { same(it.name, m.name) }
+            if (existing != null) {
+                if (cmd.important && !existing.important) {
+                    mats.setImportant(existing.id, true, topOrder)
+                    topOrder -= 1
+                    starredIds.add(existing.id); starredNames.add(existing.name)
+                } else skipped.add(m.name)
+                continue
+            }
             val qty = m.quantity ?: 1.0
             val unit = m.unit ?: ""
             val id = mats.addMaterial(m.name, qty, unit, "main", m.pack ?: "") { newId ->
                 SelfChangeLedger.markMaterialWritten(app, newId, RemoteChangeProcessor.materialSignature(m.name, qty, unit))
             }
-            LearningHub.store(app).recordAdded(m.name, qty, unit, false)
+            if (cmd.important) { mats.setImportant(id, true, topOrder); topOrder -= 1 }
+            LearningHub.store(app).recordAdded(m.name, qty, unit, cmd.important)
             ids.add(id); added.add(m.name)
         }
-        if (added.isEmpty()) return Outcome("موجودة مسبقاً", skipped.joinToString("، ") + " بالنواقص أصلاً", success = false)
-        ChangeHistory.log(app, "إضافة للنواقص: ${added.joinToString("، ")} (المساعد)")
+        if (added.isEmpty() && starredNames.isEmpty()) return Outcome("موجودة مسبقاً", skipped.joinToString("، ") + " بالنواقص أصلاً", success = false)
+        ChangeHistory.log(app, "إضافة للنواقص: ${(added + starredNames).joinToString("، ")}" + (if (cmd.important) " (هامة)" else "") + " (المساعد)")
         after()
+        val star = if (cmd.important) " ⭐" else ""
         val extra = if (skipped.isNotEmpty()) " • موجودة مسبقاً: ${skipped.joinToString("، ")}" else ""
-        return Outcome("تمت الإضافة للنواقص", added.joinToString("، ") + extra, undo = {
+        val undo: suspend () -> Unit = {
             SelfChangeLedger.markMaterialsDeleted(app, ids)
             ids.forEach { mats.deleteMaterial(it) }
+            starredIds.forEach { mats.setImportant(it, false) }
             after()
-        })
+        }
+        if (added.isEmpty()) return Outcome("تم وضعها كهامة", starredNames.joinToString("، ") + star + extra, undo = undo)
+        val starNote = if (starredNames.isNotEmpty()) " • صارت هامة: ${starredNames.joinToString("، ")}" else ""
+        return Outcome("تمت الإضافة للنواقص", added.joinToString("، ") + star + starNote + extra, undo = undo)
     }
 
     private suspend fun removeShortages(cmd: Command, data: AssistantData): Outcome {
