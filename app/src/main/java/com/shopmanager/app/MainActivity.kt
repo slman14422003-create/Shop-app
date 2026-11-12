@@ -548,14 +548,16 @@ class MainActivity : FragmentActivity() {
                                     if (!isUnlocked) {
                                         LockScreen(settings = settings, onUnlocked = { unlocked = true; lockedByLeave = false })
                                     } else {
-                                        ShopManagerApp(
-                                            settings = settings,
-                                            onThemeChanged = { themeMode = it },
-                                            onPerformancePreferenceChanged = { performancePreference = it },
-                                            onRecheckDevicePerformance = onRecheckDevicePerformance,
-                                            pendingNotificationAction = pendingNotificationAction,
-                                            onConsumeNotificationAction = { pendingNotificationAction = null }
-                                        )
+                                        com.shopmanager.app.ui.chat.AuthGate {
+                                            ShopManagerApp(
+                                                settings = settings,
+                                                onThemeChanged = { themeMode = it },
+                                                onPerformancePreferenceChanged = { performancePreference = it },
+                                                onRecheckDevicePerformance = onRecheckDevicePerformance,
+                                                pendingNotificationAction = pendingNotificationAction,
+                                                onConsumeNotificationAction = { pendingNotificationAction = null }
+                                            )
+                                        }
                                     }
                                 }
 

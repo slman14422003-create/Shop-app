@@ -118,32 +118,14 @@ class ChatSessionViewModel(application: Application) : AndroidViewModel(applicat
     private val _auth = MutableStateFlow(AuthUiState())
     val auth: StateFlow<AuthUiState> = _auth
 
-    fun clearAuthMessages() { _auth.update { it.copy(error = null, info = null) } }
+    private var authJob: Job? = null
 
-    fun signUp(name: String, email: String, password: String) = runAuth { authRepo.signUp(name, email, password) }
-
-    fun signIn(email: String, password: String) = runAuth { authRepo.signIn(email, password) }
-
-    fun sendReset(email: String) {
-        viewModelScope.launch {
-            _auth.value = AuthUiState(busy = true)
-            try {
-                authRepo.sendReset(email)
-                _auth.value = AuthUiState(info = "أرسلنا رابط إعادة تعيين كلمة المرور إلى بريدك")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                _auth.value = AuthUiState(error = chatErrorMessage(e))
-            }
-        }
-    }
-
-    private fun runAuth(block: suspend () -> Unit) {
+    fun signInWithGoogle(activity: android.app.Activity) {
         if (_auth.value.busy) return
-        viewModelScope.launch {
+        authJob = viewModelScope.launch {
             _auth.value = AuthUiState(busy = true)
             try {
-                block()
+                authRepo.signInWithGoogle(activity)
                 _auth.value = AuthUiState()
             } catch (e: CancellationException) {
                 throw e
@@ -153,9 +135,8 @@ class ChatSessionViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun signOut() {
-        VoicePlayer.stop()
-        authRepo.signOut()
+    fun cancelAuth() {
+        authJob?.cancel()
         _auth.value = AuthUiState()
     }
 

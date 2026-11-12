@@ -17,11 +17,13 @@ enum class NotifKind(
 ) {
     SHOPPING("low_stock_channel_s_", "shopping", "قائمة النواقص والمشتريات", NotifSound.NOTE),
     DEBTS("debts_channel_s_", "debts", "تنبيهات الديون", NotifSound.TRITONE),
-    NOTES("notes_channel_s_", "notes", "تذكيرات الملاحظات الهامة", NotifSound.CHIME)
+    NOTES("notes_channel_s_", "notes", "تذكيرات الملاحظات الهامة", NotifSound.CHIME),
+    CHAT("chat_channel_s_", "chat", "رسائل الدردشة", NotifSound.DROP)
 }
 
 /** نغمات بأسلوب الآيفون (مولَّدة أصلياً داخل التطبيق) + نغمات الجهاز + صامت. */
 enum class NotifSound(val key: String, val label: String, val hint: String, val rawRes: Int?) {
+    DROP("drop", "قطرة", "قطرة ماء هادئة", R.raw.water_drop_soft),
     NOTE("note", "نوتة", "نقرة ماريمبا ناعمة", R.raw.tone_note),
     TRITONE("tritone", "ثلاثي النغمات", "ثلاث نوتات صاعدة سريعة", R.raw.tone_tritone),
     CHIME("chime", "رنين", "نغمتان زجاجيتان", R.raw.tone_chime),

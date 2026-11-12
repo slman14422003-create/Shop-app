@@ -29,3 +29,12 @@
 - AssistantActions.addShortages: sets star (setImportant with top order) on new items, or on existing shortage when asked important; undo removes added and unstars
 - AssistantViewModel.process: ADD_SHORTAGE skips the confirm card unless risky/reasons (undo button stays on result)
 - tests: shortage_important_and_levantine added in AssistantEngineTest (not run offline)
+
+## google login + device lock + chat notifications task
+- ChatAuthRepository.kt: email/password removed; signInWithGoogle(activity) uses OAuthProvider("google.com") with prompt=select_account (no web client id needed, only Google provider enabled in Firebase Auth of shop-app-1670f)
+- device binding: transaction on devices/{ANDROID_ID} + users/{uid}.deviceId; device_taken / account_other_device errors sign the user out again
+- ui/chat/GoogleLoginScreen.kt: AuthGate wraps ShopManagerApp in MainActivity (after LockScreen); no guest path; signOut removed from ChatSessionViewModel, ChatListScreen, ConversationScreen, ShopManagerApp; ChatAuthScreen.kt deleted
+- firebase-chat/firestore.rules: users.deviceId + devices collection; MUST be published in the chat Firebase project
+- ChatMessageWatcher.kt (started/stopped from RemoteChangeWatcher): chats listener, baseline per chat in prefs "chat_notif_baseline", skips open chat via ChatOpenTracker; NotifKind.CHAT + NotifSound.DROP (water_drop_soft); NotificationHelper.showChatMessageNotification uses MessagingStyle; tap -> NotificationAction.OpenChat
+- sync notification: channel id changed to realtime_sync_hidden_v3 (IMPORTANCE_NONE); old channel id could not be lowered by the app after creation
+- not compiled here: verify via ci

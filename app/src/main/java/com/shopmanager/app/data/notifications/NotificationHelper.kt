@@ -34,8 +34,9 @@ import com.shopmanager.app.ui.common.avatarColorFor
  */
 object NotificationHelper {
 
-    private const val CHANNEL_REALTIME = "realtime_sync_silent_channel"
+    private const val CHANNEL_REALTIME = "realtime_sync_hidden_v3"
     private const val CHANNEL_REALTIME_PREVIOUS = "realtime_sync_hidden_channel"
+    private const val CHANNEL_REALTIME_SILENT_OLD = "realtime_sync_silent_channel"
     private const val CHANNEL_REALTIME_LEGACY = "realtime_sync_channel"
     private const val CHANNEL_UPDATE_DOWNLOAD = "update_download_channel"
     const val NOTIF_ID_REALTIME = 1800
@@ -54,6 +55,7 @@ object NotificationHelper {
     private const val NOTIF_ID_NOTE_BASE = 40000
     private const val NOTIF_ID_NEW_NOTE_BASE = 50000
     private const val NOTIF_ID_NOTE_DONE_BASE = 60000
+    private const val NOTIF_ID_CHAT_BASE = 90000
     private const val NOTIF_ID_MATERIAL_BASE = 70000
     private const val NOTIF_ID_SHOPPING_SUMMARY = 1901
     private const val GROUP_SHOPPING = "com.shopmanager.app.GROUP_SHOPPING"
@@ -136,6 +138,16 @@ object NotificationHelper {
             }
             manager.createNotificationChannel(notesChannel)
 
+            val chatChannel = NotificationChannel(
+                NotificationSounds.channelId(context, NotifKind.CHAT), NotifKind.CHAT.label, NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "إشعار رسائل الدردشة الجديدة"
+                setShowBadge(true)
+                setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.CHAT), settingsRepo.customSoundUri(NotifKind.CHAT)), NotificationSounds.AUDIO_ATTRS)
+                enableVibration(false)
+            }
+            manager.createNotificationChannel(chatChannel)
+
             // قناة إشعار الخدمة الأمامية الدائم (المزامنة الفورية): أدنى أهمية —
             // بلا صوت ولا اهتزاز ولا ظهور على شاشة القفل، فقط سطر صغير مطوي في
             // الشريط. لازم يوجد إشعار للخدمة الأمامية، وهذا أقل شكل ممكن له.
@@ -145,6 +157,7 @@ object NotificationHelper {
             runCatching { manager.deleteNotificationChannel(CHANNEL_REALTIME_LEGACY) }
             if (!RealtimeSyncService.isRunning) {
                 runCatching { manager.deleteNotificationChannel(CHANNEL_REALTIME_PREVIOUS) }
+                runCatching { manager.deleteNotificationChannel(CHANNEL_REALTIME_SILENT_OLD) }
             }
             val realtimeChannel = NotificationChannel(
                 CHANNEL_REALTIME, "المزامنة الفورية", NotificationManager.IMPORTANCE_NONE
@@ -437,6 +450,48 @@ object NotificationHelper {
      * note. A rotating id derived from the note id keeps several new notes
      * (e.g. after reconnecting) each visible instead of overwriting one another.
      */
+    fun showChatMessageNotification(
+        context: Context,
+        chatId: String,
+        otherUid: String,
+        name: String,
+        text: String,
+        isVoice: Boolean,
+        timeMs: Long
+    ) {
+        if (!hasPermission(context)) return
+        val id = NOTIF_ID_CHAT_BASE + (chatId.hashCode() and 0xFFF)
+        val channelId = NotificationSounds.channelId(context, NotifKind.CHAT)
+        val body = if (isVoice) "رسالة صوتية" else text.ifBlank { "رسالة جديدة" }
+        val sender = androidx.core.app.Person.Builder()
+            .setName(name)
+            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithBitmap(buildAvatarBitmap(name)))
+            .build()
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val existing = runCatching {
+            manager?.activeNotifications?.firstOrNull { it.id == id }?.notification
+        }.getOrNull()
+        val style = existing?.let { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it) }
+            ?: NotificationCompat.MessagingStyle(androidx.core.app.Person.Builder().setName("أنا").build())
+        style.addMessage(body, timeMs, sender)
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setStyle(style)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+            .setWhen(timeMs)
+            .setContentIntent(buildContentIntent(context, id, NotificationAction.OpenChat(otherUid, name)))
+            .extend(lockScreenPrivacy(context, channelId, "رسالة جديدة"))
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (_: SecurityException) {
+        }
+    }
+
     fun showNewNoteNotification(context: Context, title: String, content: String, noteId: String) {
         if (!hasPermission(context)) return
         val id = NOTIF_ID_NEW_NOTE_BASE + (noteId.hashCode() and 0xFFF)

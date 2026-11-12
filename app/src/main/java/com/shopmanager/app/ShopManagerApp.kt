@@ -243,6 +243,10 @@ internal fun ShopManagerApp(
             is NotificationAction.DebtPaid, is NotificationAction.NewDebt -> openPager(PAGE_DEBTS)
             is NotificationAction.ShoppingList -> openPager(PAGE_MATERIALS)
             is NotificationAction.NoteReminder -> { openPager(PAGE_DASHBOARD, animate = false); navController.safeNavigate(ROUTE_NOTES) }
+            is NotificationAction.OpenChat -> {
+                navController.safeNavigate(chatConversationRoute(pendingNotificationAction.otherUid, pendingNotificationAction.name))
+                onConsumeNotificationAction()
+            }
             null -> {}
         }
     }
@@ -644,11 +648,7 @@ internal fun ShopManagerApp(
                 )
                 ConversationScreen(
                     viewModel = vm,
-                    onBack = { navController.safePopBackStack() },
-                    onSignOut = {
-                        chatSessionViewModel.signOut()
-                        navController.safePopBackStack(force = true)
-                    }
+                    onBack = { navController.safePopBackStack() }
                 )
             }
             composable(ROUTE_MATERIAL_CATALOG) {
@@ -894,5 +894,6 @@ internal fun NotificationActionDialog(action: NotificationAction, onConsume: () 
         is NotificationAction.NoteReminder -> {
             LaunchedEffect(action) { onConsume() }
         }
+        is NotificationAction.OpenChat -> Unit
     }
 }

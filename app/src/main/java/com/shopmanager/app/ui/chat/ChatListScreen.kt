@@ -23,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Delete
@@ -96,12 +95,9 @@ fun ChatRoot(
     onOpenUserPicker: () -> Unit
 ) {
     val session by viewModel.session.collectAsStateWithLifecycle()
-    val authState by viewModel.auth.collectAsStateWithLifecycle()
     val listState by viewModel.chatList.collectAsStateWithLifecycle()
     val chatsError by viewModel.chatsError.collectAsStateWithLifecycle()
 
-    var menuOpen by remember { mutableStateOf(false) }
-    var confirmSignOut by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val pinned by viewModel.pinned.collectAsStateWithLifecycle()
     val toast by viewModel.toast.collectAsStateWithLifecycle()
@@ -126,23 +122,13 @@ fun ChatRoot(
         topBar = {
             ScreenTopBar(
                 title = "الدردشة المحلية",
-                reservedIcons = if (signedIn) 2 else 1,
+                reservedIcons = 1,
                 navigation = {
                     ScreenIconButton(Icons.Default.Menu, "القائمة", onOpenDrawer)
                 },
                 actions = if (signedIn) {
                     {
                         ScreenIconButton(Icons.Default.Add, "محادثة جديدة", onOpenUserPicker)
-                        Box {
-                            ScreenIconButton(Icons.Default.MoreVert, "المزيد", { menuOpen = true })
-                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("تسجيل الخروج") },
-                                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },
-                                    onClick = { menuOpen = false; confirmSignOut = true }
-                                )
-                            }
-                        }
                     }
                 } else null
             )
@@ -150,17 +136,9 @@ fun ChatRoot(
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (session) {
-                ChatSessionState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                ChatSessionState.Loading, ChatSessionState.SignedOut -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurfaceVariant, strokeWidth = 2.dp)
                 }
-
-                ChatSessionState.SignedOut -> ChatAuthScreen(
-                    state = authState,
-                    onSignUp = viewModel::signUp,
-                    onSignIn = viewModel::signIn,
-                    onForgot = viewModel::sendReset,
-                    onClearMessages = viewModel::clearAuthMessages
-                )
 
                 is ChatSessionState.SignedIn -> Column(Modifier.fillMaxSize()) {
                     AppSearchBar(
@@ -239,18 +217,6 @@ fun ChatRoot(
                 TextButton(shape = RectangleShape, onClick = { viewModel.clearChat(chat.chatId); deleteTarget = null }) { Text("مسح") }
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { deleteTarget = null }) { Text("إلغاء") } }
-        )
-    }
-
-    if (confirmSignOut) {
-        GlassAlertDialog(
-            onDismissRequest = { confirmSignOut = false },
-            title = { Text("تسجيل الخروج") },
-            text = { Text("هل تريد تسجيل الخروج من الدردشة؟ يمكنك الدخول مجدداً في أي وقت بنفس الحساب.") },
-            confirmButton = {
-                TextButton(shape = RectangleShape, onClick = { confirmSignOut = false; viewModel.signOut() }) { Text("خروج") }
-            },
-            dismissButton = { TextButton(shape = RectangleShape, onClick = { confirmSignOut = false }) { Text("إلغاء") } }
         )
     }
 }

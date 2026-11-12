@@ -29,8 +29,10 @@ service cloud.firestore {
 
       // إنشاء الملف مرة واحدة عند التسجيل، بالتزامن مع حجز الاسم (نفس العملية الذرّية في التطبيق).
       allow create: if signedIn() && uid == me()
-        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'createdAt', 'lastSeen'])
-        && request.resource.data.keys().hasAll(['name', 'nameLower', 'createdAt', 'lastSeen'])
+        && request.resource.data.keys().hasOnly(['name', 'nameLower', 'deviceId', 'createdAt', 'lastSeen'])
+        && request.resource.data.keys().hasAll(['name', 'nameLower', 'deviceId', 'createdAt', 'lastSeen'])
+        && request.resource.data.deviceId is string
+        && getAfter(/databases/$(database)/documents/devices/$(request.resource.data.deviceId)).data.uid == uid
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 2 && request.resource.data.name.size() <= 20
         && request.resource.data.nameLower is string
@@ -41,10 +43,25 @@ service cloud.firestore {
 
       // الوحيد المسموح تعديله: آخر ظهور (النبضة)، وبقيمة وقت الخادم.
       allow update: if signedIn() && uid == me()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen'])
-        && request.resource.data.lastSeen == request.time;
+        && (
+          (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastSeen'])
+            && request.resource.data.lastSeen == request.time)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deviceId'])
+            && !('deviceId' in resource.data)
+            && getAfter(/databases/$(database)/documents/devices/$(request.resource.data.deviceId)).data.uid == uid)
+        );
 
       allow delete: if false;
+    }
+
+    // ───────────── ربط الجهاز بحساب واحد ─────────────
+    match /devices/{deviceId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.uid == me()
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
     }
 
     // ───────────── حجز اسم المستخدم (فريد) ─────────────

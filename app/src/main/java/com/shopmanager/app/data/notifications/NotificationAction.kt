@@ -52,6 +52,14 @@ sealed class NotificationAction {
         }
     }
 
+    data class OpenChat(val otherUid: String, val name: String) : NotificationAction() {
+        override fun applyExtras(intent: Intent) {
+            intent.putExtra(EXTRA_ACTION_TYPE, TYPE_OPEN_CHAT)
+            intent.putExtra(EXTRA_CHAT_UID, otherUid)
+            intent.putExtra(EXTRA_PERSON_NAME, name)
+        }
+    }
+
     companion object {
         private const val EXTRA_ACTION_TYPE = "notif_action_type"
         private const val EXTRA_PERSON_NAME = "notif_person_name"
@@ -60,11 +68,13 @@ sealed class NotificationAction {
         private const val EXTRA_MATERIALS = "notif_materials"
         private const val EXTRA_NOTE_ID = "notif_note_id"
         private const val EXTRA_NOTE_TITLE = "notif_note_title"
+        private const val EXTRA_CHAT_UID = "notif_chat_uid"
 
         private const val TYPE_DEBT_PAID = "debt_paid"
         private const val TYPE_NEW_DEBT = "new_debt"
         private const val TYPE_SHOPPING_LIST = "shopping_list"
         private const val TYPE_NOTE_REMINDER = "note_reminder"
+        private const val TYPE_OPEN_CHAT = "open_chat"
 
         /** Reads back whichever [NotificationAction] (if any) the Intent that
          * launched/resumed the Activity was carrying. Returns null for an
@@ -84,6 +94,10 @@ sealed class NotificationAction {
                 TYPE_NOTE_REMINDER -> {
                     val noteId = intent.getStringExtra(EXTRA_NOTE_ID) ?: return null
                     NoteReminder(noteId, intent.getStringExtra(EXTRA_NOTE_TITLE) ?: "")
+                }
+                TYPE_OPEN_CHAT -> {
+                    val uid = intent.getStringExtra(EXTRA_CHAT_UID) ?: return null
+                    OpenChat(uid, intent.getStringExtra(EXTRA_PERSON_NAME) ?: "")
                 }
                 else -> null
             }

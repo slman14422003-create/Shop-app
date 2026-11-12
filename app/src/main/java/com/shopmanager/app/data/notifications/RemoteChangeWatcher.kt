@@ -141,6 +141,7 @@ object RemoteChangeWatcher {
             }
         )
         registrations = list
+        ChatMessageWatcher.start(ctx)
     }
 
     @Synchronized
@@ -149,6 +150,7 @@ object RemoteChangeWatcher {
         if (owners.isNotEmpty()) return
         retryHandler.removeCallbacksAndMessages(null)
         retryPending = false
+        ChatMessageWatcher.stop()
         for (registration in registrations) {
             try {
                 registration.remove()

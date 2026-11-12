@@ -55,7 +55,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
@@ -136,6 +135,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shopmanager.app.data.chat.ChatOpenTracker
 import com.shopmanager.app.data.chat.ChatMessage
 import com.shopmanager.app.data.chat.MessageType
 import com.shopmanager.app.data.chat.ReplyRef
@@ -173,8 +173,7 @@ private class MessageMenu(val m: ChatMessage, val mine: Boolean, val anchor: Rec
 @Composable
 fun ConversationScreen(
     viewModel: ConversationViewModel,
-    onBack: () -> Unit,
-    onSignOut: () -> Unit
+    onBack: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -195,7 +194,6 @@ fun ConversationScreen(
     }
 
     var text by rememberSaveable { mutableStateOf("") }
-    var confirmSignOut by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf<MessageMenu?>(null) }
     var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
@@ -204,6 +202,23 @@ fun ConversationScreen(
     val listState = rememberLazyListState()
 
     ChatPresenceEffect { viewModel.heartbeat() }
+
+    val openLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(viewModel.chatId, openLifecycleOwner) {
+        val chatId = viewModel.chatId
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> ChatOpenTracker.openChatId = chatId
+                Lifecycle.Event.ON_PAUSE -> if (ChatOpenTracker.openChatId == chatId) ChatOpenTracker.openChatId = null
+                else -> Unit
+            }
+        }
+        openLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            openLifecycleOwner.lifecycle.removeObserver(observer)
+            if (ChatOpenTracker.openChatId == chatId) ChatOpenTracker.openChatId = null
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -283,8 +298,7 @@ fun ConversationScreen(
                 status = status,
                 highlight = typing || other?.isOnline(now) == true,
                 onBack = onBack,
-                onClear = { confirmClear = true },
-                onSignOut = { confirmSignOut = true }
+                onClear = { confirmClear = true }
             )
         },
         bottomBar = {
@@ -490,16 +504,6 @@ fun ConversationScreen(
             dismissButton = { TextButton(shape = RectangleShape, onClick = { confirmClear = false }) { Text("إلغاء") } }
         )
     }
-
-    if (confirmSignOut) {
-        GlassAlertDialog(
-            onDismissRequest = { confirmSignOut = false },
-            title = { Text("تسجيل الخروج") },
-            text = { Text("هل تريد تسجيل الخروج من الدردشة؟ يمكنك الدخول مجدداً بنفس الحساب.") },
-            confirmButton = { TextButton(shape = RectangleShape, onClick = { confirmSignOut = false; onSignOut() }) { Text("خروج") } },
-            dismissButton = { TextButton(shape = RectangleShape, onClick = { confirmSignOut = false }) { Text("إلغاء") } }
-        )
-    }
 }
 
 @Composable
@@ -508,8 +512,7 @@ private fun ConversationHeader(
     status: String,
     highlight: Boolean,
     onBack: () -> Unit,
-    onClear: () -> Unit,
-    onSignOut: () -> Unit
+    onClear: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     var menu by remember { mutableStateOf(false) }
@@ -549,11 +552,6 @@ private fun ConversationHeader(
                     text = { Text("مسح المحادثة") },
                     leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
                     onClick = { menu = false; onClear() }
-                )
-                DropdownMenuItem(
-                    text = { Text("تسجيل الخروج") },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, null) },
-                    onClick = { menu = false; onSignOut() }
                 )
             }
         }
