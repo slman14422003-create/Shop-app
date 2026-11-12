@@ -479,6 +479,35 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 f.add(CardField("النص", c.text ?: "")); f.add(CardField("الموعد", c.date?.label ?: ""))
             }
             Intent.DELETE_LAST -> { title = "التراجع عن آخر عملية"; f.add(CardField("العملية", undoStack.lastOrNull()?.label ?: "—")) }
+            Intent.ADD_PERSON -> {
+                title = "إضافة عميل جديد"
+                f.add(CardField("الاسم", c.person?.name ?: ""))
+                c.phone?.let { f.add(CardField("الهاتف", it)) }
+            }
+            Intent.RENAME_PERSON -> {
+                title = "تغيير اسم عميل"
+                f.add(CardField("الاسم الحالي", c.person?.name ?: ""))
+                f.add(CardField("الاسم الجديد", c.newName ?: ""))
+            }
+            Intent.DELETE_PERSON -> {
+                title = "حذف عميل"
+                f.add(CardField("الاسم", c.person?.name ?: ""))
+                currentBalance(c)?.let { f.add(CardField("الرصيد الحالي", "${fmt(it)} $cur")) }
+            }
+            Intent.SET_PHONE -> {
+                title = "حفظ رقم هاتف"
+                f.add(CardField("العميل", c.person?.name ?: ""))
+                f.add(CardField("الرقم", c.phone ?: ""))
+            }
+            Intent.DELETE_MATERIAL -> {
+                title = "حذف مادة من القائمة الثابتة"
+                f.add(CardField("المادة", c.materials.firstOrNull()?.name ?: ""))
+            }
+            Intent.RENAME_MATERIAL -> {
+                title = "تغيير اسم مادة"
+                f.add(CardField("الاسم الحالي", c.materials.firstOrNull()?.name ?: ""))
+                f.add(CardField("الاسم الجديد", c.newName ?: ""))
+            }
             else -> title = c.understood
         }
         return AssistantCard.Confirm(title, f, c.confirmReasons, c, c.risky)
@@ -513,6 +542,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             Intent.ADD_SHORTAGE, Intent.REMOVE_SHORTAGE -> listOf(AssistantChip("شو النواقص"), AssistantChip("أضف مادة أخرى", "ضيف  للنواقص", false))
             Intent.LIST_SHORTAGES -> listOf(AssistantChip("ضيف للنواقص", "ضيف  للنواقص", false), AssistantChip("إيجاد المواد الناقصة"))
             Intent.SET_PRICE, Intent.QUERY_PRICE -> listOf(AssistantChip("شو النواقص"), AssistantChip("ملخص اليوم"))
+            Intent.ADD_PERSON -> listOfNotNull(p?.let { AssistantChip("سجل دين لـ $it", "سجل على $it ", false) }, AssistantChip("مجموع الديون"))
+            Intent.RENAME_PERSON, Intent.SET_PHONE, Intent.DELETE_PERSON -> listOf(AssistantChip("مجموع الديون"), AssistantChip("ملخص اليوم"))
+            Intent.RENAME_MATERIAL, Intent.DELETE_MATERIAL -> listOf(AssistantChip("شو النواقص"), AssistantChip("ملخص اليوم"))
             Intent.QUERY_TOTAL_DEBTS, Intent.QUERY_TOP_DEBTORS, Intent.QUERY_STALE_DEBTORS -> listOf(AssistantChip("أكثر 5 مدينين"), AssistantChip("من لم يسدد منذ مدة"))
             else -> listOf(AssistantChip("ملخص اليوم"))
         }

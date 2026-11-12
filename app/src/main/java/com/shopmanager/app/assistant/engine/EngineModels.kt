@@ -10,7 +10,8 @@ enum class Intent {
     ADD_SHORTAGE, REMOVE_SHORTAGE, LIST_SHORTAGES,
     QUERY_PRICE, SET_PRICE, ADD_MATERIAL, SEARCH_MATERIAL, RUN_MISSING_FINDER,
     SUMMARY, OPEN, ADD_NOTE, REMINDER, CALCULATE,
-    UNDO, DELETE_LAST, REPEAT, HELP, GREETING, THANKS, CONFIRM, CANCEL, UNKNOWN
+    UNDO, DELETE_LAST, REPEAT, HELP, GREETING, THANKS, CONFIRM, CANCEL, UNKNOWN,
+    ADD_PERSON, RENAME_PERSON, DELETE_PERSON, SET_PHONE, DELETE_MATERIAL, RENAME_MATERIAL
 }
 
 enum class Slot { PERSON, AMOUNT, MATERIAL, TEXT, DATE }
@@ -122,7 +123,10 @@ data class Command(
     val prompt: String? = null,
     val ambiguity: Ambiguity? = null,
     val aliasToLearn: AliasLearn? = null,
-    val important: Boolean = false
+    val important: Boolean = false,
+    /** الاسم الجديد عند تغيير اسم عميل أو مادة. */
+    val newName: String? = null,
+    val phone: String? = null
 ) {
     /** مكتمل ولا غموض فيه، جاهز لبطاقة التأكيد/التنفيذ. */
     val isReady: Boolean get() = missing.isEmpty() && ambiguity == null && intent != Intent.UNKNOWN

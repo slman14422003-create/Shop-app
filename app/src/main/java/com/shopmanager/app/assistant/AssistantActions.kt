@@ -74,6 +74,12 @@ class AssistantActions(private val app: Application) {
         Intent.SET_PRICE -> setPrice(cmd, data)
         Intent.ADD_MATERIAL -> addMaterial(cmd, data)
         Intent.ADD_NOTE, Intent.REMINDER -> addNote(cmd)
+        Intent.ADD_PERSON -> addPerson(cmd, data)
+        Intent.RENAME_PERSON -> renamePerson(cmd, data)
+        Intent.DELETE_PERSON -> deletePerson(cmd, data)
+        Intent.SET_PHONE -> setPhone(cmd, data)
+        Intent.DELETE_MATERIAL -> deleteMaterial(cmd, data)
+        Intent.RENAME_MATERIAL -> renameMaterial(cmd, data)
         else -> Outcome("غير مدعوم", "هذا الأمر لا يحتاج تنفيذاً", success = false)
     }
 
@@ -261,6 +267,114 @@ class AssistantActions(private val app: Application) {
         val priceText = cmd.amount?.let { " بسعر ${money(it, data.currency)}" } ?: ""
         return Outcome("تمت إضافة المادة", m.name + priceText, undo = {
             catalogProvider().firstOrNull { same(it.name, m.name) }?.let { mats.deleteCatalogItem(it.id) }
+            after()
+        })
+    }
+
+    // ------------------------------------------------------------------ إدارة العملاء
+
+    private suspend fun addPerson(cmd: Command, data: AssistantData): Outcome {
+        val name = cmd.person?.name?.trim().orEmpty()
+        if (name.isEmpty()) error("لا يوجد اسم")
+        if (data.persons.any { same(it.name, name) }) {
+            return Outcome("موجود مسبقاً", "$name موجود بين العملاء", success = false)
+        }
+        val phone = cmd.phone.orEmpty()
+        debts.addPerson(name, 0.0, dateStr(null), "", phone)
+        ChangeHistory.log(app, "إضافة عميل جديد \"$name\" (المساعد)")
+        DebtActivityLog.log(app, DebtActivityLog.Kind.NEW_CUSTOMER, name, 0.0)
+        after()
+        return Outcome("تمت إضافة العميل", name + (if (phone.isNotEmpty()) " — $phone" else ""), undo = {
+            debts.findPersonIdByName(name)?.let { debts.deletePersonWithDebts(it) }
+            DebtActivityLog.log(app, DebtActivityLog.Kind.UNDO, name, 0.0)
+            after()
+        })
+    }
+
+    private suspend fun renamePerson(cmd: Command, data: AssistantData): Outcome {
+        val ref = cmd.person ?: error("لا يوجد عميل")
+        val newName = cmd.newName?.trim().orEmpty()
+        if (newName.isEmpty()) error("لا يوجد اسم جديد")
+        val person = data.persons.firstOrNull { it.id == ref.id }
+            ?: return Outcome("ما لقيت العميل", "\"${ref.name}\" غير موجود", success = false)
+        if (same(person.name, newName)) return Outcome("نفس الاسم", "الاسم الجديد مثل القديم", success = false)
+        if (data.persons.any { it.id != person.id && same(it.name, newName) }) {
+            return Outcome("الاسم مستخدم", "\"$newName\" لعميل آخر", success = false)
+        }
+        debts.updatePerson(person.id, newName, person.amount, person.date)
+        ChangeHistory.log(app, "تغيير اسم العميل \"${person.name}\" إلى \"$newName\" (المساعد)")
+        DebtActivityLog.log(app, DebtActivityLog.Kind.EDITED, newName, person.amount)
+        after()
+        return Outcome("تم تغيير الاسم", "${person.name} ← $newName", undo = {
+            debts.updatePerson(person.id, person.name, person.amount, person.date)
+            DebtActivityLog.log(app, DebtActivityLog.Kind.UNDO, person.name, person.amount)
+            after()
+        })
+    }
+
+    private suspend fun deletePerson(cmd: Command, data: AssistantData): Outcome {
+        val ref = cmd.person ?: error("لا يوجد عميل")
+        val person = data.persons.firstOrNull { it.id == ref.id }
+            ?: return Outcome("ما لقيت العميل", "\"${ref.name}\" غير موجود", success = false)
+        val personDebts = data.debts.filter { it.personId == person.id }
+        debts.deletePersonWithDebts(person.id)
+        ChangeHistory.log(app, "حذف العميل \"${person.name}\" مع ديونه (المساعد)")
+        DebtActivityLog.log(app, DebtActivityLog.Kind.DELETED_CUSTOMER, person.name, person.amount)
+        after()
+        return Outcome("تم حذف العميل", "${person.name} (${personDebts.size} عملية)", undo = {
+            debts.restorePerson(person, personDebts)
+            DebtActivityLog.log(app, DebtActivityLog.Kind.UNDO, person.name, person.amount)
+            after()
+        })
+    }
+
+    private suspend fun setPhone(cmd: Command, data: AssistantData): Outcome {
+        val ref = cmd.person ?: error("لا يوجد عميل")
+        val phone = cmd.phone?.trim().orEmpty()
+        if (phone.isEmpty()) error("لا يوجد رقم")
+        val person = data.persons.firstOrNull { it.id == ref.id }
+            ?: return Outcome("ما لقيت العميل", "\"${ref.name}\" غير موجود", success = false)
+        debts.updatePerson(person.id, person.name, person.amount, person.date, phone)
+        ChangeHistory.log(app, "حفظ رقم هاتف العميل \"${person.name}\" (المساعد)")
+        DebtActivityLog.log(app, DebtActivityLog.Kind.EDITED, person.name, person.amount)
+        after()
+        return Outcome("تم حفظ الرقم", "${person.name}: $phone", undo = {
+            debts.updatePerson(person.id, person.name, person.amount, person.date, person.phone)
+            DebtActivityLog.log(app, DebtActivityLog.Kind.UNDO, person.name, person.amount)
+            after()
+        })
+    }
+
+    // ------------------------------------------------------------------ القائمة الثابتة
+
+    private suspend fun deleteMaterial(cmd: Command, data: AssistantData): Outcome {
+        val m = cmd.materials.firstOrNull() ?: error("لا توجد مادة")
+        val item = data.catalog.firstOrNull { same(it.name, m.name) }
+            ?: return Outcome("ما لقيت المادة", "${m.name} مو بالقائمة الثابتة", success = false)
+        mats.deleteCatalogItem(item.id)
+        ChangeHistory.log(app, "حذف مادة من القائمة الثابتة: ${item.name} (المساعد)")
+        after()
+        return Outcome("تم حذف المادة", item.name, undo = {
+            mats.addCatalogItem(item.name, item.group)
+            after()
+        })
+    }
+
+    private suspend fun renameMaterial(cmd: Command, data: AssistantData): Outcome {
+        val m = cmd.materials.firstOrNull() ?: error("لا توجد مادة")
+        val newName = cmd.newName?.trim().orEmpty()
+        if (newName.isEmpty()) error("لا يوجد اسم جديد")
+        val item = data.catalog.firstOrNull { same(it.name, m.name) }
+            ?: return Outcome("ما لقيت المادة", "${m.name} مو بالقائمة الثابتة", success = false)
+        if (same(item.name, newName)) return Outcome("نفس الاسم", "الاسم الجديد مثل القديم", success = false)
+        if (data.catalog.any { it.id != item.id && same(it.name, newName) }) {
+            return Outcome("موجودة مسبقاً", "\"$newName\" موجودة بالقائمة", success = false)
+        }
+        mats.updateCatalogItem(item.id, newName, item.group)
+        ChangeHistory.log(app, "تغيير اسم المادة \"${item.name}\" إلى \"$newName\" (المساعد)")
+        after()
+        return Outcome("تم تغيير اسم المادة", "${item.name} ← $newName", undo = {
+            mats.updateCatalogItem(item.id, item.name, item.group)
             after()
         })
     }

@@ -422,6 +422,10 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         if (hasW(Lexicon.MATERIAL_WORDS) && recordV) add(Intent.ADD_MATERIAL, 2.5)
         if (importantW && hasW(Lexicon.MATERIAL_WORDS) && !hasW(Lexicon.NEW_WORDS)) add(Intent.ADD_MATERIAL, -3.0)
         if (hasW(Lexicon.NEW_WORDS) && recordV && materialOrFree) add(Intent.ADD_MATERIAL, 2.0)
+        // "ضيف مادة X" أو "ضيف X للقائمة الثابتة": إضافة للقائمة الثابتة لا للنواقص.
+        val catalogCue = hasW(setOf("ثابته", "كتالوج"))
+        if (catalogCue && (recordV || adderV)) { add(Intent.ADD_MATERIAL, 5.0); add(Intent.ADD_SHORTAGE, -5.0) }
+        if (hasW(Lexicon.MATERIAL_WORDS) && (recordV || adderV) && !shortageW && !importantW) add(Intent.ADD_MATERIAL, 3.0)
 
         if (hasW(Lexicon.SEARCH_VERBS)) {
             add(Intent.SEARCH_MATERIAL, 4.0)
@@ -472,6 +476,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         base: Command?
     ): Command {
         val rawText = toks.joinToString(" ") { it.raw }
+        ManagementParser.parse(toks, rawText, snapshot, ctx, force)?.let { return validate(it, snapshot) }
         val an = analyze(toks, snapshot, idx)
         val scored = scoreIntents(an, ctx, hint)
         val best = scored.firstOrNull()
@@ -497,6 +502,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         }
         if (intent == Intent.REPEAT) {
             val last = ctx.lastCommand ?: return Command(Intent.REPEAT, score, rawText, missing = emptyList(), prompt = "ما في شي أكرره بعد.")
+            if (last.intent in ManagementParser.INTENTS) return validate(last.copy(rawText = rawText, score = score), snapshot)
             intent = last.intent
             return build(intent, score, rawText, an, snapshot, ctx, last)
         }
@@ -517,6 +523,12 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         Intent.ADD_MATERIAL -> "إضافة مادة جديدة"
         Intent.SEARCH_MATERIAL -> "البحث عن مادة"
         Intent.OPEN -> "فتح شاشة"
+        Intent.ADD_PERSON -> "إضافة عميل"
+        Intent.RENAME_PERSON -> "تغيير اسم عميل"
+        Intent.DELETE_PERSON -> "حذف عميل"
+        Intent.SET_PHONE -> "حفظ رقم هاتف"
+        Intent.DELETE_MATERIAL -> "حذف مادة"
+        Intent.RENAME_MATERIAL -> "تغيير اسم مادة"
         else -> i.name
     }
 
@@ -770,10 +782,18 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         val intent = cmd.intent
 
         val person = cmd.person
-        val needsPerson = intent in setOf(Intent.ADD_DEBT, Intent.PAY_DEBT, Intent.REDUCE_DEBT, Intent.DELETE_DEBT, Intent.QUERY_BALANCE)
+        val needsPerson = intent in setOf(
+            Intent.ADD_DEBT, Intent.PAY_DEBT, Intent.REDUCE_DEBT, Intent.DELETE_DEBT, Intent.QUERY_BALANCE,
+            Intent.ADD_PERSON, Intent.RENAME_PERSON, Intent.DELETE_PERSON, Intent.SET_PHONE
+        )
         if (needsPerson) {
             if (person == null) {
-                missing.add(Slot.PERSON); prompt = if (intent == Intent.ADD_DEBT) "على مين بدك أسجّل الدين؟" else "عن أي عميل تقصد؟"
+                missing.add(Slot.PERSON)
+                prompt = when (intent) {
+                    Intent.ADD_DEBT -> "على مين بدك أسجّل الدين؟"
+                    Intent.ADD_PERSON -> "شو اسم العميل الجديد؟"
+                    else -> "عن أي عميل تقصد؟"
+                }
             } else if (person.level == MatchLevel.NONE) {
                 missing.add(Slot.PERSON); prompt = "ما لقيت \"${person.rawSpan}\" بين العملاء. اكتب الاسم مرة ثانية."
             } else if (person.candidates.size >= 2 && person.candidates[1].name != person.candidates[0].name &&
@@ -791,9 +811,16 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
 
         val needsMaterial = intent in setOf(
             Intent.ADD_SHORTAGE, Intent.REMOVE_SHORTAGE, Intent.QUERY_PRICE, Intent.SET_PRICE,
-            Intent.ADD_MATERIAL, Intent.SEARCH_MATERIAL
+            Intent.ADD_MATERIAL, Intent.SEARCH_MATERIAL, Intent.DELETE_MATERIAL, Intent.RENAME_MATERIAL
         )
         if (needsMaterial) {
+            if ((intent == Intent.DELETE_MATERIAL || intent == Intent.RENAME_MATERIAL) && cmd.materials.isNotEmpty()) {
+                val first = cmd.materials[0]
+                if (first.level == MatchLevel.NEW || first.level == MatchLevel.NONE) {
+                    missing.add(Slot.MATERIAL)
+                    if (prompt == null) prompt = "ما لقيت \"${first.rawSpan}\" بالقائمة. اكتب اسم المادة مرة ثانية."
+                }
+            }
             if (cmd.materials.isEmpty()) {
                 missing.add(Slot.MATERIAL); if (prompt == null) prompt = "أي مادة؟"
             } else if (ambiguity == null) {
@@ -819,6 +846,12 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         if (needsAmount && (cmd.amount == null || cmd.amount!! <= 0.0)) {
             missing.add(Slot.AMOUNT); if (prompt == null) prompt = if (intent == Intent.SET_PRICE) "كم السعر الجديد؟" else "كم المبلغ؟"
         }
+        if ((intent == Intent.RENAME_PERSON || intent == Intent.RENAME_MATERIAL) && cmd.newName.isNullOrBlank()) {
+            missing.add(Slot.TEXT); if (prompt == null) prompt = "شو الاسم الجديد؟"
+        }
+        if (intent == Intent.SET_PHONE && cmd.phone.isNullOrBlank()) {
+            missing.add(Slot.TEXT); if (prompt == null) prompt = "شو رقم الهاتف؟"
+        }
         if (intent == Intent.ADD_NOTE && cmd.text.isNullOrBlank()) { missing.add(Slot.TEXT); if (prompt == null) prompt = "شو نص الملاحظة؟" }
         if (intent == Intent.REMINDER) {
             if (cmd.text.isNullOrBlank()) { missing.add(Slot.TEXT); if (prompt == null) prompt = "شو بدك أذكّرك فيه؟" }
@@ -834,6 +867,11 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         when (intent) {
             Intent.DELETE_DEBT, Intent.DELETE_LAST, Intent.REMOVE_SHORTAGE -> { risky = true; reasons.add("عملية حذف") }
             Intent.SET_PRICE -> { risky = true; reasons.add("تعديل سعر") }
+            Intent.DELETE_PERSON -> {
+                risky = true; reasons.add("حذف عميل مع كل ديونه")
+                if (known != null && known.balance > 0.0001) reasons.add("عليه دين ${Calculator.format(known.balance)} $cur سيُحذف معه")
+            }
+            Intent.DELETE_MATERIAL -> { risky = true; reasons.add("حذف مادة من القائمة الثابتة") }
             else -> {}
         }
         if (person?.level == MatchLevel.NEW) reasons.add("عميل جديد سيُنشأ")
@@ -901,6 +939,12 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             Intent.THANKS -> "شكر"
             Intent.CONFIRM -> "تأكيد"
             Intent.CANCEL -> "إلغاء"
+            Intent.ADD_PERSON -> "إضافة عميل جديد: ${name.ifBlank { "..." }}" + (c.phone?.let { " ($it)" } ?: "")
+            Intent.RENAME_PERSON -> "تغيير اسم العميل ${name.ifBlank { "..." }} إلى ${c.newName ?: "..."}"
+            Intent.DELETE_PERSON -> "حذف العميل ${name.ifBlank { "..." }} مع كل ديونه"
+            Intent.SET_PHONE -> "حفظ رقم ${name.ifBlank { "..." }}: ${c.phone ?: "..."}"
+            Intent.DELETE_MATERIAL -> "حذف مادة من القائمة الثابتة: ${mats.ifBlank { "..." }}"
+            Intent.RENAME_MATERIAL -> "تغيير اسم المادة ${mats.ifBlank { "..." }} إلى ${c.newName ?: "..."}"
             Intent.UNKNOWN -> ""
         }
     }
@@ -945,7 +989,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                     if (n != null) { cmd = cmd.copy(amount = n.value); filled = true }
                 }
                 Slot.PERSON -> {
-                    val p = resolvePerson(an, ctx, pend.intent == Intent.ADD_DEBT, null)
+                    val p = resolvePerson(an, ctx, pend.intent == Intent.ADD_DEBT || pend.intent == Intent.ADD_PERSON, null)
                     if (p != null) { cmd = cmd.copy(person = p); filled = true }
                 }
                 Slot.MATERIAL -> {
@@ -954,7 +998,10 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                 }
                 Slot.TEXT -> {
                     val t = toks.joinToString(" ") { it.raw }.trim()
-                    if (t.isNotEmpty()) { cmd = cmd.copy(text = t); filled = true }
+                    if (pend.intent in ManagementParser.INTENTS) {
+                        val upd = ManagementParser.applyText(cmd, t)
+                        if (upd != null) { cmd = upd; filled = true }
+                    } else if (t.isNotEmpty()) { cmd = cmd.copy(text = t); filled = true }
                 }
                 Slot.DATE -> {
                     val d = an.dateFuture
