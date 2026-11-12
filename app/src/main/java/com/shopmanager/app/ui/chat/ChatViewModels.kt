@@ -12,7 +12,10 @@ import com.shopmanager.app.data.chat.ChatFirebase
 import com.shopmanager.app.data.chat.ChatMessage
 import com.shopmanager.app.data.chat.ChatMeta
 import com.shopmanager.app.data.chat.ChatRepository
+import com.shopmanager.app.data.chat.ChatLocalStore
 import com.shopmanager.app.data.chat.ChatSummary
+import com.shopmanager.app.data.chat.MessageType
+import com.shopmanager.app.data.chat.ReplyRef
 import com.shopmanager.app.data.chat.ChatUser
 import com.shopmanager.app.data.chat.MAX_VOICE_MS
 import com.shopmanager.app.data.chat.VoicePlayer
@@ -64,6 +67,34 @@ class ChatSessionViewModel(application: Application) : AndroidViewModel(applicat
 
     private val authRepo = ChatAuthRepository(application)
     private val repo = ChatRepository(application)
+
+    private val _pinned = MutableStateFlow(
+        authRepo.currentUid()?.let { ChatLocalStore.pinned(application, it) } ?: emptySet()
+    )
+    val pinned: StateFlow<Set<String>> = _pinned
+
+    private val _toast = MutableStateFlow<String?>(null)
+    val toast: StateFlow<String?> = _toast
+    fun clearToast() { _toast.value = null }
+
+    fun togglePin(chatId: String) {
+        val uid = authRepo.currentUid() ?: return
+        _pinned.value = ChatLocalStore.togglePin(getApplication<Application>(), uid, chatId)
+    }
+
+    fun clearChat(chatId: String) {
+        val uid = authRepo.currentUid() ?: return
+        viewModelScope.launch {
+            try {
+                repo.clearChat(chatId, uid)
+                _toast.value = "تم مسح المحادثة"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _toast.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر مسح المحادثة" else it }
+            }
+        }
+    }
 
     val session: StateFlow<ChatSessionState> = authRepo.accountFlow()
         .map<ChatAccount?, ChatSessionState> { if (it == null) ChatSessionState.SignedOut else ChatSessionState.SignedIn(it) }
@@ -182,7 +213,10 @@ data class RecordingUi(
     val active: Boolean = false,
     val elapsedMs: Long = 0L,
     val level: Int = 0,
-    val willCancel: Boolean = false
+    val willCancel: Boolean = false,
+    val locked: Boolean = false,
+    val paused: Boolean = false,
+    val levels: List<Int> = emptyList()
 )
 
 private const val PAGE_SIZE = 50L
@@ -208,7 +242,7 @@ class ConversationViewModel(
     /** رسالة قصيرة للمستخدم (Snackbar) من الواجهة نفسها: صلاحية، نسخ... */
     fun showHint(text: String) { _message.value = text }
 
-    val messages: StateFlow<MessagesState> = limit
+    private val rawMessages: StateFlow<MessagesState> = limit
         .flatMapLatest { l ->
             repo.listenMessages(chatId, l)
                 .retryOnError { _message.value = "تعذّر تحديث الرسائل، سنعيد المحاولة" }
@@ -220,6 +254,23 @@ class ConversationViewModel(
     private val meta: StateFlow<ChatMeta?> = repo.listenMeta(chatId, me, otherUid)
         .map<ChatMeta, ChatMeta?> { it }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val hidden = MutableStateFlow(ChatLocalStore.hiddenIds(application, chatId))
+
+    val messages: StateFlow<MessagesState> = combine(rawMessages, meta, hidden) { st, mt, hid ->
+        if (mt == null) {
+            MessagesState(emptyList(), true, false)
+        } else {
+            val cleared = mt.myClearedMs
+            st.copy(messages = st.messages.filter { it.id !in hid && (cleared <= 0L || it.createdAtMs > cleared) })
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MessagesState())
+
+    private val _replyTo = MutableStateFlow<ChatMessage?>(null)
+    val replyTo: StateFlow<ChatMessage?> = _replyTo
+
+    private val _editing = MutableStateFlow<ChatMessage?>(null)
+    val editing: StateFlow<ChatMessage?> = _editing
 
     val otherReadMs: StateFlow<Long> = meta.map { it?.otherReadMs ?: 0L }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0L)
@@ -276,14 +327,14 @@ class ConversationViewModel(
         // تنظيف الرسائل الصوتية المنتهية (أقدم من 30 يوماً) عند فتح المحادثة؛ بدل TTL.
         viewModelScope.launch {
             val tried = HashSet<String>()
-            messages.collect { st ->
+            rawMessages.collect { st ->
                 val expired = st.messages.filter { it.isExpiredVoice && !it.pending && tried.add(it.id) }
                 if (expired.isNotEmpty()) repo.deleteExpiredVoice(chatId, expired)
             }
         }
         // وضع علامة "مقروء" عندما تصل رسالة واردة والشاشة ظاهرة.
         viewModelScope.launch {
-            combine(messages, meta, active) { m, mt, a -> Triple(m.messages.lastOrNull { it.fromUid != me }, mt, a) }
+            combine(rawMessages, meta, active) { m, mt, a -> Triple(m.messages.lastOrNull { it.fromUid != me }, mt, a) }
                 .collect { (lastIn, mt, a) ->
                     if (a && mt != null && lastIn != null && !lastIn.pending &&
                         lastIn.createdAtMs > mt.myReadMs && lastIn.id != lastMarkedId
@@ -310,13 +361,88 @@ class ConversationViewModel(
         return n ?: "مستخدم"
     }
 
+    private fun ChatMessage.toReplyRef() = ReplyRef(id, fromUid, type, if (type == MessageType.VOICE) "" else text)
+
+    fun startReply(m: ChatMessage) { _editing.value = null; _replyTo.value = m }
+    fun cancelReply() { _replyTo.value = null }
+    fun startEdit(m: ChatMessage) { _replyTo.value = null; _editing.value = m }
+    fun cancelEdit() { _editing.value = null }
+
+    fun deleteForMe(m: ChatMessage) {
+        hidden.value = ChatLocalStore.hide(getApplication<Application>(), chatId, m.id)
+        if (_replyTo.value?.id == m.id) _replyTo.value = null
+    }
+
+    fun deleteForEveryone(m: ChatMessage) {
+        if (m.fromUid != me) return
+        if (_replyTo.value?.id == m.id) _replyTo.value = null
+        val list = rawMessages.value.messages
+        val newLast = if (list.lastOrNull()?.id == m.id) list.getOrNull(list.lastIndex - 1) else null
+        val isLast = list.lastOrNull()?.id == m.id
+        viewModelScope.launch {
+            try {
+                repo.deleteMessage(chatId, m.id, isLast, newLast, me)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر حذف الرسالة" else it }
+            }
+        }
+    }
+
+    fun react(m: ChatMessage, emoji: String) {
+        val next = if (m.reactions[me] == emoji) null else emoji
+        viewModelScope.launch {
+            try {
+                repo.setReaction(chatId, m.id, me, next)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر إضافة التفاعل" else it }
+            }
+        }
+    }
+
+    fun clearChat() {
+        viewModelScope.launch {
+            try {
+                repo.clearChat(chatId, me)
+                _replyTo.value = null
+                _editing.value = null
+                _message.value = "تم مسح المحادثة"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر مسح المحادثة" else it }
+            }
+        }
+    }
+
     fun sendText(text: String) {
         val t = text.trim()
         if (t.isEmpty()) return
         typingOn = false
+        val editTarget = _editing.value
+        if (editTarget != null) {
+            _editing.value = null
+            if (t == editTarget.text) return
+            val isLast = rawMessages.value.messages.lastOrNull()?.id == editTarget.id
+            viewModelScope.launch {
+                try {
+                    repo.editMessage(chatId, editTarget.id, t, isLast)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    _message.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر تعديل الرسالة" else it }
+                }
+            }
+            return
+        }
+        val reply = _replyTo.value?.toReplyRef()
+        _replyTo.value = null
         viewModelScope.launch {
             try {
-                repo.sendText(me, myName(), otherUid, otherName, t)
+                repo.sendText(me, myName(), otherUid, otherName, t, reply)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -352,9 +478,16 @@ class ConversationViewModel(
         recJob = viewModelScope.launch {
             while (isActive) {
                 delay(100)
-                val level = recorder.sampleLevel()
+                val paused = recorder.isPaused
+                val level = if (paused) 0 else recorder.sampleLevel()
                 val elapsed = recorder.elapsedMs()
-                _recording.update { it.copy(elapsedMs = elapsed, level = level) }
+                _recording.update {
+                    it.copy(
+                        elapsedMs = elapsed,
+                        level = level,
+                        levels = if (paused) it.levels else (it.levels + level).takeLast(48)
+                    )
+                }
                 if (elapsed >= MAX_VOICE_MS) {
                     finishRecording(send = true)
                     break
@@ -364,7 +497,16 @@ class ConversationViewModel(
         return true
     }
 
-    fun setWillCancel(v: Boolean) { _recording.update { if (it.willCancel == v) it else it.copy(willCancel = v) } }
+    fun setWillCancel(v: Boolean) { _recording.update { if (it.willCancel == v || it.locked) it else it.copy(willCancel = v) } }
+
+    fun lockRecording() { _recording.update { if (!it.active) it else it.copy(locked = true, willCancel = false) } }
+
+    fun togglePauseRecording() {
+        val cur = _recording.value
+        if (!cur.active || !cur.locked) return
+        val ok = if (cur.paused) recorder.resume() else recorder.pause()
+        if (ok) _recording.update { it.copy(paused = !it.paused) }
+    }
 
     fun finishRecording(send: Boolean) {
         if (!_recording.value.active) return
@@ -375,14 +517,16 @@ class ConversationViewModel(
             recorder.cancel()
             return
         }
+        val reply = _replyTo.value?.toReplyRef()
         viewModelScope.launch(Dispatchers.Default) {
             val voice = recorder.stop()
             if (voice == null) {
                 _message.value = "التسجيل قصير جداً أو كبير الحجم، اضغط مطولاً وتحدّث ثم أفلت"
                 return@launch
             }
+            _replyTo.value = null
             try {
-                repo.sendVoice(me, myName(), otherUid, otherName, voice.audioB64, voice.durationMs, voice.wave)
+                repo.sendVoice(me, myName(), otherUid, otherName, voice.audioB64, voice.durationMs, voice.wave, reply)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

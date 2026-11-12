@@ -31,8 +31,11 @@ data class ChatSummary(
     val lastType: MessageType,
     val lastFromMe: Boolean,
     val lastTimeMs: Long,
-    val unread: Int
+    val unread: Int,
+    val clearedMs: Long = 0L
 )
+
+data class ReplyRef(val id: String, val fromUid: String, val type: MessageType, val text: String)
 
 data class ChatMessage(
     val id: String,
@@ -45,7 +48,10 @@ data class ChatMessage(
     val createdAtMs: Long,
     val expireAtMs: Long,
     /** true = الكتابة لم تصل للخادم بعد (ساعة صغيرة). */
-    val pending: Boolean
+    val pending: Boolean,
+    val reply: ReplyRef? = null,
+    val edited: Boolean = false,
+    val reactions: Map<String, String> = emptyMap()
 ) {
     val isExpiredVoice: Boolean
         get() = type == MessageType.VOICE && expireAtMs > 0 && System.currentTimeMillis() > expireAtMs
@@ -57,7 +63,8 @@ data class ChatMeta(
     val otherReadMs: Long = 0L,
     /** قيمة مؤشر "يكتب الآن" للطرف الآخر (تتغير مع كل نبضة كتابة)، 0 = لا يكتب. */
     val otherTypingStamp: Long = 0L,
-    val myReadMs: Long = 0L
+    val myReadMs: Long = 0L,
+    val myClearedMs: Long = 0L
 )
 
 fun chatIdFor(a: String, b: String): String = if (a < b) "${a}_$b" else "${b}_$a"

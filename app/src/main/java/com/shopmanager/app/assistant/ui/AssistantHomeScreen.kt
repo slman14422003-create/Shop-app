@@ -13,6 +13,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -54,7 +57,6 @@ import com.shopmanager.app.ui.common.AppSheet
 import com.shopmanager.app.ui.common.AppRowSurface
 import com.shopmanager.app.ui.common.AppScreenPadding
 import com.shopmanager.app.ui.common.Formatters
-import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.ScreenIconButton
 import com.shopmanager.app.ui.common.ScreenTopBar
 import com.shopmanager.app.ui.materials.MaterialsViewModel
@@ -157,7 +159,7 @@ fun AssistantHomeScreen(
                 }
             }
         }
-        InputBar(input, { input = it }, { send(input) }, Modifier.padding(bottom = LocalFloatingBottomNavHeight.current))
+        InputBar(input, { input = it }, { send(input) }, Modifier.windowInsetsPadding(WindowInsets.navigationBars))
     }
 
     if (showStats) {

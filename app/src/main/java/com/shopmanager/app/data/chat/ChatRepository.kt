@@ -76,6 +76,7 @@ class ChatRepository(private val context: Context) {
                     return@addSnapshotListener
                 }
                 val list = snap?.documents?.mapNotNull { it.toSummary(me) }
+                    ?.filter { it.clearedMs <= 0L || it.lastTimeMs > it.clearedMs }
                     // الترتيب هنا (لا في الاستعلام) حتى لا نحتاج فهرساً مركّباً في Firestore.
                     ?.sortedByDescending { it.lastTimeMs } ?: emptyList()
                 trySend(list)
@@ -94,7 +95,15 @@ class ChatRepository(private val context: Context) {
                 val reads = snap.get("reads") as? Map<*, *>
                 val typing = snap.get("typing") as? Map<*, *>
                 fun ms(v: Any?): Long = (v as? Timestamp)?.let { it.seconds * 1000 + it.nanoseconds / 1_000_000 } ?: 0L
-                trySend(ChatMeta(otherReadMs = ms(reads?.get(other)), otherTypingStamp = ms(typing?.get(other)), myReadMs = ms(reads?.get(me))))
+                val clears = snap.get("clears", ServerTimestampBehavior.ESTIMATE) as? Map<*, *>
+                trySend(
+                    ChatMeta(
+                        otherReadMs = ms(reads?.get(other)),
+                        otherTypingStamp = ms(typing?.get(other)),
+                        myReadMs = ms(reads?.get(me)),
+                        myClearedMs = ms(clears?.get(me))
+                    )
+                )
             }
         awaitClose { reg.remove() }
     }
@@ -115,22 +124,70 @@ class ChatRepository(private val context: Context) {
         awaitClose { reg.remove() }
     }
 
-    suspend fun sendText(me: String, myName: String, other: String, otherName: String, text: String) {
+    suspend fun sendText(me: String, myName: String, other: String, otherName: String, text: String, reply: ReplyRef? = null) {
         val clean = text.trim().take(MAX_TEXT_LENGTH)
         if (clean.isEmpty()) return
-        send(me, myName, other, otherName, MessageType.TEXT, clean, null, 0L, emptyList())
+        send(me, myName, other, otherName, MessageType.TEXT, clean, null, 0L, emptyList(), reply)
     }
 
     suspend fun sendVoice(
         me: String, myName: String, other: String, otherName: String,
-        audioB64: String, durationMs: Long, wave: List<Int>
+        audioB64: String, durationMs: Long, wave: List<Int>, reply: ReplyRef? = null
     ) {
-        send(me, myName, other, otherName, MessageType.VOICE, "", audioB64, durationMs, wave)
+        send(me, myName, other, otherName, MessageType.VOICE, "", audioB64, durationMs, wave, reply)
+    }
+
+    suspend fun editMessage(chatId: String, msgId: String, newText: String, isLast: Boolean) {
+        val clean = newText.trim().take(MAX_TEXT_LENGTH)
+        if (clean.isEmpty()) return
+        withTimeout(WRITE_TIMEOUT_MS) {
+            val chatRef = db.collection("chats").document(chatId)
+            val batch = db.batch()
+            batch.update(chatRef.collection("messages").document(msgId), mapOf("text" to clean, "edited" to true))
+            if (isLast) batch.update(chatRef, "lastText", clean.take(120))
+            batch.commit().awaitQueued()
+        }
+    }
+
+    suspend fun deleteMessage(chatId: String, msgId: String, updateLast: Boolean, newLast: ChatMessage?, me: String) {
+        withTimeout(WRITE_TIMEOUT_MS) {
+            val chatRef = db.collection("chats").document(chatId)
+            val batch = db.batch()
+            batch.delete(chatRef.collection("messages").document(msgId))
+            if (updateLast) {
+                val last = newLast
+                batch.update(
+                    chatRef,
+                    mapOf(
+                        "lastText" to if (last == null || last.type == MessageType.VOICE) "" else last.text.take(120),
+                        "lastType" to (last?.type ?: MessageType.TEXT).storage,
+                        "lastFrom" to (last?.fromUid ?: me)
+                    )
+                )
+            }
+            batch.commit().awaitQueued()
+        }
+    }
+
+    suspend fun setReaction(chatId: String, msgId: String, me: String, emoji: String?) {
+        withTimeout(WRITE_TIMEOUT_MS) {
+            db.collection("chats").document(chatId).collection("messages").document(msgId)
+                .update("reactions.$me", emoji ?: FieldValue.delete()).awaitQueued()
+        }
+    }
+
+    /** مسح المحادثة عندي فقط: تُخفى كل رسالة أقدم من هذه اللحظة، ويبقى الطرف الآخر كما هو. */
+    suspend fun clearChat(chatId: String, me: String) {
+        withTimeout(WRITE_TIMEOUT_MS) {
+            db.collection("chats").document(chatId)
+                .update("clears.$me", FieldValue.serverTimestamp(), "unread.$me", 0).awaitQueued()
+        }
     }
 
     private suspend fun send(
         me: String, myName: String, other: String, otherName: String,
-        type: MessageType, text: String, audioB64: String?, durationMs: Long, wave: List<Int>
+        type: MessageType, text: String, audioB64: String?, durationMs: Long, wave: List<Int>,
+        reply: ReplyRef? = null
     ) = withTimeout(WRITE_TIMEOUT_MS) {
         val chatId = chatIdFor(me, other)
         val chatRef = db.collection("chats").document(chatId)
@@ -142,6 +199,14 @@ class ChatRepository(private val context: Context) {
             "text" to text,
             "createdAt" to FieldValue.serverTimestamp()
         )
+        if (reply != null) {
+            msg["reply"] = mapOf(
+                "id" to reply.id,
+                "from" to reply.fromUid,
+                "type" to reply.type.storage,
+                "text" to reply.text.take(120)
+            )
+        }
         if (type == MessageType.VOICE && audioB64 != null) {
             msg["audio"] = audioB64
             msg["durationMs"] = durationMs
@@ -216,13 +281,27 @@ private fun DocumentSnapshot.toSummary(me: String): ChatSummary? {
         lastType = MessageType.from(getString("lastType")),
         lastFromMe = getString("lastFrom") == me,
         lastTimeMs = getTimestamp("lastTime", ServerTimestampBehavior.ESTIMATE).toMs(),
-        unread = unread
+        unread = unread,
+        clearedMs = ((get("clears", ServerTimestampBehavior.ESTIMATE) as? Map<*, *>)?.get(me) as? Timestamp).toMs()
     )
 }
 
 private fun DocumentSnapshot.toMessage(): ChatMessage? {
     val from = getString("from") ?: return null
     val wave = (get("wave") as? List<*>)?.mapNotNull { (it as? Number)?.toInt() } ?: emptyList()
+    val replyMap = get("reply") as? Map<*, *>
+    val reply = replyMap?.let {
+        val rid = it["id"] as? String ?: return@let null
+        ReplyRef(
+            id = rid,
+            fromUid = it["from"] as? String ?: "",
+            type = MessageType.from(it["type"] as? String),
+            text = it["text"] as? String ?: ""
+        )
+    }
+    val reactions = (get("reactions") as? Map<*, *>)
+        ?.mapNotNull { (k, v) -> if (k is String && v is String) k to v else null }
+        ?.toMap() ?: emptyMap()
     return ChatMessage(
         id = id,
         fromUid = from,
@@ -233,6 +312,9 @@ private fun DocumentSnapshot.toMessage(): ChatMessage? {
         wave = wave,
         createdAtMs = getTimestamp("createdAt", ServerTimestampBehavior.ESTIMATE).toMs(),
         expireAtMs = getTimestamp("expireAt").toMs(),
-        pending = metadata.hasPendingWrites()
+        pending = metadata.hasPendingWrites(),
+        reply = reply,
+        edited = getBoolean("edited") == true,
+        reactions = reactions
     )
 }

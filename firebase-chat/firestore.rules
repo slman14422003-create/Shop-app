@@ -69,7 +69,7 @@ service cloud.firestore {
 
       allow create: if inChatId(chatId)
         && request.resource.data.keys().hasOnly(
-             ['members', 'names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing'])
+             ['members', 'names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing', 'clears'])
         && request.resource.data.members is list
         && request.resource.data.members.size() == 2
         && request.resource.data.members.hasAll(chatId.split('_'))
@@ -83,7 +83,7 @@ service cloud.firestore {
       allow update: if signedIn() && me() in resource.data.members
         && request.resource.data.members == resource.data.members
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-             ['names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing'])
+             ['names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing', 'clears'])
         // تغيير آخر رسالة = إرسال رسالة: يجب أن أكون المرسل وبوقت الخادم.
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTime'])
             || (request.resource.data.lastFrom == me()
@@ -93,7 +93,8 @@ service cloud.firestore {
                 && request.resource.data.lastText.size() <= 120))
         // "قرأت" و"أكتب" خاصّان بي أنا فقط (لا أعدّل حالة الطرف الآخر).
         && request.resource.data.get('reads', {}).diff(resource.data.get('reads', {})).affectedKeys().hasOnly([me()])
-        && request.resource.data.get('typing', {}).diff(resource.data.get('typing', {})).affectedKeys().hasOnly([me()]);
+        && request.resource.data.get('typing', {}).diff(resource.data.get('typing', {})).affectedKeys().hasOnly([me()])
+        && request.resource.data.get('clears', {}).diff(resource.data.get('clears', {})).affectedKeys().hasOnly([me()]);
 
       allow delete: if false;
 
@@ -103,7 +104,7 @@ service cloud.firestore {
 
         allow create: if inChatId(chatId)
           && request.resource.data.keys().hasOnly(
-               ['from', 'type', 'text', 'createdAt', 'audio', 'durationMs', 'wave', 'expireAt'])
+               ['from', 'type', 'text', 'createdAt', 'audio', 'durationMs', 'wave', 'expireAt', 'reply'])
           && request.resource.data.keys().hasAll(['from', 'type', 'text', 'createdAt'])
           && request.resource.data.from == me()
           && request.resource.data.createdAt == request.time
@@ -124,13 +125,27 @@ service cloud.firestore {
                  && request.resource.data.expireAt > request.time)
           );
 
-        // لا تعديل أبداً. الحذف مسموح لأي طرف في المحادثة بشرط أن تكون رسالة صوتية انتهت مدتها
-        // (expireAt في الماضي): التطبيق ينظّف الصوت القديم تلقائياً عند فتح المحادثة، بدون TTL.
-        allow update: if false;
+        // تعديل: صاحب الرسالة النصية يعدّل النص فقط (وعلامة edited). التفاعل: كل عضو يغيّر تفاعله هو فقط.
+        allow update: if inChatId(chatId)
+          && (
+            (resource.data.from == me()
+              && resource.data.type == 'text'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited'])
+              && request.resource.data.text is string
+              && request.resource.data.text.size() >= 1 && request.resource.data.text.size() <= 2000)
+            ||
+            (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+              && request.resource.data.get('reactions', {}).diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([me()]))
+          );
+
+        // الحذف: صاحب الرسالة يحذفها للجميع، ولأي طرف حذف الرسالة الصوتية التي انتهت مدتها (تنظيف تلقائي).
         allow delete: if inChatId(chatId)
-          && resource.data.type == 'voice'
-          && resource.data.expireAt is timestamp
-          && resource.data.expireAt < request.time;
+          && (
+            resource.data.from == me()
+            || (resource.data.type == 'voice'
+                && resource.data.expireAt is timestamp
+                && resource.data.expireAt < request.time)
+          );
       }
     }
 

@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -137,6 +138,9 @@ fun BlurContextMenu(
     anchor: Rect,
     actions: List<BlurMenuAction>,
     onDismiss: () -> Unit,
+    reactions: List<String> = emptyList(),
+    selectedReaction: String? = null,
+    onReact: (String) -> Unit = {},
     preview: @Composable () -> Unit
 ) {
     val context = LocalContext.current
@@ -175,6 +179,9 @@ fun BlurContextMenu(
     val itemHeight = 56.dp
     val gap = 10.dp
     val margin = 16.dp
+    val reactionBarHeight = 54.dp
+    val reactionCell = 44.dp
+    val hasReactions = reactions.isNotEmpty()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -222,16 +229,83 @@ fun BlurContextMenu(
 
             if (ready) {
                 val left = anchor.left - origin.x
-                val top = anchor.top - origin.y
+                val topRaw = anchor.top - origin.y
                 val menuHeightPx = with(density) { (itemHeight * actions.size).toPx() }
                 val gapPx = with(density) { gap.toPx() }
                 val marginPx = with(density) { margin.toPx() }
                 val menuWidthPx = with(density) { menuWidth.toPx() }
                 val bottomLimit = rootSize.height - marginPx
-                val below = top + anchor.height + gapPx + menuHeightPx <= bottomLimit
+                val reactBlockPx = if (hasReactions) with(density) { (reactionBarHeight + gap).toPx() } else 0f
+                val shift = if (hasReactions) {
+                    val blockTop = topRaw - reactBlockPx
+                    val total = reactBlockPx + anchor.height + gapPx + menuHeightPx
+                    val up = min(0f, bottomLimit - (blockTop + total))
+                    max(up, marginPx * 2 - blockTop)
+                } else 0f
+                val top = topRaw + shift
+                val below = hasReactions || top + anchor.height + gapPx + menuHeightPx <= bottomLimit
                 val menuTop = if (below) top + anchor.height + gapPx else max(marginPx, top - gapPx - menuHeightPx)
                 val rawLeft = if (rtl) left + anchor.width - menuWidthPx - marginPx else left + marginPx
                 val menuLeft = min(max(rawLeft, marginPx), max(marginPx, rootSize.width - menuWidthPx - marginPx))
+
+                if (hasReactions) {
+                    val barWidth = reactionCell * reactions.size + 16.dp
+                    val barWidthPx = with(density) { barWidth.toPx() }
+                    val barRaw = if (rtl) left + anchor.width - barWidthPx else left
+                    val barLeft = min(max(barRaw, marginPx), max(marginPx, rootSize.width - barWidthPx - marginPx))
+                    val barTop = top - reactBlockPx
+                    Box(
+                        Modifier
+                            .offset { IntOffset(barLeft.roundToInt(), barTop.roundToInt()) }
+                            .width(barWidth)
+                            .height(reactionBarHeight)
+                            .graphicsLayer {
+                                alpha = fade
+                                val sc = 0.8f + 0.2f * progress
+                                scaleX = sc
+                                scaleY = sc
+                                transformOrigin = TransformOrigin(if (rtl) 1f else 0f, 1f)
+                            }
+                            .shadow(20.dp, RoundedCornerShape(27.dp), clip = false)
+                            .clip(RoundedCornerShape(27.dp))
+                            .background(if (strong) Color.Transparent else scheme.surfaceContainerHigh)
+                    ) {
+                        if (strong && target != null) {
+                            BlurLayer(
+                                target = target,
+                                radius = 16f,
+                                scale = 4f,
+                                noise = true,
+                                tint = glassTint,
+                                backdrop = scheme.background,
+                                modifier = Modifier.matchParentSize()
+                            )
+                        }
+                        Row(
+                            Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            reactions.forEach { emoji ->
+                                Box(
+                                    Modifier
+                                        .size(reactionCell)
+                                        .clip(androidx.compose.foundation.shape.CircleShape)
+                                        .background(
+                                            if (emoji == selectedReaction) scheme.onSurface.copy(alpha = 0.14f) else Color.Transparent
+                                        )
+                                        .clickable {
+                                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            onDismiss()
+                                            onReact(emoji)
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(emoji, fontSize = 26.sp)
+                                }
+                            }
+                        }
+                    }
+                }
 
                 Box(
                     Modifier

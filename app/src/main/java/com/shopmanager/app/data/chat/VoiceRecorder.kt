@@ -27,9 +27,12 @@ class VoiceRecorder(private val context: Context) {
     private var recorder: MediaRecorder? = null
     private var file: File? = null
     private var startedAt = 0L
+    private var accumulated = 0L
+    private var pausedFlag = false
     private val samples = ArrayList<Int>()
 
     val isRecording: Boolean get() = recorder != null
+    val isPaused: Boolean get() = pausedFlag
 
     fun start(): Boolean {
         if (recorder != null) return false
@@ -54,15 +57,48 @@ class VoiceRecorder(private val context: Context) {
         recorder = r
         file = out
         startedAt = System.currentTimeMillis()
+        accumulated = 0L
+        pausedFlag = false
         samples.clear()
         return true
     }
 
-    fun elapsedMs(): Long = if (recorder == null) 0L else System.currentTimeMillis() - startedAt
+    fun elapsedMs(): Long = when {
+        recorder == null -> 0L
+        pausedFlag -> accumulated
+        else -> accumulated + System.currentTimeMillis() - startedAt
+    }
+
+    fun pause(): Boolean {
+        val r = recorder ?: return false
+        if (pausedFlag) return true
+        return try {
+            r.pause()
+            accumulated += System.currentTimeMillis() - startedAt
+            pausedFlag = true
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun resume(): Boolean {
+        val r = recorder ?: return false
+        if (!pausedFlag) return true
+        return try {
+            r.resume()
+            startedAt = System.currentTimeMillis()
+            pausedFlag = false
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     /** مستوى الصوت الحالي 0..100 (مقياس لوغاريتمي)، ويُسجَّل لرسم الموجة. */
     fun sampleLevel(): Int {
         val r = recorder ?: return 0
+        if (pausedFlag) return 0
         val amp = runCatching { r.maxAmplitude }.getOrDefault(0)
         val level = (ln(1.0 + amp) / ln(1.0 + 32767.0) * 100).roundToInt().coerceIn(0, 100)
         samples.add(level)
@@ -76,6 +112,7 @@ class VoiceRecorder(private val context: Context) {
         val duration = elapsedMs()
         recorder = null
         file = null
+        pausedFlag = false
         val ok = try {
             r.stop(); true
         } catch (_: RuntimeException) {
@@ -98,6 +135,7 @@ class VoiceRecorder(private val context: Context) {
         val f = file
         recorder = null
         file = null
+        pausedFlag = false
         runCatching { r.stop() }
         runCatching { r.release() }
         f?.delete()

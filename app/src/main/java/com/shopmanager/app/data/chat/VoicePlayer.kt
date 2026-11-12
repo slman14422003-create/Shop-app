@@ -20,7 +20,8 @@ data class VoicePlayState(
     val id: String? = null,
     val playing: Boolean = false,
     val positionMs: Int = 0,
-    val durationMs: Int = 0
+    val durationMs: Int = 0,
+    val speed: Float = 1f
 )
 
 /**
@@ -33,6 +34,7 @@ object VoicePlayer {
     private var player: MediaPlayer? = null
     private var tick: Job? = null
     private var loadingId: String? = null
+    private var speed = 1f
 
     private val _state = MutableStateFlow(VoicePlayState())
     val state: StateFlow<VoicePlayState> = _state
@@ -46,6 +48,7 @@ object VoicePlayer {
                 _state.value = cur.copy(playing = false)
             } else {
                 runCatching { p.start() }
+                applySpeed(p)
                 _state.value = cur.copy(playing = true)
                 startTick()
             }
@@ -73,14 +76,30 @@ object VoicePlayer {
                 mp.setOnErrorListener { _, _, _ -> stop(); true }
                 mp.prepare()
                 mp.start()
+                applySpeed(mp)
             } catch (_: Exception) {
                 runCatching { mp.release() }
                 return@launch
             }
             player = mp
-            _state.value = VoicePlayState(id, true, 0, mp.duration)
+            _state.value = VoicePlayState(id, true, 0, mp.duration, speed)
             startTick()
         }
+    }
+
+    fun cycleSpeed() {
+        speed = when {
+            speed < 1.25f -> 1.5f
+            speed < 1.75f -> 2f
+            else -> 1f
+        }
+        val p = player
+        if (p != null && _state.value.playing) applySpeed(p)
+        _state.value = _state.value.copy(speed = speed)
+    }
+
+    private fun applySpeed(p: MediaPlayer) {
+        runCatching { p.playbackParams = p.playbackParams.setSpeed(speed) }
     }
 
     fun stop() {
@@ -92,7 +111,7 @@ object VoicePlayer {
             runCatching { it.release() }
         }
         player = null
-        _state.value = VoicePlayState()
+        _state.value = VoicePlayState(speed = speed)
     }
 
     private fun startTick() {
