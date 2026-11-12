@@ -17,6 +17,12 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.AdminPanelSettings
+import androidx.compose.material3.Icon
+import com.shopmanager.app.ui.common.AppGroupGap
+import com.shopmanager.app.ui.common.groupedRowShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
@@ -78,7 +84,9 @@ fun AssistantHomeScreen(
     onOpenChat: () -> Unit,
     onNavigateToDebts: () -> Unit,
     onNavigateToMaterials: () -> Unit,
-    onOpenNotes: () -> Unit
+    onOpenNotes: () -> Unit,
+    onOpenSettings: () -> Unit = {},
+    onOpenAdmin: () -> Unit = {}
 ) {
     val data by assistant.data.collectAsState()
     val mood by assistant.mood.collectAsState()
@@ -201,6 +209,20 @@ fun AssistantHomeScreen(
             }
             AppRowSurface(RoundedCornerShape(20.dp), onClick = { showStats = false; onOpenNotes() }) {
                 Text("الملاحظات", Modifier.padding(16.dp), style = MaterialTheme.typography.titleSmall)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+                AppRowSurface(groupedRowShape(0, 1), onClick = { showStats = false; onOpenSettings() }) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Settings, null, modifier = Modifier.size(22.dp))
+                        Text("الإعدادات", Modifier.padding(start = 14.dp).weight(1f), style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+                AppRowSurface(groupedRowShape(1, 1), onClick = { showStats = false; onOpenAdmin() }) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.AdminPanelSettings, null, modifier = Modifier.size(22.dp))
+                        Text("لوحة المسؤول", Modifier.padding(start = 14.dp).weight(1f), style = MaterialTheme.typography.titleSmall)
+                    }
+                }
             }
             if (log.isNotEmpty()) {
                 Text("آخر ما نفّذه المساعد", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)

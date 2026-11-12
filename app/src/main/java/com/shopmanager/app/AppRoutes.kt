@@ -7,7 +7,6 @@ import androidx.compose.runtime.*
 import com.shopmanager.app.data.security.AdminPasswordRepository
 import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.dashboard.DashboardScreen
-import com.shopmanager.app.ui.common.AppDrawerContent
 
 // FIX: Home/Debts/Materials/Notes all live as pages of one HorizontalPager
 // so every destination shares the exact same page-transition animation and

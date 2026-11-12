@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 import com.shopmanager.app.data.security.AdminPasswordRepository
 import com.shopmanager.app.data.security.PinAttemptThrottle
 import com.shopmanager.app.ui.dashboard.DashboardScreen
-import com.shopmanager.app.ui.common.AppDrawerContent
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassAlertDialog
 

@@ -80,7 +80,7 @@ import com.shopmanager.app.ui.chat.ConversationScreen
 import com.shopmanager.app.ui.chat.ConversationViewModel
 import com.shopmanager.app.ui.chat.UserPickerScreen
 import com.shopmanager.app.ui.chat.UserPickerViewModel
-import com.shopmanager.app.ui.common.AppDrawerContent
+import com.shopmanager.app.ui.common.AppMenuPopup
 import com.shopmanager.app.ui.common.FloatingQuickActions
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.QuickAction
@@ -170,7 +170,7 @@ internal fun ShopManagerApp(
     // divider at the bottom instead of sitting in that same list). The
     // pager/openPager() machinery underneath is unchanged — the drawer
     // just drives the same `pagerState` the old pill used to.
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    var menuOpen by remember { mutableStateOf(false) }
     val drawerScope = rememberCoroutineScope()
 
     // لوحة المسؤول السرية: PIN-gate state, hoisted up here from
@@ -179,6 +179,26 @@ internal fun ShopManagerApp(
     var showAdminPinDialog by remember { mutableStateOf(false) }
     val adminContext = LocalContext.current
     val adminThrottle = remember { PinAttemptThrottle(adminContext, "shop_manager_admin_throttle") }
+    val requestAdminAccess: () -> Unit = {
+        // البصمة/الوجه أولاً إن كانت متاحة على الجهاز؛ وإلا (أو عند اختيار "كلمة المرور"
+        // أو فشل النظام) يظهر مربع كلمة المرور بنفس قفل المحاولات.
+        val bioActivity = BiometricAuth.findActivity(adminContext)
+        if (bioActivity != null && BiometricAuth.isAvailable(adminContext) && !adminThrottle.isLocked()) {
+            BiometricAuth.prompt(
+                activity = bioActivity,
+                title = "دخول لوحة المطوّر",
+                subtitle = "أكّد هويتك للمتابعة",
+                negativeText = "استخدام كلمة المرور",
+                onSuccess = {
+                    adminThrottle.registerSuccess()
+                    navController.safeNavigate(ROUTE_ADMIN)
+                },
+                onFailure = { showAdminPinDialog = true }
+            )
+        } else {
+            showAdminPinDialog = true
+        }
+    }
 
     // BUG FIXED ("ترابط بين جميع الانميشن"): tapping a bottom-nav tab (or a
     // notification landing on a specific tab) drove the SAME pager as
@@ -195,7 +215,7 @@ internal fun ShopManagerApp(
     // instead of two different ones stitched together.
     val isLowTierForPager = LocalPerformanceTier.current == PerformanceTier.LOW
     val pagerTabAnimationSpec: FiniteAnimationSpec<Float> =
-        tween(MotionSpecs.pagerMillis().coerceAtLeast(150), easing = MotionSpecs.claudeEasing)
+        tween(MotionSpecs.pagerMillis().coerceAtLeast(150), easing = MotionSpecs.navEasing)
 
     @OptIn(ExperimentalFoundationApi::class)
     fun openPager(page: Int, animate: Boolean = true) {
@@ -209,7 +229,15 @@ internal fun ShopManagerApp(
             // LOW: تبديل التبويب فوري — انزلاق صفحتين كاملتين (مع تركيب الصفحة الجديدة في أول
             // إطار) هو أثقل ما في التنقل على المعالج الرسومي القديم.
             if (isLowTierForPager || !animate || !alreadyOnPager) pagerState.scrollToPage(page)
-            else pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec)
+            else {
+                // انتقال بعيد (مثلاً الرئيسية ← الدردشة): نقفز إلى الصفحة المجاورة للهدف أولاً ثم
+                // ننزلق خطوة واحدة فقط، بدل المرور على كل الصفحات الوسيطة وتركيبها أثناء الحركة.
+                val from = pagerState.currentPage
+                if (kotlin.math.abs(page - from) > 1) {
+                    pagerState.scrollToPage(if (page > from) page - 1 else page + 1)
+                }
+                pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec)
+            }
         }
     }
 
@@ -330,53 +358,7 @@ internal fun ShopManagerApp(
     val density = LocalDensity.current
     var floatingNavHeight by remember { mutableStateOf(0.dp) }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        // Only swipe-openable from the main pager tabs — same screens the
-        // old pill only ever showed on (`showBottomBar`) — so a swipe on
-        // Settings/PersonDetail/etc. doesn't fight that screen's own back
-        // gesture.
-        gesturesEnabled = showBottomBar,
-        drawerContent = {
-            AppDrawerContent(
-                selectedPage = pagerState.currentPage,
-                onSelectPage = { page ->
-                    openPager(page)
-                    drawerScope.launch { drawerState.close() }
-                },
-                onOpenSettings = {
-                    navController.safeNavigate(ROUTE_SETTINGS)
-                    drawerScope.launch { drawerState.close() }
-                },
-                onOpenMissingFinder = {
-                    navController.safeNavigate(ROUTE_MISSING_FINDER)
-                    drawerScope.launch { drawerState.close() }
-                },
-                onOpenAdmin = {
-                    drawerScope.launch { drawerState.close() }
-                    // البصمة/الوجه أولاً إن كانت متاحة على الجهاز؛ وإلا (أو عند
-                    // اختيار "كلمة المرور" أو فشل النظام) يظهر مربع كلمة المرور
-                    // القديم بنفس قفل المحاولات.
-                    val bioActivity = BiometricAuth.findActivity(adminContext)
-                    if (bioActivity != null && BiometricAuth.isAvailable(adminContext) && !adminThrottle.isLocked()) {
-                        BiometricAuth.prompt(
-                            activity = bioActivity,
-                            title = "دخول لوحة المطوّر",
-                            subtitle = "أكّد هويتك للمتابعة",
-                            negativeText = "استخدام كلمة المرور",
-                            onSuccess = {
-                                adminThrottle.registerSuccess()
-                                navController.safeNavigate(ROUTE_ADMIN)
-                            },
-                            onFailure = { showAdminPinDialog = true }
-                        )
-                    } else {
-                        showAdminPinDialog = true
-                    }
-                }
-            )
-        }
-    ) {
+    Box(Modifier.fillMaxSize()) {
     Box(
         Modifier
             .fillMaxSize()
@@ -395,8 +377,8 @@ internal fun ShopManagerApp(
         // السهم ومع بقية التطبيق. الآن dirSign = -1 في RTL: الدفع من اليسار والسحب نحو اليسار.
         val dirSign = if (androidx.compose.ui.platform.LocalLayoutDirection.current ==
             androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
-        val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(navMs, easing = MotionSpecs.claudeEasing)
-        val navFadeSpec: FiniteAnimationSpec<Float> = tween(navMs, easing = MotionSpecs.claudeEasing)
+        val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(navMs, easing = MotionSpecs.navEasing)
+        val navFadeSpec: FiniteAnimationSpec<Float> = tween(navMs, easing = MotionSpecs.navEasing)
         // REPLACED THE OLD ALPHA-DIM ("الانميشن غير جميل / بدي ياه متكامل
         // وبلا تقطيع"): the covered screen used to dim via fadeOut/fadeIn
         // down to 72% alpha while it translated. Animating the *alpha* of a
@@ -459,17 +441,13 @@ internal fun ShopManagerApp(
                     // LOW: طبقة واحدة فقط تتحرك (الشاشة الجديدة تتلاشى فوق القديمة الثابتة)،
                     // بدل تلاشٍ متقاطع لشاشتين كاملتين = نصف عمل المعالج الرسومي على 40Hz.
                     isLowTier -> ExitTransition.None
-                    isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
-                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 3 } +
-                        scaleOut(pushScaleSpec, targetScale = 0.94f)
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
                 }
             },
             popEnterTransition = {
                 when {
                     isLowTier -> EnterTransition.None
-                    isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
-                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 3 } +
-                        scaleIn(pushScaleSpec, initialScale = 0.94f)
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
                 }
             },
             popExitTransition = {
@@ -520,34 +498,26 @@ internal fun ShopManagerApp(
                     // الأداء القوي فقط: عمق بصري أثناء تبديل التبويب — الصفحة المغادِرة/القادمة
                     // تصغر قليلاً وتخفت. كله داخل graphicsLayer (مرحلة الرسم)، وعند السكون
                     // offset = 0 فلا طبقة إضافية. المتوازن والمنخفض: انزلاق خام بلا أي طبقات.
-                    val pageFx = if (performanceTier == PerformanceTier.STANDARD) {
-                        Modifier.graphicsLayer {
-                            val off = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
-                                .let { if (it < 0f) -it else it }.coerceIn(0f, 1f)
-                            val sc = 1f - 0.06f * off
-                            scaleX = sc
-                            scaleY = sc
-                            alpha = 1f - 0.5f * off
-                        }
-                    } else Modifier
-                    Box(pageFx.fillMaxSize()) {
+                    Box(Modifier.fillMaxSize()) {
                     when (page) {
                         PAGE_DASHBOARD -> if (assistantSettings.newHome) AssistantHomeScreen(
                             assistant = assistantViewModel,
                             materialsViewModel = materialsViewModel,
-                            onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                            onOpenDrawer = { menuOpen = true },
                             onOpenActivity = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) },
                             onOpenChat = { navController.safeNavigate(ROUTE_ASSISTANT) },
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
-                            onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) }
+                            onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
+                            onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) },
+                            onOpenAdmin = requestAdminAccess
                         ) else DashboardScreen(
                             debtsViewModel = debtsViewModel,
                             materialsViewModel = materialsViewModel,
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
                             onOpenMissingFinder = { navController.safeNavigate(ROUTE_MISSING_FINDER) },
-                            onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                            onOpenDrawer = { menuOpen = true },
                             notesViewModel = notesViewModel,
                             onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
                             onOpenMaterial = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
@@ -559,7 +529,7 @@ internal fun ShopManagerApp(
                             onOpenPerson = { personId -> navController.safeNavigate("personDetail/$personId") },
                             addPersonRequested = addPersonRequested,
                             onAddPersonRequestHandled = { addPersonRequested = false },
-                            onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                            onOpenDrawer = { menuOpen = true },
                             onOpenActivityLog = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) }
                         )
                         PAGE_MATERIALS -> MaterialsScreen(
@@ -571,11 +541,11 @@ internal fun ShopManagerApp(
                             onSavePricesRequestHandled = { savePricesRequested = false },
                             initialSearchQuery = pendingMaterialHighlight,
                             onInitialSearchConsumed = { pendingMaterialHighlight = null },
-                            onOpenDrawer = { drawerScope.launch { drawerState.open() } }
+                            onOpenDrawer = { menuOpen = true }
                         )
                         else -> ChatRoot(
                             viewModel = chatSessionViewModel,
-                            onOpenDrawer = { drawerScope.launch { drawerState.open() } },
+                            onOpenDrawer = { menuOpen = true },
                             onOpenConversation = { uid, name ->
                                 navController.safeNavigate(chatConversationRoute(uid, name))
                             },
@@ -816,7 +786,24 @@ internal fun ShopManagerApp(
             )
         }
     }
-    } // ModalNavigationDrawer
+    AppMenuPopup(
+        visible = menuOpen,
+        selectedPage = pagerState.currentPage,
+        onDismiss = { menuOpen = false },
+        onSelectPage = { page ->
+            menuOpen = false
+            openPager(page)
+        },
+        onOpenMissingFinder = {
+            menuOpen = false
+            navController.safeNavigate(ROUTE_MISSING_FINDER)
+        },
+        onOpenNotes = {
+            menuOpen = false
+            navController.safeNavigate(ROUTE_NOTES)
+        }
+    )
+    } // menu overlay Box
 
     // لوحة المسؤول السرية: PIN gate, triggered from the admin button in the
     // side drawer (see AppDrawerContent's onOpenAdmin above). Rendered as a
