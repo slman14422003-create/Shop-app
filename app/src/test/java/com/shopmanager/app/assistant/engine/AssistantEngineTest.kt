@@ -371,4 +371,23 @@ class AssistantEngineTest {
         val ms = (System.nanoTime() - t0) / 1_000_000
         assertTrue("استغرق $ms ms", ms < 200) // حد متساهل لاختلاف أجهزة CI؛ الهدف على الهاتف < 50ms
     }
+
+    @Test fun add_shortage_with_unit_and_important_even_with_similar_person_name() {
+        val s = snap.copy(persons = persons + KnownPerson("p9", "كريم", 0.0))
+        val c = Collector()
+        val texts = listOf(
+            "اضف كريمة محلية كيلو هام", "اضف كريمة محلاية كيلو هامه", "سجل كريمة محلاية كيلو هام",
+            "ضيف كمون ناعم كيلو هام", "اضف كمون ناعم كيلو هام", "اظف كمون ناعم كيلو هام",
+            "ضيف كمون ناعم كيلو هام", "اضف كمون ناعم كلو هام", "اضف كمون ناعم كيلوو هام"
+        )
+        for (t in texts) c.case(t) {
+            val cm = cmd(t, s = s)
+            assertEquals("intent", Intent.ADD_SHORTAGE, cm.intent)
+            assertTrue("important", cm.important)
+            assertTrue("material", cm.materials.isNotEmpty())
+        }
+        c.case("name kept whole") { assertEquals("كريمة محلية", cmd("اضف كريمة محلية كيلو هام", s = s).materials[0].name) }
+        c.case("debt still works") { assertEquals(Intent.ADD_DEBT, cmd("سجل على سامر 20 ألف", s = s).intent) }
+        c.assertNone()
+    }
 }

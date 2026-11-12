@@ -18,6 +18,7 @@ private class Analysis(
     val personMatches: List<SpanMatch>,
     val materialMatches: List<SpanMatch>,
     val free: List<IntRange>,
+    val freeNoPerson: List<IntRange>,
     val pronoun: Boolean,
     val available: BooleanArray
 ) {
@@ -38,7 +39,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         snapshot: EngineSnapshot,
         context: ConversationContext = ConversationContext()
     ): EngineOutput {
-        val toks = tokenize(input)
+        val toks = correctTokens(tokenize(input), snapshot)
         if (toks.isEmpty()) return output(listOf(Command(Intent.UNKNOWN, rawText = input)), context, snapshot)
         val idx = Indexes(snapshot)
         val segments = splitSegments(toks)
@@ -112,7 +113,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             }
             AmbiguityKind.INTENT -> {
                 val forced = runCatching { Intent.valueOf(option.value) }.getOrNull() ?: return command
-                val toks = tokenize(command.rawText)
+                val toks = correctTokens(tokenize(command.rawText), snapshot)
                 parseSegment(toks, snapshot, Indexes(snapshot), context, null, forced, null)
             }
         }
@@ -155,6 +156,43 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         s = s.replace(Regex("[؟?!:\"'()\\[\\]{}…]"), " ")
         s = s.replace(Regex("(?<!\\d)\\.|\\.(?!\\d)"), " ")
         return s.split(Regex("\\s+")).filter { it.isNotEmpty() }.map { Tok(it, ArabicText.canonicalToken(it)) }
+    }
+
+    private val verbPool: List<String> by lazy { Lexicon.COMMAND_VERBS.filter { it.length >= 4 } }
+    private val qtyPool: List<String> by lazy {
+        (Lexicon.UNIT_WORDS.keys + Lexicon.PACK_WORDS.keys + Lexicon.IMPORTANT_WORDS).filter { it.length >= 4 }
+    }
+
+    private fun nearest(t: String, pool: List<String>): String? {
+        var best: String? = null
+        var bd = 2
+        for (w in pool) {
+            if (kotlin.math.abs(w.length - t.length) > 1) continue
+            val d = ArabicText.levenshtein(t, w)
+            if (d < bd) { bd = d; best = w }
+        }
+        return best
+    }
+
+    /** يصحح خربطة حرف واحد في أفعال الأوامر ووحدات الكمية وكلمات الأهمية، دون المساس بأسماء العملاء والمواد المعروفة. */
+    private fun correctTokens(toks: List<Tok>, snapshot: EngineSnapshot): List<Tok> {
+        if (toks.size < 2) return toks
+        val known = HashSet<String>()
+        for (p in snapshot.persons) EntityMatcher.tokensOf(p.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (m in snapshot.materials) EntityMatcher.tokensOf(m.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (a in snapshot.aliases.keys) EntityMatcher.tokensOf(a).forEach { known.add(ArabicText.stripAl(it)) }
+        val out = ArrayList<Tok>(toks.size)
+        for ((i, t) in toks.withIndex()) {
+            val w = t.norm
+            val skip = w.length < 4 || w[0] in '0'..'9' || Lexicon.isStop(w) || ArabicText.stripAl(w) in known || NumberParser.findNumbers(listOf(w)).isNotEmpty()
+            if (skip) { out.add(t); continue }
+            val verbPos = i == 0 || toks[i - 1].norm in conj
+            var fixed: String? = null
+            if (verbPos) fixed = nearest(w, verbPool)
+            if (fixed == null) fixed = nearest(w, qtyPool)
+            out.add(if (fixed != null) Tok(t.raw, fixed) else t)
+        }
+        return out
     }
 
     private val conj = setOf("و", "ثم", "بعدين", "وبعدين", "كمان", "وكمان", ",")
@@ -225,8 +263,20 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                 i = j + 1
             } else i++
         }
+        val matchedMat = BooleanArray(n)
+        for (m in materialMatches) for (k in m.start until m.end) matchedMat[k] = true
+        val freeNoPerson = ArrayList<IntRange>()
+        var q = 0
+        while (q < n) {
+            if (available[q] && !matchedMat[q]) {
+                var j = q
+                while (j + 1 < n && available[j + 1] && !matchedMat[j + 1] && j + 1 - q < 3) j++
+                freeNoPerson.add(q..j)
+                q = j + 1
+            } else q++
+        }
         val pronoun = norm.any { it in Lexicon.PRONOUNS }
-        return Analysis(toks, numbers, money, amountNums, dateFuture, datePast, consumed, personMatches, materialMatches, free, pronoun, available)
+        return Analysis(toks, numbers, money, amountNums, dateFuture, datePast, consumed, personMatches, materialMatches, free, freeNoPerson, pronoun, available)
     }
 
     private fun isUnitish(t: String): Boolean =
@@ -384,7 +434,18 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         if (shortageW && !materialOrFree && !recordV) add(Intent.ADD_SHORTAGE, -2.5)
         if (hint == Intent.ADD_SHORTAGE && recordV && materialOrFree) add(Intent.ADD_SHORTAGE, 2.5)
         if (plainAdd && materialOrFree) { add(Intent.ADD_SHORTAGE, 2.5); add(Intent.ADD_DEBT, -1.5) }
-        if (importantW && materialOrFree && !personPresent && !debtW && (recordV || adderV || shortCue || hasW(Lexicon.NEED_WEAK))) add(Intent.ADD_SHORTAGE, 3.0)
+        // أمر إضافة بلا مبلغ ولا "على" ولا كلمة دين = مادة ناقصة، حتى لو شبه اسمها اسم عميل.
+        val qtyCue = (0 until n).any { isUnitish(norm[it]) && norm[it] !in Lexicon.FRACTIONS }
+        val addCmd = recordV || adderV
+        val tookV = hasW(Lexicon.TOOK_VERBS)
+        val catalogOrMat = hasW(setOf("ثابته", "كتالوج")) || hasW(Lexicon.MATERIAL_WORDS)
+        if (addCmd && !prepOn && !debtW && !amountNum && !tookV && !an.pronoun && !catalogOrMat) {
+            val shortageCue = qtyCue || importantW
+            if (materialOrFree && (!personPresent || shortageCue)) { add(Intent.ADD_SHORTAGE, 3.0); add(Intent.ADD_DEBT, -2.5) }
+            else if (personPresent && shortageCue) { add(Intent.ADD_SHORTAGE, 4.0); add(Intent.ADD_DEBT, -3.0) }
+        }
+        if (addCmd && qtyCue && !prepOn && !debtW && !amountNum && !catalogOrMat) add(Intent.ADD_SHORTAGE, 1.5)
+        if (importantW && materialOrFree && (!personPresent || !prepOn) && !debtW && (recordV || adderV || shortCue || hasW(Lexicon.NEED_WEAK))) add(Intent.ADD_SHORTAGE, 3.0)
 
         if (deleteV && materialOrFree) {
             add(Intent.REMOVE_SHORTAGE, 2.5)
@@ -550,7 +611,8 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         ) || (intent == Intent.OPEN && cmd.person == null)
         if (needsMaterial) {
             val multi = intent == Intent.ADD_SHORTAGE || intent == Intent.REMOVE_SHORTAGE
-            var items = materialItems(an, multi)
+            val noPrepOn = (an.norm.indices).none { isPrepOnAt(an.norm, it) }
+            var items = materialItems(an, multi, ignorePersons = noPrepOn && (intent == Intent.ADD_SHORTAGE || intent == Intent.REMOVE_SHORTAGE || intent == Intent.ADD_MATERIAL))
             if (!multi && items.size > 1) items = listOf(items[0])
             if (items.isEmpty() && base != null) items = base.materials
             if (intent == Intent.OPEN && items.none { it.level != MatchLevel.NEW }) items = emptyList()
@@ -714,7 +776,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
 
     private class Span(val start: Int, val end: Int, val name: String, val score: Double, val level: MatchLevel, val cands: List<Candidate>, val alias: Boolean, val raw: String)
 
-    private fun materialItems(an: Analysis, allowFree: Boolean): List<MaterialRef> {
+    private fun materialItems(an: Analysis, allowFree: Boolean, ignorePersons: Boolean = false): List<MaterialRef> {
         val spans = ArrayList<Span>()
         for (m in an.materialMatches) {
             val amb = EntityMatcher.isAmbiguous(m)
@@ -723,7 +785,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             spans.add(Span(m.start, m.end, m.best.name, m.best.score, level, cands, m.viaAlias, m.rawSpan))
         }
         if (allowFree || spans.isEmpty()) {
-            for (run in an.free) {
+            for (run in (if (ignorePersons) an.freeNoPerson else an.free)) {
                 // نقسم على واو العطف الملتصقة حتى تنفصل مواد القائمة ("سكر وملح وبهارات").
                 var s = run.first
                 for (k in run.first..run.last) {
