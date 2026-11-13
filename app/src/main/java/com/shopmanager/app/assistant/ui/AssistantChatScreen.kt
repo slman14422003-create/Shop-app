@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -44,6 +45,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +94,12 @@ fun AssistantChatScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val shown = remember(messages, query, searching) {
+        if (searching && query.isNotBlank()) messages.filter { it.text.contains(query.trim(), ignoreCase = true) || (it.card as? com.shopmanager.app.assistant.AssistantCard.Result)?.details?.contains(query.trim()) == true } else messages
+    }
+    val pinned by assistant.pinned.collectAsState()
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
@@ -123,19 +131,31 @@ fun AssistantChatScreen(
                     color = if (thinking) AssistantWarnOrange else AssistantSuccessGreen
                 )
             }
+            IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Filled.Search, contentDescription = "بحث") }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "المزيد") }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text("ما يستطيع المساعد فعله") }, onClick = { menuOpen = false; showHelp = true })
+                    DropdownMenuItem(text = { Text("وضع القائمة الطويلة (صوتي)") }, onClick = { menuOpen = false; assistant.startListMode() })
+                    DropdownMenuItem(text = { Text(if (settings.dryRun) "إيقاف وضع التجربة" else "وضع التجربة بدون تنفيذ") }, onClick = { menuOpen = false; assistant.updateSettings(settings.copy(dryRun = !settings.dryRun)) })
                     DropdownMenuItem(text = { Text("إعدادات المساعد") }, onClick = { menuOpen = false; onOpenSettings() })
                     DropdownMenuItem(text = { Text("مسح السجل") }, onClick = { menuOpen = false; confirmClear = true })
                 }
             }
         }
 
+        if (searching) OutlinedTextField(
+            query, { query = it }, singleLine = true, placeholder = { Text("ابحث في المحادثة") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+        )
+        if (settings.dryRun) Text(
+            "وضع التجربة: لن يُنفَّذ أي شيء", Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelMedium, color = AssistantWarnOrange
+        )
+
         // ---- الرسائل
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (messages.isEmpty() && !thinking) {
+            if (shown.isEmpty() && !thinking) {
                 EmptyState(mood, settings.robotAnimation, assistantData) { assistant.send(it) }
             } else {
                 LazyColumn(
@@ -144,12 +164,12 @@ fun AssistantChatScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(messages, key = { it.id }) { m ->
+                    items(shown, key = { it.id }) { m ->
                         val index = messages.indexOf(m)
                         val prev = messages.getOrNull(index - 1)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (prev == null || !sameDay(prev.time, m.time)) DateDivider(m.time)
-                            Bubble(m, assistant, undoable) {
+                            Bubble(m, assistant, undoable, pinned = m.text in pinned, onPin = { assistant.pin(m.text) }) {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("message", m.text))
                                 Toast.makeText(context, "تم النسخ", Toast.LENGTH_SHORT).show()
@@ -164,8 +184,10 @@ fun AssistantChatScreen(
             }
         }
 
-        // ---- الإدخال
-        InputBar(input, { input = it }, ::submit)
+        UndoBarView(assistant)
+        VoiceStatusArea(assistant) { input = it }
+        QuickButtonsRow(assistant) { input = it }
+        InputBar(input, { input = it }, ::submit, leading = { MicButton(assistant) })
     }
 
     if (showHelp) HelpSheet(onDismiss = { showHelp = false }) { text ->
@@ -189,7 +211,7 @@ internal fun onChip(chip: AssistantChip, assistant: AssistantViewModel, fill: (S
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Bubble(m: AssistantMessage, assistant: AssistantViewModel, undoable: Set<Long>, onCopy: () -> Unit) {
+private fun Bubble(m: AssistantMessage, assistant: AssistantViewModel, undoable: Set<Long>, pinned: Boolean = false, onPin: () -> Unit = {}, onCopy: () -> Unit) {
     val dark = LocalIsDarkTheme.current
     val userBg = if (dark) Color.White else MaterialTheme.colorScheme.inverseSurface
     val userFg = if (dark) Color.Black else MaterialTheme.colorScheme.inverseOnSurface
@@ -211,6 +233,11 @@ private fun Bubble(m: AssistantMessage, assistant: AssistantViewModel, undoable:
                     }
                 }
                 if (m.text.isNotBlank()) Text(m.text, style = MaterialTheme.typography.bodyLarge)
+                if (m.fromUser && m.text.isNotBlank()) Text(
+                    if (pinned) "★ مثبّت" else "☆ تثبيت",
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.clickable { onPin() }
+                )
                 m.card?.let { AssistantCardView(m, it, assistant, undoable) }
             }
         }
@@ -265,12 +292,13 @@ private fun dayLabel(t: Long): String {
 }
 
 @Composable
-internal fun InputBar(value: String, onChange: (String) -> Unit, onSend: () -> Unit, modifier: Modifier = Modifier) {
+internal fun InputBar(value: String, onChange: (String) -> Unit, onSend: () -> Unit, modifier: Modifier = Modifier, leading: (@Composable () -> Unit)? = null) {
     Row(
         modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        if (leading != null) leading()
         TextField(
             value = value,
             onValueChange = onChange,

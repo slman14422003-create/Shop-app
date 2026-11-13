@@ -167,7 +167,9 @@ fun AssistantHomeScreen(
                 }
             }
         }
-        InputBar(input, { input = it }, { send(input) }, Modifier.windowInsetsPadding(WindowInsets.navigationBars))
+        UndoBarView(assistant)
+        VoiceStatusArea(assistant) { input = it }
+        InputBar(input, { input = it }, { send(input) }, Modifier.windowInsetsPadding(WindowInsets.navigationBars), leading = { MicButton(assistant) })
     }
 
     if (showStats) {

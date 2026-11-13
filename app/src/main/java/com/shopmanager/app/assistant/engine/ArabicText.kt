@@ -138,7 +138,7 @@ object ArabicText {
     }
 
     /**
-     * مفتاح صوتي عربي مبسّط: يدمج الأصوات المتقاربة بين اللهجات (ث/ص->س، ذ/ظ->ز، ط->ت، ض->د، ق->ك، ع->ا، ح->ه)
+     * مفتاح صوتي عربي مبسّط: يدمج الأصوات المتقاربة بين اللهجات (ث/ص->س، ذ/ظ->ز، ط->ت، ض->د، ق->همزة، ع->ا، ح->ه)
      * ويحذف حروف العلة غير الأولى. كلمتان بنفس المفتاح غالباً تُنطقان متقاربتين.
      */
     fun phoneticKey(s: String): String {
@@ -150,7 +150,8 @@ object ArabicText {
                 'ذ', 'ظ' -> 'ز'
                 'ط' -> 'ت'
                 'ض' -> 'د'
-                'ق', 'غ' -> 'ك'
+                'ق' -> 'ا'
+                'غ' -> 'ك'
                 'ع' -> 'ا'
                 'ح', 'خ' -> 'ه'
                 else -> ch
@@ -174,7 +175,8 @@ object ArabicText {
         var s = (levSim + jw) / 2.0
         // كلمة قصيرة جداً لا تُعتبر مطابقة عالية إلا بالتطابق التام.
         if (maxLen <= 3) s = min(s, 0.7)
-        if (a.length >= 3 && b.length >= 3 && phoneticKey(a) == phoneticKey(b)) s = max(s, 0.8)
+        if (a.length >= 3 && b.length >= 3 && a[0] != b[0] && phoneticKey(a.substring(0, 1)) != phoneticKey(b.substring(0, 1))) s *= 0.9
+        if (a.length >= 3 && b.length >= 3 && kotlin.math.abs(a.length - b.length) <= 1 && phoneticKey(a.substring(0, 1)) == phoneticKey(b.substring(0, 1)) && phoneticKey(a) == phoneticKey(b)) s = max(s, 0.8)
         return s.coerceIn(0.0, 1.0)
     }
 }

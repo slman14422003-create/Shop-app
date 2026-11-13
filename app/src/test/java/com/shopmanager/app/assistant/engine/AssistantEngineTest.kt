@@ -400,4 +400,256 @@ class AssistantEngineTest {
         c.case("debt still works") { assertEquals(Intent.ADD_DEBT, cmd("سجل على سامر 20 ألف", s = s).intent) }
         c.assertNone()
     }
+
+    private val rich = EngineSnapshot(
+        persons = listOf(
+            KnownPerson("p1", "سامر", 50_000.0, typicalAmount = 20_000.0),
+            KnownPerson("p2", "أحمد علي", 30_000.0, debtAmounts = listOf(10_000.0, 12_000.0)),
+            KnownPerson("p3", "أحمد سمير", 80_000.0, debtAmounts = listOf(75_000.0))
+        ),
+        materials = listOf(
+            KnownMaterial("سكر", 18_500.0), KnownMaterial("ملح", 3_000.0, inShortage = true),
+            KnownMaterial("ملح خشن", 3_500.0), KnownMaterial("ملح ناعم", 3_200.0),
+            KnownMaterial("هيل", 90_000.0, usualUnit = "نص كيلو", usualQty = 1.0),
+            KnownMaterial("بيبسي", 5_000.0), KnownMaterial("نسكافيه", 40_000.0), KnownMaterial("قهوة", 30_000.0)
+        ),
+        aliases = emptyMap(), currency = "ل.س", nowMillis = now, timeZoneId = "UTC", version = 7L,
+        recentOps = listOf(RecentOp("ADD_SHORTAGE", "سكر", 0.0, now - 3_600_000L))
+    )
+
+    @Test fun voice_fillers_glued_and_cleaned_text() {
+        val c = Collector()
+        c.case("fillers removed") {
+            val o = run("يا معلم لو سمحت ضيف سكر هلق", s = rich)
+            assertEquals(Intent.ADD_SHORTAGE, o.commands[0].intent)
+            assertEquals("سكر", o.commands[0].materials[0].name)
+            assertTrue(!o.cleanedText.contains("معلم") && !o.cleanedText.contains("سمحت"))
+        }
+        c.case("glued verb") { assertEquals("سكر", cmd("ضيفسكر", s = rich).materials[0].name) }
+        c.case("filler shu before verb") { assertEquals(Intent.ADD_SHORTAGE, cmd("شو ضيف هيل", s = rich).intent) }
+        c.assertNone()
+    }
+
+    @Test fun foreign_names_and_shami_numbers() {
+        val c = Collector()
+        c.case("pepsi latin") { assertEquals("بيبسي", cmd("ضيف Pepsi", s = rich).materials[0].name) }
+        c.case("nescafe latin") { assertEquals("نسكافيه", cmd("ضيف Nescafe", s = rich).materials[0].name) }
+        c.case("ألفين وخمسميه") { assertEquals(2_500.0, cmd("سجل على سامر ألفين وخمسميه", s = rich).amount ?: 0.0, 0.001) }
+        c.case("تلاتة تلاف") { assertEquals(3_000.0, cmd("سجل على سامر تلاتة تلاف", s = rich).amount ?: 0.0, 0.001) }
+        c.case("اربعتعش الف") { assertEquals(14_000.0, cmd("سجل على سامر اربعتعش الف", s = rich).amount ?: 0.0, 0.001) }
+        c.case("ميتين الف") { assertEquals(200_000.0, cmd("سجل على سامر ميتين الف", s = rich).amount ?: 0.0, 0.001) }
+        c.case("مليون ونص") { assertEquals(1_500_000.0, cmd("سجل على سامر مليون ونص", s = rich).amount ?: 0.0, 0.001) }
+        c.case("نص مليون") { assertEquals(500_000.0, cmd("سجل على سامر نص مليون", s = rich).amount ?: 0.0, 0.001) }
+        c.case("qaf as hamza") { assertTrue(ArabicText.similarity("قهوه", "اهوه") >= 0.8) }
+        c.case("thaa as seen") { assertTrue(ArabicText.similarity("ثوم", "سوم") >= 0.8) }
+        c.case("dhal as zay") { assertTrue(ArabicText.similarity("ذره", "زره") >= 0.8) }
+        c.case("dad as dal") { assertTrue(ArabicText.similarity("ضبس", "دبس") >= 0.8) }
+        c.assertNone()
+    }
+
+    @Test fun speech_ranker_and_weak_words() {
+        val c = Collector()
+        c.case("rerank by known names") {
+            val r = SpeechResult("سجل على ثامر 5000", listOf(SpeechAlt("سجل على سامر 5000", 0.4f), SpeechAlt("سجل على شامر 5000", 0.3f)))
+            val ranked = SpeechRanker.rank(r, rich)
+            assertTrue(ranked.text, ranked.text.contains("سامر"))
+        }
+        c.case("phonetic fix") {
+            val r = SpeechResult("ضيف اهوه", emptyList())
+            assertTrue(SpeechRanker.rank(r, rich).text.contains("قهوة") || SpeechRanker.rank(r, rich).text.contains("قهوه"))
+        }
+        c.case("weak words listed") {
+            val r = SpeechResult("ضيف زنجفيل", emptyList(), listOf(SpeechWord("ضيف", 0.95f), SpeechWord("زنجفيل", 0.3f)))
+            assertTrue(SpeechRanker.rank(r, rich).weak.any { it.text == "زنجفيل" })
+        }
+        c.case("weak alternatives") {
+            val alts = SpeechRanker.alternativesFor("سكار", rich)
+            assertTrue(alts.contains("سكر"))
+        }
+        c.assertNone()
+    }
+
+    @Test fun voice_choice_words() {
+        val c = Collector()
+        c.case("first") { assertEquals(VoiceChoiceResult.Option(0), VoiceChoice.parse("الأولى")) }
+        c.case("second") { assertEquals(VoiceChoiceResult.Option(1), VoiceChoice.parse("التانية")) }
+        c.case("third") { assertEquals(VoiceChoiceResult.Option(2), VoiceChoice.parse("التالتة")) }
+        c.case("this") { assertEquals(VoiceChoiceResult.Confirm, VoiceChoice.parse("هي")) }
+        c.case("execute") { assertEquals(VoiceChoiceResult.Confirm, VoiceChoice.parse("نفّذ")) }
+        c.case("no") { assertEquals(VoiceChoiceResult.Cancel, VoiceChoice.parse("لا")) }
+        c.case("undo") { assertEquals(VoiceChoiceResult.Undo, VoiceChoice.parse("تراجع")) }
+        c.case("sentence is none") { assertEquals(VoiceChoiceResult.None, VoiceChoice.parse("ضيف سكر وملح")) }
+        c.case("choice resolves pending") {
+            val o = run("كم على أحمد", s = rich)
+            val r = run("التانية", o.context, rich).commands[0]
+            assertTrue(r.isReady); assertTrue(r.fromChoice)
+            assertEquals(o.commands[0].ambiguity!!.options[1].label, r.person?.name)
+        }
+        c.assertNone()
+    }
+
+    @Test fun list_mode_vocabulary_and_options() {
+        val c = Collector()
+        c.case("list mode items") {
+            val o = engine.understand("سكر، هيل، ملح", rich, ConversationContext(), EngineOptions(listMode = true))
+            val x = o.commands[0]
+            assertEquals(Intent.ADD_SHORTAGE, x.intent); assertTrue(x.listMode)
+            assertEquals(listOf("سكر", "هيل", "ملح"), x.materials.map { it.name })
+        }
+        c.case("list split") { assertEquals(listOf("سكر", "هيل", "ملح"), ListMode.items("سكر، هيل و ملح")) }
+        c.case("vocabulary") {
+            val v = Vocabulary.build(rich)
+            assertTrue(v.words.contains("سامر") && v.words.contains("هيل") && v.words.contains("ضيف") && v.words.contains("خمسين"))
+            assertTrue(v.toGrammarJson().contains("[unk]"))
+        }
+        c.case("prewarm and cache") {
+            engine.prewarm(rich)
+            val a = cmd("ضيف سكر", s = rich); val b = cmd("ضيف سكر", s = rich)
+            assertEquals(a.materials[0].name, b.materials[0].name)
+        }
+        c.assertNone()
+    }
+
+    @Test fun understanding_quantities_corrections_queries() {
+        val c = Collector()
+        c.case("multi quantities") {
+            val x = cmd("ضيف كيلو سكر ونص كيلو هيل وكيسين ملح", s = rich)
+            assertEquals(3, x.materials.size)
+            assertEquals("كيلو", x.materials[0].unit)
+            assertEquals("نص كيلو", x.materials[1].unit)
+            assertEquals(2.0, x.materials[2].quantity ?: 0.0, 0.001)
+        }
+        c.case("update existing shortage") {
+            val x = cmd("ضيف تلاتة كيس ملح", s = rich)
+            assertTrue(x.materials[0].inShortage); assertTrue(x.understood.contains("تحديث"))
+        }
+        c.case("correction") {
+            val last = Command(Intent.ADD_SHORTAGE, 9.0, "ضيف ملح", materials = listOf(MaterialRef("ملح", "ملح", 1.0, MatchLevel.EXACT, 1.0, "كيلو")), understood = "x")
+            val x = cmd("لا مو هيك، قصدي الخشن", ConversationContext(lastCommand = last), rich)
+            assertTrue(x.isCorrection); assertEquals("ملح خشن", x.materials[0].name); assertEquals("كيلو", x.materials[0].unit)
+        }
+        c.case("bought deletes") { assertEquals(Intent.REMOVE_SHORTAGE, cmd("اشتريت السكر", s = rich).intent) }
+        c.case("arrived deletes") { assertEquals(Intent.REMOVE_SHORTAGE, cmd("وصل الهيل", s = rich).intent) }
+        c.case("compound debt shortage") {
+            val o = run("سجل على سامر 5000 وضيف سكر", s = rich)
+            assertEquals(listOf(Intent.ADD_DEBT, Intent.ADD_SHORTAGE), o.commands.map { it.intent })
+        }
+        c.case("remaining query") { assertEquals(Intent.QUERY_BALANCE, cmd("كم باقي على سامر", s = rich).intent) }
+        c.case("shortage today") {
+            val x = cmd("شو ناقص اليوم", s = rich)
+            assertEquals(Intent.LIST_SHORTAGES, x.intent); assertEquals(Period.TODAY, x.period)
+        }
+        c.case("top debtors") {
+            val x = cmd("أكثر 5 مديونين", s = rich)
+            assertEquals(Intent.QUERY_TOP_DEBTORS, x.intent); assertEquals(5, x.limit)
+        }
+        c.case("pronoun material") {
+            val x = cmd("ضيف كمان كيلو منها", ConversationContext(lastMaterial = "هيل"), rich)
+            assertEquals(Intent.ADD_SHORTAGE, x.intent); assertEquals("هيل", x.materials[0].name); assertEquals("كيلو", x.materials[0].unit)
+        }
+        c.case("pronoun person pay rest") {
+            val x = cmd("سدد له الباقي", ConversationContext(lastPerson = PersonRef("سامر", "p1", "سامر", 1.0, MatchLevel.EXACT)), rich)
+            assertEquals(Intent.PAY_DEBT, x.intent); assertEquals("p1", x.person?.id); assertTrue(x.full)
+        }
+        c.case("question availability") { assertEquals(Intent.SEARCH_MATERIAL, cmd("عندنا هيل؟", s = rich).intent) }
+        c.case("finished means shortage") { assertEquals(Intent.ADD_SHORTAGE, cmd("خلص الهيل", s = rich).intent) }
+        c.case("bought means remove") { assertEquals(Intent.REMOVE_SHORTAGE, cmd("جبنا هيل", s = rich).intent) }
+        c.assertNone()
+    }
+
+    @Test fun habits_and_context_rules() {
+        val c = Collector()
+        c.case("usual unit filled") {
+            val x = cmd("ضيف هيل", s = rich)
+            assertEquals("نص كيلو", x.materials[0].unit); assertTrue(x.materials[0].fromHabit)
+        }
+        c.case("explicit beats habit") {
+            val x = cmd("ضيف كيلو هيل", s = rich)
+            assertEquals("كيلو", x.materials[0].unit); assertTrue(!x.materials[0].fromHabit)
+        }
+        c.case("disambiguate by amount") {
+            val x = cmd("سجل على أحمد 75000", s = rich)
+            assertEquals("p3", x.person?.id); assertTrue(x.ambiguity == null)
+        }
+        c.case("still ambiguous without hint") { assertTrue(cmd("كم على أحمد", s = rich).ambiguity != null) }
+        c.case("large quantity risky") { assertTrue(cmd("ضيف 2000 كيس سكر", s = rich).risky) }
+        c.case("price jump risky") { assertTrue(cmd("خلي سعر هيل 900000", s = rich).risky) }
+        c.case("duplicate warning") {
+            val x = cmd("ضيف سكر", s = rich)
+            assertTrue(x.confirmReasons.joinToString().contains("قبل ساعة"))
+        }
+        c.case("no duplicate warning after window") {
+            val x = cmd("ضيف سكر", s = rich.copy(recentOps = listOf(RecentOp("ADD_SHORTAGE", "سكر", 0.0, now - 30 * 3_600_000L))))
+            assertTrue(!x.confirmReasons.joinToString().contains("قبل"))
+        }
+        c.case("shortage only from existing") {
+            val x = cmd("ضيف زعفران", s = rich)
+            assertTrue(!x.isReady)
+        }
+        c.case("debt only for existing") {
+            val x = cmd("سجل على فارس 5000", s = rich)
+            assertTrue(!x.isReady)
+        }
+        c.assertNone()
+    }
+
+    @Test fun habit_book_learning_and_export() {
+        val c = Collector()
+        val add = { name: String, unit: String?, qty: Double -> Command(Intent.ADD_SHORTAGE, 9.0, "", materials = listOf(MaterialRef(name, name, 1.0, MatchLevel.EXACT, qty, unit))) }
+        c.case("usual unit after two") {
+            var b = HabitBook()
+            b = b.record(add("سكر", "كيلو", 2.0), now)
+            assertEquals(null, b.usualUnit("سكر"))
+            b = b.record(add("سكر", "كيلو", 2.0), now + 1)
+            assertEquals("كيلو", b.usualUnit("سكر")?.first)
+            assertEquals(2.0, b.usualQty("سكر") ?: 0.0, 0.001)
+        }
+        c.case("alias after same choice twice") {
+            val b1 = HabitBook().recordChoice("سمر", "سامر")
+            assertEquals(null, b1.alias)
+            val b2 = b1.book.recordChoice("سمر", "سامر")
+            assertEquals("سامر", b2.alias?.canonical)
+        }
+        c.case("companions") {
+            val two = Command(Intent.ADD_SHORTAGE, 9.0, "", materials = listOf(MaterialRef("سكر", "سكر", 1.0, MatchLevel.EXACT), MaterialRef("شاي", "شاي", 1.0, MatchLevel.EXACT)))
+            val b = HabitBook().record(two, now).record(two, now + 1)
+            assertEquals(listOf("شاي"), b.companions("سكر"))
+            assertEquals(emptyList<String>(), b.companions("سكر", setOf("شاي")))
+        }
+        c.case("recurring") {
+            val day = 86_400_000L
+            var b = HabitBook()
+            for (i in 0 until 4) b = b.record(add("سكر", null, 1.0), now - (40 - i * 10) * day)
+            val r = b.recurring(now, emptySet())
+            assertTrue(r.isNotEmpty() && r[0].name == "سكر")
+            assertTrue(b.recurring(now, setOf("سكر")).isEmpty())
+        }
+        c.case("quick order by hour") {
+            val noonDebt = Command(Intent.ADD_DEBT, 9.0, "")
+            var b = HabitBook()
+            for (i in 0 until 3) b = b.record(noonDebt, 12 * 3_600_000L - 3 * 3_600_000L + i * 86_400_000L, 3)
+            val ordered = b.quickOrder(12, listOf("نواقص" to Intent.LIST_SHORTAGES, "دين" to Intent.ADD_DEBT))
+            assertEquals(Intent.ADD_DEBT, ordered[0].second)
+        }
+        c.case("export import roundtrip") {
+            val b = HabitBook().record(add("سكر", "كيلو", 2.0), now).record(add("سكر", "كيلو", 2.0), now + 1)
+            val back = HabitBook.fromText(b.toText())
+            assertEquals(b.toText(), back.toText())
+            val merged = b.merge(back)
+            assertEquals(4, merged.usage["سكر"])
+        }
+        c.case("dictionary export import") {
+            val txt = PersonalDictionary.export(mapOf("سمر" to "سامر", "بيبسي" to "Pepsi"))
+            val m = PersonalDictionary.import(txt)
+            assertEquals("سامر", m["سمر"])
+            assertEquals(2, m.size)
+        }
+        c.case("enrich snapshot") {
+            val b = HabitBook().record(add("سكر", "كيلو", 2.0), now).record(add("سكر", "كيلو", 2.0), now + 1)
+            val e = b.enrich(rich)
+            assertEquals("كيلو", e.materials.first { it.name == "سكر" }.usualUnit)
+            assertEquals(2, e.materials.first { it.name == "سكر" }.usage)
+        }
+        c.assertNone()
+    }
 }

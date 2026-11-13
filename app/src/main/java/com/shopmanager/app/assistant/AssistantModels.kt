@@ -4,9 +4,11 @@ import com.shopmanager.app.assistant.engine.AmbiguityOption
 import com.shopmanager.app.assistant.engine.Command
 
 /** حالة الروبوت التعبيرية. */
-enum class RobotMood { READY, THINKING, SUCCESS, CONFUSED }
+enum class RobotMood { READY, THINKING, SUCCESS, CONFUSED, LISTENING }
 
-data class CardField(val label: String, val value: String)
+data class CardField(val label: String, val value: String, val tone: Int = 0)
+
+data class UndoBar(val label: String, val undoId: Long, val expiresAt: Long)
 
 /** بطاقات غنية داخل فقاعة المساعد. */
 sealed interface AssistantCard {
@@ -24,7 +26,8 @@ sealed interface AssistantCard {
         val title: String,
         val details: String,
         val undoId: Long?,
-        val success: Boolean = true
+        val success: Boolean = true,
+        val command: Command? = null
     ) : AssistantCard
 
     /** بطاقة جواب (سعر، رصيد، قائمة...). */
@@ -60,5 +63,6 @@ data class AssistantSettings(
     val alwaysConfirm: Boolean = true,
     val robotAnimation: Boolean = true,
     /** الشاشة الرئيسية الجديدة (المساعد). إيقافها يعيد الرئيسية الكلاسيكية. */
-    val newHome: Boolean = true
+    val newHome: Boolean = true,
+    val dryRun: Boolean = false
 )

@@ -1,5 +1,9 @@
 package com.shopmanager.app.assistant.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,7 +33,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.shopmanager.app.assistant.voice.ui.ModelManagementScreen
+import com.shopmanager.app.assistant.voice.ui.VoiceSettingsSection
 import com.shopmanager.app.assistant.AssistantViewModel
 import com.shopmanager.app.ui.common.AppPillButton
 import com.shopmanager.app.ui.common.AppRowSurface
@@ -44,6 +51,14 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
     val aliases by assistant.aliases.collectAsState()
     var confirmAliases by remember { mutableStateOf(false) }
     var confirmHistory by remember { mutableStateOf(false) }
+    var showModels by remember { mutableStateOf(false) }
+    val unheard by assistant.unheard.collectAsState()
+    val context = LocalContext.current
+
+    if (showModels) {
+        ModelManagementScreen(assistant.voice) { showModels = false }
+        return
+    }
 
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(
@@ -58,6 +73,8 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
             item { SwitchRow("الاقتراحات الاستباقية", "اقتراحات على الرئيسية مثل مواد تتكرر في النواقص", s.proactiveSuggestions) { assistant.updateSettings(s.copy(proactiveSuggestions = it)) } }
             item { SwitchRow("اطلب تأكيداً دائماً", "بطاقة تأكيد قبل أي تنفيذ. الحذف وتعديل السعر والمبالغ غير المعتادة تُؤكَّد دائماً حتى لو أطفأته", s.alwaysConfirm) { assistant.updateSettings(s.copy(alwaysConfirm = it)) } }
             item { SwitchRow("حركة الروبوت", "إيقافها يثبّت الروبوت ويوفّر الأداء", s.robotAnimation) { assistant.updateSettings(s.copy(robotAnimation = it)) } }
+            item { SwitchRow("وضع التجربة", "ينفّذ المساعد كل شيء شكلياً بدون تغيير أي بيانات", s.dryRun) { assistant.updateSettings(s.copy(dryRun = it)) } }
+            item { VoiceSettingsSection(assistant.voice) { showModels = true } }
             item { SwitchRow("الرئيسية الجديدة (المساعد)", "إيقافها يعيد الشاشة الرئيسية الكلاسيكية", s.newHome) { assistant.updateSettings(s.copy(newHome = it)) } }
 
             item { Text("الأسماء البديلة المتعلَّمة", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
@@ -73,6 +90,31 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
                     }
                 }
                 item { AppPillButton("مسح كل الأسماء البديلة", { confirmAliases = true }, Modifier.fillMaxWidth(), tonal = true, height = 46.dp) }
+            }
+            item { Text("القاموس الشخصي", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    AppPillButton("تصدير", {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("dictionary", assistant.exportDictionary()))
+                        Toast.makeText(context, "نُسخ القاموس إلى الحافظة", Toast.LENGTH_SHORT).show()
+                    }, Modifier.weight(1f), tonal = true, height = 46.dp)
+                    AppPillButton("استيراد من الحافظة", {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val t = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+                        val n = if (t.isBlank()) 0 else assistant.importDictionary(t)
+                        Toast.makeText(context, "تم استيراد $n اسماً", Toast.LENGTH_SHORT).show()
+                    }, Modifier.weight(1f), tonal = true, height = 46.dp)
+                }
+            }
+            item { Text("جمل ما فهمها المساعد", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
+            if (unheard.isEmpty()) {
+                item { Text("لا توجد جمل بعد.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else {
+                items(unheard.reversed().take(30), key = { it }) { t ->
+                    AppRowSurface(RoundedCornerShape(18.dp)) { Text(t, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), style = MaterialTheme.typography.bodyMedium) }
+                }
+                item { AppPillButton("مسح هذا السجل", { assistant.clearUnheard() }, Modifier.fillMaxWidth(), tonal = true, height = 46.dp) }
             }
             item { AppPillButton("مسح سجل المحادثة", { confirmHistory = true }, Modifier.fillMaxWidth().padding(top = 6.dp), tonal = true, height = 46.dp) }
         }

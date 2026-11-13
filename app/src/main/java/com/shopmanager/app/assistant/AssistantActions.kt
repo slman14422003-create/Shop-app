@@ -90,23 +90,13 @@ class AssistantActions(private val app: Application) {
         val amount = cmd.amount ?: error("لا يوجد مبلغ")
         val date = dateStr(cmd.date?.startMillis)
         val cur = data.currency
-        if (p.id != null) {
-            val id = debts.addDebt(p.id, amount, date, "") { SelfChangeLedger.markCreated(app, SelfChangeLedger.KIND_DEBT, it) }
-            ChangeHistory.log(app, "إضافة دين بمبلغ ${Formatters.number(amount)} (المساعد)")
-            DebtActivityLog.log(app, DebtActivityLog.Kind.ADDED, p.name, amount)
-            after()
-            return Outcome("تم تسجيل الدين", "${money(amount, cur)} على ${p.name}", undo = {
-                debts.deleteDebt(id)
-                DebtActivityLog.log(app, DebtActivityLog.Kind.UNDO, p.name, amount)
-                after()
-            })
-        }
-        debts.addPerson(p.name, amount, date, "", "") { SelfChangeLedger.markCreated(app, SelfChangeLedger.KIND_DEBT, it) }
-        ChangeHistory.log(app, "إضافة عميل جديد \"${p.name}\" بدين ${Formatters.number(amount)} (المساعد)")
-        DebtActivityLog.log(app, DebtActivityLog.Kind.NEW_CUSTOMER, p.name, amount)
+        val pid = p.id ?: return Outcome("ما لقيت العميل", "\"${p.name}\" غير موجود بين العملاء", success = false)
+        val id = debts.addDebt(pid, amount, date, "") { SelfChangeLedger.markCreated(app, SelfChangeLedger.KIND_DEBT, it) }
+        ChangeHistory.log(app, "إضافة دين بمبلغ ${Formatters.number(amount)} (المساعد)")
+        DebtActivityLog.log(app, DebtActivityLog.Kind.ADDED, p.name, amount)
         after()
-        return Outcome("تم إنشاء العميل وتسجيل الدين", "${p.name} — ${money(amount, cur)}", undo = {
-            debts.findPersonIdByName(p.name)?.let { debts.deletePersonWithDebts(it) }
+        return Outcome("تم تسجيل الدين", "${money(amount, cur)} على ${p.name}", undo = {
+            debts.deleteDebt(id)
             DebtActivityLog.log(app, DebtActivityLog.Kind.UNDO, p.name, amount)
             after()
         })
@@ -183,15 +173,30 @@ class AssistantActions(private val app: Application) {
         val skipped = ArrayList<String>()
         val starredIds = ArrayList<String>()
         val starredNames = ArrayList<String>()
+        val updatedNames = ArrayList<String>()
+        val restores = ArrayList<suspend () -> Unit>()
         var topOrder = (data.materials.minOfOrNull { it.order } ?: 0L) - 1
         for (m in cmd.materials) {
             val existing = data.materials.firstOrNull { same(it.name, m.name) }
             if (existing != null) {
+                var touched = false
+                if (m.quantity != null && !m.fromHabit && (kotlin.math.abs(m.quantity - existing.quantity) > 0.0001 || (m.unit != null && m.unit != existing.unit))) {
+                    val nu = m.unit ?: existing.unit
+                    SelfChangeLedger.markMaterialWritten(app, existing.id, RemoteChangeProcessor.materialSignature(existing.name, m.quantity, nu))
+                    mats.updateMaterial(existing.id, existing.name, m.quantity, nu, existing.section, existing.notes)
+                    LearningHub.store(app).recordAdded(existing.name, m.quantity, nu, cmd.important)
+                    updatedNames.add(existing.name + " (" + Formatters.number(m.quantity) + " " + nu + ")")
+                    val old = existing
+                    restores.add { mats.updateMaterial(old.id, old.name, old.quantity, old.unit, old.section, old.notes) }
+                    touched = true
+                }
                 if (cmd.important && !existing.important) {
                     mats.setImportant(existing.id, true, topOrder)
                     topOrder -= 1
                     starredIds.add(existing.id); starredNames.add(existing.name)
-                } else skipped.add(m.name)
+                    touched = true
+                }
+                if (!touched) skipped.add(m.name)
                 continue
             }
             val qty = m.quantity ?: 1.0
@@ -203,7 +208,7 @@ class AssistantActions(private val app: Application) {
             LearningHub.store(app).recordAdded(m.name, qty, unit, cmd.important)
             ids.add(id); added.add(m.name)
         }
-        if (added.isEmpty() && starredNames.isEmpty()) return Outcome("موجودة مسبقاً", skipped.joinToString("، ") + " بالنواقص أصلاً", success = false)
+        if (added.isEmpty() && starredNames.isEmpty() && updatedNames.isEmpty()) return Outcome("موجودة مسبقاً", skipped.joinToString("، ") + " بالنواقص أصلاً", success = false)
         ChangeHistory.log(app, "إضافة للنواقص: ${(added + starredNames).joinToString("، ")}" + (if (cmd.important) " (هامة)" else "") + " (المساعد)")
         after()
         val star = if (cmd.important) " ⭐" else ""
@@ -212,11 +217,14 @@ class AssistantActions(private val app: Application) {
             SelfChangeLedger.markMaterialsDeleted(app, ids)
             ids.forEach { mats.deleteMaterial(it) }
             starredIds.forEach { mats.setImportant(it, false) }
+            restores.forEach { it() }
             after()
         }
-        if (added.isEmpty()) return Outcome("تم وضعها كهامة", starredNames.joinToString("، ") + star + extra, undo = undo)
+        if (added.isEmpty() && starredNames.isEmpty()) return Outcome("تم تحديث الكمية", updatedNames.joinToString("، ") + extra, undo = undo)
+        if (added.isEmpty()) return Outcome("تم وضعها كهامة", starredNames.joinToString("، ") + star + (if (updatedNames.isNotEmpty()) " • تحديث: ${updatedNames.joinToString("، ")}" else "") + extra, undo = undo)
         val starNote = if (starredNames.isNotEmpty()) " • صارت هامة: ${starredNames.joinToString("، ")}" else ""
-        return Outcome("تمت الإضافة للنواقص", added.joinToString("، ") + star + starNote + extra, undo = undo)
+        val upNote = if (updatedNames.isNotEmpty()) " • تحديث: ${updatedNames.joinToString("، ")}" else ""
+        return Outcome("تمت الإضافة للنواقص", added.joinToString("، ") + star + starNote + upNote + extra, undo = undo)
     }
 
     private suspend fun removeShortages(cmd: Command, data: AssistantData): Outcome {

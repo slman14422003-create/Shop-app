@@ -3,7 +3,21 @@ package com.shopmanager.app.assistant
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.shopmanager.app.assistant.engine.AmbiguityKind
 import com.shopmanager.app.assistant.engine.AmbiguityOption
+import com.shopmanager.app.assistant.engine.EngineOptions
+import com.shopmanager.app.assistant.engine.HabitBook
+import com.shopmanager.app.assistant.engine.ListMode
+import com.shopmanager.app.assistant.engine.PersonalDictionary
+import com.shopmanager.app.assistant.engine.RankedSpeech
+import com.shopmanager.app.assistant.engine.RecentOp
+import com.shopmanager.app.assistant.engine.RecurringAlert
+import com.shopmanager.app.assistant.engine.SpeechRanker
+import com.shopmanager.app.assistant.engine.Vocabulary
+import com.shopmanager.app.assistant.engine.VoiceChoice
+import com.shopmanager.app.assistant.engine.VoiceChoiceResult
+import com.shopmanager.app.assistant.voice.VoiceInput
+import com.shopmanager.app.assistant.voice.VoiceUiState
 import com.shopmanager.app.assistant.engine.ArabicText
 import com.shopmanager.app.assistant.engine.AssistantEngine
 import com.shopmanager.app.assistant.engine.Command
@@ -86,6 +100,41 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     val data: StateFlow<AssistantData> = _data.asStateFlow()
     private val _history = MutableStateFlow<Map<String, List<PriceChange>>>(emptyMap())
 
+    val voice: VoiceInput = VoiceInput.get(application)
+
+    private var habits = HabitBook.fromText(store.loadHabits())
+
+    private val _pinned = MutableStateFlow(store.loadPinned())
+    val pinned: StateFlow<List<String>> = _pinned.asStateFlow()
+
+    private val _unheard = MutableStateFlow(store.loadUnheard())
+    val unheard: StateFlow<List<String>> = _unheard.asStateFlow()
+
+    private val _undoBar = MutableStateFlow<UndoBar?>(null)
+    val undoBar: StateFlow<UndoBar?> = _undoBar.asStateFlow()
+
+    private val _voicePreview = MutableStateFlow<RankedSpeech?>(null)
+    val voicePreview: StateFlow<RankedSpeech?> = _voicePreview.asStateFlow()
+
+    private val _listMode = MutableStateFlow(false)
+    val listMode: StateFlow<Boolean> = _listMode.asStateFlow()
+
+    private val _listItems = MutableStateFlow<List<String>>(emptyList())
+    val listItems: StateFlow<List<String>> = _listItems.asStateFlow()
+
+    private val _recurring = MutableStateFlow<List<RecurringAlert>>(emptyList())
+    val recurring: StateFlow<List<RecurringAlert>> = _recurring.asStateFlow()
+
+    private val _quick = MutableStateFlow<List<AssistantChip>>(emptyList())
+    val quickButtons: StateFlow<List<AssistantChip>> = _quick.asStateFlow()
+
+    private var dataVersion = 1L
+    private var lastWasVoice = false
+    private var undoBarJob: Job? = null
+    private var warmed = false
+    private val recentOps = ArrayList<RecentOp>()
+    private var lastExecuted: Pair<Intent, Long>? = null
+
     private var engineCtx = ConversationContext()
     private var idSeq = System.currentTimeMillis()
     private var bound = false
@@ -96,6 +145,23 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         _messages.value = store.loadHistory()
+        viewModelScope.launch { voice.results.collect { onVoiceResult(it) } }
+        viewModelScope.launch {
+            voice.uiState.collect { st ->
+                when (st) {
+                    is VoiceUiState.Listening -> setMood(RobotMood.LISTENING)
+                    is VoiceUiState.Processing -> setMood(RobotMood.THINKING)
+                    is VoiceUiState.Idle -> if (_mood.value == RobotMood.LISTENING) setMood(RobotMood.READY)
+                    is VoiceUiState.Unavailable -> if (_mood.value == RobotMood.LISTENING) setMood(RobotMood.READY)
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        voice.release()
+        super.onCleared()
     }
 
     private fun nextId(): Long { idSeq += 1; return idSeq }
@@ -112,8 +178,48 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             ) { d, m, catalog, history ->
                 _history.value = history
                 AssistantData(d.persons, d.debts, m.materials, m.prices, catalog, currencyRepo.currencySymbol)
-            }.collect { _data.value = it }
+            }.collect {
+                _data.value = it
+                dataVersion += 1
+                refreshHabitViews()
+                if (!warmed) {
+                    warmed = true
+                    viewModelScope.launch(Dispatchers.Default) {
+                        val snap = buildSnapshot()
+                        engine.prewarm(snap)
+                        voice.preload(Vocabulary.build(snap))
+                    }
+                }
+            }
         }
+    }
+
+    private fun refreshHabitViews() {
+        val now = System.currentTimeMillis()
+        val current = _data.value.materials.map { it.name }.toSet()
+        _recurring.value = habits.recurring(now, current).map { a ->
+            a.copy(name = displayName(a.name))
+        }.take(3)
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val base = listOf(
+            "ضيف للنواقص" to Intent.ADD_SHORTAGE, "سجل دين" to Intent.ADD_DEBT, "شو النواقص" to Intent.LIST_SHORTAGES,
+            "مجموع الديون" to Intent.QUERY_TOTAL_DEBTS, "ملخص اليوم" to Intent.SUMMARY
+        )
+        val ordered = habits.quickOrder(hour, base).map { (label, intent) ->
+            when (intent) {
+                Intent.ADD_SHORTAGE -> AssistantChip(label, "ضيف  للنواقص", false)
+                Intent.ADD_DEBT -> AssistantChip(label, "سجل على ", false)
+                else -> AssistantChip(label)
+            }
+        }
+        _quick.value = _pinned.value.map { AssistantChip(it, it, true) } + ordered
+    }
+
+    private fun displayName(key: String): String {
+        val d = _data.value
+        val k = ArabicText.normalize(key)
+        return (d.materials.map { it.name } + d.prices.keys + d.catalog.map { it.name })
+            .firstOrNull { ArabicText.normalize(it.trim()) == k } ?: key
     }
 
     private fun buildSnapshot(): EngineSnapshot {
@@ -125,7 +231,8 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 id = p.id, name = p.name, balance = p.amount,
                 oldestDebtAt = ds.filter { it.createdAt > 0 }.minOfOrNull { it.createdAt } ?: 0L,
                 lastDebtAt = ds.maxOfOrNull { it.createdAt } ?: 0L,
-                typicalAmount = if (ds.size >= 2) ds.sumOf { it.amount } / ds.size else 0.0
+                typicalAmount = if (ds.size >= 2) ds.sumOf { it.amount } / ds.size else 0.0,
+                debtAmounts = ds.map { it.amount }.filter { it > 0 }.takeLast(12)
             )
         }
         val seen = HashSet<String>()
@@ -138,7 +245,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         d.materials.forEach { add(it.name, true) }
         d.prices.keys.forEach { add(it, false) }
         d.catalog.forEach { add(it.name, false) }
-        return EngineSnapshot(persons, mats, _aliases.value, d.currency, System.currentTimeMillis())
+        val now = System.currentTimeMillis()
+        val recent = synchronized(recentOps) { recentOps.filter { now - it.at < 24 * 3_600_000L }.toList() }
+        return habits.enrich(EngineSnapshot(persons, mats, _aliases.value, d.currency, now, version = dataVersion + _aliases.value.size, recentOps = recent))
     }
 
     // ------------------------------------------------------------------ المحادثة
@@ -166,9 +275,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setDraft(text: String) { _draft.value = text }
 
-    fun send(textIn: String) {
+    fun send(textIn: String, fromVoice: Boolean = false, listMode: Boolean = false) {
         val text = textIn.trim()
         if (text.isEmpty() || _thinking.value) return
+        lastWasVoice = fromVoice
+        if (!listMode && handleCardWord(text)) return
         _draft.value = ""
         addMessage(AssistantMessage(nextId(), true, text, System.currentTimeMillis()))
         _thinking.value = true
@@ -177,7 +288,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             try {
                 val snapshot = buildSnapshot()
                 val ctxIn = engineCtx
-                val out = withContext(Dispatchers.Default) { engine.understand(text, snapshot, ctxIn) }
+                val out = withContext(Dispatchers.Default) { engine.understand(text, snapshot, ctxIn, EngineOptions(listMode = listMode)) }
                 engineCtx = out.context
                 handle(out.commands)
             } catch (e: Exception) {
@@ -190,6 +301,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun reply(text: String, mood: RobotMood, card: AssistantCard? = null, chips: List<AssistantChip> = emptyList()): Long {
         val id = nextId()
+        if (lastWasVoice && voice.settings.value.speakReplies && text.isNotBlank() && mood != RobotMood.THINKING) {
+            voice.speak(text.lineSequence().first { it.isNotBlank() }.take(140))
+        }
         addMessage(AssistantMessage(id, false, text, System.currentTimeMillis(), card, chips))
         setMood(mood, if (mood == RobotMood.READY) 0L else 3000L)
         return id
@@ -205,12 +319,17 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun process(c: Command) {
         val line = understoodLine(c)
         // غموض: بطاقة توضيح بأزرار
-        c.ambiguity?.let { amb ->
+        c.ambiguity?.let { amb0 ->
+            val amb = if (amb0.kind == AmbiguityKind.FUZZY_MATERIAL || amb0.kind == AmbiguityKind.MATERIAL) {
+                amb0.copy(options = amb0.options.sortedByDescending { habits.usage[ArabicText.normalize(it.label.trim())] ?: 0 })
+            } else amb0
+            val sorted = if (amb === amb0) c else c.copy(ambiguity = amb)
+            if (engineCtx.pending != null) engineCtx = engineCtx.copy(pending = sorted)
             reply(line.ifBlank { "" }.let { if (it.isEmpty()) amb.question else it + "\n" + amb.question }, RobotMood.CONFUSED,
-                AssistantCard.Clarify(amb.question, amb.options, c))
+                AssistantCard.Clarify(amb.question, amb.options, sorted))
             return
         }
-        if (c.intent == Intent.UNKNOWN) { reply(UNKNOWN_REPLY, RobotMood.CONFUSED, chips = starterChips()); return }
+        if (c.intent == Intent.UNKNOWN) { noteUnheard(c.rawText); reply(UNKNOWN_REPLY, RobotMood.CONFUSED, chips = starterChips()); return }
         if (c.missing.isNotEmpty()) { reply(listOf(line, c.prompt ?: "ناقصني معلومة.").filter { it.isNotBlank() }.joinToString("\n"), RobotMood.CONFUSED); return }
 
         when (c.intent) {
@@ -238,7 +357,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
 
-        // أوامر تغيّر البيانات
+        if (c.isCorrection) cancelOldConfirms(c)
         val quickAdd = c.intent == Intent.ADD_SHORTAGE && !c.risky && c.confirmReasons.isEmpty()
         val mustConfirm = c.risky || c.confirmReasons.isNotEmpty() || (_settings.value.alwaysConfirm && !quickAdd) ||
             c.person?.level == MatchLevel.NEW || c.intent == Intent.DELETE_LAST
@@ -282,6 +401,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             messageId?.let { replaceMessage(it) { m -> m.copy(card = null) } }
             undoLast(); return
         }
+        if (c.isCorrection) undoPreviousForCorrection(c)
+        if (_settings.value.dryRun) {
+            val card = AssistantCard.Result("تجربة بدون تنفيذ", c.understood.ifBlank { "لم يُنفَّذ شيء" } + "\nلم يتغير أي شيء في بياناتك", null, true)
+            if (messageId != null) replaceMessage(messageId) { it.copy(card = card, time = System.currentTimeMillis()) } else reply(line, RobotMood.SUCCESS, card)
+            setMood(RobotMood.SUCCESS, 3000L)
+            return
+        }
         val outcome = try {
             actions.execute(c, _data.value)
         } catch (e: Exception) {
@@ -299,8 +425,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             publishUndoable()
             undoId = id
         }
-        if (outcome.success) logAction(outcome.title + ": " + outcome.details)
-        val card = AssistantCard.Result(outcome.title, outcome.details, undoId, outcome.success)
+        if (outcome.success) {
+            logAction(outcome.title + ": " + outcome.details)
+            recordHabits(c)
+            lastExecuted = c.intent to System.currentTimeMillis()
+            undoId?.let { showUndoBar(outcome.title + ": " + outcome.details, it) }
+        }
+        val card = AssistantCard.Result(outcome.title, outcome.details, undoId, outcome.success, if (outcome.success && c.intent == Intent.ADD_SHORTAGE) c else null)
         val chips = chipsFor(c)
         if (messageId != null) {
             replaceMessage(messageId) { it.copy(card = card, chips = chips, time = System.currentTimeMillis()) }
@@ -309,6 +440,276 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
         setMood(if (outcome.success) RobotMood.SUCCESS else RobotMood.CONFUSED, 3000L)
         setLast(outcome.title)
+    }
+
+    private fun recordHabits(c: Command) {
+        val now = System.currentTimeMillis()
+        val zone = java.util.TimeZone.getDefault().getOffset(now) / 3_600_000
+        habits = habits.record(c, now, zone)
+        when (c.intent) {
+            Intent.ADD_SHORTAGE -> c.materials.forEach { m -> synchronized(recentOps) { recentOps.add(RecentOp(Intent.ADD_SHORTAGE.name, m.name, 0.0, now)) } }
+            Intent.ADD_DEBT -> c.person?.let { p -> synchronized(recentOps) { recentOps.add(RecentOp(Intent.ADD_DEBT.name, p.name, c.amount ?: 0.0, now)) } }
+            else -> {}
+        }
+        val text = habits.toText()
+        viewModelScope.launch(Dispatchers.IO) { store.saveHabits(text) }
+        refreshHabitViews()
+    }
+
+    private fun showUndoBar(label: String, id: Long) {
+        undoBarJob?.cancel()
+        _undoBar.value = UndoBar(label, id, System.currentTimeMillis() + UNDO_BAR_MS)
+        undoBarJob = viewModelScope.launch { delay(UNDO_BAR_MS); _undoBar.value = null }
+    }
+
+    fun dismissUndoBar() { undoBarJob?.cancel(); _undoBar.value = null }
+
+    private fun noteUnheard(raw: String) {
+        if (raw.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) { store.addUnheard(raw); _unheard.value = store.loadUnheard() }
+    }
+
+    fun clearUnheard() { store.clearUnheard(); _unheard.value = emptyList() }
+
+    private fun cancelOldConfirms(c: Command) {
+        _messages.value.filter { it.card is AssistantCard.Confirm && (it.card as AssistantCard.Confirm).command.intent == c.intent }
+            .forEach { replaceMessage(it.id) { m -> m.copy(card = null, text = m.text + "\n✖ استُبدلت بالتصحيح") } }
+    }
+
+    private suspend fun undoPreviousForCorrection(c: Command) {
+        val last = lastExecuted
+        val entry = undoStack.lastOrNull()
+        if (last != null && entry != null && last.first == c.intent && System.currentTimeMillis() - last.second < 120_000L) {
+            try {
+                entry.block()
+                undoStack.remove(entry)
+                publishUndoable()
+                _undoBar.value = null
+                lastExecuted = null
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun handleCardWord(text: String): Boolean {
+        if (text.split(' ').size > 3) return false
+        val lastCard = _messages.value.lastOrNull { !it.fromUser }
+        val conf = lastCard?.takeIf { it.card is AssistantCard.Confirm } ?: return false
+        return when (VoiceChoice.parse(text)) {
+            is VoiceChoiceResult.Confirm -> { addMessage(AssistantMessage(nextId(), true, text, System.currentTimeMillis())); confirm(conf.id); true }
+            is VoiceChoiceResult.Cancel -> { addMessage(AssistantMessage(nextId(), true, text, System.currentTimeMillis())); cancel(conf.id); true }
+            is VoiceChoiceResult.Undo -> { addMessage(AssistantMessage(nextId(), true, text, System.currentTimeMillis())); cancel(conf.id); true }
+            else -> false
+        }
+    }
+
+    // ------------------------------------------------------------------ الصوت
+
+    fun startVoice() {
+        _voicePreview.value = null
+        viewModelScope.launch {
+            val v = withContext(Dispatchers.Default) { Vocabulary.build(buildSnapshot()) }
+            voice.start(v)
+        }
+    }
+
+    fun stopVoice() { voice.stop() }
+
+    fun cancelVoice() {
+        voice.cancel()
+        _listMode.value = false
+        _listItems.value = emptyList()
+    }
+
+    private suspend fun onVoiceResult(r: com.shopmanager.app.assistant.engine.SpeechResult) {
+        val snap = buildSnapshot()
+        val ranked = withContext(Dispatchers.Default) { SpeechRanker.rank(r, snap) }
+        val text = ranked.text.trim()
+        if (text.isBlank()) {
+            reply("ما سمعت شي واضح، جرّب مرة ثانية أو اكتب الطلب.", RobotMood.CONFUSED)
+            if (_listMode.value) startVoice()
+            return
+        }
+        if (_listMode.value) {
+            val done = setOf("خلصت", "تم", "كفي", "انتهيت", "نفذ", "نفّذ", "خلص")
+            if (ArabicText.normalize(text) in done.map { ArabicText.normalize(it) }) finishList()
+            else {
+                _listItems.value = _listItems.value + ListMode.items(text)
+                startVoice()
+            }
+            return
+        }
+        if (voice.settings.value.autoSend && ranked.weak.isEmpty()) {
+            send(text, fromVoice = true)
+        } else {
+            _voicePreview.value = ranked
+        }
+    }
+
+    fun applyWeakAlternative(index: Int, alternative: String) {
+        val p = _voicePreview.value ?: return
+        val words = p.text.split(Regex("\\s+")).toMutableList()
+        if (index !in words.indices) return
+        val heard = words[index]
+        words[index] = alternative
+        learnFromCorrection(heard, alternative)
+        _voicePreview.value = p.copy(text = words.joinToString(" "), weak = p.weak.filter { it.index != index })
+    }
+
+    fun sendPreview(edited: String) {
+        val p = _voicePreview.value
+        _voicePreview.value = null
+        if (p != null) {
+            val a = p.text.split(Regex("\\s+"))
+            val b = edited.trim().split(Regex("\\s+"))
+            if (a.size == b.size) for (i in a.indices) if (a[i] != b[i]) learnFromCorrection(a[i], b[i])
+        }
+        send(edited, fromVoice = true)
+    }
+
+    fun dismissPreview() { _voicePreview.value = null }
+
+    private fun learnFromCorrection(heard: String, intended: String) {
+        val canonical = nameContaining(intended) ?: return
+        if (ArabicText.normalize(heard) == ArabicText.normalize(canonical)) return
+        learnAlias(heard, canonical)
+    }
+
+    private fun nameContaining(token: String): String? {
+        val d = _data.value
+        val k = ArabicText.stripAl(ArabicText.canonicalToken(token))
+        val names = d.persons.map { it.name } + d.materials.map { it.name } + d.prices.keys + d.catalog.map { it.name }
+        return names.firstOrNull { n -> n.trim().split(Regex("\\s+")).any { ArabicText.stripAl(ArabicText.canonicalToken(it)) == k } }
+    }
+
+    fun startListMode() {
+        _listMode.value = true
+        _listItems.value = emptyList()
+        startVoice()
+    }
+
+    fun editListItem(index: Int, text: String) {
+        val l = _listItems.value.toMutableList()
+        if (index !in l.indices) return
+        if (text.isBlank()) l.removeAt(index) else l[index] = text.trim()
+        _listItems.value = l
+    }
+
+    fun finishList() {
+        voice.stop()
+        val items = _listItems.value
+        _listMode.value = false
+        _listItems.value = emptyList()
+        if (items.isNotEmpty()) send(items.joinToString("، "), fromVoice = true, listMode = true)
+    }
+
+    fun exportDictionary(): String = "[aliases]\n" + PersonalDictionary.export(_aliases.value) + "\n[habits]\n" + habits.toText()
+
+    fun importDictionary(text: String): Int {
+        val ai = text.indexOf("[aliases]")
+        val hi = text.indexOf("[habits]")
+        val aliasPart = if (ai >= 0) text.substring(ai + 9, if (hi > ai) hi else text.length) else text
+        val habitPart = if (hi >= 0) text.substring(hi + 8) else ""
+        val m = PersonalDictionary.import(aliasPart)
+        m.forEach { (a, c) -> store.addAlias(a, c) }
+        _aliases.value = store.loadAliases()
+        if (habitPart.isNotBlank()) {
+            habits = habits.merge(HabitBook.fromText(habitPart))
+            val t = habits.toText()
+            viewModelScope.launch(Dispatchers.IO) { store.saveHabits(t) }
+            refreshHabitViews()
+        }
+        return m.size
+    }
+
+    fun pin(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        val l = if (t in _pinned.value) _pinned.value - t else (_pinned.value + t).takeLast(8)
+        _pinned.value = l
+        viewModelScope.launch(Dispatchers.IO) { store.savePinned(l) }
+        refreshHabitViews()
+    }
+
+    // ------------------------------------------------------------------ تعديل بطاقات التأكيد والنتيجة
+
+    fun editLine(messageId: Long, index: Int, name: String?, quantity: Double?, unit: String?) {
+        val msg = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val card = msg.card as? AssistantCard.Confirm ?: return
+        val c = editedCommand(card.command, index, name, quantity, unit) ?: return
+        replaceMessage(messageId) { it.copy(card = confirmCard(c)) }
+        engineCtx = engineCtx.copy(pending = null)
+    }
+
+    private fun editedCommand(c: Command, index: Int, name: String?, quantity: Double?, unit: String?): Command? {
+        if (index !in c.materials.indices) return null
+        var target = c.materials[index]
+        if (name != null && ArabicText.normalize(name.trim()) != ArabicText.normalize(target.name)) {
+            val found = displayNameOrNull(name) ?: run { setLast("الاسم لازم يكون من المواد الموجودة"); return null }
+            target = target.copy(name = found, rawSpan = found, score = 1.0, level = MatchLevel.EXACT, candidates = emptyList(), fromHabit = false)
+        }
+        if (quantity != null) target = target.copy(quantity = quantity, fromHabit = false)
+        if (unit != null) target = target.copy(unit = unit.ifBlank { null }, fromHabit = false)
+        val list = c.materials.toMutableList()
+        list[index] = target
+        return c.copy(materials = list)
+    }
+
+    private fun displayNameOrNull(name: String): String? {
+        val k = ArabicText.normalize(name.trim())
+        val d = _data.value
+        return (d.materials.map { it.name } + d.prices.keys + d.catalog.map { it.name }).firstOrNull { ArabicText.normalize(it.trim()) == k }
+    }
+
+    fun removeLine(messageId: Long, index: Int) {
+        val msg = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val card = msg.card as? AssistantCard.Confirm ?: return
+        val c = card.command
+        if (index !in c.materials.indices) return
+        if (c.materials.size <= 1) { cancel(messageId); return }
+        replaceMessage(messageId) { it.copy(card = confirmCard(c.copy(materials = c.materials.filterIndexed { i, _ -> i != index }))) }
+    }
+
+    fun toggleImportant(messageId: Long) {
+        val msg = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val card = msg.card as? AssistantCard.Confirm ?: return
+        replaceMessage(messageId) { it.copy(card = confirmCard(card.command.copy(important = !card.command.important))) }
+    }
+
+    fun setQuickQuantity(messageId: Long, quantity: Double, unit: String?) {
+        val msg = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val card = msg.card as? AssistantCard.Confirm ?: return
+        val c = card.command
+        if (c.materials.isEmpty()) return
+        val targets = c.materials.indices.filter { c.materials[it].quantity == null || c.materials[it].fromHabit }.ifEmpty { listOf(c.materials.lastIndex) }
+        var cur = c
+        for (i in targets) cur = editedCommand(cur, i, null, quantity, unit ?: "") ?: cur
+        replaceMessage(messageId) { it.copy(card = confirmCard(cur)) }
+    }
+
+    fun editResult(messageId: Long, index: Int, name: String?, quantity: Double?, unit: String?, important: Boolean?) {
+        val msg = _messages.value.firstOrNull { it.id == messageId } ?: return
+        val card = msg.card as? AssistantCard.Result ?: return
+        val base = card.command ?: return
+        var c = editedCommand(base, index, name, quantity, unit) ?: base
+        if (important != null) c = c.copy(important = important)
+        val entry = undoStack.firstOrNull { it.id == card.undoId }
+        _thinking.value = true
+        viewModelScope.launch {
+            try {
+                if (entry != null) { entry.block(); undoStack.remove(entry); publishUndoable(); _undoBar.value = null }
+                execute(c, messageId, msg.text)
+            } catch (e: Exception) {
+                reply("تعذر تعديل النتيجة: ${e.message ?: "تحقق من الاتصال"}", RobotMood.CONFUSED)
+            } finally { _thinking.value = false }
+        }
+    }
+
+    fun otherChoice(messageId: Long) {
+        val card = _messages.value.firstOrNull { it.id == messageId }?.card as? AssistantCard.Clarify ?: return
+        _draft.value = card.command.rawText
+        replaceMessage(messageId) { it.copy(card = null, text = it.text + "\n✎ اكتب الاسم الصحيح") }
+        engineCtx = engineCtx.copy(pending = null)
     }
 
     // ------------------------------------------------------------------ توضيح الغموض
@@ -325,6 +726,11 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 }
                 engineCtx = engineCtx.copy(pending = if (resolved.isReady) null else resolved)
                 resolved.aliasToLearn?.let { learnAlias(it.alias, it.canonical) }
+                val raw = card.command.person?.takeIf { it.level != MatchLevel.EXACT }?.rawSpan ?: card.command.materials.firstOrNull { it.level != MatchLevel.EXACT }?.rawSpan
+                if (raw != null) habits.recordChoice(raw, option.label).let { r ->
+                    habits = r.book
+                    r.alias?.let { a -> learnAlias(a.alias, a.canonical) }
+                }
                 process(resolved)
             } finally { _thinking.value = false }
         }
@@ -432,7 +838,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         when (c.intent) {
             Intent.ADD_DEBT -> {
                 title = if (c.person?.level == MatchLevel.NEW) "تسجيل دين لعميل جديد" else "تسجيل دين"
-                f.add(CardField("الاسم", c.person?.name ?: "")); f.add(CardField("المبلغ", "${fmt(c.amount ?: 0.0)} $cur"))
+                f.add(CardField("الاسم", c.person?.name ?: "", toneOf(c.person?.level))); f.add(CardField("المبلغ", "${fmt(c.amount ?: 0.0)} $cur"))
                 c.date?.let { f.add(CardField("التاريخ", it.label)) }
             }
             Intent.PAY_DEBT -> {
@@ -453,7 +859,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             }
             Intent.ADD_SHORTAGE -> {
                 title = "إضافة للنواقص"
-                c.materials.forEach { f.add(CardField(it.name, materialQty(it))) }
+                c.materials.forEach { f.add(CardField(it.name, materialQty(it), toneOf(it.level))) }
                 if (c.important) f.add(CardField("الأهمية", "هامة ⭐"))
             }
             Intent.REMOVE_SHORTAGE -> {
@@ -513,6 +919,12 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         return AssistantCard.Confirm(title, f, c.confirmReasons, c, c.risky)
     }
 
+    private fun toneOf(level: MatchLevel?): Int = when (level) {
+        MatchLevel.EXACT, MatchLevel.HIGH -> 1
+        MatchLevel.MEDIUM -> 2
+        else -> 0
+    }
+
     private fun materialQty(m: com.shopmanager.app.assistant.engine.MaterialRef): String {
         val q = m.quantity ?: return ""
         return listOfNotNull(fmt(q).takeIf { !(q == 1.0 && m.unit != null) }, m.unit, m.pack).joinToString(" ")
@@ -526,9 +938,10 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             listOf(CardField("— $g —", "")) + ex.take(4).map { CardField(it, "") }
         })
 
-    private fun starterChips(): List<AssistantChip> = listOf(
-        AssistantChip("ملخص اليوم"), AssistantChip("شو النواقص"), AssistantChip("مجموع الديون"), AssistantChip("أكثر 5 مدينين")
-    )
+    private fun starterChips(): List<AssistantChip> =
+        _recurring.value.map { AssistantChip("قرّبت تخلص: ${it.name}", "ضيف ${it.name}") } + listOf(
+            AssistantChip("ملخص اليوم"), AssistantChip("شو النواقص"), AssistantChip("مجموع الديون"), AssistantChip("أكثر 5 مدينين")
+        )
 
     private fun chipsFor(c: Command): List<AssistantChip> {
         val p = c.person?.name
@@ -539,7 +952,13 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
             )
             Intent.PAY_DEBT, Intent.REDUCE_DEBT -> listOfNotNull(p?.let { AssistantChip("عرض الرصيد", "كم على $it") }, AssistantChip("مجموع الديون"))
             Intent.QUERY_BALANCE -> listOfNotNull(p?.let { AssistantChip("سجل دين آخر", "سجل على $it ", false) }, AssistantChip("مجموع الديون"))
-            Intent.ADD_SHORTAGE, Intent.REMOVE_SHORTAGE -> listOf(AssistantChip("شو النواقص"), AssistantChip("أضف مادة أخرى", "ضيف  للنواقص", false))
+            Intent.ADD_SHORTAGE -> {
+                val taken = c.materials.map { it.name }.toSet()
+                val inShort = _data.value.materials.map { it.name }.toSet()
+                val comp = c.materials.flatMap { habits.companions(it.name, taken + inShort) }.distinct().take(2).map { displayName(it) }
+                comp.map { AssistantChip("ضيف $it كمان؟", "ضيف $it") } + listOf(AssistantChip("شو النواقص"), AssistantChip("أضف مادة أخرى", "ضيف  للنواقص", false))
+            }
+            Intent.REMOVE_SHORTAGE -> listOf(AssistantChip("شو النواقص"), AssistantChip("أضف مادة أخرى", "ضيف  للنواقص", false))
             Intent.LIST_SHORTAGES -> listOf(AssistantChip("ضيف للنواقص", "ضيف  للنواقص", false), AssistantChip("إيجاد المواد الناقصة"))
             Intent.SET_PRICE, Intent.QUERY_PRICE -> listOf(AssistantChip("شو النواقص"), AssistantChip("ملخص اليوم"))
             Intent.ADD_PERSON -> listOfNotNull(p?.let { AssistantChip("سجل دين لـ $it", "سجل على $it ", false) }, AssistantChip("مجموع الديون"))
@@ -552,6 +971,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     companion object {
         private const val MAX_UNDO = 10
+        private const val UNDO_BAR_MS = 10_000L
         private const val UNKNOWN_REPLY = "ما فهمت الطلب تماماً 🤔 جرّب صياغة مثل: \"سجل على سامر 20 ألف\" أو اضغط ⋮ ← ما يستطيع المساعد فعله."
     }
 }

@@ -17,7 +17,8 @@ class AssistantStore(context: Context) {
         proactiveSuggestions = prefs.getBoolean(K_PROACTIVE, true),
         alwaysConfirm = prefs.getBoolean(K_CONFIRM, true),
         robotAnimation = prefs.getBoolean(K_ANIM, true),
-        newHome = prefs.getBoolean(K_HOME, true)
+        newHome = prefs.getBoolean(K_HOME, true),
+        dryRun = prefs.getBoolean(K_DRY, false)
     )
 
     fun saveSettings(s: AssistantSettings) {
@@ -26,6 +27,7 @@ class AssistantStore(context: Context) {
             .putBoolean(K_CONFIRM, s.alwaysConfirm)
             .putBoolean(K_ANIM, s.robotAnimation)
             .putBoolean(K_HOME, s.newHome)
+            .putBoolean(K_DRY, s.dryRun)
             .apply()
     }
 
@@ -125,13 +127,56 @@ class AssistantStore(context: Context) {
         prefs.edit().putString(K_ACTIONS, arr.toString()).apply()
     }
 
+    @Synchronized
+    fun loadHabits(): String = prefs.getString(K_HABITS, "") ?: ""
+
+    @Synchronized
+    fun saveHabits(text: String) { prefs.edit().putString(K_HABITS, text).apply() }
+
+    @Synchronized
+    fun loadPinned(): List<String> = runCatching {
+        val a = JSONArray(prefs.getString(K_PINNED, "[]") ?: "[]")
+        (0 until a.length()).map { a.getString(it) }
+    }.getOrDefault(emptyList())
+
+    @Synchronized
+    fun savePinned(list: List<String>) {
+        val a = JSONArray()
+        list.take(12).forEach { a.put(it) }
+        prefs.edit().putString(K_PINNED, a.toString()).apply()
+    }
+
+    @Synchronized
+    fun loadUnheard(): List<String> = runCatching {
+        val a = JSONArray(prefs.getString(K_UNHEARD, "[]") ?: "[]")
+        (0 until a.length()).map { a.getString(it) }
+    }.getOrDefault(emptyList())
+
+    @Synchronized
+    fun addUnheard(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        val list = (loadUnheard().filter { it != t } + t).takeLast(MAX_UNHEARD)
+        val a = JSONArray()
+        list.forEach { a.put(it) }
+        prefs.edit().putString(K_UNHEARD, a.toString()).apply()
+    }
+
+    @Synchronized
+    fun clearUnheard() { prefs.edit().remove(K_UNHEARD).apply() }
+
     companion object {
+        const val MAX_UNHEARD = 100
         const val MAX_HISTORY = 200
         const val MAX_ACTIONS = 30
         private const val K_PROACTIVE = "proactive"
         private const val K_CONFIRM = "always_confirm"
         private const val K_ANIM = "robot_anim"
         private const val K_HOME = "new_home"
+        private const val K_DRY = "dry_run"
+        private const val K_HABITS = "habits"
+        private const val K_PINNED = "pinned"
+        private const val K_UNHEARD = "unheard"
         private const val K_HISTORY = "history"
         private const val K_ALIASES = "aliases"
         private const val K_ACTIONS = "actions"

@@ -34,14 +34,26 @@ data class KnownPerson(
     val oldestDebtAt: Long = 0L,
     val lastDebtAt: Long = 0L,
     /** متوسط الدين المعتاد لهذا الشخص (0 = لا تاريخ كافٍ). */
-    val typicalAmount: Double = 0.0
+    val typicalAmount: Double = 0.0,
+    val debtAmounts: List<Double> = emptyList()
 )
 
 data class KnownMaterial(
     val name: String,
     val price: Double? = null,
-    val inShortage: Boolean = false
+    val inShortage: Boolean = false,
+    val fixed: Boolean = true,
+    val usage: Int = 0,
+    val usualUnit: String? = null,
+    val usualQty: Double? = null,
+    val usualPack: String? = null
 )
+
+data class RecentOp(val kind: String, val key: String, val amount: Double, val at: Long)
+
+data class EngineOptions(val listMode: Boolean = false)
+
+enum class Subject { PERSON, MATERIAL }
 
 data class EngineSnapshot(
     val persons: List<KnownPerson> = emptyList(),
@@ -50,7 +62,9 @@ data class EngineSnapshot(
     val aliases: Map<String, String> = emptyMap(),
     val currency: String = "ل.س",
     val nowMillis: Long = System.currentTimeMillis(),
-    val timeZoneId: String = "Asia/Damascus"
+    val timeZoneId: String = "Asia/Damascus",
+    val version: Long = 0L,
+    val recentOps: List<RecentOp> = emptyList()
 )
 
 data class Candidate(val name: String, val id: String?, val score: Double)
@@ -77,7 +91,9 @@ data class MaterialRef(
     /** كلمة تعبئة (كيس، علبة...) تُحفظ ضمن الملاحظة لأن وحدات التطبيق ثابتة. */
     val pack: String? = null,
     val candidates: List<Candidate> = emptyList(),
-    val viaAlias: Boolean = false
+    val viaAlias: Boolean = false,
+    val inShortage: Boolean = false,
+    val fromHabit: Boolean = false
 )
 
 data class DateRef(
@@ -126,7 +142,11 @@ data class Command(
     val important: Boolean = false,
     /** الاسم الجديد عند تغيير اسم عميل أو مادة. */
     val newName: String? = null,
-    val phone: String? = null
+    val phone: String? = null,
+    val isCorrection: Boolean = false,
+    val fromChoice: Boolean = false,
+    val listMode: Boolean = false,
+    val contextNote: String? = null
 ) {
     /** مكتمل ولا غموض فيه، جاهز لبطاقة التأكيد/التنفيذ. */
     val isReady: Boolean get() = missing.isEmpty() && ambiguity == null && intent != Intent.UNKNOWN
@@ -149,14 +169,16 @@ data class ConversationContext(
     val lastAmount: Double? = null,
     val lastCommand: Command? = null,
     /** أمر ناقص ينتظر جواب المستخدم على سؤال المتابعة. */
-    val pending: Command? = null
+    val pending: Command? = null,
+    val lastSubject: Subject? = null
 )
 
 data class EngineOutput(
     val commands: List<Command>,
     val context: ConversationContext,
     /** سطر "فهمت: ..." الجاهز للعرض. */
-    val understood: String
+    val understood: String,
+    val cleanedText: String = ""
 )
 
 /** نقطة توسعة لطبقة نموذج لغوي صغير اختيارية لاحقاً دون تغيير باقي الكود. */

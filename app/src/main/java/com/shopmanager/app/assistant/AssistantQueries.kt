@@ -65,8 +65,10 @@ object AssistantQueries {
                 })
             }
             Intent.LIST_SHORTAGES -> {
-                val list = data.materials
-                if (list.isEmpty()) AssistantCard.Answer("النواقص", emptyList(), "ما في نواقص حالياً 👌")
+                val span = when (cmd.period) { Period.TODAY -> 1L; Period.WEEK -> 7L; Period.MONTH -> 30L; null -> 0L }
+                val list = if (span == 0L) data.materials else data.materials.filter { it.updatedAt >= now - span * DAY }
+                if (span > 0L && list.isEmpty()) AssistantCard.Answer("النواقص", emptyList(), "ما أُضيف شي للنواقص بهالفترة")
+                else if (list.isEmpty()) AssistantCard.Answer("النواقص", emptyList(), "ما في نواقص حالياً 👌")
                 else AssistantCard.Answer(
                     "النواقص (${Formatters.number(list.size.toDouble())})",
                     list.take(25).map { m ->

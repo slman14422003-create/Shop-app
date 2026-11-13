@@ -55,6 +55,7 @@ fun robotDescription(mood: RobotMood): String = when (mood) {
     RobotMood.THINKING -> "المساعد يفكر"
     RobotMood.SUCCESS -> "المساعد: تمت العملية بنجاح"
     RobotMood.CONFUSED -> "المساعد لم يفهم أو تنقصه معلومة"
+    RobotMood.LISTENING -> "المساعد يستمع"
 }
 
 /**
@@ -145,6 +146,7 @@ fun RobotAvatar(mood: RobotMood, modifier: Modifier = Modifier, size: Dp = 140.d
             RobotMood.THINKING -> Yellow
             RobotMood.SUCCESS -> AssistantSuccessGreen
             RobotMood.CONFUSED -> AssistantWarnOrange
+            RobotMood.LISTENING -> Color(0xFF6EA8FE)
         }
         val bob = if (animated) floatState.value * w * 0.018f else 0f
         val k = kick.value
@@ -222,6 +224,12 @@ private fun DrawScope.drawRobot(
                 drawPath(p, EyeColor, style = eyeStroke)
             }
             smile(w, EyeColor, 0.075f, eyeStroke)
+        }
+        RobotMood.LISTENING -> {
+            val grow = 1f + kotlin.math.abs(look) * 0.12f
+            drawOval(EyeColor, Offset(lx - er * grow, eyeY - er * 1.6f * grow), Size(er * 2 * grow, er * 3.2f * grow))
+            drawOval(EyeColor, Offset(rx - er * grow, eyeY - er * 1.6f * grow), Size(er * 2 * grow, er * 3.2f * grow))
+            drawCircle(EyeColor, w * .028f, Offset(w * .5f, w * .515f), style = eyeStroke)
         }
         RobotMood.CONFUSED -> {
             rotate(-16f, Offset(lx, eyeY)) { drawOval(EyeColor, Offset(lx - er, eyeY - er * 1.3f), Size(er * 2, er * 2.6f)) }

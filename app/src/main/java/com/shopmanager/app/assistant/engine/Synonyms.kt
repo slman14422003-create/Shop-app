@@ -83,6 +83,22 @@ internal object Synonyms {
         listOf("بهارات", "بهار", "spice", "بهارا", "spices"),
         listOf("فلفل", "فلفلل", "pepper", "فلفله"),
         listOf("كبه", "كبة", "كبا"),
+        listOf("بيبسي", "pepsi", "ببسي", "بيبسى"),
+        listOf("كوكاكولا", "cocacola", "coca-cola", "coke", "كوكا", "كولا", "كوكاكولاا"),
+        listOf("كيتكات", "kitkat", "kit-kat", "كتكات", "كيتكاتت"),
+        listOf("ميرندا", "mirinda", "ميرنده"),
+        listOf("ليبتون", "lipton", "ليبتن"),
+        listOf("نوتيلا", "nutella", "نيوتيلا"),
+        listOf("اندومي", "indomie", "اندومى"),
+        listOf("ماجي", "maggi", "ماغي"),
+        listOf("تايد", "tide", "تيد"),
+        listOf("اوريو", "oreo", "اوريوو"),
+        listOf("سنيكرز", "snickers", "سنكرز"),
+        listOf("تويكس", "twix", "تويكسس"),
+        listOf("لايز", "lays", "ليز"),
+        listOf("برينجلز", "pringles", "برنجلز"),
+        listOf("ريدبول", "redbull", "red-bull", "ريد"),
+        listOf("فيري", "fairy", "فيرى"),
         listOf("منظف", "منظفات", "ديتول", "detergent", "منضف")
     )
 

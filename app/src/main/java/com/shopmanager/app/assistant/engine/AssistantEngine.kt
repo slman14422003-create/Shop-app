@@ -34,14 +34,58 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
 
     // ------------------------------------------------------------------ واجهة عامة
 
+    @Volatile
+    private var cache: Pair<List<Long>, Indexes>? = null
+
+    private fun indexesFor(snapshot: EngineSnapshot): Indexes {
+        val key = listOf(snapshot.version, snapshot.persons.size.toLong(), snapshot.materials.size.toLong(), snapshot.aliases.size.toLong(), snapshot.persons.sumOf { it.name.hashCode().toLong() }, snapshot.materials.sumOf { it.name.hashCode().toLong() }, snapshot.aliases.hashCode().toLong())
+        val c = cache
+        if (c != null && c.first == key) return c.second
+        val fresh = Indexes(snapshot)
+        cache = key to fresh
+        return fresh
+    }
+
+    fun prewarm(snapshot: EngineSnapshot) {
+        indexesFor(snapshot)
+    }
+
+    private fun knownTokenSet(snapshot: EngineSnapshot): Set<String> {
+        val known = HashSet<String>()
+        for (p in snapshot.persons) EntityMatcher.tokensOf(p.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (m in snapshot.materials) EntityMatcher.tokensOf(m.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (a in snapshot.aliases.keys) EntityMatcher.tokensOf(a).forEach { known.add(ArabicText.stripAl(it)) }
+        return known
+    }
+
     fun understand(
         input: String,
         snapshot: EngineSnapshot,
-        context: ConversationContext = ConversationContext()
+        context: ConversationContext = ConversationContext(),
+        options: EngineOptions = EngineOptions()
     ): EngineOutput {
-        val toks = correctTokens(tokenize(input), snapshot)
-        if (toks.isEmpty()) return output(listOf(Command(Intent.UNKNOWN, rawText = input)), context, snapshot)
-        val idx = Indexes(snapshot)
+        val known = knownTokenSet(snapshot)
+        var base = tokenize(input)
+        if (options.listMode && base.isNotEmpty() && base[0].norm !in Lexicon.COMMAND_VERBS) {
+            base = tokenize(ListMode.asCommandText(input))
+        }
+        val cleaned = SpellFixer.split(FillerWords.strip(base, known), known)
+        val toks = correctTokens(cleaned, snapshot)
+        val cleanedText = toks.joinToString(" ") { it.raw }
+        if (toks.isEmpty()) return output(listOf(Command(Intent.UNKNOWN, rawText = input)), context, snapshot, cleanedText)
+        val idx = indexesFor(snapshot)
+
+        val pendChoice = context.pending
+        if (pendChoice?.ambiguity != null && pendChoice.ambiguity.options.isNotEmpty()) {
+            val vc = VoiceChoice.parse(cleanedText)
+            if (vc is VoiceChoiceResult.Option && vc.index in pendChoice.ambiguity.options.indices) {
+                val r = closeAfterChoice(resolveChoice(pendChoice, pendChoice.ambiguity.options[vc.index], snapshot, context), snapshot)
+                return output(listOf(r), context.copy(pending = null), snapshot, cleanedText)
+            }
+        }
+
+        detectCorrection(toks, snapshot, idx, context)?.let { return output(listOf(it), updateContext(context, it), snapshot, cleanedText) }
+
         val segments = splitSegments(toks)
 
         var ctx = context
@@ -57,15 +101,15 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         val pend = context.pending
         if (pend != null && commands.size == 1) {
             val only = commands[0]
-            if (only.intent == Intent.CANCEL) return output(commands, context.copy(pending = null), snapshot)
+            if (only.intent == Intent.CANCEL) return output(commands, context.copy(pending = null), snapshot, cleanedText)
             if (only.intent == Intent.CONFIRM && pend.ambiguity != null && pend.ambiguity.options.isNotEmpty()) {
-                val resolved = resolveChoice(pend, pend.ambiguity.options[0], snapshot, context)
-                return output(listOf(resolved), context.copy(pending = null), snapshot)
+                val resolved = closeAfterChoice(resolveChoice(pend, pend.ambiguity.options[0], snapshot, context), snapshot)
+                return output(listOf(resolved), context.copy(pending = null), snapshot, cleanedText)
             }
             val strong = only.score >= 6.5 && only.intent != Intent.ADD_DEBT && only.intent != Intent.UNKNOWN
             if (!strong) {
                 val cont = continuePending(pend, toks, snapshot, idx, context)
-                if (cont != null) return output(listOf(cont), context, snapshot)
+                if (cont != null) return output(listOf(cont), context, snapshot, cleanedText)
             }
         }
 
@@ -73,7 +117,69 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             val fb = fallback.interpret(input, snapshot, context)
             if (fb != null) return fb
         }
-        return output(commands, ctx, snapshot)
+        val finalCommands = if (options.listMode) commands.map { if (it.intent == Intent.ADD_SHORTAGE) it.copy(listMode = true) else it } else commands
+        return output(finalCommands, ctx, snapshot, cleanedText)
+    }
+
+    private fun closeAfterChoice(cmdIn: Command, snapshot: EngineSnapshot): Command {
+        var cmd = cmdIn.copy(fromChoice = true)
+        var guard = 0
+        while (cmd.ambiguity != null && guard < 8) {
+            guard++
+            val amb = cmd.ambiguity!!
+            val opt = amb.options.firstOrNull() ?: break
+            cmd = resolveChoice(cmd, opt, snapshot).copy(fromChoice = true)
+        }
+        if (cmd.missing.contains(Slot.MATERIAL) && cmd.materials.size > 1) {
+            val ok = cmd.materials.filter { it.level != MatchLevel.NEW && it.level != MatchLevel.NONE }
+            if (ok.isNotEmpty()) {
+                val dropped = cmd.materials.filter { it.level == MatchLevel.NEW || it.level == MatchLevel.NONE }.joinToString("، ") { it.rawSpan }
+                cmd = validate(cmd.copy(materials = ok, missing = emptyList(), contextNote = "تجاهلت (غير موجودة): $dropped"), snapshot).copy(fromChoice = true)
+            }
+        }
+        return if (cmd.missing.isNotEmpty() && cmd.intent != Intent.UNKNOWN && cmd.materials.isEmpty() && cmd.person == null) cmd else cmd.copy(prompt = if (cmd.missing.isEmpty()) null else cmd.prompt)
+    }
+
+    private val correctionLead = setOf("لا", "مو", "مش", "غلط", "لأ", "لاء", "ماهيك", "مهيك")
+    private val correctionKey = setOf("قصدي", "قصدنا", "اقصد", "قصدت", "بقصد")
+
+    private fun detectCorrection(toks: List<Tok>, snapshot: EngineSnapshot, idx: Indexes, ctx: ConversationContext): Command? {
+        val last = ctx.pending?.takeIf { it.materials.isNotEmpty() || it.person != null } ?: ctx.lastCommand ?: return null
+        val norm = toks.map { it.norm }
+        val keyAt = norm.indexOfFirst { it in correctionKey }
+        val lead = norm.firstOrNull() in correctionLead
+        if (keyAt < 0 && !(lead && norm.size >= 3 && norm.getOrNull(1) in setOf("مو", "مش", "هيك", "هاد", "هاي"))) return null
+        val rest = if (keyAt >= 0) toks.drop(keyAt + 1) else toks.drop(norm.indexOfFirst { it == "هيك" || it == "هاد" || it == "هاي" } + 1)
+        val span = rest.filter { !Lexicon.isStop(it.norm) || it.norm.length > 3 }.map { it.raw }
+        if (span.isEmpty()) return null
+        val spanTokens = EntityMatcher.tokensOf(span.joinToString(" "))
+        if (last.intent in setOf(Intent.ADD_SHORTAGE, Intent.REMOVE_SHORTAGE, Intent.QUERY_PRICE, Intent.SET_PRICE) && last.materials.isNotEmpty()) {
+            val lastNames = last.materials.map { EntityMatcher.tokensOf(it.name).map { t -> ArabicText.stripAl(t) } }
+            var best: KnownMaterial? = null
+            var bs = 0.0
+            for (m in snapshot.materials) {
+                val form = EntityMatcher.formOf(m.name)
+                var sc = maxOf(EntityMatcher.scoreForm(spanTokens, form), EntityMatcher.looseScore(spanTokens, form))
+                val mt = EntityMatcher.tokensOf(m.name).map { ArabicText.stripAl(it) }
+                if (lastNames.any { l -> l.any { it in mt } }) sc += 0.1
+                if (sc > bs) { bs = sc; best = m }
+            }
+            if (best == null || bs < 0.6) return null
+            val target = last.materials.last()
+            val replaced = last.materials.dropLast(1) + target.copy(
+                rawSpan = span.joinToString(" "), name = best.name, score = 1.0, level = MatchLevel.EXACT,
+                candidates = emptyList(), inShortage = best.inShortage, fromHabit = false
+            )
+            return validate(last.copy(materials = replaced, isCorrection = true, ambiguity = null, missing = emptyList(), contextNote = "تصحيح: بدل ${target.name}"), snapshot).copy(isCorrection = true)
+        }
+        if (last.person != null && last.intent in setOf(Intent.ADD_DEBT, Intent.PAY_DEBT, Intent.REDUCE_DEBT, Intent.DELETE_DEBT, Intent.QUERY_BALANCE)) {
+            val (cands, _) = EntityMatcher.candidatesFor(spanTokens, idx.persons)
+            val top = cands.firstOrNull() ?: return null
+            if (top.score < 0.6) return null
+            val pr = PersonRef(span.joinToString(" "), top.id, top.name, top.score, if (top.score >= 0.9) MatchLevel.EXACT else MatchLevel.MEDIUM, cands)
+            return validate(last.copy(person = pr, isCorrection = true, ambiguity = null, missing = emptyList(), contextNote = "تصحيح: بدل ${last.person.name}"), snapshot).copy(isCorrection = true)
+        }
+        return null
     }
 
     /** يطبّق اختيار المستخدم من بطاقة التوضيح ويرجع الأمر المحدّث. */
@@ -121,7 +227,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             AmbiguityKind.INTENT -> {
                 val forced = runCatching { Intent.valueOf(option.value) }.getOrNull() ?: return command
                 val toks = correctTokens(tokenize(command.rawText), snapshot)
-                parseSegment(toks, snapshot, Indexes(snapshot), context, null, forced, null)
+                parseSegment(toks, snapshot, indexesFor(snapshot), context, null, forced, null).copy(fromChoice = true)
             }
         }
     }
@@ -196,7 +302,11 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             val verbPos = i == 0 || toks[i - 1].norm in conj
             var fixed: String? = null
             if (verbPos) fixed = nearest(w, verbPool)
-            if (fixed == null) fixed = nearest(w, qtyPool)
+            if (fixed == null) {
+                val nb = listOfNotNull(toks.getOrNull(i - 1)?.norm, toks.getOrNull(i + 1)?.norm)
+                val near = nb.any { x -> x[0] in '0'..'9' || NumberParser.findNumbers(listOf(x)).isNotEmpty() }
+                if (near) fixed = nearest(w, qtyPool)
+            }
             out.add(if (fixed != null) Tok(t.raw, fixed) else t)
         }
         return out
@@ -500,6 +610,8 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             if (materialOrFree) add(Intent.SEARCH_MATERIAL, 1.0)
         }
         if ((qWord || hasW(setOf("في"))) && hasW(Lexicon.AVAILABLE) && materialOrFree) add(Intent.SEARCH_MATERIAL, 4.5)
+        if (an.pronoun && ctx.lastMaterial != null && (adderV || recordV) && !hasW(setOf("دين", "ديون")) && an.personMatches.isEmpty()) add(Intent.ADD_SHORTAGE, 4.0)
+        if (n >= 2 && hasAt(0, Lexicon.AVAILABLE) && an.materialMatches.isNotEmpty()) add(Intent.SEARCH_MATERIAL, 4.5)
 
         if (hasW(Lexicon.FINDER_WORDS) && hasW(Lexicon.MISSING_WORDS)) add(Intent.RUN_MISSING_FINDER, 7.0)
         if (hasW(setOf("ايجاد", "اكتشاف")) && hasW(setOf("مواد"))) add(Intent.RUN_MISSING_FINDER, 4.0)
@@ -622,7 +734,14 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             var items = materialItems(an, multi, ignorePersons = noPrepOn && (intent == Intent.ADD_SHORTAGE || intent == Intent.REMOVE_SHORTAGE || intent == Intent.ADD_MATERIAL))
             if (!multi && items.size > 1) items = listOf(items[0])
             if (items.isEmpty() && base != null) items = base.materials
+            if (items.isEmpty() && base == null && an.pronoun && ctx.lastMaterial != null && intent in setOf(Intent.ADD_SHORTAGE, Intent.REMOVE_SHORTAGE, Intent.QUERY_PRICE)) {
+                val grp = an.norm.indices.filter { isQtyTok(it, an) }
+                val q = parseQty(an, grp)
+                val lm = snapshot.materials.firstOrNull { ArabicText.normalize(it.name) == ArabicText.normalize(ctx.lastMaterial) }
+                items = listOf(MaterialRef(ctx.lastMaterial, ctx.lastMaterial, 1.0, MatchLevel.EXACT, q?.value, q?.unit, q?.pack, inShortage = lm?.inShortage == true))
+            }
             if (intent == Intent.OPEN && items.none { it.level != MatchLevel.NEW }) items = emptyList()
+            items = items.map { m -> decorate(m, snapshot, intent) }
             cmd = cmd.copy(materials = items)
         }
         if (intent == Intent.ADD_SHORTAGE) {
@@ -651,6 +770,9 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         }
         if (intent == Intent.SUMMARY) {
             cmd = cmd.copy(period = DateParser.detectPeriod(an.norm) ?: Period.TODAY)
+        }
+        if (intent == Intent.LIST_SHORTAGES) {
+            cmd = cmd.copy(period = DateParser.detectPeriod(an.norm))
         }
         if (intent == Intent.OPEN) {
             var screen: Screen? = null
@@ -829,6 +951,22 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         return mergeDuplicates(items)
     }
 
+    private fun decorate(m: MaterialRef, snapshot: EngineSnapshot, intent: Intent): MaterialRef {
+        if (m.level == MatchLevel.NEW || m.level == MatchLevel.NONE) return m
+        val known = snapshot.materials.firstOrNull { ArabicText.normalize(it.name) == ArabicText.normalize(m.name) } ?: return m
+        var r = m.copy(inShortage = known.inShortage)
+        if (intent == Intent.ADD_SHORTAGE && r.quantity == null && r.unit == null && r.pack == null) {
+            if (known.usualUnit != null || known.usualPack != null || known.usualQty != null) {
+                r = r.copy(
+                    unit = known.usualUnit, pack = known.usualPack,
+                    quantity = known.usualQty ?: if (known.usualUnit != null || known.usualPack != null) 1.0 else null,
+                    fromHabit = true
+                )
+            }
+        }
+        return r
+    }
+
     private fun sameItem(a: MaterialRef, b: MaterialRef): Boolean {
         if (ArabicText.normalize(a.name) == ArabicText.normalize(b.name)) return true
         val ca = a.candidates.map { it.name }.toSet()
@@ -932,6 +1070,11 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             } else if (person.level == MatchLevel.NONE) {
                 missing.add(Slot.PERSON); prompt = "ما لقيت \"${person.rawSpan}\" بين العملاء. اكتب الاسم مرة ثانية."
             } else if (person.candidates.size >= 2 && person.candidates[1].name != person.candidates[0].name &&
+                person.candidates[1].score >= person.candidates[0].score - 0.03 && disambiguate(cmd, snapshot) != null
+            ) {
+                val chosen = disambiguate(cmd, snapshot)!!
+                cmd = cmd.copy(person = chosen.first, contextNote = chosen.second)
+            } else if (person.candidates.size >= 2 && person.candidates[1].name != person.candidates[0].name &&
                 person.candidates[1].score >= person.candidates[0].score - 0.03
             ) {
                 val opts = person.candidates.take(4).map { AmbiguityOption(it.name, "${it.id ?: ""}|${it.name}") }
@@ -1026,7 +1169,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         }
         if (person?.level == MatchLevel.NEW) reasons.add("عميل جديد سيُنشأ")
         val amt = cmd.amount
-        if (amt != null && intent in setOf(Intent.ADD_DEBT, Intent.PAY_DEBT, Intent.REDUCE_DEBT)) {
+        if (amt != null && intent in setOf(Intent.ADD_DEBT, Intent.PAY_DEBT, Intent.REDUCE_DEBT, Intent.DELETE_DEBT)) {
             if (known != null && known.typicalAmount > 0.0 && amt > known.typicalAmount * 5.0) {
                 risky = true; reasons.add("المبلغ أكبر بكثير من المعتاد لهذا الشخص (المعتاد ≈ ${Calculator.format(known.typicalAmount)} $cur)")
             } else if (amt >= 10_000_000.0) {
@@ -1037,11 +1180,59 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             }
         }
         if (intent == Intent.PAY_DEBT && known != null && known.balance <= 0.0001) reasons.add("رصيده صفر أصلاً")
+        if (intent == Intent.SET_PRICE && amt != null) {
+            val old = cmd.materials.firstOrNull()?.let { m -> snapshot.materials.firstOrNull { ArabicText.normalize(it.name) == ArabicText.normalize(m.name) }?.price }
+            if (old != null && old > 0.0 && (amt > old * 3.0 || amt < old / 3.0)) {
+                risky = true; reasons.add("السعر الجديد يختلف كثيراً عن السعر الحالي (${Calculator.format(old)} $cur)")
+            }
+        }
+        if (intent == Intent.ADD_SHORTAGE || intent == Intent.REMOVE_SHORTAGE) {
+            for (m in cmd.materials) {
+                val q = m.quantity ?: continue
+                val k = snapshot.materials.firstOrNull { ArabicText.normalize(it.name) == ArabicText.normalize(m.name) }
+                val usual = k?.usualQty
+                if ((usual != null && usual > 0.0 && q > usual * 5.0) || q >= 1000.0) {
+                    risky = true; reasons.add("الكمية ${Calculator.format(q)} لـ ${m.name} أكبر من المعتاد")
+                }
+                if (m.inShortage && intent == Intent.ADD_SHORTAGE) reasons.add("${m.name} موجودة بالنواقص: ستُحدَّث كميتها")
+            }
+        }
+        if (intent == Intent.ADD_SHORTAGE && ambiguity == null && missing.isEmpty()) {
+            for (m in cmd.materials) {
+                DuplicateGuard.check(Intent.ADD_SHORTAGE.name, m.name, 0.0, snapshot)?.let { reasons.add("${m.name}: $it") }
+            }
+        }
+        if (intent == Intent.ADD_DEBT && amt != null && person != null && ambiguity == null && missing.isEmpty()) {
+            DuplicateGuard.check(Intent.ADD_DEBT.name, person.name, amt, snapshot)?.let { reasons.add("دين ${person.name}: ${it.replace("أُضيفت", "سُجّل")}") }
+        }
 
         cmd = cmd.copy(
             missing = missing, ambiguity = ambiguity, prompt = prompt, confirmReasons = reasons, risky = risky
         )
         return cmd.copy(understood = describe(cmd, cur))
+    }
+
+    private fun disambiguate(cmd: Command, snapshot: EngineSnapshot): Pair<PersonRef, String>? {
+        val person = cmd.person ?: return null
+        val amt = cmd.amount ?: return null
+        val pool = person.candidates.take(4).mapNotNull { c -> snapshot.persons.firstOrNull { it.id == c.id } }
+        if (pool.size < 2) return null
+        val feasible = if (cmd.intent == Intent.PAY_DEBT || cmd.intent == Intent.REDUCE_DEBT) pool.filter { it.balance + 0.0001 >= amt } else pool
+        if (feasible.size == 1 && feasible.size < pool.size) {
+            val p = feasible[0]
+            return PersonRef(person.rawSpan, p.id, p.name, 0.95, MatchLevel.HIGH) to "اخترت ${p.name} لأن رصيده يناسب المبلغ"
+        }
+        val scored = pool.map { p ->
+            val ds = (p.debtAmounts + p.typicalAmount).filter { it > 0.0 }
+            val d = if (ds.isEmpty()) Double.MAX_VALUE else ds.minOf { kotlin.math.abs(it - amt) / maxOf(it, amt) }
+            p to d
+        }.sortedBy { it.second }
+        val a = scored[0]; val b = scored[1]
+        if (a.second < 0.05 && (b.second > 0.25 || b.second == Double.MAX_VALUE)) {
+            val p = a.first
+            return PersonRef(person.rawSpan, p.id, p.name, 0.95, MatchLevel.HIGH) to "اخترت ${p.name} لأن عنده دين بنفس المبلغ سابقاً"
+        }
+        return null
     }
 
     private fun describe(c: Command, cur: String): String {
@@ -1053,7 +1244,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
                 m.unit != null && m.quantity == 1.0 -> " (${m.unit})"
                 else -> " (${Calculator.format(m.quantity)}${m.unit?.let { " $it" } ?: ""}${m.pack?.let { " $it" } ?: ""})"
             }
-            m.name + q
+            m.name + q + (if (m.fromHabit) " (المعتاد)" else "")
         }
         return when (c.intent) {
             Intent.ADD_DEBT -> "تسجيل دين ${amt.ifBlank { "..." }} على ${name.ifBlank { "..." }}" + if (c.person?.level == MatchLevel.NEW) " (عميل جديد)" else ""
@@ -1064,7 +1255,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             Intent.QUERY_TOTAL_DEBTS -> "السؤال عن مجموع الديون"
             Intent.QUERY_TOP_DEBTORS -> "أكثر ${c.limit ?: 5} مدينين"
             Intent.QUERY_STALE_DEBTORS -> "المدينون الذين لم يسددوا منذ مدة" + (c.date?.let { " (${it.label})" } ?: "")
-            Intent.ADD_SHORTAGE -> "إضافة للنواقص: $mats" + if (c.important) " (هامة)" else ""
+            Intent.ADD_SHORTAGE -> (if (c.materials.isNotEmpty() && c.materials.all { it.inShortage }) "تحديث كمية بالنواقص: " else "إضافة للنواقص: ") + mats + if (c.important) " (هامة)" else ""
             Intent.REMOVE_SHORTAGE -> "حذف من النواقص: $mats"
             Intent.LIST_SHORTAGES -> "عرض قائمة النواقص"
             Intent.QUERY_PRICE -> "السؤال عن سعر $mats"
@@ -1168,19 +1359,20 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
     private fun updateContext(ctx: ConversationContext, cmd: Command): ConversationContext {
         var c = ctx
         if (cmd.person != null && cmd.person.level != MatchLevel.NONE) c = c.copy(lastPerson = cmd.person)
-        if (cmd.materials.isNotEmpty()) c = c.copy(lastMaterial = cmd.materials.last().name)
+        if (cmd.materials.isNotEmpty()) c = c.copy(lastMaterial = cmd.materials.last().name, lastSubject = Subject.MATERIAL)
+        if (cmd.person != null && cmd.person.level != MatchLevel.NONE) c = c.copy(lastSubject = Subject.PERSON)
         if (cmd.amount != null) c = c.copy(lastAmount = cmd.amount)
         if (cmd.isReady && !cmd.isReadOnly) c = c.copy(lastCommand = cmd)
         return c
     }
 
-    private fun output(commands: List<Command>, ctx: ConversationContext, snapshot: EngineSnapshot): EngineOutput {
+    private fun output(commands: List<Command>, ctx: ConversationContext, snapshot: EngineSnapshot, cleanedText: String = ""): EngineOutput {
         var c = ctx
         val needing = commands.firstOrNull { !it.isReady && it.intent != Intent.UNKNOWN || it.ambiguity != null }
         c = c.copy(pending = needing)
         val lines = commands.filter { it.intent != Intent.UNKNOWN && it.understood.isNotBlank() }.map { it.understood }
         val understood = if (lines.isEmpty()) "" else "فهمت: " + lines.joinToString(" ثم ")
-        return EngineOutput(commands, c, understood)
+        return EngineOutput(commands, c, understood, cleanedText)
     }
 
     companion object {

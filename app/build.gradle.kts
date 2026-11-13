@@ -143,6 +143,18 @@ android {
         ndk {
             abiFilters += listOf("armeabi-v7a", "arm64-v8a")
         }
+        externalNativeBuild {
+            cmake {
+                arguments += listOf("-DANDROID_STL=c++_static", "-DANDROID_ARM_NEON=TRUE")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     signingConfigs {
@@ -302,6 +314,8 @@ dependencies {
     // from what it pinned before to its own current stable release, not
     // just the BOMs. Nothing here is an alpha/beta/RC.
     implementation(project(":blurview"))
+    implementation("com.alphacephei:vosk-android:0.3.70")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
     implementation("androidx.core:core-ktx:1.19.1")
     // Standard AndroidX SplashScreen API — shows a static app icon on a
     // flat background immediately at cold start instead of a blank/white
