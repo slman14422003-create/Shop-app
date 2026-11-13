@@ -4,7 +4,6 @@ import com.shopmanager.app.assistant.engine.SpeechAlt
 import com.shopmanager.app.assistant.engine.SpeechResult
 import com.shopmanager.app.assistant.engine.SpeechWord
 import com.shopmanager.app.assistant.engine.VocabularyList
-import com.shopmanager.app.assistant.engine.toGrammarJson
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
@@ -45,11 +44,7 @@ internal class VoskEngine(private val models: ModelManager) : VoiceEngine {
     }
 
     private fun createRecognizer(m: Model, vocabulary: VocabularyList): Recognizer {
-        val r = try {
-            Recognizer(m, AudioCapture.SAMPLE_RATE.toFloat(), vocabulary.toGrammarJson())
-        } catch (t: Throwable) {
-            Recognizer(m, AudioCapture.SAMPLE_RATE.toFloat())
-        }
+        val r = Recognizer(m, AudioCapture.SAMPLE_RATE.toFloat())
         r.setMaxAlternatives(5)
         r.setWords(true)
         return r

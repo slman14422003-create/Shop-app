@@ -59,9 +59,31 @@ internal class AudioCapture {
     fun read(buf: ShortArray, len: Int): Int {
         val r = record ?: return -1
         return try {
-            r.read(buf, 0, len)
+            val n = r.read(buf, 0, len)
+            if (n > 0) boost(buf, n)
+            n
         } catch (t: Throwable) {
             -1
+        }
+    }
+
+    private var gainNow = 1f
+
+    private fun boost(buf: ShortArray, n: Int) {
+        var peak = 0
+        for (i in 0 until n) {
+            val v = kotlin.math.abs(buf[i].toInt())
+            if (v > peak) peak = v
+        }
+        val p = peak / 32768f
+        if (p > 0.008f) {
+            val g = (0.45f / p).coerceIn(1f, 10f)
+            gainNow = if (g < gainNow) g else gainNow * 0.85f + g * 0.15f
+        }
+        if (gainNow <= 1.02f) return
+        for (i in 0 until n) {
+            val v = (buf[i] * gainNow).toInt()
+            buf[i] = v.coerceIn(-32768, 32767).toShort()
         }
     }
 
