@@ -560,10 +560,17 @@ object NotificationHelper {
             ?: return
         val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(existing) ?: return
         style.addMessage(text, System.currentTimeMillis(), null as androidx.core.app.Person?)
-        val rebuilt = NotificationCompat.Builder.recoverBuilder(app, existing)
+        val rebuilt = NotificationCompat.Builder(app, existing.channelId ?: NotificationSounds.channelId(app, NotifKind.CHAT))
+            .setSmallIcon(app.applicationInfo.icon)
             .setStyle(style)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
             .setOnlyAlertOnce(true)
-            .setNumber(0)
+            .setWhen(System.currentTimeMillis())
+            .setGroup(GROUP_CHAT)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setContentIntent(existing.contentIntent)
+            .apply { existing.actions?.forEach { a -> addAction(NotificationCompat.Action.Builder(a.icon, a.title, a.actionIntent).build()) } }
             .build()
         try {
             NotificationManagerCompat.from(app).notify(id, rebuilt)
