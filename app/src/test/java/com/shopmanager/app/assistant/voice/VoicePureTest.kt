@@ -65,10 +65,10 @@ class VoicePureTest {
         assertEquals(listOf(VoiceEngineKind.SYSTEM, VoiceEngineKind.WHISPER, VoiceEngineKind.VOSK), o)
     }
 
-    @Test fun selector_low_prefers_vosk_then_whisper() {
+    @Test fun selector_low_prefers_whisper_then_vosk() {
         val p = DeviceProfile(2000, 4, 29, false, false, false)
         val o = EngineSelector.order(p, VoiceEngineKind.AUTO, voskUsable = true, whisperUsable = true)
-        assertEquals(listOf(VoiceEngineKind.VOSK, VoiceEngineKind.WHISPER), o)
+        assertEquals(listOf(VoiceEngineKind.WHISPER, VoiceEngineKind.VOSK), o)
     }
 
     @Test fun selector_whisper_primary_when_vosk_unusable() {

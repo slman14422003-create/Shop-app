@@ -195,10 +195,10 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
         pendingVocabulary = vocabulary
         val s = _settings.value
         var targetId = WHISPER_MODEL_ID
-        var title = "Whisper Tiny مضغوط"
+        var title = if (manager.whisperVariant == "small") "Whisper Small مضغوط (دقة أعلى)" else "Whisper Base مضغوط"
         var size = manager.whisperHeadSize()
         val voskAllowed = !manager.voskRejected() && EngineSelector.order(profile(), s.preferred, true, true).contains(VoiceEngineKind.VOSK)
-        val preferVosk = voskAllowed && (s.preferred == VoiceEngineKind.VOSK || deviceClass() == DeviceClass.LOW)
+        val preferVosk = voskAllowed && s.preferred == VoiceEngineKind.VOSK
         if (preferVosk) {
             var entry = manager.voskEntry()
             if (entry == null && gate.isAllowed(s.allowMobileData)) {
@@ -216,7 +216,7 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
         }
         if (targetId == WHISPER_MODEL_ID && size <= 0L && gate.isAllowed(s.allowMobileData)) {
             try {
-                val r = HttpSupport.resolve(WHISPER_MODEL_URL)
+                val r = HttpSupport.resolve(manager.whisperUrl)
                 if (r.totalSize > 0L) {
                     size = r.totalSize
                     manager.saveWhisperHead(size, DownloadMath.sha256FromEtag(r.linkedEtag))
@@ -413,14 +413,14 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
                             return
                         }
                     }
-                    val r = HttpSupport.resolve(WHISPER_MODEL_URL)
+                    val r = HttpSupport.resolve(manager.whisperUrl)
                     size = r.totalSize
                     sha = DownloadMath.sha256FromEtag(r.linkedEtag)
                     if (size > 0L) manager.saveWhisperHead(size, sha)
                 } catch (t: Throwable) {
                 }
             }
-            request = DownloadRequest(WHISPER_MODEL_ID, WHISPER_MODEL_URL, manager.whisperFile, sha, null, size, true)
+            request = DownloadRequest(WHISPER_MODEL_ID, manager.whisperUrl, manager.whisperFile, sha, null, size, true)
         }
         val finalId = request.modelId
         val outcome = downloader.download(request, allowMobile, downloadCancel) { st ->

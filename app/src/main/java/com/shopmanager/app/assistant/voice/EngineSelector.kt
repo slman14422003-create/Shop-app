@@ -44,11 +44,7 @@ object EngineSelector {
             return result
         }
         if (sys) result.add(VoiceEngineKind.SYSTEM)
-        val rest = if (deviceClass(profile) == DeviceClass.LOW) {
-            listOf(VoiceEngineKind.VOSK, VoiceEngineKind.WHISPER)
-        } else {
-            listOf(VoiceEngineKind.WHISPER, VoiceEngineKind.VOSK)
-        }
+        val rest = listOf(VoiceEngineKind.WHISPER, VoiceEngineKind.VOSK)
         for (k in rest) if (usable(k)) result.add(k)
         return result
     }

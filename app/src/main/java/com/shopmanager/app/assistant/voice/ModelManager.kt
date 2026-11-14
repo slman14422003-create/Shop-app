@@ -11,8 +11,7 @@ import java.util.zip.ZipInputStream
 internal const val WHISPER_MODEL_ID = "whisper"
 internal const val VOSK_MODEL_ID = "vosk"
 internal const val VOSK_CATALOG_URL = "https://alphacephei.com/vosk/models/model-list.json"
-internal const val WHISPER_MODEL_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin"
-internal const val WHISPER_FILE_NAME = "ggml-tiny-q5_1.bin"
+internal const val WHISPER_BASE_URL = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
 
 internal class ModelManager(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("voice_models_meta", Context.MODE_PRIVATE)
@@ -20,7 +19,26 @@ internal class ModelManager(context: Context) {
     private val whisperDir get() = File(root, "whisper")
     private val voskRoot get() = File(root, "vosk")
 
-    val whisperFile: File get() = File(whisperDir, WHISPER_FILE_NAME)
+    private val totalRamMb: Long = run {
+        val am = context.applicationContext.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val mi = android.app.ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        mi.totalMem / (1024L * 1024L)
+    }
+
+    val whisperVariant: String = if (totalRamMb < 3000L) "base" else "small"
+    val whisperFileName: String = "ggml-$whisperVariant-q5_1.bin"
+    val whisperUrl: String = WHISPER_BASE_URL + whisperFileName
+
+    init {
+        try {
+            File(whisperDir, "ggml-tiny-q5_1.bin").delete()
+            if (whisperVariant == "small") File(whisperDir, "ggml-base-q5_1.bin").delete()
+        } catch (_: Throwable) {
+        }
+    }
+
+    val whisperFile: File get() = File(whisperDir, whisperFileName)
 
     fun whisperInstalled(): Boolean = whisperFile.isFile && whisperFile.length() > 0L
 
@@ -98,7 +116,7 @@ internal class ModelManager(context: Context) {
         }
         out.add(
             ModelInfo(
-                WHISPER_MODEL_ID, VoiceEngineKind.WHISPER, "Whisper Tiny مضغوط",
+                WHISPER_MODEL_ID, VoiceEngineKind.WHISPER, if (whisperVariant == "small") "Whisper Small مضغوط (دقة أعلى)" else "Whisper Base مضغوط",
                 whisperHeadSize(), whisperInstalled(), if (whisperInstalled()) whisperFile.length() else 0L
             )
         )
