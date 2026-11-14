@@ -54,7 +54,7 @@ internal class SystemSpeechEngine(context: Context) : VoiceEngine {
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, settings.autoStopMs)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, settings.autoStopMs)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, appContext.packageName)
-            if (Build.VERSION.SDK_INT >= 33 && bias.isNotEmpty()) putStringArrayListExtra(RecognizerIntent.EXTRA_BIAS_STRINGS, bias)
+            if (Build.VERSION.SDK_INT >= 33 && bias.isNotEmpty()) putStringArrayListExtra("android.speech.extra.BIAS_STRINGS", bias)
         }
 
     private fun begin() {
