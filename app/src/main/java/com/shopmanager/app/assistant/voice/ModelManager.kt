@@ -42,12 +42,12 @@ internal class ModelManager(context: Context) {
 
     fun whisperInstalled(): Boolean = whisperFile.isFile && whisperFile.length() > 0L
 
-    fun whisperHeadSize(): Long = prefs.getLong("whisper_size", 0L)
+    fun whisperHeadSize(): Long = prefs.getLong("whisper_size_$whisperFileName", 0L)
 
-    fun whisperHeadSha(): String? = prefs.getString("whisper_sha", null)
+    fun whisperHeadSha(): String? = prefs.getString("whisper_sha_$whisperFileName", null)
 
     fun saveWhisperHead(size: Long, sha: String?) {
-        prefs.edit().putLong("whisper_size", size).putString("whisper_sha", sha).apply()
+        prefs.edit().putLong("whisper_size_$whisperFileName", size).putString("whisper_sha_$whisperFileName", sha).remove("whisper_size").remove("whisper_sha").apply()
     }
 
     fun voskEntry(): VoskCatalogEntry? {
