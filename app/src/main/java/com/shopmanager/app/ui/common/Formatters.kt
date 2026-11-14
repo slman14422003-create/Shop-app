@@ -20,7 +20,9 @@ import java.util.Locale
  * worker — so sharing it is safe.
  */
 object Formatters {
-    private val arabicNumberFormat = NumberFormat.getNumberInstance(Locale("ar"))
+    private val arabicNumberFormat = object : ThreadLocal<NumberFormat>() {
+        override fun initialValue(): NumberFormat = NumberFormat.getNumberInstance(Locale("ar"))
+    }
 
-    fun number(value: Double): String = arabicNumberFormat.format(value)
+    fun number(value: Double): String = arabicNumberFormat.get().format(value)
 }

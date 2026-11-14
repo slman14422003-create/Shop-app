@@ -20,7 +20,7 @@ import com.shopmanager.app.ui.common.AppSettingsState
 import com.shopmanager.app.ui.common.Formatters
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 
@@ -113,7 +113,7 @@ object MaterialsReportImage {
         }
         canvas.drawPath(headerPath, fill)
         canvas.drawText("قائمة النواقص", right, 120f, text(Color.WHITE, 64f, true, Paint.Align.RIGHT))
-        val df = SimpleDateFormat("EEEE d MMMM yyyy، h:mm a", Locale("ar"))
+        val df = DateFormats.get("EEEE d MMMM yyyy، h:mm a", Locale("ar"))
         canvas.drawText(df.format(Date()), right, 176f, text(Color.argb(215, 255, 255, 255), 30f, false, Paint.Align.RIGHT))
 
         var cx = right

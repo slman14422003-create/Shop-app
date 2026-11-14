@@ -12,7 +12,6 @@ import com.shopmanager.app.data.FirebaseModule
 import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.debts.OverdueRule
 import com.shopmanager.app.data.settings.SettingsRepository
-import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 

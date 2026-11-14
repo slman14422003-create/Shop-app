@@ -1,6 +1,6 @@
 package com.shopmanager.app.data.debts
 
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Calendar
 import java.util.Locale
 
@@ -25,7 +25,7 @@ object OverdueRule {
     }.timeInMillis
 
     fun compute(persons: List<Person>, debts: List<Debt>, overdueDays: Int, now: Long): List<OverdueItem> {
-        val format = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+        val format = DateFormats.get("yyyy-MM-dd", Locale.US, lenient = false)
         val limit = now - overdueDays.toLong() * DAY_MS
         val balance = HashMap<String, Double>()
         val oldest = HashMap<String, Long>()

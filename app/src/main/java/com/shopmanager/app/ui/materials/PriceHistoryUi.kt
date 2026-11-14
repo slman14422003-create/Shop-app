@@ -43,7 +43,7 @@ import com.shopmanager.app.ui.common.AppSpaceXs
 import com.shopmanager.app.ui.common.Formatters
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.theme.LocalSemanticColors
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
@@ -128,7 +128,7 @@ internal fun PriceHistoryDialog(
 ) {
     val semantic = LocalSemanticColors.current
     val currency = AppSettingsState.currencySymbol
-    val dateFormat = remember { SimpleDateFormat("d MMM yyyy، h:mm a", Locale("ar")) }
+    val dateFormat = remember { DateFormats.get("d MMM yyyy، h:mm a", Locale("ar")) }
     GlassAlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },

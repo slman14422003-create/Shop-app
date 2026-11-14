@@ -90,6 +90,9 @@ jobs:
             echo "::warning title=توقيع غير ثابت::RELEASE_KEYSTORE_BASE64 غير معرّف — سيُوقَّع الإصدار بمفتاح debug مؤقت، وتحديث التطبيق من داخله سيفشل بتعارض التوقيع."
           fi
 
+      - name: Run unit tests
+        run: gradle testDebugUnitTest --parallel --build-cache --stacktrace
+
       - name: Build release APK
         env:
           SIGNING_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}

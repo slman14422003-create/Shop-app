@@ -14,7 +14,7 @@ import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.ui.common.Formatters
 import java.io.File
 import java.io.FileOutputStream
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 
@@ -84,7 +84,7 @@ object WholeAppReportImage {
             alpha = 210
         }
         // 12-hour clock ("a" renders as ص/م in the Arabic locale).
-        val df = SimpleDateFormat("d MMMM yyyy، h:mm a", Locale("ar"))
+        val df = DateFormats.get("d MMMM yyyy، h:mm a", Locale("ar"))
         canvas.drawText(df.format(Date()), WIDTH - PADDING, 152f, datePaint)
 
         val sectionPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {

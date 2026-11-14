@@ -23,7 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.shopmanager.app.ui.common.avatarColorFor
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -75,8 +75,8 @@ fun ChatPresenceEffect(heartbeat: suspend () -> Unit) {
     }
 }
 
-private val timeFmt get() = SimpleDateFormat("HH:mm", Locale.US)
-private val dateFmt get() = SimpleDateFormat("d/M/yyyy", Locale.US)
+private val timeFmt get() = DateFormats.get("HH:mm", Locale.US)
+private val dateFmt get() = DateFormats.get("d/M/yyyy", Locale.US)
 private val dayNames = arrayOf("الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت")
 
 fun formatClock(ms: Long): String = if (ms <= 0) "" else timeFmt.format(Date(ms))

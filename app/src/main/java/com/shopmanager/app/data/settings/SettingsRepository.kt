@@ -131,7 +131,7 @@ class SettingsRepository(context: Context) {
     var performanceMode: PerformanceMode
         // قيمة "BALANCED" المحفوظة من إصدار سابق (لم يعد خياراً يدوياً) أو أي قيمة غير معروفة ← AUTO.
         get() = runCatching {
-            PerformanceMode.valueOf(prefs.getString(KEY_PERFORMANCE_MODE, PerformanceMode.AUTO.name)!!)
+            PerformanceMode.valueOf(prefs.getString(KEY_PERFORMANCE_MODE, PerformanceMode.AUTO.name) ?: PerformanceMode.AUTO.name)
         }.getOrDefault(PerformanceMode.AUTO)
         set(value) = prefs.edit().putString(KEY_PERFORMANCE_MODE, value.name).apply()
 

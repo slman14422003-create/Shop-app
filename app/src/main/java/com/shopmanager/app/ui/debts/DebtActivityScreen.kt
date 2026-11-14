@@ -34,7 +34,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,9 +66,10 @@ import com.shopmanager.app.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /**
  * شاشة مستقلة لسجل الديون (آخر العمليات: سداد / إضافة دين / عميل جديد ...)
@@ -80,7 +80,7 @@ fun DebtActivityScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val semantic = LocalSemanticColors.current
-    val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd — HH:mm", Locale.US) }
+    val dateFormat = remember { DateFormats.get("yyyy/MM/dd — HH:mm", Locale.US) }
     var confirmClear by remember { mutableStateOf(false) }
 
     // Result: نجاح = القائمة، فشل = رفض القراءة (غالباً قواعد Firestore لم تُنشر بعد).
@@ -89,7 +89,7 @@ fun DebtActivityScreen(onBack: () -> Unit) {
             .map { Result.success(it) }
             .catch { emit(Result.failure(it)) }
     }
-    val state by flow.collectAsState(initial = null)
+    val state by flow.collectAsStateWithLifecycle(initialValue = null)
     val entries = state?.getOrNull() ?: emptyList()
 
     Scaffold(

@@ -11,7 +11,7 @@ import com.shopmanager.app.data.materials.MaterialsRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Locale
 
 /**
@@ -65,7 +65,7 @@ object BackupManager {
     private const val KEEP_INSTANT = 5
     private const val KEEP_LEGACY = 2
 
-    private fun stampFormat() = SimpleDateFormat("yyyyMMdd_HHmmssSSS", Locale.US)
+    private fun stampFormat() = DateFormats.get("yyyyMMdd_HHmmssSSS", Locale.US)
 
     private fun backupDir(context: Context): File =
         File(context.filesDir, DIR_NAME).apply { mkdirs() }

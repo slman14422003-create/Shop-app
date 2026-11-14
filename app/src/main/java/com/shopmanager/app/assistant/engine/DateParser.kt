@@ -70,7 +70,7 @@ object DateParser {
                 t == "مبارح" -> { day(-1, "مبارح"); consumed.add(i) }
                 t == "الليله" || t == "الليلة" -> { day(0, "الليلة"); consumed.add(i) }
                 (t == "من" || t == "منذ" || t == "قبل") && sinceAt(tokens, numbers, i) != null -> {
-                    val (days, upTo) = sinceAt(tokens, numbers, i)!!
+                    val (days, upTo) = sinceAt(tokens, numbers, i) ?: Pair(0, i)
                     val c = now.clone() as Calendar
                     c.add(Calendar.DAY_OF_YEAR, -days)
                     dayStart = startOfDay(c); dayEnd = today + 86_400_000L
@@ -138,7 +138,7 @@ object DateParser {
             c.timeInMillis = start
             c.set(Calendar.HOUR_OF_DAY, hour); c.set(Calendar.MINUTE, minute)
             timeMillis = c.timeInMillis
-            if (dayStart == null && preferFuture && timeMillis!! <= nowMillis) {
+            if (dayStart == null && preferFuture && (timeMillis ?: c.timeInMillis) <= nowMillis) {
                 c.add(Calendar.DAY_OF_YEAR, 1)
                 timeMillis = c.timeInMillis
                 start = startOfDay(c)

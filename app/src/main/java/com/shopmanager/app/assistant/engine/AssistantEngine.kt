@@ -126,7 +126,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         var guard = 0
         while (cmd.ambiguity != null && guard < 8) {
             guard++
-            val amb = cmd.ambiguity!!
+            val amb = cmd.ambiguity ?: break
             val opt = amb.options.firstOrNull() ?: break
             cmd = resolveChoice(cmd, opt, snapshot).copy(fromChoice = true)
         }
@@ -1072,8 +1072,9 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             } else if (person.candidates.size >= 2 && person.candidates[1].name != person.candidates[0].name &&
                 person.candidates[1].score >= person.candidates[0].score - 0.03 && disambiguate(cmd, snapshot) != null
             ) {
-                val chosen = disambiguate(cmd, snapshot)!!
-                cmd = cmd.copy(person = chosen.first, contextNote = chosen.second)
+                disambiguate(cmd, snapshot)?.let { chosen ->
+                    cmd = cmd.copy(person = chosen.first, contextNote = chosen.second)
+                }
             } else if (person.candidates.size >= 2 && person.candidates[1].name != person.candidates[0].name &&
                 person.candidates[1].score >= person.candidates[0].score - 0.03
             ) {
@@ -1136,7 +1137,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         }
 
         val needsAmount = intent == Intent.ADD_DEBT || intent == Intent.REDUCE_DEBT || intent == Intent.SET_PRICE
-        if (needsAmount && (cmd.amount == null || cmd.amount!! <= 0.0)) {
+        if (needsAmount && ((cmd.amount ?: 0.0) <= 0.0)) {
             missing.add(Slot.AMOUNT); if (prompt == null) prompt = if (intent == Intent.SET_PRICE) "كم السعر الجديد؟" else "كم المبلغ؟"
         }
         if ((intent == Intent.RENAME_PERSON || intent == Intent.RENAME_MATERIAL) && cmd.newName.isNullOrBlank()) {

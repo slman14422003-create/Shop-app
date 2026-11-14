@@ -56,7 +56,7 @@ import com.shopmanager.app.ui.notes.NoteEditScreen
 import com.shopmanager.app.ui.notes.NotesViewModel
 import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.NumberFormat
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 import androidx.compose.foundation.shape.CircleShape
@@ -86,7 +86,7 @@ import com.shopmanager.app.ui.common.AppActionPill
 import androidx.compose.material.icons.filled.Close
 import com.shopmanager.app.data.performance.listItemEntrance
 
-private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+private fun today(): String = DateFormats.get("yyyy-MM-dd", Locale.US).format(Date())
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -815,7 +815,7 @@ private fun LinkedNoteRow(
                         Spacer(Modifier.width(3.dp))
                         Text(
                             remember(note.reminderAt) {
-                                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date(note.reminderAt))
+                                DateFormats.get("yyyy-MM-dd HH:mm", Locale.US).format(Date(note.reminderAt))
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary

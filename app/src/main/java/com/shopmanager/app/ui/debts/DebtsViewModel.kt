@@ -1,5 +1,7 @@
 package com.shopmanager.app.ui.debts
 
+import kotlinx.coroutines.CancellationException
+import android.util.Log
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -308,7 +310,10 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
                 // (مثلاً انقطاع الشبكة بلحظة الحذف بالضبط).
                 try {
                     notesRepo.unlinkNotesForPerson(id)
-                } catch (_: Exception) { }
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
+                    Log.w("DebtsViewModel", "unlinkNotesForPerson failed", e)
+                }
             } catch (e: Exception) {
                 _message.value = "خطأ في الحذف: ${e.message}"
             }

@@ -50,7 +50,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,10 +69,11 @@ import com.shopmanager.app.assistant.AssistantViewModel
 import com.shopmanager.app.assistant.RobotMood
 import com.shopmanager.app.ui.common.AppSheet
 import com.shopmanager.app.ui.theme.LocalIsDarkTheme
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** شاشة المحادثة الكاملة مع المساعد المحلي. */
 @OptIn(ExperimentalFoundationApi::class)
@@ -83,14 +83,14 @@ fun AssistantChatScreen(
     onBack: () -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    val messages by assistant.messages.collectAsState()
-    val mood by assistant.mood.collectAsState()
+    val messages by assistant.messages.collectAsStateWithLifecycle()
+    val mood by assistant.mood.collectAsStateWithLifecycle()
     val voiceLevel = rememberVoiceLevelState(assistant)
-    val assistantData by assistant.data.collectAsState()
-    val thinking by assistant.thinking.collectAsState()
-    val settings by assistant.settings.collectAsState()
-    val undoable by assistant.undoable.collectAsState()
-    val draft by assistant.draft.collectAsState()
+    val assistantData by assistant.data.collectAsStateWithLifecycle()
+    val thinking by assistant.thinking.collectAsStateWithLifecycle()
+    val settings by assistant.settings.collectAsStateWithLifecycle()
+    val undoable by assistant.undoable.collectAsStateWithLifecycle()
+    val draft by assistant.draft.collectAsStateWithLifecycle()
 
     var input by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
@@ -101,7 +101,7 @@ fun AssistantChatScreen(
     val shown = remember(messages, query, searching) {
         if (searching && query.isNotBlank()) messages.filter { it.text.contains(query.trim(), ignoreCase = true) || (it.card as? com.shopmanager.app.assistant.AssistantCard.Result)?.details?.contains(query.trim()) == true } else messages
     }
-    val pinned by assistant.pinned.collectAsState()
+    val pinned by assistant.pinned.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     val context = LocalContext.current
 
@@ -289,7 +289,7 @@ private fun dayLabel(t: Long): String {
     return when {
         sameDay(t, now) -> "اليوم"
         sameDay(t, now - 86_400_000L) -> "أمس"
-        else -> SimpleDateFormat("yyyy/MM/dd", Locale.US).format(Date(t))
+        else -> DateFormats.get("yyyy/MM/dd", Locale.US).format(Date(t))
     }
 }
 

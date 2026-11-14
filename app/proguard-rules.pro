@@ -39,8 +39,5 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
--keep class com.shopmanager.app.assistant.voice.WhisperBridge { *; }
 -keepclasseswithmembernames class * { native <methods>; }
--keep class com.sun.jna.** { *; }
--dontwarn com.sun.jna.**
 -dontwarn java.awt.**

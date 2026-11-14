@@ -64,7 +64,6 @@ import com.shopmanager.app.ui.common.AppGroupLargeRadius
 import com.shopmanager.app.ui.common.AppScreenPadding
 import com.shopmanager.app.ui.common.avatarColorFor
 import java.text.NumberFormat
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import kotlin.math.abs

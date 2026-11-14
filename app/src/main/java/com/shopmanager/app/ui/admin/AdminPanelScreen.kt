@@ -92,7 +92,7 @@ import com.shopmanager.app.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Locale
 import com.shopmanager.app.data.performance.MotionSpecs
 
@@ -172,7 +172,7 @@ fun AdminPanelScreen(
         val ts = settings.lastUpdateCheckAt
         if (ts == 0L) "لم يتم التحقق بعد"
         // 12-hour clock — "a" renders as ص/م in Arabic locale.
-        else SimpleDateFormat("yyyy/MM/dd — h:mm a", Locale("ar")).format(java.util.Date(ts))
+        else DateFormats.get("yyyy/MM/dd — h:mm a", Locale("ar")).format(java.util.Date(ts))
     }
 
     fun testManifestNow() {

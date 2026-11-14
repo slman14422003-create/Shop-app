@@ -1,5 +1,7 @@
 package com.shopmanager.app.assistant
 
+import kotlinx.coroutines.CancellationException
+import android.util.Log
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -509,7 +511,9 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                 publishUndoable()
                 _undoBar.value = null
                 lastExecuted = null
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("AssistantViewModel", "undo for correction failed", e)
             }
         }
     }

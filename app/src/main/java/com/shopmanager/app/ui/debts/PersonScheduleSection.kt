@@ -67,7 +67,7 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.groupedRowShape
 import com.shopmanager.app.ui.theme.LocalSemanticColors
 import java.text.NumberFormat
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
@@ -149,7 +149,7 @@ internal fun PersonScheduleCard(
 ) {
     val semantic = LocalSemanticColors.current
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
-    val dateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale("ar")) }
+    val dateFormat = remember { DateFormats.get("d MMM yyyy", Locale("ar")) }
     val today = OverdueRule.startOfDay(System.currentTimeMillis())
     var showDuePicker by rememberSaveable { mutableStateOf(false) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
@@ -362,7 +362,7 @@ private fun AddInstallmentDialog(
     onDismiss: () -> Unit,
     onAdd: (amount: Double, date: Long) -> Unit
 ) {
-    val dateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale("ar")) }
+    val dateFormat = remember { DateFormats.get("d MMM yyyy", Locale("ar")) }
     var amountText by rememberSaveable { mutableStateOf("") }
     var date by rememberSaveable { mutableStateOf(defaultDate) }
     var showPicker by rememberSaveable { mutableStateOf(false) }

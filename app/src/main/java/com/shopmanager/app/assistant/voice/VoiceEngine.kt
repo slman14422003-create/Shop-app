@@ -4,6 +4,7 @@ import com.shopmanager.app.assistant.engine.SpeechResult
 import com.shopmanager.app.assistant.engine.VocabularyList
 
 internal interface EngineSink {
+    fun onReady()
     fun onPartial(text: String)
     fun onLevel(level: Float)
     fun onProcessing()
@@ -13,6 +14,7 @@ internal interface EngineSink {
 
 internal interface VoiceEngine {
     fun prepare(vocabulary: VocabularyList): String?
+    fun preload(vocabulary: VocabularyList)
     fun start(sink: EngineSink, settings: VoiceSettings, vocabulary: VocabularyList)
     fun stop()
     fun cancel()

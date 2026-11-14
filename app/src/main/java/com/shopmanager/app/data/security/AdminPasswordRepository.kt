@@ -1,10 +1,13 @@
 package com.shopmanager.app.data.security
 
+import android.util.Log
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Source
 import com.shopmanager.app.data.FirebaseModule
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -76,6 +79,7 @@ object AdminPasswordRepository {
             val snap = withTimeout(TIMEOUT_MS) { ref.get(Source.SERVER).await() }
             return Fetched.Found(snap, fromServer = true)
         } catch (e: Exception) {
+            if (e is CancellationException && e !is TimeoutCancellationException) throw e
             e
         }
         // قواعد ترفض القراءة: الكاش لن ينفع، والرسالة الأوضح للمطوّر هي الرفض نفسه.
@@ -87,7 +91,9 @@ object AdminPasswordRepository {
         return try {
             val snap = ref.get(Source.CACHE).await()
             Fetched.Found(snap, fromServer = false)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w("AdminPasswordRepository", "cache read failed", e)
             Fetched.Failed(describe(serverError))
         }
     }
@@ -155,6 +161,7 @@ object AdminPasswordRepository {
                 else "المستند config/admin غير موجود أو الحقل password فارغ"
             )
         } catch (e: Exception) {
+            if (e is CancellationException && e !is TimeoutCancellationException) throw e
             val elapsed = System.currentTimeMillis() - start
             Probe(reachable = false, latencyMs = elapsed, passwordConfigured = false, detail = describe(e))
         }

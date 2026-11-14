@@ -1,5 +1,6 @@
 package com.shopmanager.app.data.notifications
 
+import android.util.Log
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.MediaPlayer
@@ -109,7 +110,7 @@ object NotificationSounds {
     }
 
     fun stopPreview() {
-        try { player?.release() } catch (_: Exception) {}
+        try { player?.release() } catch (e: Exception) { Log.w("NotificationSounds", "ignored", e) }
         player = null
     }
 }

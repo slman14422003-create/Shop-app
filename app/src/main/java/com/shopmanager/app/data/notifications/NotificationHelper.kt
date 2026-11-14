@@ -1,5 +1,6 @@
 package com.shopmanager.app.data.notifications
 
+import android.util.Log
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -98,7 +99,7 @@ object NotificationHelper {
             manager.notificationChannels.orEmpty().forEach { ch ->
                 val stale = ch.id in legacy ||
                     (NotifKind.values().any { ch.id.startsWith(it.idPrefix) } && ch.id !in activeIds)
-                if (stale) try { manager.deleteNotificationChannel(ch.id) } catch (_: Exception) {}
+                if (stale) try { manager.deleteNotificationChannel(ch.id) } catch (e: Exception) { Log.w("NotificationHelper", "ignored", e) }
             }
 
             val shoppingChannel = NotificationChannel(
@@ -574,8 +575,7 @@ object NotificationHelper {
             .build()
         try {
             NotificationManagerCompat.from(app).notify(id, rebuilt)
-        } catch (_: SecurityException) {
-        }
+        } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
     }
 
     fun cancelChatNotification(context: Context, chatId: String) {
@@ -586,8 +586,7 @@ object NotificationHelper {
         if (!present) return
         try {
             NotificationManagerCompat.from(app).cancel(id)
-        } catch (_: SecurityException) {
-        }
+        } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
         postChatSummary(app, NotificationSounds.channelId(app, NotifKind.CHAT), excludeId = id)
     }
 
@@ -596,7 +595,7 @@ object NotificationHelper {
         val compat = NotificationManagerCompat.from(app)
         val active = activeChatNotifications(manager, excludeId)
         if (active.isEmpty()) {
-            try { compat.cancel(NOTIF_ID_CHAT_SUMMARY) } catch (_: SecurityException) {}
+            try { compat.cancel(NOTIF_ID_CHAT_SUMMARY) } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
             return
         }
         var messages = 0
@@ -630,8 +629,7 @@ object NotificationHelper {
             .build()
         try {
             compat.notify(NOTIF_ID_CHAT_SUMMARY, summary)
-        } catch (_: SecurityException) {
-        }
+        } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
     }
 
     fun showNewNoteNotification(context: Context, title: String, content: String, noteId: String) {
@@ -725,8 +723,7 @@ object NotificationHelper {
         try {
             NotificationManagerCompat.from(context).notify(id, notification)
             postShoppingGroupSummary(context)
-        } catch (e: SecurityException) {
-        }
+        } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
     }
 
     fun cancelMaterialNotification(context: Context, materialId: String) {
@@ -757,8 +754,7 @@ object NotificationHelper {
             .build()
         try {
             NotificationManagerCompat.from(context).notify(NOTIF_ID_SHOPPING_SUMMARY, summary)
-        } catch (e: SecurityException) {
-        }
+        } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
     }
 
     fun cancelShoppingListNotification(context: Context) {
@@ -862,8 +858,7 @@ object NotificationHelper {
             .build()
         try {
             NotificationManagerCompat.from(context).notify(NOTIF_ID_OVERDUE, notification)
-        } catch (e: SecurityException) {
-        }
+        } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
     }
 
     fun showDueReminderNotification(context: Context, key: String, title: String, body: String) {
@@ -889,8 +884,7 @@ object NotificationHelper {
             .build()
         try {
             NotificationManagerCompat.from(context).notify(id, notification)
-        } catch (e: SecurityException) {
-        }
+        } catch (e: SecurityException) { Log.w("NotificationHelper", "ignored", e) }
     }
 
     /**

@@ -382,7 +382,7 @@ fun WhatsNewScreen(
                 if (!head?.subtitle.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        head!!.subtitle,
+                        head?.subtitle.orEmpty(),
                         modifier = Modifier.staggerIn("sub", 300),
                         style = MaterialTheme.typography.bodyMedium,
                         color = cs.onSurfaceVariant,

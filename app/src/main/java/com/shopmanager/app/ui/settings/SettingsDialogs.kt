@@ -38,7 +38,7 @@ import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.data.materials.quantityLabel
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Locale
 import com.shopmanager.app.data.performance.MotionSpecs
 
@@ -245,7 +245,7 @@ internal fun SetPinDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 internal fun formatBackupDate(timestampMillis: Long): String =
     runCatching {
         // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
-        SimpleDateFormat("yyyy/MM/dd — h:mm a", Locale("ar")).format(java.util.Date(timestampMillis))
+        DateFormats.get("yyyy/MM/dd — h:mm a", Locale("ar")).format(java.util.Date(timestampMillis))
     }.getOrDefault("—")
 
 internal fun buildBackupText(
@@ -285,7 +285,7 @@ internal fun QuickRepliesDialog(current: List<String>, onDismiss: () -> Unit, on
         onDismissRequest = onDismiss,
         title = { Text("الردود الجاهزة") },
         text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 items.forEachIndexed { i, r ->
                     Row(
                         Modifier.fillMaxWidth().clickable { editIndex = i; draft = r }.padding(vertical = 6.dp),

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +46,7 @@ import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
 import android.os.Build
 import android.view.WindowManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 
@@ -183,7 +185,12 @@ fun GlassAlertDialog(
                             }
                         }
                         text?.let {
-                            Box(Modifier.fillMaxWidth().padding(top = if (title != null) 16.dp else 0.dp)) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = LocalConfiguration.current.screenHeightDp.dp)
+                                    .padding(top = if (title != null) 16.dp else 0.dp)
+                            ) {
                                 ProvideTextStyle(MaterialTheme.typography.bodyMedium) {
                                     CompositionLocalProvider(LocalContentColor provides resolvedTextColor) { it() }
                                 }

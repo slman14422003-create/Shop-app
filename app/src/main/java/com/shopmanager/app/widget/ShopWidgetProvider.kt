@@ -10,7 +10,7 @@ import android.widget.RemoteViews
 import com.shopmanager.app.MainActivity
 import com.shopmanager.app.R
 import java.text.NumberFormat
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 
@@ -37,7 +37,7 @@ class ShopWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_updated, context.getString(R.string.widget_not_synced))
             } else {
                 val nf = NumberFormat.getNumberInstance(Locale("ar"))
-                val time = SimpleDateFormat("d MMM، h:mm a", Locale("ar")).format(Date(snap.updatedAt))
+                val time = DateFormats.get("d MMM، h:mm a", Locale("ar")).format(Date(snap.updatedAt))
                 views.setTextViewText(R.id.widget_debt_value, "${nf.format(snap.totalDebt)} ${snap.currency}".trim())
                 views.setTextViewText(R.id.widget_shortages_value, nf.format(snap.shortages.toLong()))
                 views.setTextViewText(R.id.widget_updated, context.getString(R.string.widget_updated_at, time))

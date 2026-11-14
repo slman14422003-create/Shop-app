@@ -39,7 +39,7 @@ import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.showWithOptionalUndo
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.theme.LocalSemanticColors
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Locale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
@@ -419,7 +419,7 @@ private fun NoteRow(
                             InfoChip(
                                 icon = Icons.Default.Schedule,
                                 text = remember(note.reminderAt) {
-                                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(note.reminderAt))
+                                    DateFormats.get("yyyy-MM-dd HH:mm", Locale.US).format(java.util.Date(note.reminderAt))
                                 }
                             )
                         }

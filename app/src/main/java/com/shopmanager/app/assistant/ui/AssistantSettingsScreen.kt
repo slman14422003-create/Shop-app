@@ -25,7 +25,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,15 +41,16 @@ import com.shopmanager.app.ui.common.AppRowSurface
 import com.shopmanager.app.ui.common.AppScreenPadding
 import com.shopmanager.app.ui.common.ScreenIconButton
 import com.shopmanager.app.ui.common.ScreenTopBar
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** إعدادات المساعد: الاقتراحات الاستباقية، التأكيد الدائم، حركة الروبوت، الرئيسية الجديدة، الأسماء البديلة، مسح السجل. */
 @Composable
 fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
-    val s by assistant.settings.collectAsState()
-    val aliases by assistant.aliases.collectAsState()
+    val s by assistant.settings.collectAsStateWithLifecycle()
+    val aliases by assistant.aliases.collectAsStateWithLifecycle()
     var confirmAliases by remember { mutableStateOf(false) }
     var confirmHistory by remember { mutableStateOf(false) }
-    val unheard by assistant.unheard.collectAsState()
+    val unheard by assistant.unheard.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     Column(Modifier.fillMaxSize()) {

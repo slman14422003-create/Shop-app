@@ -40,7 +40,7 @@ class VoiceRecorder(private val context: Context) {
         @Suppress("DEPRECATION")
         val r = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(context) else MediaRecorder()
         try {
-            r.setAudioSource(MediaRecorder.AudioSource.MIC)
+            r.setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
             r.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             r.setAudioChannels(1)

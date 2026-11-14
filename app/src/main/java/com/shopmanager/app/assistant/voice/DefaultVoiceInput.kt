@@ -2,6 +2,7 @@ package com.shopmanager.app.assistant.voice
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import com.shopmanager.app.assistant.engine.SpeechResult
 import com.shopmanager.app.assistant.engine.VocabularyList
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -51,12 +52,14 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
             try {
                 engine.cancel()
             } catch (t: Throwable) {
+                Log.w(TAG, "engine cancel failed", t)
             }
-            tts.stop()
+            tts.stopAndWait()
             _uiState.value = VoiceUiState.Preparing
             val err = try {
                 engine.prepare(vocabulary)
             } catch (t: Throwable) {
+                Log.w(TAG, "engine prepare failed", t)
                 "تعذر التحضير"
             }
             if (id != session.get()) return@execute
@@ -64,8 +67,12 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
                 _uiState.value = VoiceUiState.Unavailable(err)
                 return@execute
             }
-            _uiState.value = VoiceUiState.Listening("", 0f)
             val sink = object : EngineSink {
+                override fun onReady() {
+                    if (id != session.get()) return
+                    _uiState.value = VoiceUiState.Listening("", 0f)
+                }
+
                 override fun onPartial(text: String) {
                     if (id != session.get()) return
                     val lv = (_uiState.value as? VoiceUiState.Listening)?.level ?: 0f
@@ -105,6 +112,7 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
             try {
                 engine.start(sink, _settings.value, vocabulary)
             } catch (t: Throwable) {
+                Log.w(TAG, "engine start failed", t)
                 _uiState.value = VoiceUiState.Unavailable("تعذر تشغيل الصوت، اكتب الأمر")
             }
         }
@@ -115,6 +123,7 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
             try {
                 engine.stop()
             } catch (t: Throwable) {
+                Log.w(TAG, "engine stop failed", t)
             }
         }
     }
@@ -125,12 +134,21 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
             try {
                 engine.cancel()
             } catch (t: Throwable) {
+                Log.w(TAG, "engine cancel failed", t)
             }
             _uiState.value = VoiceUiState.Idle
         }
     }
 
-    override fun preload(vocabulary: VocabularyList) {}
+    override fun preload(vocabulary: VocabularyList) {
+        control.execute {
+            try {
+                engine.preload(vocabulary)
+            } catch (t: Throwable) {
+                Log.w(TAG, "engine preload failed", t)
+            }
+        }
+    }
 
     override fun release() {
         session.incrementAndGet()
@@ -138,6 +156,7 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
             try {
                 engine.release()
             } catch (t: Throwable) {
+                Log.w(TAG, "engine release failed", t)
             }
             _uiState.value = VoiceUiState.Idle
             tts.release()
@@ -153,6 +172,7 @@ internal class DefaultVoiceInput private constructor(private val app: Applicatio
     }
 
     companion object {
+        private const val TAG = "DefaultVoiceInput"
         @Volatile private var instance: DefaultVoiceInput? = null
 
         fun get(app: Application): DefaultVoiceInput =

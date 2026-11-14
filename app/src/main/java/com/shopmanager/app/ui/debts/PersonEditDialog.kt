@@ -23,11 +23,11 @@ import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.PhoneUtils
 import com.shopmanager.app.ui.common.groupedRowShape
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 
-private fun today(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+private fun today(): String = DateFormats.get("yyyy-MM-dd", Locale.US).format(Date())
 
 /**
  * BUG FIXED: this dialog used to have no loading/disabled state at all while

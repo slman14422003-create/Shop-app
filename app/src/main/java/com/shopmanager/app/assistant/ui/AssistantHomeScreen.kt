@@ -37,7 +37,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +66,7 @@ import com.shopmanager.app.ui.common.ScreenIconButton
 import com.shopmanager.app.ui.common.ScreenTopBar
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import kotlinx.coroutines.delay
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 private const val REPLY_VISIBLE_MS = 30_000L
 
@@ -88,16 +88,16 @@ fun AssistantHomeScreen(
     onOpenSettings: () -> Unit = {},
     onOpenAdmin: () -> Unit = {}
 ) {
-    val data by assistant.data.collectAsState()
-    val mood by assistant.mood.collectAsState()
+    val data by assistant.data.collectAsStateWithLifecycle()
+    val mood by assistant.mood.collectAsStateWithLifecycle()
     val voiceLevel = rememberVoiceLevelState(assistant)
-    val settings by assistant.settings.collectAsState()
-    val log by assistant.actionLog.collectAsState()
-    val messages by assistant.messages.collectAsState()
-    val undoable by assistant.undoable.collectAsState()
-    val suggestions by materialsViewModel.homeSuggestions.collectAsState()
-    val history by materialsViewModel.priceHistory.collectAsState()
-    val draft by assistant.draft.collectAsState()
+    val settings by assistant.settings.collectAsStateWithLifecycle()
+    val log by assistant.actionLog.collectAsStateWithLifecycle()
+    val messages by assistant.messages.collectAsStateWithLifecycle()
+    val undoable by assistant.undoable.collectAsStateWithLifecycle()
+    val suggestions by materialsViewModel.homeSuggestions.collectAsStateWithLifecycle()
+    val history by materialsViewModel.priceHistory.collectAsStateWithLifecycle()
+    val draft by assistant.draft.collectAsStateWithLifecycle()
 
     var input by remember { mutableStateOf("") }
     var showStats by remember { mutableStateOf(false) }

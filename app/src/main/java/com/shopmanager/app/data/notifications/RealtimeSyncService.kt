@@ -1,5 +1,6 @@
 package com.shopmanager.app.data.notifications
 
+import android.util.Log
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -100,8 +101,7 @@ class RealtimeSyncService : Service() {
                 context.applicationContext.stopService(
                     Intent(context.applicationContext, RealtimeSyncService::class.java)
                 )
-            } catch (_: Exception) {
-            }
+            } catch (e: Exception) { Log.w("RealtimeSyncService", "ignored", e) }
         }
     }
 }

@@ -19,7 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.history.ChangeHistory
 import com.shopmanager.app.ui.common.GlassAlertDialog
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 
@@ -27,7 +27,7 @@ import java.util.Locale
 fun ChangeHistoryDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
     var entries by remember { mutableStateOf(ChangeHistory.all(context)) }
-    val format = remember { SimpleDateFormat("yyyy/MM/dd — HH:mm", Locale.US) }
+    val format = remember { DateFormats.get("yyyy/MM/dd — HH:mm", Locale.US) }
     val clearButton: (@Composable () -> Unit)? = if (entries.isNotEmpty()) {
         {
             TextButton(

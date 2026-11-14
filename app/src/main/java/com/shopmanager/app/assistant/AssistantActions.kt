@@ -22,7 +22,7 @@ import com.shopmanager.app.data.notifications.NoteReminderWorker
 import com.shopmanager.app.data.notifications.RemoteChangeProcessor
 import com.shopmanager.app.data.notifications.SelfChangeLedger
 import com.shopmanager.app.ui.common.Formatters
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Date
 import java.util.Locale
 
@@ -58,7 +58,7 @@ class AssistantActions(private val app: Application) {
     @Volatile var catalogProvider: () -> List<MaterialCatalogItem> = { emptyList() }
 
     private fun dateStr(millis: Long?): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(millis ?: System.currentTimeMillis()))
+        DateFormats.get("yyyy-MM-dd", Locale.US).format(Date(millis ?: System.currentTimeMillis()))
 
     private fun money(v: Double, cur: String) = "${Formatters.number(v)} $cur"
     private fun same(a: String, b: String) = ArabicText.normalize(a.trim()) == ArabicText.normalize(b.trim())

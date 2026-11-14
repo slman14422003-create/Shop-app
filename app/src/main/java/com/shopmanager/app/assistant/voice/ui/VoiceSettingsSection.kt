@@ -10,7 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,10 +17,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.assistant.voice.VoiceInput
 import com.shopmanager.app.ui.common.AppRowSurface
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun VoiceSettingsSection(voice: VoiceInput) {
-    val s by voice.settings.collectAsState()
+    val s by voice.settings.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("الإدخال الصوتي", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
         VoiceSwitchRow("نطق الردود", "يقول المساعد \"فهمت: ...\" بصوت عربي", s.speakReplies) { voice.updateSettings(s.copy(speakReplies = it)) }

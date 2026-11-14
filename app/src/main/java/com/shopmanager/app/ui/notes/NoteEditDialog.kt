@@ -31,14 +31,14 @@ import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.notes.ImportantNote
 import com.shopmanager.app.data.notes.NoteLinkType
 import com.shopmanager.app.ui.common.AppTextField
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Calendar
 import java.util.Locale
 import com.shopmanager.app.ui.common.ScreenIconButton
 import com.shopmanager.app.ui.common.ScreenTopBar
 
-private val dateFormat get() = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-private val timeFormat get() = SimpleDateFormat("HH:mm", Locale.US)
+private val dateFormat get() = DateFormats.get("yyyy-MM-dd", Locale.US)
+private val timeFormat get() = DateFormats.get("HH:mm", Locale.US)
 
 /**
  * Add/edit screen for a "ملاحظة هامة". Beyond the plain title+content of a

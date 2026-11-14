@@ -348,7 +348,7 @@ fun ConversationScreen(
     val status = when {
         typing -> "يكتب الآن..."
         other?.isOnline(now) == true -> "متصل الآن"
-        other != null -> formatLastSeen(other!!.lastSeenMs, now)
+        other != null -> other?.let { formatLastSeen(it.lastSeenMs, now) }.orEmpty()
         else -> ""
     }
 

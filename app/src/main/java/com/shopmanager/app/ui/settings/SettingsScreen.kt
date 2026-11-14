@@ -95,7 +95,7 @@ import com.shopmanager.app.ui.theme.LocalSemanticColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Locale
 import com.shopmanager.app.data.performance.MotionSpecs
 
@@ -906,7 +906,7 @@ fun SettingsScreen(
                                 ?: "ملف كامل يمكن استعادته لاحقًا على هذا الجهاز أو جهاز آخر",
                             enabled = !isExportingFile,
                             onClick = {
-                                val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(java.util.Date())
+                                val stamp = DateFormats.get("yyyyMMdd_HHmmss", Locale.US).format(java.util.Date())
                                 exportFileLauncher.launch("shop_manager_backup_$stamp.json")
                             },
                             trailing = if (isExportingFile) SpinnerTrailing else null

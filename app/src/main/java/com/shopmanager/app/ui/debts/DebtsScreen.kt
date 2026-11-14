@@ -44,7 +44,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.alpha
 import com.shopmanager.app.data.performance.LocalPerformanceTier
 import com.shopmanager.app.data.performance.PerformanceTier
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.util.Locale
 import com.shopmanager.app.ui.common.AppSearchBar
 import com.shopmanager.app.ui.common.AppSettingsState
@@ -292,7 +292,7 @@ fun DebtsScreen(
             // فقط): عميل قديم أُضيف له دين اليوم يظهر في الأعلى. الدين القديم بلا
             // createdAt يُستعان بتاريخه المكتوب.
             val lastAddedAt = remember(state.persons, state.debts) {
-                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+                val dateFormat = DateFormats.get("yyyy-MM-dd", Locale.US, lenient = false)
                 val latestDebt = HashMap<String, Long>()
                 for (d in state.debts) {
                     val t = if (d.createdAt > 0L) d.createdAt
@@ -639,7 +639,7 @@ enum class DebtFilter(val label: String) {
 
 private fun overduePersonIds(debts: List<Debt>, days: Int): Set<String> {
     val limit = System.currentTimeMillis() - days * 86_400_000L
-    val format = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
+    val format = DateFormats.get("yyyy-MM-dd", Locale.US, lenient = false)
     return debts
         .filter { debt ->
             val time = runCatching { format.parse(debt.date.trim())?.time }.getOrNull()

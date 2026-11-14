@@ -2,6 +2,7 @@ package com.shopmanager.app.assistant.voice
 
 import android.content.Context
 import android.speech.tts.TextToSpeech
+import android.util.Log
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -24,6 +25,7 @@ internal class TtsSpeaker(context: Context) {
                 val engine = tts
                 if (ready && engine != null) engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "shop-tts")
             } catch (t: Throwable) {
+                Log.w(TAG, "speak failed", t)
                 failed = true
             }
         }
@@ -34,7 +36,22 @@ internal class TtsSpeaker(context: Context) {
             try {
                 tts?.stop()
             } catch (t: Throwable) {
+                Log.w(TAG, "stop failed", t)
             }
+        }
+    }
+
+    fun stopAndWait() {
+        try {
+            executor.submit(Runnable {
+                try {
+                    tts?.stop()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "stop failed", t)
+                }
+            }).get(1500, TimeUnit.MILLISECONDS)
+        } catch (t: Throwable) {
+            Log.w(TAG, "stopAndWait failed", t)
         }
     }
 
@@ -44,6 +61,7 @@ internal class TtsSpeaker(context: Context) {
                 tts?.stop()
                 tts?.shutdown()
             } catch (t: Throwable) {
+                Log.w(TAG, "release failed", t)
             }
             tts = null
             ready = false
@@ -64,6 +82,7 @@ internal class TtsSpeaker(context: Context) {
             try {
                 engine.shutdown()
             } catch (t: Throwable) {
+                Log.w(TAG, "shutdown failed", t)
             }
             failed = true
             return
@@ -82,11 +101,16 @@ internal class TtsSpeaker(context: Context) {
             try {
                 engine.shutdown()
             } catch (t: Throwable) {
+                Log.w(TAG, "shutdown failed", t)
             }
             failed = true
             return
         }
         tts = engine
         ready = true
+    }
+
+    private companion object {
+        const val TAG = "TtsSpeaker"
     }
 }

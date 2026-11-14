@@ -1,5 +1,6 @@
 package com.shopmanager.app.data.notifications
 
+import android.util.Log
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -22,7 +23,6 @@ class BootReceiver : BroadcastReceiver() {
             if (settings.notificationsEnabled && settings.realtimeSyncEnabled) {
                 RealtimeSyncService.start(context)
             }
-        } catch (_: Exception) {
-        }
+        } catch (e: Exception) { Log.w("BootReceiver", "ignored", e) }
     }
 }

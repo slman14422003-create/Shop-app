@@ -41,7 +41,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,18 +68,19 @@ import com.shopmanager.app.data.performance.PerformanceTier
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun rememberVoiceLevelState(assistant: AssistantViewModel): State<Float> {
     val flow = remember(assistant) {
         assistant.voice.uiState.map { (it as? VoiceUiState.Listening)?.level ?: 0f }.distinctUntilChanged()
     }
-    return flow.collectAsState(initial = 0f)
+    return flow.collectAsStateWithLifecycle(initialValue = 0f)
 }
 
 @Composable
 fun MicButton(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
-    val ui by assistant.voice.uiState.collectAsState()
+    val ui by assistant.voice.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val listening = ui is VoiceUiState.Listening
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -113,10 +113,10 @@ fun MicButton(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 fun VoiceStatusArea(assistant: AssistantViewModel, onTypeInstead: (String) -> Unit) {
-    val ui by assistant.voice.uiState.collectAsState()
-    val preview by assistant.voicePreview.collectAsState()
-    val listMode by assistant.listMode.collectAsState()
-    val items by assistant.listItems.collectAsState()
+    val ui by assistant.voice.uiState.collectAsStateWithLifecycle()
+    val preview by assistant.voicePreview.collectAsStateWithLifecycle()
+    val listMode by assistant.listMode.collectAsStateWithLifecycle()
+    val items by assistant.listItems.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         when (val s = ui) {
             is VoiceUiState.Listening -> StatusCard(
@@ -217,7 +217,7 @@ private fun PreviewBar(assistant: AssistantViewModel, p: RankedSpeech, onTypeIns
 
 @Composable
 fun UndoBarView(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
-    val bar by assistant.undoBar.collectAsState()
+    val bar by assistant.undoBar.collectAsStateWithLifecycle()
     val b: UndoBar = bar ?: return
     var remaining by remember(b.undoId) { mutableStateOf(((b.expiresAt - System.currentTimeMillis()) / 1000L).toInt().coerceAtLeast(0)) }
     LaunchedEffect(b.undoId) {
@@ -236,7 +236,7 @@ fun UndoBarView(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
 
 @Composable
 fun QuickButtonsRow(assistant: AssistantViewModel, onFill: (String) -> Unit) {
-    val quick by assistant.quickButtons.collectAsState()
+    val quick by assistant.quickButtons.collectAsStateWithLifecycle()
     if (quick.isEmpty()) return
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         quick.forEach { c: AssistantChip ->

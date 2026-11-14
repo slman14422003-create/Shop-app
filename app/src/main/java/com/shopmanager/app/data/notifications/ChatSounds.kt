@@ -1,5 +1,6 @@
 package com.shopmanager.app.data.notifications
 
+import android.util.Log
 import android.content.Context
 import android.media.MediaPlayer
 import com.shopmanager.app.R
@@ -44,7 +45,7 @@ object ChatSounds {
     }
 
     fun releaseSend() {
-        try { sendPlayer?.release() } catch (_: Exception) {}
+        try { sendPlayer?.release() } catch (e: Exception) { Log.w("ChatSounds", "ignored", e) }
         sendPlayer = null
     }
 }

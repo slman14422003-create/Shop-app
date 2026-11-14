@@ -87,7 +87,7 @@ import com.shopmanager.app.ui.common.avatarColorFor
 import com.shopmanager.app.ui.debts.DebtsViewModel
 import com.shopmanager.app.ui.materials.MaterialsViewModel
 import com.shopmanager.app.ui.theme.LocalSemanticColors
-import java.text.SimpleDateFormat
+import com.shopmanager.app.util.DateFormats
 import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Date
@@ -187,7 +187,7 @@ fun DashboardScreen(
     val materialsRefreshing by materialsViewModel.isRefreshing.collectAsStateWithLifecycle()
     val nf = remember { NumberFormat.getNumberInstance(Locale("ar")) }
     // 12-hour clock (was HH:mm/24h) — "a" renders as ص/م in Arabic locale.
-    val df = remember { SimpleDateFormat("d MMM، h:mm a", Locale("ar")) }
+    val df = remember { DateFormats.get("d MMM، h:mm a", Locale("ar")) }
 
     // Every material in the list is, by definition, a shortage the shop
     // needs to buy - it's a live shopping list, not a stock count.
@@ -743,7 +743,7 @@ private fun DashboardHeader(
     // يعكس الوقت الصحيح فورًا كل ما الهيدر يدخل التركيب من جديد (فتح
     // التطبيق من الصفر بعد إغلاقه بالكامل).
     var greeting by remember { mutableStateOf(timeBasedGreeting()) }
-    val dateFormat = remember { SimpleDateFormat("EEEE، d MMMM", Locale("ar")) }
+    val dateFormat = remember { DateFormats.get("EEEE، d MMMM", Locale("ar")) }
     var dateText by remember { mutableStateOf(dateFormat.format(Date())) }
     LaunchedEffect(Unit) {
         while (true) {
