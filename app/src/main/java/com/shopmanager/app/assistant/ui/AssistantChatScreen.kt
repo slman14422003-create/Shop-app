@@ -48,6 +48,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -84,6 +85,7 @@ fun AssistantChatScreen(
 ) {
     val messages by assistant.messages.collectAsState()
     val mood by assistant.mood.collectAsState()
+    val voiceLevel = rememberVoiceLevelState(assistant)
     val assistantData by assistant.data.collectAsState()
     val thinking by assistant.thinking.collectAsState()
     val settings by assistant.settings.collectAsState()
@@ -122,7 +124,7 @@ fun AssistantChatScreen(
         // ---- الترويسة
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع") }
-            RobotAvatar(mood, size = 44.dp, animate = settings.robotAnimation)
+            RobotAvatar(mood, size = 44.dp, animate = settings.robotAnimation, levelState = voiceLevel)
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text("المساعد المحلي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
@@ -156,7 +158,7 @@ fun AssistantChatScreen(
         // ---- الرسائل
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (shown.isEmpty() && !thinking) {
-                EmptyState(mood, settings.robotAnimation, assistantData) { assistant.send(it) }
+                EmptyState(mood, settings.robotAnimation, voiceLevel, assistantData) { assistant.send(it) }
             } else {
                 LazyColumn(
                     state = listState,
@@ -334,14 +336,14 @@ internal fun InputBar(value: String, onChange: (String) -> Unit, onSend: () -> U
 }
 
 @Composable
-private fun EmptyState(mood: RobotMood, animate: Boolean, data: com.shopmanager.app.assistant.AssistantData, onExample: (String) -> Unit) {
+private fun EmptyState(mood: RobotMood, animate: Boolean, levelState: State<Float>, data: com.shopmanager.app.assistant.AssistantData, onExample: (String) -> Unit) {
     val groups = remember(data) { AssistantQueries.dynamicGroups(data) }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        RobotAvatar(mood, size = 110.dp, animate = animate)
+        RobotAvatar(mood, size = 110.dp, animate = animate, levelState = levelState)
         Text("أنا مساعدك المحلي", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(
             if (groups.isEmpty()) "أفهم العربية بلهجاتها وأنفّذ بدون إنترنت. أضف ديونًا أو مواد لتظهر لك اقتراحات من بياناتك."

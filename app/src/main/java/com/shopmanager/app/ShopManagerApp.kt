@@ -618,9 +618,13 @@ internal fun ShopManagerApp(
                     key = "conversation_$otherUid",
                     factory = ConversationViewModel.Factory(app, otherUid, nameHint)
                 )
+                val converter = androidx.compose.runtime.remember(assistantViewModel) {
+                    com.shopmanager.app.assistant.AssistantMessageConverter(assistantViewModel)
+                }
                 ConversationScreen(
                     viewModel = vm,
-                    onBack = { navController.safePopBackStack() }
+                    onBack = { navController.safePopBackStack() },
+                    converter = converter
                 )
             }
             composable(ROUTE_MATERIAL_CATALOG) {

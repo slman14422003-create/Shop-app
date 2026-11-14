@@ -96,12 +96,23 @@ class ChatRepository(private val context: Context) {
                 val typing = snap.get("typing") as? Map<*, *>
                 fun ms(v: Any?): Long = (v as? Timestamp)?.let { it.seconds * 1000 + it.nanoseconds / 1_000_000 } ?: 0L
                 val clears = snap.get("clears", ServerTimestampBehavior.ESTIMATE) as? Map<*, *>
+                val pinMap = snap.get("pinned") as? Map<*, *>
+                val pinned = pinMap?.let {
+                    val pid = it["id"] as? String ?: return@let null
+                    PinnedRef(
+                        id = pid,
+                        fromUid = it["from"] as? String ?: "",
+                        type = MessageType.from(it["type"] as? String),
+                        text = it["text"] as? String ?: ""
+                    )
+                }
                 trySend(
                     ChatMeta(
                         otherReadMs = ms(reads?.get(other)),
                         otherTypingStamp = ms(typing?.get(other)),
                         myReadMs = ms(reads?.get(me)),
-                        myClearedMs = ms(clears?.get(me))
+                        myClearedMs = ms(clears?.get(me)),
+                        pinned = pinned
                     )
                 )
             }
@@ -135,6 +146,56 @@ class ChatRepository(private val context: Context) {
         audioB64: String, durationMs: Long, wave: List<Int>, reply: ReplyRef? = null
     ) {
         send(me, myName, other, otherName, MessageType.VOICE, "", audioB64, durationMs, wave, reply)
+    }
+
+    suspend fun sendImage(
+        me: String, myName: String, other: String, otherName: String,
+        image: EncodedImage, caption: String, reply: ReplyRef? = null
+    ) {
+        send(
+            me, myName, other, otherName, MessageType.IMAGE, caption.trim().take(MAX_TEXT_LENGTH), null, 0L, emptyList(), reply,
+            image
+        )
+    }
+
+    suspend fun setPinned(chatId: String, pinned: PinnedRef?) {
+        withTimeout(WRITE_TIMEOUT_MS) {
+            val value: Any = if (pinned == null) FieldValue.delete() else mapOf(
+                "id" to pinned.id,
+                "from" to pinned.fromUid,
+                "type" to pinned.type.storage,
+                "text" to pinned.text.take(120)
+            )
+            db.collection("chats").document(chatId).update("pinned", value).awaitQueued()
+        }
+    }
+
+    suspend fun listMyChatIds(me: String): List<String> = withTimeout(20_000L) {
+        db.collection("chats").whereArrayContains("members", me).get().await().documents.map { it.id }
+    }
+
+    suspend fun deleteOlderThan(chatId: String, cutoffMs: Long, keepIds: Set<String>): Int {
+        if (cutoffMs <= 0L) return 0
+        val col = db.collection("chats").document(chatId).collection("messages")
+        val cutoff = Timestamp(Date(cutoffMs))
+        var total = 0
+        repeat(25) {
+            val snap = withTimeout(20_000L) {
+                col.whereLessThan("createdAt", cutoff).orderBy("createdAt").limit(200).get().await()
+            }
+            if (snap.isEmpty) return total
+            val docs = snap.documents.filter { it.id !in keepIds }
+            if (docs.isNotEmpty()) {
+                withTimeout(20_000L) {
+                    val batch = db.batch()
+                    docs.forEach { batch.delete(it.reference) }
+                    batch.commit().await()
+                }
+                total += docs.size
+            }
+            if (snap.size() < 200 || docs.isEmpty()) return total
+        }
+        return total
     }
 
     suspend fun editMessage(chatId: String, msgId: String, newText: String, isLast: Boolean) {
@@ -187,7 +248,8 @@ class ChatRepository(private val context: Context) {
     private suspend fun send(
         me: String, myName: String, other: String, otherName: String,
         type: MessageType, text: String, audioB64: String?, durationMs: Long, wave: List<Int>,
-        reply: ReplyRef? = null
+        reply: ReplyRef? = null,
+        image: EncodedImage? = null
     ) = withTimeout(WRITE_TIMEOUT_MS) {
         val chatId = chatIdFor(me, other)
         val chatRef = db.collection("chats").document(chatId)
@@ -213,6 +275,12 @@ class ChatRepository(private val context: Context) {
             msg["wave"] = wave
             // الصوت يُحذف بعد 30 يوماً: التطبيق ينظّف المنتهي عند فتح المحادثة (بدون TTL ولا خدمات إضافية).
             msg["expireAt"] = Timestamp(Date(System.currentTimeMillis() + VOICE_TTL_MS))
+        }
+
+        if (type == MessageType.IMAGE && image != null) {
+            msg["image"] = image.b64
+            msg["imgW"] = image.width
+            msg["imgH"] = image.height
         }
 
         val chat = mapOf(
@@ -315,6 +383,9 @@ private fun DocumentSnapshot.toMessage(): ChatMessage? {
         pending = metadata.hasPendingWrites(),
         reply = reply,
         edited = getBoolean("edited") == true,
-        reactions = reactions
+        reactions = reactions,
+        imageB64 = getString("image").orEmpty(),
+        imageW = (getLong("imgW") ?: 0L).toInt(),
+        imageH = (getLong("imgH") ?: 0L).toInt()
     )
 }

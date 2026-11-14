@@ -274,3 +274,94 @@ internal fun buildBackupText(
     sb.append("\nتم الإنشاء تلقائيًا من التطبيق.")
     return sb.toString()
 }
+
+@Composable
+internal fun QuickRepliesDialog(current: List<String>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
+    var items by remember { mutableStateOf(current) }
+    var draft by remember { mutableStateOf("") }
+    var editIndex by remember { mutableStateOf(-1) }
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("الردود الجاهزة") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                items.forEachIndexed { i, r ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { editIndex = i; draft = r }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            r,
+                            Modifier.weight(1f),
+                            fontWeight = if (i == editIndex) FontWeight.Bold else FontWeight.Normal
+                        )
+                        TextButton(shape = RectangleShape, onClick = {
+                            items = com.shopmanager.app.data.chat.QuickReplies.remove(items, i)
+                            if (editIndex == i) { editIndex = -1; draft = "" }
+                        }) { Text("حذف") }
+                    }
+                }
+                Spacer(Modifier.height(AppSpaceSm))
+                AppTextField(
+                    value = draft,
+                    onValueChange = { draft = it.take(com.shopmanager.app.data.chat.QuickReplies.MAX_LEN) },
+                    label = if (editIndex >= 0) "تعديل الرد" else "رد جديد",
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row {
+                    TextButton(
+                        enabled = draft.isNotBlank() && (editIndex >= 0 || items.size < com.shopmanager.app.data.chat.QuickReplies.MAX_COUNT),
+                        shape = RectangleShape,
+                        onClick = {
+                            items = if (editIndex >= 0) com.shopmanager.app.data.chat.QuickReplies.update(items, editIndex, draft)
+                            else com.shopmanager.app.data.chat.QuickReplies.add(items, draft)
+                            draft = ""
+                            editIndex = -1
+                        }
+                    ) { Text(if (editIndex >= 0) "تحديث" else "إضافة") }
+                    if (editIndex >= 0) {
+                        TextButton(shape = RectangleShape, onClick = { editIndex = -1; draft = "" }) { Text("إلغاء التعديل") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(shape = RectangleShape, onClick = { onSave(items) }) { Text("حفظ") } },
+        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+internal fun AutoDeleteDialog(currentDays: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+    var selected by remember { mutableStateOf(currentDays) }
+    val needsConfirm = selected > 0 && selected != currentDays
+
+    GlassAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("حذف الرسائل القديمة تلقائياً") },
+        text = {
+            Column {
+                com.shopmanager.app.data.chat.ChatRetention.OPTIONS_DAYS.forEach { d ->
+                    IosOptionRow(
+                        label = com.shopmanager.app.data.chat.ChatRetention.label(d),
+                        selected = selected == d,
+                        onClick = { selected = d }
+                    )
+                }
+                if (needsConfirm) {
+                    Text(
+                        "سيتم حذف الرسائل الأقدم من $selected يوماً نهائياً من الخادم عند الطرفين، ولا يمكن استرجاعها.",
+                        modifier = Modifier.padding(top = AppSpaceSm)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(shape = RectangleShape, onClick = { onConfirm(selected) }) {
+                Text(if (needsConfirm) "تأكيد التفعيل" else "حفظ")
+            }
+        },
+        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
+    )
+}

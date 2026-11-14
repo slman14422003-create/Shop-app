@@ -1,10 +1,14 @@
 package com.shopmanager.app.data.chat
 
 enum class MessageType(val storage: String) {
-    TEXT("text"), VOICE("voice");
+    TEXT("text"), VOICE("voice"), IMAGE("image");
 
     companion object {
-        fun from(s: String?) = if (s == "voice") VOICE else TEXT
+        fun from(s: String?) = when (s) {
+            "voice" -> VOICE
+            "image" -> IMAGE
+            else -> TEXT
+        }
     }
 }
 
@@ -37,6 +41,8 @@ data class ChatSummary(
 
 data class ReplyRef(val id: String, val fromUid: String, val type: MessageType, val text: String)
 
+data class PinnedRef(val id: String, val fromUid: String, val type: MessageType, val text: String)
+
 data class ChatMessage(
     val id: String,
     val fromUid: String,
@@ -51,7 +57,10 @@ data class ChatMessage(
     val pending: Boolean,
     val reply: ReplyRef? = null,
     val edited: Boolean = false,
-    val reactions: Map<String, String> = emptyMap()
+    val reactions: Map<String, String> = emptyMap(),
+    val imageB64: String = "",
+    val imageW: Int = 0,
+    val imageH: Int = 0
 ) {
     val isExpiredVoice: Boolean
         get() = type == MessageType.VOICE && expireAtMs > 0 && System.currentTimeMillis() > expireAtMs
@@ -64,7 +73,8 @@ data class ChatMeta(
     /** قيمة مؤشر "يكتب الآن" للطرف الآخر (تتغير مع كل نبضة كتابة)، 0 = لا يكتب. */
     val otherTypingStamp: Long = 0L,
     val myReadMs: Long = 0L,
-    val myClearedMs: Long = 0L
+    val myClearedMs: Long = 0L,
+    val pinned: PinnedRef? = null
 )
 
 fun chatIdFor(a: String, b: String): String = if (a < b) "${a}_$b" else "${b}_$a"

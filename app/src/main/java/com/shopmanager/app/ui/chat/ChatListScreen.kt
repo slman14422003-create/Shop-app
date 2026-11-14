@@ -283,7 +283,7 @@ private fun ChatRow(
                         )
                     } else {
                         Text(
-                            (if (chat.lastFromMe) "أنت: " else "") + chat.lastText,
+                            (if (chat.lastFromMe) "أنت: " else "") + (if (chat.lastType == MessageType.IMAGE) "📷 " + chat.lastText.ifBlank { "صورة" } else chat.lastText),
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (hasUnread) cs.onSurface else cs.onSurfaceVariant,
                             maxLines = 1,

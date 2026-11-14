@@ -149,6 +149,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             voice.uiState.collect { st ->
                 when (st) {
+                    is VoiceUiState.Preparing -> setMood(RobotMood.LISTENING)
                     is VoiceUiState.Listening -> setMood(RobotMood.LISTENING)
                     is VoiceUiState.Processing -> setMood(RobotMood.THINKING)
                     is VoiceUiState.Idle -> if (_mood.value == RobotMood.LISTENING) setMood(RobotMood.READY)
@@ -191,6 +192,28 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     }
                 }
             }
+        }
+    }
+
+    suspend fun planChatConversion(
+        kind: com.shopmanager.app.data.chat.ConvertKind,
+        text: String
+    ): com.shopmanager.app.data.chat.ConversionPlan = withContext(Dispatchers.Default) {
+        ChatConversion.plan(engine, buildSnapshot(), kind, text)
+    }
+
+    suspend fun applyChatConversion(
+        plan: com.shopmanager.app.data.chat.ConversionPlan.Ready
+    ): com.shopmanager.app.data.chat.ConversionResult {
+        val cmd = plan.handle as? Command
+            ?: return com.shopmanager.app.data.chat.ConversionResult("تعذر التنفيذ", "أمر غير صالح", false)
+        return try {
+            val o = withContext(Dispatchers.IO) { actions.execute(cmd, _data.value) }
+            com.shopmanager.app.data.chat.ConversionResult(o.title, o.details, o.success, o.undo)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.shopmanager.app.data.chat.ConversionResult("تعذر التنفيذ", e.message.orEmpty(), false)
         }
     }
 

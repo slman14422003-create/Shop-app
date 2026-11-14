@@ -10,6 +10,8 @@ import com.google.firebase.firestore.DocumentSnapshot.ServerTimestampBehavior
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.QuerySnapshot
 import com.shopmanager.app.data.chat.ChatFirebase
+import com.shopmanager.app.data.chat.ChatNotifyInput
+import com.shopmanager.app.data.chat.ChatNotifyRules
 import com.shopmanager.app.data.chat.ChatOpenTracker
 import com.shopmanager.app.data.settings.SettingsRepository
 import java.util.concurrent.Executor
@@ -81,38 +83,45 @@ object ChatMessageWatcher {
     private fun handle(app: Context, uid: String, snap: QuerySnapshot) {
         val trusted = !snap.metadata.isFromCache || snap.metadata.hasPendingWrites()
         if (!trusted) return
-        val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val enabled = SettingsRepository(app).notificationsEnabled
-        val edit = prefs.edit()
-        for (change in snap.documentChanges) {
-            if (change.type == DocumentChange.Type.REMOVED) continue
-            val doc = change.document
-            val lastTime = doc.getTimestamp("lastTime", ServerTimestampBehavior.NONE)?.toMs() ?: continue
-            val key = "last_${doc.id}"
-            val seen = prefs.getLong(key, -1L)
-            if (lastTime <= seen) continue
-            edit.putLong(key, lastTime)
-
-            if (seen == -1L && !initialDone) continue
-            if (doc.getString("lastFrom") == uid) continue
-            val unread = ((doc.get("unread") as? Map<*, *>)?.get(uid) as? Number)?.toInt() ?: 0
-            if (unread <= 0) continue
-            val cleared = ((doc.get("clears", ServerTimestampBehavior.ESTIMATE) as? Map<*, *>)?.get(uid) as? Timestamp)?.toMs() ?: 0L
-            if (cleared > 0L && lastTime <= cleared) continue
-            if (ChatOpenTracker.openChatId == doc.id) continue
-            if (!enabled) continue
-
-            val members = (doc.get("members") as? List<*>)?.filterIsInstance<String>().orEmpty()
-            val other = members.firstOrNull { it != uid } ?: continue
-            val names = doc.get("names") as? Map<*, *>
-            val name = (names?.get(other) as? String).orEmpty().ifBlank { "مستخدم" }
-            val isVoice = doc.getString("lastType") == "voice"
-            NotificationHelper.showChatMessageNotification(
-                app, doc.id, other, name, doc.getString("lastText").orEmpty(), isVoice, lastTime
-            )
-        }
-        edit.apply()
+        process(app, uid, snap, !initialDone)
         initialDone = true
+    }
+
+    private val lock = Any()
+
+    internal fun process(app: Context, uid: String, snap: QuerySnapshot, initial: Boolean) {
+        synchronized(lock) {
+            val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val enabled = SettingsRepository(app).notificationsEnabled
+            val edit = prefs.edit()
+            for (change in snap.documentChanges) {
+                if (change.type == DocumentChange.Type.REMOVED) continue
+                val doc = change.document
+                val unread = ((doc.get("unread") as? Map<*, *>)?.get(uid) as? Number)?.toInt() ?: 0
+                if (unread <= 0) NotificationHelper.cancelChatNotification(app, doc.id)
+                val lastTime = doc.getTimestamp("lastTime", ServerTimestampBehavior.NONE)?.toMs() ?: continue
+                val key = "last_${doc.id}"
+                val cleared = ((doc.get("clears", ServerTimestampBehavior.ESTIMATE) as? Map<*, *>)?.get(uid) as? Timestamp)?.toMs() ?: 0L
+                val decision = ChatNotifyRules.decide(
+                    seenMs = prefs.getLong(key, ChatNotifyRules.NO_BASELINE),
+                    initial = initial,
+                    myUid = uid,
+                    openChatId = ChatOpenTracker.openChatId,
+                    enabled = enabled,
+                    doc = ChatNotifyInput(doc.id, lastTime, doc.getString("lastFrom").orEmpty(), unread, cleared)
+                )
+                if (decision.advanceBaseline) edit.putLong(key, lastTime)
+                if (!decision.notify) continue
+                val members = (doc.get("members") as? List<*>)?.filterIsInstance<String>().orEmpty()
+                val other = members.firstOrNull { it != uid } ?: continue
+                val names = doc.get("names") as? Map<*, *>
+                val name = (names?.get(other) as? String).orEmpty().ifBlank { "مستخدم" }
+                NotificationHelper.showChatMessageNotification(
+                    app, doc.id, other, name, doc.getString("lastType"), doc.getString("lastText").orEmpty(), lastTime, unread
+                )
+            }
+            edit.apply()
+        }
     }
 
     private fun Timestamp.toMs(): Long = seconds * 1000 + nanoseconds / 1_000_000

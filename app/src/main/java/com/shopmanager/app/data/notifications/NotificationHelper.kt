@@ -16,6 +16,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.shopmanager.app.MainActivity
+import com.shopmanager.app.data.chat.ChatNotifyRules
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.settings.SettingsRepository
@@ -58,6 +59,8 @@ object NotificationHelper {
     private const val NOTIF_ID_CHAT_BASE = 90000
     private const val NOTIF_ID_MATERIAL_BASE = 70000
     private const val NOTIF_ID_SHOPPING_SUMMARY = 1901
+    private const val NOTIF_ID_CHAT_SUMMARY = 1904
+    private const val GROUP_CHAT = "com.shopmanager.app.GROUP_CHAT"
     private const val GROUP_SHOPPING = "com.shopmanager.app.GROUP_SHOPPING"
 
     // "مجموعات الإشعارات المتقدمة": each channel gets its own notification
@@ -144,7 +147,12 @@ object NotificationHelper {
                 description = "إشعار رسائل الدردشة الجديدة"
                 setShowBadge(true)
                 setSound(NotificationSounds.soundUri(context, settingsRepo.soundFor(NotifKind.CHAT), settingsRepo.customSoundUri(NotifKind.CHAT)), NotificationSounds.AUDIO_ATTRS)
-                enableVibration(false)
+                if (settingsRepo.chatVibrationEnabled) {
+                    enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 120, 80, 120)
+                } else {
+                    enableVibration(false)
+                }
             }
             manager.createNotificationChannel(chatChannel)
 
@@ -450,31 +458,76 @@ object NotificationHelper {
      * note. A rotating id derived from the note id keeps several new notes
      * (e.g. after reconnecting) each visible instead of overwriting one another.
      */
+    fun chatNotificationId(chatId: String): Int = NOTIF_ID_CHAT_BASE + (chatId.hashCode() and 0xFFF)
+
+    private fun isChatNotificationId(id: Int): Boolean = id in NOTIF_ID_CHAT_BASE..(NOTIF_ID_CHAT_BASE + 0xFFF)
+
+    private fun activeChatNotifications(manager: NotificationManager?, excludeId: Int = -1) =
+        runCatching {
+            manager?.activeNotifications.orEmpty().filter { isChatNotificationId(it.id) && it.id != excludeId }
+        }.getOrDefault(emptyList())
+
+    private fun chatPerson(name: String) = androidx.core.app.Person.Builder()
+        .setName(name)
+        .setIcon(androidx.core.graphics.drawable.IconCompat.createWithBitmap(buildAvatarBitmap(name)))
+        .build()
+
+    private fun chatReplyAction(context: Context, id: Int, chatId: String, otherUid: String, name: String): NotificationCompat.Action {
+        val remoteInput = androidx.core.app.RemoteInput.Builder(NotificationActionReceiver.KEY_CHAT_REPLY)
+            .setLabel("اكتب ردك")
+            .build()
+        val intent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_CHAT_REPLY
+            putExtra(NotificationActionReceiver.EXTRA_CHAT_ID, chatId)
+            putExtra(NotificationActionReceiver.EXTRA_CHAT_OTHER_UID, otherUid)
+            putExtra(NotificationActionReceiver.EXTRA_CHAT_OTHER_NAME, name)
+            putExtra(NotificationActionReceiver.EXTRA_NOTIF_ID, id)
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+        val pending = PendingIntent.getBroadcast(context, id, intent, flags)
+        return NotificationCompat.Action.Builder(com.shopmanager.app.R.drawable.ic_stat_notify, "رد", pending)
+            .addRemoteInput(remoteInput)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .setAllowGeneratedReplies(true)
+            .build()
+    }
+
+    private fun chatMarkReadAction(context: Context, id: Int, chatId: String): NotificationCompat.Action {
+        val intent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = NotificationActionReceiver.ACTION_CHAT_MARK_READ
+            putExtra(NotificationActionReceiver.EXTRA_CHAT_ID, chatId)
+            putExtra(NotificationActionReceiver.EXTRA_NOTIF_ID, id)
+        }
+        val pending = buildActionIntent(context, id, intent)
+        return NotificationCompat.Action.Builder(com.shopmanager.app.R.drawable.ic_stat_notify, "تعليم كمقروء", pending)
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
+    }
+
     fun showChatMessageNotification(
         context: Context,
         chatId: String,
         otherUid: String,
         name: String,
+        type: String?,
         text: String,
-        isVoice: Boolean,
-        timeMs: Long
+        timeMs: Long,
+        unread: Int = 1
     ) {
         if (!hasPermission(context)) return
-        val id = NOTIF_ID_CHAT_BASE + (chatId.hashCode() and 0xFFF)
-        val channelId = NotificationSounds.channelId(context, NotifKind.CHAT)
-        val body = if (isVoice) "رسالة صوتية" else text.ifBlank { "رسالة جديدة" }
-        val sender = androidx.core.app.Person.Builder()
-            .setName(name)
-            .setIcon(androidx.core.graphics.drawable.IconCompat.createWithBitmap(buildAvatarBitmap(name)))
-            .build()
-        val manager = context.getSystemService(NotificationManager::class.java)
-        val existing = runCatching {
-            manager?.activeNotifications?.firstOrNull { it.id == id }?.notification
-        }.getOrNull()
+        val app = context.applicationContext
+        ensureChannels(app)
+        val id = chatNotificationId(chatId)
+        val channelId = NotificationSounds.channelId(app, NotifKind.CHAT)
+        val manager = app.getSystemService(NotificationManager::class.java)
+        val existing = runCatching { manager?.activeNotifications?.firstOrNull { it.id == id }?.notification }.getOrNull()
         val style = existing?.let { NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(it) }
             ?: NotificationCompat.MessagingStyle(androidx.core.app.Person.Builder().setName("أنا").build())
-        style.addMessage(body, timeMs, sender)
-        val notification = NotificationCompat.Builder(context, channelId)
+        style.addMessage(ChatNotifyRules.body(type, text), timeMs, chatPerson(name))
+        val notification = NotificationCompat.Builder(app, channelId)
             .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
             .setColor(BRAND_COLOR)
             .setStyle(style)
@@ -483,11 +536,93 @@ object NotificationHelper {
             .setAutoCancel(true)
             .setOnlyAlertOnce(false)
             .setWhen(timeMs)
-            .setContentIntent(buildContentIntent(context, id, NotificationAction.OpenChat(otherUid, name)))
-            .extend(lockScreenPrivacy(context, channelId, "رسالة جديدة"))
+            .setNumber(unread.coerceAtLeast(1))
+            .setGroup(GROUP_CHAT)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setContentIntent(buildContentIntent(app, id, NotificationAction.OpenChat(otherUid, name)))
+            .addAction(chatReplyAction(app, id, chatId, otherUid, name))
+            .addAction(chatMarkReadAction(app, id, chatId))
+            .extend(lockScreenPrivacy(app, channelId, "رسالة جديدة"))
             .build()
         try {
-            NotificationManagerCompat.from(context).notify(id, notification)
+            NotificationManagerCompat.from(app).notify(id, notification)
+        } catch (_: SecurityException) {
+            return
+        }
+        postChatSummary(app, channelId)
+    }
+
+    fun appendOwnChatReply(context: Context, chatId: String, text: String) {
+        val app = context.applicationContext
+        val id = chatNotificationId(chatId)
+        val manager = app.getSystemService(NotificationManager::class.java)
+        val existing = runCatching { manager?.activeNotifications?.firstOrNull { it.id == id }?.notification }.getOrNull()
+            ?: return
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(existing) ?: return
+        style.addMessage(text, System.currentTimeMillis(), null as androidx.core.app.Person?)
+        val rebuilt = NotificationCompat.Builder.recoverBuilder(app, existing)
+            .setStyle(style)
+            .setOnlyAlertOnce(true)
+            .setNumber(0)
+            .build()
+        try {
+            NotificationManagerCompat.from(app).notify(id, rebuilt)
+        } catch (_: SecurityException) {
+        }
+    }
+
+    fun cancelChatNotification(context: Context, chatId: String) {
+        val app = context.applicationContext
+        val id = chatNotificationId(chatId)
+        val manager = app.getSystemService(NotificationManager::class.java)
+        val present = runCatching { manager?.activeNotifications?.any { it.id == id } == true }.getOrDefault(true)
+        if (!present) return
+        try {
+            NotificationManagerCompat.from(app).cancel(id)
+        } catch (_: SecurityException) {
+        }
+        postChatSummary(app, NotificationSounds.channelId(app, NotifKind.CHAT), excludeId = id)
+    }
+
+    private fun postChatSummary(app: Context, channelId: String, excludeId: Int = -1) {
+        val manager = app.getSystemService(NotificationManager::class.java)
+        val compat = NotificationManagerCompat.from(app)
+        val active = activeChatNotifications(manager, excludeId)
+        if (active.isEmpty()) {
+            try { compat.cancel(NOTIF_ID_CHAT_SUMMARY) } catch (_: SecurityException) {}
+            return
+        }
+        var messages = 0
+        val lines = ArrayList<String>()
+        for (sbn in active) {
+            val st = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(sbn.notification) ?: continue
+            messages += st.messages.size
+            val last = st.messages.lastOrNull() ?: continue
+            lines.add((last.person?.name?.toString()?.let { "$it: " } ?: "") + last.text)
+        }
+        val title = ChatNotifyRules.summaryTitle(active.size, messages.coerceAtLeast(active.size))
+        val inbox = NotificationCompat.InboxStyle().setSummaryText(title)
+        lines.take(5).forEach { inbox.addLine(it) }
+        val open = PendingIntent.getActivity(
+            app, NOTIF_ID_CHAT_SUMMARY,
+            Intent(app, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val summary = NotificationCompat.Builder(app, channelId)
+            .setSmallIcon(com.shopmanager.app.R.drawable.ic_stat_notify)
+            .setColor(BRAND_COLOR)
+            .setContentTitle(title)
+            .setStyle(inbox)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setGroup(GROUP_CHAT)
+            .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .extend(lockScreenPrivacy(app, channelId, "رسائل جديدة"))
+            .build()
+        try {
+            compat.notify(NOTIF_ID_CHAT_SUMMARY, summary)
         } catch (_: SecurityException) {
         }
     }

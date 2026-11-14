@@ -17,6 +17,16 @@ import com.shopmanager.app.data.chat.ChatSummary
 import com.shopmanager.app.data.chat.MessageType
 import com.shopmanager.app.data.chat.ReplyRef
 import com.shopmanager.app.data.chat.ChatUser
+import com.shopmanager.app.data.chat.ChatImageCodec
+import com.shopmanager.app.data.chat.ChatRetention
+import com.shopmanager.app.data.chat.ChatSearch
+import com.shopmanager.app.data.chat.ConversionPlan
+import com.shopmanager.app.data.chat.ConvertKind
+import com.shopmanager.app.data.chat.MessageConverter
+import com.shopmanager.app.data.chat.PinnedRef
+import com.shopmanager.app.data.chat.TranscribeResult
+import com.shopmanager.app.data.chat.VoiceTranscriber
+import com.shopmanager.app.data.settings.SettingsRepository
 import com.shopmanager.app.data.chat.MAX_VOICE_MS
 import com.shopmanager.app.data.chat.VoicePlayer
 import com.shopmanager.app.data.chat.VoiceRecorder
@@ -110,10 +120,39 @@ class ChatSessionViewModel(application: Application) : AndroidViewModel(applicat
                 repo.listenMyChats(s.account.uid)
                     .retryOnError { _chatsError.value = chatErrorMessage(it) }
                     .onEach { _chatsError.value = null }
+                    .onEach { list -> scheduleCleanup(list.map { it.chatId }) }
                     .map { ChatListState(it, false) }
             } else flowOf(ChatListState())
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ChatListState())
+
+    private var cleanupRunning = false
+
+    private fun scheduleCleanup(ids: List<String>) {
+        val settings = SettingsRepository(getApplication<Application>())
+        val days = settings.chatAutoDeleteDays
+        val now = System.currentTimeMillis()
+        if (days <= 0 || cleanupRunning || ids.isEmpty() || !ChatRetention.isDue(settings.chatCleanupLastRun, now)) return
+        cleanupRunning = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val cutoff = ChatRetention.cutoffMs(now, days)
+                var allOk = true
+                for (id in ids) {
+                    try {
+                        repo.deleteOlderThan(id, cutoff, emptySet())
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        allOk = false
+                    }
+                }
+                if (allOk) settings.chatCleanupLastRun = now
+            } finally {
+                cleanupRunning = false
+            }
+        }
+    }
 
     private val _auth = MutableStateFlow(AuthUiState())
     val auth: StateFlow<AuthUiState> = _auth
@@ -200,6 +239,19 @@ data class RecordingUi(
     val levels: List<Int> = emptyList()
 )
 
+data class SearchUi(
+    val active: Boolean = false,
+    val query: String = "",
+    val matches: List<String> = emptyList(),
+    val index: Int = -1
+) {
+    val currentId: String? get() = matches.getOrNull(index)
+}
+
+data class ConvertUi(val kind: ConvertKind, val text: String, val plan: ConversionPlan? = null, val busy: Boolean = true)
+
+class UndoHint(val text: String, val undo: suspend () -> Unit)
+
 private const val PAGE_SIZE = 50L
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -246,6 +298,35 @@ class ConversationViewModel(
             st.copy(messages = st.messages.filter { it.id !in hid && (cleared <= 0L || it.createdAtMs > cleared) })
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MessagesState())
+
+    val pinned: StateFlow<PinnedRef?> = meta.map { it?.pinned }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val settingsRepo = SettingsRepository(application)
+
+    private val _search = MutableStateFlow(SearchUi())
+    val search: StateFlow<SearchUi> = _search
+
+    private val _transcripts = MutableStateFlow<Map<String, String>>(emptyMap())
+    val transcripts: StateFlow<Map<String, String>> = _transcripts
+
+    private val _transcribing = MutableStateFlow<Set<String>>(emptySet())
+    val transcribing: StateFlow<Set<String>> = _transcribing
+
+    private val _sendingImage = MutableStateFlow(false)
+    val sendingImage: StateFlow<Boolean> = _sendingImage
+
+    private val _convert = MutableStateFlow<ConvertUi?>(null)
+    val convert: StateFlow<ConvertUi?> = _convert
+
+    private val _undoHint = MutableStateFlow<UndoHint?>(null)
+    val undoHint: StateFlow<UndoHint?> = _undoHint
+    fun clearUndoHint() { _undoHint.value = null }
+
+    val quickReplies: List<String> get() = settingsRepo.chatQuickReplies
+    val linkPreviewEnabled: Boolean get() = settingsRepo.chatLinkPreviewEnabled
+
+    var converter: MessageConverter? = null
 
     private val _replyTo = MutableStateFlow<ChatMessage?>(null)
     val replyTo: StateFlow<ChatMessage?> = _replyTo
@@ -328,6 +409,158 @@ class ConversationViewModel(
     }
 
     fun setActive(a: Boolean) { active.value = a }
+
+    fun openSearch() { _search.value = SearchUi(active = true) }
+
+    fun closeSearch() { _search.value = SearchUi() }
+
+    fun setSearchQuery(q: String) {
+        val ids = ChatSearch.matchIds(rawMessages.value.messages, q)
+        _search.value = SearchUi(true, q, ids, if (ids.isEmpty()) -1 else ids.lastIndex)
+    }
+
+    fun stepSearch(older: Boolean) {
+        val cur = _search.value
+        if (cur.matches.isEmpty()) return
+        _search.value = cur.copy(index = ChatSearch.step(cur.index, cur.matches.size, older))
+    }
+
+    fun togglePin(m: ChatMessage) {
+        val current = pinned.value
+        val next = if (current?.id == m.id) null else PinnedRef(m.id, m.fromUid, m.type, if (m.type == MessageType.VOICE) "" else m.text)
+        viewModelScope.launch {
+            try {
+                repo.setPinned(chatId, next)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر تثبيت الرسالة" else it }
+            }
+        }
+    }
+
+    fun unpin() {
+        viewModelScope.launch { runCatching { repo.setPinned(chatId, null) } }
+    }
+
+    fun sendImage(uri: android.net.Uri, caption: String = "") {
+        if (_sendingImage.value) return
+        val reply = _replyTo.value?.toReplyRef()
+        viewModelScope.launch {
+            _sendingImage.value = true
+            try {
+                val enc = ChatImageCodec.encode(getApplication(), uri)
+                if (enc == null) {
+                    _message.value = "تعذّر تجهيز الصورة"
+                } else {
+                    _replyTo.value = null
+                    repo.sendImage(me, myName(), otherUid, otherName, enc, caption, reply)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر إرسال الصورة" else it }
+            } finally {
+                _sendingImage.value = false
+            }
+        }
+    }
+
+    fun sendQuickReply(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        val reply = _replyTo.value?.toReplyRef()
+        _replyTo.value = null
+        viewModelScope.launch {
+            try {
+                repo.sendText(me, myName(), otherUid, otherName, t, reply)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _message.value = chatErrorMessage(e).let { if (it.startsWith("حدث خطأ")) "تعذّر إرسال الرسالة" else it }
+            }
+        }
+    }
+
+    fun transcribe(m: ChatMessage) {
+        if (m.type != MessageType.VOICE || m.audioB64.isEmpty() || m.id in _transcribing.value || m.id in _transcripts.value) return
+        _transcribing.update { it + m.id }
+        viewModelScope.launch {
+            try {
+                when (val r = VoiceTranscriber.transcribe(getApplication(), m.audioB64)) {
+                    is TranscribeResult.Text -> _transcripts.update { it + (m.id to r.text) }
+                    is TranscribeResult.Error -> _message.value = r.message
+                }
+            } finally {
+                _transcribing.update { it - m.id }
+            }
+        }
+    }
+
+    fun startConvert(kind: ConvertKind, m: ChatMessage) {
+        val conv = converter
+        if (conv == null || m.type == MessageType.VOICE || m.text.isBlank()) {
+            _message.value = "لا يمكن تحويل هذه الرسالة"
+            return
+        }
+        replan(kind, m.text)
+    }
+
+    private fun replan(kind: ConvertKind, text: String) {
+        val conv = converter ?: return
+        _convert.value = ConvertUi(kind, text)
+        viewModelScope.launch {
+            try {
+                val plan = conv.plan(kind, text)
+                _convert.value = ConvertUi(kind, text, plan, false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _convert.value = null
+                _message.value = "تعذّر تحليل الرسالة"
+            }
+        }
+    }
+
+    fun chooseConvertOption(text: String) {
+        val cur = _convert.value ?: return
+        replan(cur.kind, text)
+    }
+
+    fun dismissConvert() { _convert.value = null }
+
+    fun confirmConvert() {
+        val cur = _convert.value ?: return
+        val plan = cur.plan as? ConversionPlan.Ready ?: return
+        val conv = converter ?: return
+        _convert.value = cur.copy(busy = true)
+        viewModelScope.launch {
+            try {
+                val r = conv.apply(plan)
+                _convert.value = null
+                if (r.success && r.undo != null) _undoHint.value = UndoHint(r.title + (if (r.details.isNotBlank()) ": " + r.details else ""), r.undo)
+                else _message.value = r.title + (if (r.details.isNotBlank()) ": " + r.details else "")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _convert.value = null
+                _message.value = "تعذّر التنفيذ"
+            }
+        }
+    }
+
+    fun runUndo(h: UndoHint) {
+        viewModelScope.launch {
+            try {
+                h.undo()
+                _message.value = "تم التراجع"
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _message.value = "تعذّر التراجع"
+            }
+        }
+    }
 
     /** نبضة "متصل الآن" أثناء فتح المحادثة. */
     suspend fun heartbeat() { repo.heartbeat(me) }

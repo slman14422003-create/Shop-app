@@ -51,6 +51,7 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
             checkNewDebts(settings)
             checkShortageList(settings)
             checkNewNotes(settings)
+            checkChatMessages()
             Result.success()
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
@@ -115,6 +116,18 @@ class BackgroundSyncWorker(appContext: Context, params: WorkerParameters) :
         for (note in fresh) {
             NotificationHelper.showNewNoteNotification(applicationContext, note.title, note.content, note.id)
         }
+    }
+
+    private suspend fun checkChatMessages() {
+        val uid = try {
+            com.shopmanager.app.data.chat.ChatFirebase.auth(applicationContext).currentUser?.uid
+        } catch (e: Exception) {
+            null
+        } ?: return
+        val firstRun = applicationContext.getSharedPreferences("chat_notif_baseline", Context.MODE_PRIVATE).all.isEmpty()
+        val snap = com.shopmanager.app.data.chat.ChatFirebase.db(applicationContext)
+            .collection("chats").whereArrayContains("members", uid).get(Source.SERVER).await()
+        ChatMessageWatcher.process(applicationContext, uid, snap, firstRun)
     }
 
     companion object {

@@ -4,6 +4,13 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -33,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +64,19 @@ import com.shopmanager.app.assistant.engine.MaterialRef
 import com.shopmanager.app.assistant.engine.RankedSpeech
 import com.shopmanager.app.assistant.voice.VoiceUiState
 import com.shopmanager.app.ui.common.AppPillButton
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+
+@Composable
+fun rememberVoiceLevelState(assistant: AssistantViewModel): State<Float> {
+    val flow = remember(assistant) {
+        assistant.voice.uiState.map { (it as? VoiceUiState.Listening)?.level ?: 0f }.distinctUntilChanged()
+    }
+    return flow.collectAsState(initial = 0f)
+}
 
 @Composable
 fun MicButton(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
@@ -66,18 +86,27 @@ fun MicButton(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) assistant.startVoice()
     }
-    Surface(
-        onClick = {
-            if (listening) assistant.stopVoice()
-            else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) assistant.startVoice()
-            else launcher.launch(Manifest.permission.RECORD_AUDIO)
-        },
-        shape = CircleShape,
-        color = if (listening) AssistantWarnOrange else MaterialTheme.colorScheme.surfaceContainerHighest,
-        modifier = modifier.size(52.dp)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(if (listening) Icons.Filled.Stop else Icons.Filled.Mic, contentDescription = if (listening) "إيقاف" else "تحدّث")
+    Box(modifier.size(52.dp), contentAlignment = Alignment.Center) {
+        if (listening && LocalPerformanceTier.current != PerformanceTier.LOW) {
+            val t = rememberInfiniteTransition(label = "micPulse")
+            val p by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "p")
+            Canvas(Modifier.matchParentSize()) {
+                drawCircle(AssistantWarnOrange.copy(alpha = (1f - p) * 0.45f), radius = size.minDimension / 2f * (1f + p * 0.7f))
+            }
+        }
+        Surface(
+            onClick = {
+                if (listening) assistant.stopVoice()
+                else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) assistant.startVoice()
+                else launcher.launch(Manifest.permission.RECORD_AUDIO)
+            },
+            shape = CircleShape,
+            color = if (listening) AssistantWarnOrange else MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.size(52.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(if (listening) Icons.Filled.Stop else Icons.Filled.Mic, contentDescription = if (listening) "إيقاف" else "تحدّث")
+            }
         }
     }
 }

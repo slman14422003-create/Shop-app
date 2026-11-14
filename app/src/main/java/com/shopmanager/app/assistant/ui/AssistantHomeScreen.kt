@@ -90,6 +90,7 @@ fun AssistantHomeScreen(
 ) {
     val data by assistant.data.collectAsState()
     val mood by assistant.mood.collectAsState()
+    val voiceLevel = rememberVoiceLevelState(assistant)
     val settings by assistant.settings.collectAsState()
     val log by assistant.actionLog.collectAsState()
     val messages by assistant.messages.collectAsState()
@@ -156,7 +157,7 @@ fun AssistantHomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
         ) {
             Box(Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onOpenChat)) {
-                RobotAvatar(mood, size = 190.dp, animate = settings.robotAnimation)
+                RobotAvatar(mood, size = 190.dp, animate = settings.robotAnimation, levelState = voiceLevel)
             }
             if (shownReply != null) {
                 Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {

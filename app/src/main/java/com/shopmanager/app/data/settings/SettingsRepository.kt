@@ -81,6 +81,38 @@ class SettingsRepository(context: Context) {
      * مغلق ليصل الإشعار لحظياً (انظر RealtimeSyncService). لكل جهاز اختياره —
      * يمكن إيقافها على الهاتف الضعيف ليعود للفحص الدوري فقط.
      */
+    var chatSendSoundEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CHAT_SEND_SOUND, true)
+        set(value) = prefs.edit().putBoolean(KEY_CHAT_SEND_SOUND, value).apply()
+
+    var chatSoundsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CHAT_SOUNDS, true)
+        set(value) = prefs.edit().putBoolean(KEY_CHAT_SOUNDS, value).apply()
+
+    var chatIncomingSoundEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CHAT_INCOMING_SOUND, true)
+        set(value) = prefs.edit().putBoolean(KEY_CHAT_INCOMING_SOUND, value).apply()
+
+    var chatVibrationEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CHAT_VIBRATION, false)
+        set(value) = prefs.edit().putBoolean(KEY_CHAT_VIBRATION, value).apply()
+
+    var chatLinkPreviewEnabled: Boolean
+        get() = prefs.getBoolean(KEY_CHAT_LINK_PREVIEW, true)
+        set(value) = prefs.edit().putBoolean(KEY_CHAT_LINK_PREVIEW, value).apply()
+
+    var chatQuickReplies: List<String>
+        get() = com.shopmanager.app.data.chat.QuickReplies.decode(prefs.getString(KEY_CHAT_QUICK_REPLIES, null))
+        set(value) = prefs.edit().putString(KEY_CHAT_QUICK_REPLIES, com.shopmanager.app.data.chat.QuickReplies.encode(value)).apply()
+
+    var chatAutoDeleteDays: Int
+        get() = prefs.getInt(KEY_CHAT_AUTO_DELETE_DAYS, 0).let { if (it < com.shopmanager.app.data.chat.ChatRetention.MIN_DAYS) 0 else it }
+        set(value) = prefs.edit().putInt(KEY_CHAT_AUTO_DELETE_DAYS, value).apply()
+
+    var chatCleanupLastRun: Long
+        get() = prefs.getLong(KEY_CHAT_CLEANUP_LAST_RUN, 0L)
+        set(value) = prefs.edit().putLong(KEY_CHAT_CLEANUP_LAST_RUN, value).apply()
+
     var realtimeSyncEnabled: Boolean
         get() = prefs.getBoolean(KEY_REALTIME_SYNC, true)
         set(value) = prefs.edit().putBoolean(KEY_REALTIME_SYNC, value).apply()
@@ -261,6 +293,14 @@ class SettingsRepository(context: Context) {
         private const val KEY_CURRENCY = "currency_symbol"
         private const val KEY_NOTIFICATIONS = "notifications_enabled"
         private const val KEY_REALTIME_SYNC = "realtime_sync_enabled"
+        private const val KEY_CHAT_SEND_SOUND = "chat_send_sound_enabled"
+        private const val KEY_CHAT_SOUNDS = "chat_sounds_enabled"
+        private const val KEY_CHAT_INCOMING_SOUND = "chat_incoming_sound_enabled"
+        private const val KEY_CHAT_VIBRATION = "chat_vibration_enabled"
+        private const val KEY_CHAT_LINK_PREVIEW = "chat_link_preview_enabled"
+        private const val KEY_CHAT_QUICK_REPLIES = "chat_quick_replies"
+        private const val KEY_CHAT_AUTO_DELETE_DAYS = "chat_auto_delete_days"
+        private const val KEY_CHAT_CLEANUP_LAST_RUN = "chat_cleanup_last_run"
         private const val KEY_PERFORMANCE_MODE = "performance_mode"
         private const val KEY_UPDATE_MANIFEST_URL = "update_manifest_url"
         private const val KEY_LAST_UPDATE_CHECK = "last_update_check_at"

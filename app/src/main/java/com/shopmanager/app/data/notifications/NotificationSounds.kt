@@ -56,7 +56,8 @@ object NotificationSounds {
         val sound = repo.soundFor(kind)
         val suffix = if (sound == NotifSound.DEVICE)
             "_" + Integer.toHexString((repo.customSoundUri(kind) ?: "").hashCode()) else ""
-        return kind.idPrefix + sound.key + suffix
+        val vibration = if (kind == NotifKind.CHAT && repo.chatVibrationEnabled) "_vib" else ""
+        return kind.idPrefix + sound.key + suffix + vibration
     }
 
     fun soundUri(context: Context, sound: NotifSound, customUri: String? = null): Uri? = when {
@@ -98,6 +99,13 @@ object NotificationSounds {
         } catch (_: Exception) {
             stopPreview()
         }
+    }
+
+    fun playIncoming(context: Context, kind: NotifKind) {
+        val app = context.applicationContext
+        val repo = SettingsRepository(app)
+        if (!repo.notificationsEnabled) return
+        preview(app, repo.soundFor(kind), repo.customSoundUri(kind))
     }
 
     fun stopPreview() {

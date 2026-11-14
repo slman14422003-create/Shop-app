@@ -88,11 +88,7 @@ object VoicePlayer {
     }
 
     fun cycleSpeed() {
-        speed = when {
-            speed < 1.25f -> 1.5f
-            speed < 1.75f -> 2f
-            else -> 1f
-        }
+        speed = PlaybackSpeeds.next(speed)
         val p = player
         if (p != null && _state.value.playing) applySpeed(p)
         _state.value = _state.value.copy(speed = speed)

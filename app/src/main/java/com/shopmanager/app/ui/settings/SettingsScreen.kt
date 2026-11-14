@@ -63,6 +63,7 @@ import com.shopmanager.app.data.debts.DebtsRepository
 import com.shopmanager.app.data.materials.MaterialsRepository
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.data.notifications.ChatSounds
 import com.shopmanager.app.data.notifications.NotifKind
 import com.shopmanager.app.data.notifications.NotifSound
 import com.shopmanager.app.data.notifications.NotificationSounds
@@ -124,6 +125,15 @@ fun SettingsScreen(
     var showSetPinDialog by remember { mutableStateOf(false) }
     var currency by remember { mutableStateOf(settings.currencySymbol) }
     var notificationsEnabled by remember { mutableStateOf(settings.notificationsEnabled) }
+    var chatSendSound by remember { mutableStateOf(settings.chatSendSoundEnabled) }
+    var chatSounds by remember { mutableStateOf(settings.chatSoundsEnabled) }
+    var chatIncomingSound by remember { mutableStateOf(settings.chatIncomingSoundEnabled) }
+    var chatVibration by remember { mutableStateOf(settings.chatVibrationEnabled) }
+    var chatLinkPreview by remember { mutableStateOf(settings.chatLinkPreviewEnabled) }
+    var chatQuickReplies by remember { mutableStateOf(settings.chatQuickReplies) }
+    var chatAutoDeleteDays by remember { mutableStateOf(settings.chatAutoDeleteDays) }
+    var showQuickReplies by remember { mutableStateOf(false) }
+    var showAutoDelete by remember { mutableStateOf(false) }
     // "المزامنة الفورية بالخلفية": مفتاح مستقل لكل جهاز (انظر RealtimeSyncService).
     var realtimeSyncEnabled by remember { mutableStateOf(settings.realtimeSyncEnabled) }
     var overdueEnabled by remember { mutableStateOf(settings.overdueReminderEnabled) }
@@ -673,6 +683,73 @@ fun SettingsScreen(
                             onClick = { soundDialogKind = kind }
                         )
                     }
+                    switchItem(
+                        icon = Icons.Outlined.MusicNote,
+                        title = "أصوات الدردشة",
+                        subtitle = "نغمات الإرسال والاستقبال داخل المحادثة",
+                        checked = chatSounds,
+                        onCheckedChange = {
+                            chatSounds = it
+                            settings.chatSoundsEnabled = it
+                        }
+                    )
+                    if (chatSounds) {
+                        switchItem(
+                            icon = Icons.Outlined.MusicNote,
+                            title = "نغمة وصول الرسالة",
+                            subtitle = "تُسمع عند وصول رسالة والمحادثة مفتوحة",
+                            checked = chatIncomingSound,
+                            onCheckedChange = {
+                                chatIncomingSound = it
+                                settings.chatIncomingSoundEnabled = it
+                            }
+                        )
+                        switchItem(
+                            icon = Icons.Outlined.MusicNote,
+                            title = "نغمة إرسال الدردشة",
+                            subtitle = "نغمة هادئة خفيفة عند إرسال رسالة",
+                            checked = chatSendSound,
+                            onCheckedChange = {
+                                chatSendSound = it
+                                settings.chatSendSoundEnabled = it
+                                if (it) ChatSounds.playSend(context)
+                            }
+                        )
+                    }
+                    switchItem(
+                        icon = Icons.Outlined.MusicNote,
+                        title = "اهتزاز إشعارات الدردشة",
+                        subtitle = "اهتزاز قصير عند وصول رسالة جديدة",
+                        checked = chatVibration,
+                        onCheckedChange = {
+                            chatVibration = it
+                            settings.chatVibrationEnabled = it
+                            com.shopmanager.app.data.notifications.NotificationHelper.ensureChannels(context)
+                            checkSystemNotificationsAllowed()
+                        }
+                    )
+                    switchItem(
+                        icon = Icons.Outlined.MusicNote,
+                        title = "معاينة الروابط",
+                        subtitle = "عرض عنوان وصورة مصغّرة للروابط داخل المحادثة",
+                        checked = chatLinkPreview,
+                        onCheckedChange = {
+                            chatLinkPreview = it
+                            settings.chatLinkPreviewEnabled = it
+                        }
+                    )
+                    item(
+                        icon = Icons.Outlined.MusicNote,
+                        title = "الردود الجاهزة",
+                        subtitle = "${chatQuickReplies.size} رد · اضغط للتعديل",
+                        onClick = { showQuickReplies = true }
+                    )
+                    item(
+                        icon = Icons.Outlined.Timer,
+                        title = "حذف الرسائل القديمة تلقائياً",
+                        subtitle = com.shopmanager.app.data.chat.ChatRetention.label(chatAutoDeleteDays),
+                        onClick = { showAutoDelete = true }
+                    )
                     item(
                         icon = Icons.Outlined.VerifiedUser,
                         title = "إذن الإشعارات",
@@ -986,6 +1063,31 @@ fun SettingsScreen(
                 }) { Text("استعادة") }
             },
             dismissButton = { TextButton(shape = RectangleShape, onClick = { pendingImportUri = null }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showQuickReplies) {
+        QuickRepliesDialog(
+            current = chatQuickReplies,
+            onDismiss = { showQuickReplies = false },
+            onSave = {
+                settings.chatQuickReplies = it
+                chatQuickReplies = settings.chatQuickReplies
+                showQuickReplies = false
+            }
+        )
+    }
+
+    if (showAutoDelete) {
+        AutoDeleteDialog(
+            currentDays = chatAutoDeleteDays,
+            onDismiss = { showAutoDelete = false },
+            onConfirm = { days ->
+                settings.chatAutoDeleteDays = days
+                settings.chatCleanupLastRun = 0L
+                chatAutoDeleteDays = settings.chatAutoDeleteDays
+                showAutoDelete = false
+            }
         )
     }
 

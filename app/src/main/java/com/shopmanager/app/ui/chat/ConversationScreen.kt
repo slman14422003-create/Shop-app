@@ -6,7 +6,20 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import com.shopmanager.app.data.chat.ConvertKind
+import com.shopmanager.app.data.chat.LinkExtractor
+import com.shopmanager.app.data.chat.MessageConverter
+import com.shopmanager.app.data.chat.PlaybackSpeeds
+import com.shopmanager.app.data.notifications.NotificationHelper
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animate
@@ -47,6 +60,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -136,6 +150,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shopmanager.app.data.chat.ChatOpenTracker
+import com.shopmanager.app.data.notifications.NotifKind
+import com.shopmanager.app.data.notifications.ChatSounds
+import com.shopmanager.app.data.notifications.NotificationSounds
 import com.shopmanager.app.data.chat.ChatMessage
 import com.shopmanager.app.data.chat.MessageType
 import com.shopmanager.app.data.chat.ReplyRef
@@ -173,7 +190,8 @@ private class MessageMenu(val m: ChatMessage, val mine: Boolean, val anchor: Rec
 @Composable
 fun ConversationScreen(
     viewModel: ConversationViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    converter: MessageConverter? = null
 ) {
     val cs = MaterialTheme.colorScheme
     val context = LocalContext.current
@@ -189,6 +207,21 @@ fun ConversationScreen(
     val play by VoicePlayer.state.collectAsStateWithLifecycle()
     val replyTo by viewModel.replyTo.collectAsStateWithLifecycle()
     val editing by viewModel.editing.collectAsStateWithLifecycle()
+    val search by viewModel.search.collectAsStateWithLifecycle()
+    val pinned by viewModel.pinned.collectAsStateWithLifecycle()
+    val transcripts by viewModel.transcripts.collectAsStateWithLifecycle()
+    val transcribing by viewModel.transcribing.collectAsStateWithLifecycle()
+    val convert by viewModel.convert.collectAsStateWithLifecycle()
+    val undoHint by viewModel.undoHint.collectAsStateWithLifecycle()
+    val sendingImage by viewModel.sendingImage.collectAsStateWithLifecycle()
+    var viewerMsg by remember { mutableStateOf<ChatMessage?>(null) }
+    var convertPick by remember { mutableStateOf<ChatMessage?>(null) }
+    val quickReplies = remember { viewModel.quickReplies }
+    val linkPreviews = remember { viewModel.linkPreviewEnabled }
+    androidx.compose.runtime.SideEffect { viewModel.converter = converter }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) viewModel.sendImage(uri)
+    }
     val now by produceState(System.currentTimeMillis()) {
         while (true) { delay(30_000L); value = System.currentTimeMillis() }
     }
@@ -208,7 +241,10 @@ fun ConversationScreen(
         val chatId = viewModel.chatId
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> ChatOpenTracker.openChatId = chatId
+                Lifecycle.Event.ON_RESUME -> {
+                    ChatOpenTracker.openChatId = chatId
+                    NotificationHelper.cancelChatNotification(context, chatId)
+                }
                 Lifecycle.Event.ON_PAUSE -> if (ChatOpenTracker.openChatId == chatId) ChatOpenTracker.openChatId = null
                 else -> Unit
             }
@@ -243,6 +279,14 @@ fun ConversationScreen(
 
     LaunchedEffect(editing?.id) { editing?.let { text = it.text } }
 
+    LaunchedEffect(undoHint) {
+        undoHint?.let { h ->
+            val r = snackbar.showSnackbar(h.text, actionLabel = "تراجع", duration = SnackbarDuration.Long)
+            if (r == SnackbarResult.ActionPerformed) viewModel.runUndo(h)
+            viewModel.clearUndoHint()
+        }
+    }
+
     LaunchedEffect(highlightId) {
         if (highlightId != null) {
             delay(1200)
@@ -268,12 +312,34 @@ fun ConversationScreen(
         out.asReversed()
     }
 
+    LaunchedEffect(search.currentId) {
+        val id = search.currentId ?: return@LaunchedEffect
+        val idx = chatItems.indexOfFirst { it is ChatItem.Msg && it.m.id == id }
+        if (idx >= 0) listState.animateScrollToItem(idx)
+    }
+
+    fun jumpTo(id: String) {
+        val idx = chatItems.indexOfFirst { it is ChatItem.Msg && it.m.id == id }
+        if (idx >= 0) {
+            highlightId = id
+            scope.launch { listState.animateScrollToItem(idx) }
+        }
+    }
+
     val atBottom by remember { derivedStateOf { listState.firstVisibleItemIndex <= 1 } }
     var unseen by remember { mutableIntStateOf(0) }
 
     val newestId = msgState.messages.lastOrNull()?.id
+    var toneSeenId by remember { mutableStateOf<String?>(null) }
+    var toneReady by remember { mutableStateOf(false) }
     LaunchedEffect(newestId) {
         val last = msgState.messages.lastOrNull() ?: return@LaunchedEffect
+        if (toneReady && last.id != toneSeenId && last.fromUid != viewModel.me && !last.pending) {
+            ChatSounds.playIncoming(context)
+            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+        toneSeenId = last.id
+        toneReady = true
         if (last.fromUid == viewModel.me || listState.firstVisibleItemIndex <= 2) listState.animateScrollToItem(0)
         else unseen++
     }
@@ -293,19 +359,49 @@ fun ConversationScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
         snackbarHost = { GlassSnackbarHost(snackbar) },
         topBar = {
-            ConversationHeader(
-                name = viewModel.otherName,
-                status = status,
-                highlight = typing || other?.isOnline(now) == true,
-                onBack = onBack,
-                onClear = { confirmClear = true }
-            )
+            Column {
+                if (search.active) {
+                    ChatSearchHeader(
+                        query = search.query,
+                        total = search.matches.size,
+                        index = search.index,
+                        onQuery = viewModel::setSearchQuery,
+                        onOlder = { viewModel.stepSearch(true) },
+                        onNewer = { viewModel.stepSearch(false) },
+                        onClose = viewModel::closeSearch
+                    )
+                } else {
+                    ConversationHeader(
+                        name = viewModel.otherName,
+                        status = status,
+                        highlight = typing || other?.isOnline(now) == true,
+                        onBack = onBack,
+                        onClear = { confirmClear = true },
+                        onSearch = viewModel::openSearch
+                    )
+                }
+                pinned?.let { p ->
+                    PinnedBar(
+                        pinned = p,
+                        name = if (p.fromUid == viewModel.me) "أنت" else viewModel.otherName,
+                        onClick = { jumpTo(p.id) },
+                        onUnpin = {
+                            msgState.messages.firstOrNull { it.id == p.id }?.let(viewModel::togglePin)
+                                ?: viewModel.unpin()
+                        }
+                    )
+                }
+            }
         },
         bottomBar = {
             InputBar(
                 text = text,
                 onTextChange = { text = it; viewModel.onTextChanged(it) },
-                onSend = { viewModel.sendText(text); text = "" },
+                onSend = {
+                    if (text.isNotBlank() && editing == null) ChatSounds.playSend(context)
+                    viewModel.sendText(text)
+                    text = ""
+                },
                 rec = rec,
                 replyTo = replyTo,
                 replyName = replyTo?.let { nameOf(it.fromUid) }.orEmpty(),
@@ -328,7 +424,14 @@ fun ConversationScreen(
                     viewModel.lockRecording()
                 },
                 onMicEnd = { send -> viewModel.finishRecording(send) },
-                onTogglePause = viewModel::togglePauseRecording
+                onTogglePause = viewModel::togglePauseRecording,
+                onAttach = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                sendingImage = sendingImage,
+                quickReplies = quickReplies,
+                onQuickReply = { r ->
+                    ChatSounds.playSend(context)
+                    viewModel.sendQuickReply(r)
+                }
             )
         }
     ) { padding ->
@@ -356,18 +459,18 @@ fun ConversationScreen(
                                     play = play,
                                     myUid = viewModel.me,
                                     otherName = viewModel.otherName,
-                                    highlight = highlightId == m.id,
+                                    highlight = highlightId == m.id || search.currentId == m.id,
+                                    query = if (search.active) search.query else "",
+                                    currentMatch = search.currentId == m.id,
+                                    transcript = transcripts[m.id],
+                                    transcribing = m.id in transcribing,
+                                    linkPreviews = linkPreviews,
+                                    onImage = { viewerMsg = m },
                                     onTogglePlay = { VoicePlayer.toggle(context, m.id, m.audioB64) },
                                     onSpeed = { VoicePlayer.cycleSpeed() },
                                     onLongPress = { anchor -> menu = MessageMenu(m, mine, anchor) },
                                     onReply = { viewModel.startReply(m) },
-                                    onJump = { id ->
-                                        val idx = chatItems.indexOfFirst { it is ChatItem.Msg && it.m.id == id }
-                                        if (idx >= 0) {
-                                            highlightId = id
-                                            scope.launch { listState.animateScrollToItem(idx) }
-                                        }
-                                    }
+                                    onJump = { id -> jumpTo(id) }
                                 )
                             }
                         }
@@ -427,6 +530,15 @@ fun ConversationScreen(
         val m = mm.m
         val actions = buildList {
             add(BlurMenuAction("رد", Icons.AutoMirrored.Filled.Reply) { viewModel.startReply(m) })
+            add(
+                BlurMenuAction(if (pinned?.id == m.id) "إلغاء التثبيت" else "تثبيت", Icons.Default.PushPin) { viewModel.togglePin(m) }
+            )
+            if (m.type == MessageType.VOICE && !m.isExpiredVoice && m.audioB64.isNotEmpty()) {
+                add(BlurMenuAction("نسخ نصي", Icons.Default.Subtitles) { viewModel.transcribe(m) })
+            }
+            if (m.type == MessageType.TEXT && m.text.isNotBlank() && converter != null) {
+                add(BlurMenuAction("تحويل إلى عنصر", Icons.Default.SwapHoriz) { convertPick = m })
+            }
             if (m.type == MessageType.TEXT) {
                 add(
                     BlurMenuAction("نسخ", Icons.Default.ContentCopy) {
@@ -460,9 +572,27 @@ fun ConversationScreen(
                     onSpeed = {},
                     onLong = {},
                     onJump = {},
-                    modifier = Modifier
+                    modifier = Modifier.wrapContentWidth(if (mm.mine) Alignment.Start else Alignment.End, unbounded = true)
                 )
             }
+        )
+    }
+
+    viewerMsg?.let { vm -> ChatImageViewer(vm) { viewerMsg = null } }
+
+    convertPick?.let { cm ->
+        ConvertKindDialog(
+            onPick = { kind -> convertPick = null; viewModel.startConvert(kind, cm) },
+            onDismiss = { convertPick = null }
+        )
+    }
+
+    convert?.let { cv ->
+        ConvertDialog(
+            state = cv,
+            onOption = viewModel::chooseConvertOption,
+            onConfirm = viewModel::confirmConvert,
+            onDismiss = viewModel::dismissConvert
         )
     }
 
@@ -512,7 +642,8 @@ private fun ConversationHeader(
     status: String,
     highlight: Boolean,
     onBack: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    onSearch: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     var menu by remember { mutableStateOf(false) }
@@ -549,6 +680,11 @@ private fun ConversationHeader(
             ScreenIconButton(Icons.Default.MoreVert, "المزيد", { menu = true })
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(
+                    text = { Text("بحث في المحادثة") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    onClick = { menu = false; onSearch() }
+                )
+                DropdownMenuItem(
                     text = { Text("مسح المحادثة") },
                     leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
                     onClick = { menu = false; onClear() }
@@ -582,6 +718,12 @@ private fun MessageBubble(
     myUid: String,
     otherName: String,
     highlight: Boolean,
+    query: String,
+    currentMatch: Boolean,
+    transcript: String?,
+    transcribing: Boolean,
+    linkPreviews: Boolean,
+    onImage: () -> Unit,
     onTogglePlay: () -> Unit,
     onSpeed: () -> Unit,
     onLongPress: (Rect) -> Unit,
@@ -668,6 +810,12 @@ private fun MessageBubble(
                     onSpeed = onSpeed,
                     onLong = openMenu,
                     onJump = onJump,
+                    query = query,
+                    currentMatch = currentMatch,
+                    transcript = transcript,
+                    transcribing = transcribing,
+                    linkPreviews = linkPreviews,
+                    onImage = onImage,
                     modifier = Modifier
                         .onGloballyPositioned { coords = it }
                         .combinedClickable(onClick = {}, onLongClick = openMenu)
@@ -711,7 +859,13 @@ private fun BubbleBody(
     onSpeed: () -> Unit,
     onLong: () -> Unit,
     onJump: (String) -> Unit,
-    modifier: Modifier
+    modifier: Modifier,
+    query: String = "",
+    currentMatch: Boolean = false,
+    transcript: String? = null,
+    transcribing: Boolean = false,
+    linkPreviews: Boolean = false,
+    onImage: () -> Unit = {}
 ) {
     val cs = MaterialTheme.colorScheme
     val base = if (mine) cs.onSurface else cs.surfaceContainerHigh
@@ -734,15 +888,47 @@ private fun BubbleBody(
                 ReplyQuote(r, replyName, fg, onClick = { onJump(r.id) })
                 Spacer(Modifier.height(6.dp))
             }
-            if (m.type == MessageType.VOICE) {
-                VoiceContent(m, fg, bg, play, onTogglePlay, onSpeed, onLong)
-            } else {
-                Text(
-                    m.text,
-                    modifier = Modifier.align(Alignment.Start),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = fg
-                )
+            when (m.type) {
+                MessageType.VOICE -> {
+                    VoiceContent(m, fg, bg, play, onTogglePlay, onSpeed, onLong)
+                    if (transcribing) {
+                        Text("جاري النسخ النصي...", style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.7f), modifier = Modifier.align(Alignment.Start).padding(top = 4.dp))
+                    }
+                    transcript?.let {
+                        Text(
+                            highlightedText(it, query, cs.primary, currentMatch),
+                            modifier = Modifier.align(Alignment.Start).padding(top = 6.dp).widthIn(max = 230.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = fg.copy(alpha = 0.9f)
+                        )
+                    }
+                }
+                MessageType.IMAGE -> {
+                    ChatImageContent(m, onImage)
+                    if (m.text.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            highlightedText(m.text, query, cs.primary, currentMatch),
+                            modifier = Modifier.align(Alignment.Start),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = fg
+                        )
+                    }
+                }
+                MessageType.TEXT -> {
+                    Text(
+                        highlightedText(m.text, query, cs.primary, currentMatch),
+                        modifier = Modifier.align(Alignment.Start),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = fg
+                    )
+                    if (linkPreviews) {
+                        LinkExtractor.firstUrl(m.text)?.let { url ->
+                            Spacer(Modifier.height(6.dp))
+                            LinkPreviewCard(url, fg)
+                        }
+                    }
+                }
             }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -799,7 +985,11 @@ private fun ReplyQuote(reply: ReplyRef, name: String, fg: Color, onClick: () -> 
                     Icon(Icons.Default.Mic, null, tint = fg.copy(alpha = 0.75f), modifier = Modifier.size(14.dp))
                 }
                 Text(
-                    if (reply.type == MessageType.VOICE) "رسالة صوتية" else reply.text,
+                    when (reply.type) {
+                        MessageType.VOICE -> "رسالة صوتية"
+                        MessageType.IMAGE -> "📷 " + reply.text.ifBlank { "صورة" }
+                        MessageType.TEXT -> reply.text
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = fg.copy(alpha = 0.8f),
                     maxLines = 2,
@@ -809,9 +999,6 @@ private fun ReplyQuote(reply: ReplyRef, name: String, fg: Color, onClick: () -> 
         }
     }
 }
-
-private fun speedLabel(speed: Float): String =
-    if (speed % 1f == 0f) "${speed.toInt()}×" else "${speed}×"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -860,9 +1047,8 @@ private fun VoiceContent(
             Waveform(m.wave, progress, fg, Modifier.width(150.dp).height(28.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(formatDuration(shownMs), style = MaterialTheme.typography.labelSmall, color = fg.copy(alpha = 0.7f))
-                if (isCurrent) {
                     Text(
-                        speedLabel(play.speed),
+                        PlaybackSpeeds.label(play.speed),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = fg,
@@ -872,7 +1058,7 @@ private fun VoiceContent(
                             .clickable(onClick = onSpeed)
                             .padding(horizontal = 8.dp, vertical = 1.dp)
                     )
-                }
+                
             }
         }
     }
@@ -965,7 +1151,11 @@ private fun InputBar(
     onWillCancel: (Boolean) -> Unit,
     onLock: () -> Unit,
     onMicEnd: (send: Boolean) -> Unit,
-    onTogglePause: () -> Unit
+    onTogglePause: () -> Unit,
+    onAttach: () -> Unit,
+    sendingImage: Boolean,
+    quickReplies: List<String>,
+    onQuickReply: (String) -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
     Column(
@@ -978,7 +1168,11 @@ private fun InputBar(
             if (replyTo != null) {
                 ComposerBanner(
                     title = "رد على $replyName",
-                    subtitle = if (replyTo.type == MessageType.VOICE) "رسالة صوتية" else replyTo.text,
+                    subtitle = when (replyTo.type) {
+                        MessageType.VOICE -> "رسالة صوتية"
+                        MessageType.IMAGE -> "📷 " + replyTo.text.ifBlank { "صورة" }
+                        MessageType.TEXT -> replyTo.text
+                    },
                     icon = Icons.AutoMirrored.Filled.Reply,
                     onClose = onCancelReply
                 )
@@ -992,6 +1186,9 @@ private fun InputBar(
                 )
             }
         }
+        if (!rec.active && !rec.locked && text.isEmpty() && editing == null && quickReplies.isNotEmpty()) {
+            QuickReplyRow(quickReplies, onQuickReply)
+        }
         if (rec.locked) {
             LockedRecorder(rec, onCancel = { onMicEnd(false) }, onTogglePause = onTogglePause, onSend = { onMicEnd(true) })
         } else {
@@ -1000,6 +1197,16 @@ private fun InputBar(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (!rec.active && editing == null) {
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape).background(cs.surfaceContainerHigh)
+                            .clickable(enabled = !sendingImage, role = Role.Button, onClick = onAttach),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (sendingImage) androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = cs.onSurfaceVariant)
+                        else Icon(Icons.Default.AddPhotoAlternate, "إرسال صورة", tint = cs.onSurface, modifier = Modifier.size(24.dp))
+                    }
+                }
                 Box(
                     Modifier
                         .weight(1f)

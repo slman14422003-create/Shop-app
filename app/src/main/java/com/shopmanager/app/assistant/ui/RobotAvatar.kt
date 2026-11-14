@@ -7,6 +7,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.runtime.snapshotFlow
+import kotlin.math.sin
 import androidx.compose.runtime.State
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -43,6 +45,7 @@ import com.shopmanager.app.data.performance.PerformanceTier
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 
+private const val TWO_PI = 6.2831855f
 private val HeadFill = Color(0xFF1D1D1F)
 private val ScreenFill = Color(0xFF000000)
 private val EyeColor = Color(0xFFF5F5F5)
@@ -63,13 +66,33 @@ fun robotDescription(mood: RobotMood): String = when (mood) {
  * لا توجد أي حركة، وتتبدّل الرسمة فقط عند تغيّر الحالة.
  */
 @Composable
-fun RobotAvatar(mood: RobotMood, modifier: Modifier = Modifier, size: Dp = 140.dp, animate: Boolean = true) {
+fun RobotAvatar(
+    mood: RobotMood,
+    modifier: Modifier = Modifier,
+    size: Dp = 140.dp,
+    animate: Boolean = true,
+    levelState: State<Float>? = null
+) {
     val animated = animate && LocalPerformanceTier.current != PerformanceTier.LOW
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 
     // وضع الأداء العالي (STANDARD): حركات إضافية — ميلان الرأس، تمايل الأنتينا ونبض توهّجها،
     // تنفّس الجسم، نظر الروبوت يمنة ويسرة، قفزة عند النجاح وهزّة رأس عند عدم الفهم.
     val rich = animated && LocalPerformanceTier.current == PerformanceTier.STANDARD
+    val listening = animated && mood == RobotMood.LISTENING
+
+    val waveState: State<Float> = if (listening) {
+        val tw = rememberInfiniteTransition(label = "listen")
+        tw.animateFloat(0f, 1f, infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart), label = "wave")
+    } else remember { mutableFloatStateOf(0f) }
+    val levelSmooth = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(listening, levelState) {
+        if (listening && levelState != null) {
+            snapshotFlow { levelState.value }.collect { raw ->
+                levelSmooth.floatValue = RobotListenMath.smooth(levelSmooth.floatValue, RobotListenMath.normalizeLevel(raw))
+            }
+        } else levelSmooth.floatValue = 0f
+    }
 
     val floatState: State<Float>
     val wanderState: State<Float>
@@ -130,9 +153,9 @@ fun RobotAvatar(mood: RobotMood, modifier: Modifier = Modifier, size: Dp = 140.d
     }
     // ردّ فعل عند تغيّر الحالة: قفزة (نجاح) أو هزّة (لم يفهم) أو إيماءة (يفكر).
     val kick = remember { Animatable(0f) }
-    LaunchedEffect(rich, mood) {
+    LaunchedEffect(rich, animated, mood) {
         kick.snapTo(0f)
-        if (rich && mood != RobotMood.READY) {
+        if ((rich && mood != RobotMood.READY) || (animated && mood == RobotMood.LISTENING)) {
             kick.animateTo(1f, tween(170, easing = FastOutSlowInEasing))
             kick.animateTo(0f, spring(dampingRatio = 0.38f, stiffness = Spring.StiffnessMediumLow))
         }
@@ -150,14 +173,26 @@ fun RobotAvatar(mood: RobotMood, modifier: Modifier = Modifier, size: Dp = 140.d
         }
         val bob = if (animated) floatState.value * w * 0.018f else 0f
         val k = kick.value
-        val jump = if (mood == RobotMood.SUCCESS) -k * w * 0.07f else 0f
+        val wv = waveState.value
+        val lv = levelSmooth.floatValue
+        val jump = when {
+            mood == RobotMood.SUCCESS -> -k * w * 0.07f
+            listening -> -(k * w * 0.05f + lv * w * 0.018f)
+            else -> 0f
+        }
         val shake = if (mood == RobotMood.CONFUSED) k * 7f else if (mood == RobotMood.THINKING) k * 3f else 0f
-        val tilt = tiltState.value * 2.4f + shake
-        val breathe = 1f + breatheState.value * 0.014f
+        val listenTilt = if (listening) sin(wv * TWO_PI) * 2.2f + lv * 3f else 0f
+        val tilt = tiltState.value * 2.4f + shake + listenTilt
+        val breathe = 1f + breatheState.value * 0.014f + if (listening) lv * 0.03f + k * 0.05f else 0f
+        val antennaSway = swayState.value * 7f + if (listening) sin(wv * TWO_PI * 2f) * 10f else 0f
+        val antennaGlow = if (listening) (wv * 2f) % 1f else glowState.value
         translate(top = bob + jump) {
             rotate(tilt, Offset(w * .5f, w * .9f)) {
                 scale(breathe, breathe, Offset(w * .5f, w * .9f)) {
-                    drawRobot(w, mood, moodColor, outline, wanderState.value, blink, look.value, glowState.value, swayState.value * 7f)
+                    drawRobot(
+                        w, mood, moodColor, outline, wanderState.value, blink, look.value, antennaGlow, antennaSway,
+                        listening = listening, rich = rich, wave = wv, level = lv
+                    )
                 }
             }
         }
@@ -166,9 +201,26 @@ fun RobotAvatar(mood: RobotMood, modifier: Modifier = Modifier, size: Dp = 140.d
 
 private fun DrawScope.drawRobot(
     w: Float, mood: RobotMood, moodColor: Color, outline: Color, wander: Float, blink: Boolean,
-    look: Float = 0f, glow: Float = 0f, sway: Float = 0f
+    look: Float = 0f, glow: Float = 0f, sway: Float = 0f,
+    listening: Boolean = false, rich: Boolean = false, wave: Float = 0f, level: Float = 0f
 ) {
     val line = Stroke(width = (w * 0.012f).coerceAtLeast(1.5f))
+
+    if (listening) {
+        val count = if (rich) RobotListenMath.RING_COUNT_RICH else RobotListenMath.RING_COUNT_LIGHT
+        val ringStroke = Stroke(width = (w * 0.01f).coerceAtLeast(1.5f))
+        for (i in 0 until count) {
+            val p = RobotListenMath.ringProgress(wave, i, count)
+            val inflate = w * RobotListenMath.ringInflate(p)
+            drawRoundRect(
+                moodColor.copy(alpha = RobotListenMath.ringAlpha(p, level)),
+                Offset(w * .17f - inflate, w * .2f - inflate),
+                Size(w * .66f + inflate * 2f, w * .44f + inflate * 2f),
+                CornerRadius(w * .13f + inflate),
+                style = ringStroke
+            )
+        }
+    }
 
     // الأنتينا
     rotate(sway, Offset(w * .5f, w * .2f)) {
@@ -182,6 +234,17 @@ private fun DrawScope.drawRobot(
     for (x in listOf(w * .115f, w * .835f)) {
         drawRoundRect(HeadFill, Offset(x, w * .34f), Size(w * .05f, w * .15f), CornerRadius(w * .02f))
         drawRoundRect(outline, Offset(x, w * .34f), Size(w * .05f, w * .15f), CornerRadius(w * .02f), style = line)
+    }
+
+    if (listening && rich) {
+        val arcStroke = Stroke(width = (w * 0.012f).coerceAtLeast(1.5f), cap = StrokeCap.Round)
+        for (i in 0..1) {
+            val r = w * (.055f + .045f * i + .02f * level)
+            val a = RobotListenMath.earArcAlpha(wave, i, level)
+            val c = moodColor.copy(alpha = a)
+            drawArc(c, 135f, 90f, false, Offset(w * .115f - r, w * .415f - r), Size(r * 2f, r * 2f), style = arcStroke)
+            drawArc(c, -45f, 90f, false, Offset(w * .885f - r, w * .415f - r), Size(r * 2f, r * 2f), style = arcStroke)
+        }
     }
 
     // الرأس
@@ -226,10 +289,11 @@ private fun DrawScope.drawRobot(
             smile(w, EyeColor, 0.075f, eyeStroke)
         }
         RobotMood.LISTENING -> {
-            val grow = 1f + kotlin.math.abs(look) * 0.12f
-            drawOval(EyeColor, Offset(lx - er * grow, eyeY - er * 1.6f * grow), Size(er * 2 * grow, er * 3.2f * grow))
-            drawOval(EyeColor, Offset(rx - er * grow, eyeY - er * 1.6f * grow), Size(er * 2 * grow, er * 3.2f * grow))
-            drawCircle(EyeColor, w * .028f, Offset(w * .5f, w * .515f), style = eyeStroke)
+            val grow = 1f + kotlin.math.abs(look) * 0.12f + level * 0.22f
+            val ld = if (listening) sin(wave * TWO_PI) * w * .012f else 0f
+            drawOval(EyeColor, Offset(lx - er * grow + ld, eyeY - er * 1.6f * grow), Size(er * 2 * grow, er * 3.2f * grow))
+            drawOval(EyeColor, Offset(rx - er * grow + ld, eyeY - er * 1.6f * grow), Size(er * 2 * grow, er * 3.2f * grow))
+            drawCircle(EyeColor, w * (.022f + .02f * level), Offset(w * .5f, w * .515f), style = eyeStroke)
         }
         RobotMood.CONFUSED -> {
             rotate(-16f, Offset(lx, eyeY)) { drawOval(EyeColor, Offset(lx - er, eyeY - er * 1.3f), Size(er * 2, er * 2.6f)) }
@@ -246,7 +310,15 @@ private fun DrawScope.drawRobot(
     // الجسم
     drawRoundRect(HeadFill, Offset(w * .31f, w * .675f), Size(w * .38f, w * .24f), CornerRadius(w * .09f))
     drawRoundRect(outline, Offset(w * .31f, w * .675f), Size(w * .38f, w * .24f), CornerRadius(w * .09f), style = line)
-    drawCircle(moodColor, w * .024f, Offset(w * .5f, w * .79f))
+    if (listening) {
+        for (i in 0 until RobotListenMath.BAR_COUNT) {
+            val x = w * (.5f + (i - 2) * .045f)
+            val h = w * RobotListenMath.barHeight(i, wave, level)
+            drawLine(moodColor, Offset(x, w * .79f - h), Offset(x, w * .79f + h), strokeWidth = w * .018f, cap = StrokeCap.Round)
+        }
+    } else {
+        drawCircle(moodColor, w * .024f, Offset(w * .5f, w * .79f))
+    }
 }
 
 private fun DrawScope.smile(w: Float, color: Color, depth: Float, stroke: Stroke) {

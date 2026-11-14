@@ -52,6 +52,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
                             else NotificationHelper.cancelShoppingListNotification(context)
                         }
                         ACTION_MARK_DEBT_PAID -> handleMarkDebtPaid(context, intent)
+                        ACTION_CHAT_REPLY -> handleChatReply(context, intent)
+                        ACTION_CHAT_MARK_READ -> handleChatMarkRead(context, intent)
                         else -> Unit
                     }
                 }
@@ -61,6 +63,37 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 pendingResult.finish()
             }
         }
+    }
+
+    private suspend fun handleChatReply(context: Context, intent: Intent) {
+        val chatId = intent.getStringExtra(EXTRA_CHAT_ID) ?: return
+        val otherUid = intent.getStringExtra(EXTRA_CHAT_OTHER_UID) ?: return
+        val otherName = intent.getStringExtra(EXTRA_CHAT_OTHER_NAME).orEmpty().ifBlank { "مستخدم" }
+        val text = androidx.core.app.RemoteInput.getResultsFromIntent(intent)
+            ?.getCharSequence(KEY_CHAT_REPLY)?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) return
+        val auth = com.shopmanager.app.data.chat.ChatFirebase.auth(context)
+        val me = auth.currentUser?.uid ?: return
+        val repo = com.shopmanager.app.data.chat.ChatRepository(context)
+        val myName = repo.getUser(me)?.name
+            ?: auth.currentUser?.displayName?.takeIf { it.isNotBlank() }
+            ?: "مستخدم"
+        try {
+            repo.sendText(me, myName, otherUid, otherName, text)
+            repo.markRead(chatId, me)
+            NotificationHelper.appendOwnChatReply(context, chatId, text)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            NotificationHelper.appendOwnChatReply(context, chatId, text)
+        }
+    }
+
+    private suspend fun handleChatMarkRead(context: Context, intent: Intent) {
+        val chatId = intent.getStringExtra(EXTRA_CHAT_ID) ?: return
+        val me = com.shopmanager.app.data.chat.ChatFirebase.auth(context).currentUser?.uid
+        NotificationHelper.cancelChatNotification(context, chatId)
+        if (me != null) com.shopmanager.app.data.chat.ChatRepository(context).markRead(chatId, me)
     }
 
     private suspend fun handleSnoozeNote(context: Context, intent: Intent) {
@@ -125,6 +158,13 @@ class NotificationActionReceiver : BroadcastReceiver() {
         const val ACTION_SNOOZE_NOTE = "com.shopmanager.app.action.SNOOZE_NOTE"
         const val ACTION_DISMISS_SHOPPING = "com.shopmanager.app.action.DISMISS_SHOPPING"
         const val ACTION_MARK_DEBT_PAID = "com.shopmanager.app.action.MARK_DEBT_PAID"
+
+        const val ACTION_CHAT_REPLY = "com.shopmanager.app.action.CHAT_REPLY"
+        const val ACTION_CHAT_MARK_READ = "com.shopmanager.app.action.CHAT_MARK_READ"
+        const val KEY_CHAT_REPLY = "key_chat_reply"
+        const val EXTRA_CHAT_ID = "extra_chat_id"
+        const val EXTRA_CHAT_OTHER_UID = "extra_chat_other_uid"
+        const val EXTRA_CHAT_OTHER_NAME = "extra_chat_other_name"
 
         const val EXTRA_NOTE_ID = "extra_note_id"
         const val EXTRA_NOTE_TITLE = "extra_note_title"
