@@ -436,6 +436,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val outcome = try {
             actions.execute(c, _data.value)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             val card = AssistantCard.Result("تعذر التنفيذ", e.message ?: "تحقق من الاتصال بالإنترنت", null, false)
             if (messageId != null) replaceMessage(messageId) { it.copy(card = card, time = System.currentTimeMillis()) } else reply(line, RobotMood.CONFUSED, card)
             setMood(RobotMood.CONFUSED, 3000L)

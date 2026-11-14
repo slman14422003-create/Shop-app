@@ -168,7 +168,9 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
             val start = System.currentTimeMillis()
             try {
                 repo.refreshFromServer()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("DebtsViewModel", "refreshFromServer failed", e)
                 // The live listeners are the source of truth; a failed
                 // manual refresh just means "nothing new from the server
                 // right now", not an error worth surfacing.

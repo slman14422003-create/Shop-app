@@ -38,6 +38,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 data class MaterialsUiState(
     val materials: List<Material> = emptyList(),
@@ -291,7 +293,9 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             val start = System.currentTimeMillis()
             try {
                 repo.refreshFromServer()
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w("MaterialsViewModel", "refreshFromServer failed", e)
                 // Live listeners remain the source of truth.
             }
             val elapsed = System.currentTimeMillis() - start

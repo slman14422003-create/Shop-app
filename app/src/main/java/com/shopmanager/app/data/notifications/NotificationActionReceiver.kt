@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
+import android.util.Log
+import kotlinx.coroutines.CancellationException
 
 /**
  * "إشعارات أكثر تطورًا وكفاءة": handles the action buttons attached to
@@ -84,7 +86,8 @@ class NotificationActionReceiver : BroadcastReceiver() {
             NotificationHelper.appendOwnChatReply(context, chatId, text)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("NotificationActionReceiver", "send chat reply failed", e)
             NotificationHelper.appendOwnChatReply(context, chatId, text)
         }
     }
@@ -113,7 +116,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
         try {
             FirebaseModule.init(context)
             NotesRepository().updateReminderAt(noteId, snoozeUntil)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w("NotificationActionReceiver", "action failed", e)
             // أفضل جهد فقط: التأجيل المحلي (WorkManager) صار فعلاً بغض
             // النظر عن نجاح هاد التحديث - فشل الاتصال هون (مثلاً بلا
             // إنترنت وقتها) ما لازم يلغي التأجيل نفسه.
@@ -147,7 +152,9 @@ class NotificationActionReceiver : BroadcastReceiver() {
             runCatching { InstantBackupWorker.requestNow(context) }
             if (notifId != -1) NotificationManagerCompat.from(context).cancel(notifId)
             NotificationHelper.showDebtPaidNotification(context, personName, amount, currency, debtId)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            Log.w("NotificationActionReceiver", "mark debt paid failed", e)
             // فشل السداد من الإشعار (غالبًا لا إنترنت وقتها) - نترك الإشعار
             // الأصلي ظاهر بدل ما ينلغي بدون ما يصير السداد فعليًا، عشان
             // الشخص يقدر يعيد المحاولة أو يفتح التطبيق.
