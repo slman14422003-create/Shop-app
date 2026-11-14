@@ -49,3 +49,14 @@
 
 ## chat firebase app id
 - ChatFirebaseConfig.APP_ID now 1:631188161296:android:bc4e11dc05e84448081b95 (registered for com.shopmanager.app); ERROR_INVALID_CERT_HASH means the APK signing SHA-1 is not added to that app in Firebase
+
+## chat upgrade task
+- new pure logic (data/chat): ChatSearch (Arabic folding + highlight ranges), QuickReplies, ChatRetention, ChatNotifyRules (notify/baseline decision used by ChatMessageWatcher.process), PlaybackSpeeds, ImageSizing, LinkExtractor/HtmlMeta, MessageConversion types
+- new android helpers: ChatImageCodec (compress <=1024px/80KB JPEG, Base64 in message doc), LinkPreviewRepository (https only, public hosts only, LruCache), VoiceTranscriber (m4a -> PCM -> SpeechRecognizer EXTRA_AUDIO_SOURCE, needs API 33+)
+- messages: type image + fields image/imgW/imgH; chat doc field pinned {id,from,type,text}
+- firebase-chat/firestore.rules CHANGED (image type, pinned, delete of messages older than 30d): MUST be published in the chat project
+- notifications: per-chat MessagingStyle + group summary (id 1904), RemoteInput reply + mark read in NotificationActionReceiver, cancel on open chat / unread 0, vibration is part of channel id suffix _vib, PIN hides text via lockScreenPrivacy
+- settings: chatSoundsEnabled (master), chatIncomingSoundEnabled, chatSendSoundEnabled, chatVibrationEnabled, chatLinkPreviewEnabled, chatQuickReplies, chatAutoDeleteDays (0/30/90/180) + confirm dialog; cleanup runs from ChatSessionViewModel.scheduleCleanup at most every 12h
+- convert message: AssistantViewModel.planChatConversion/applyChatConversion -> ChatConversion (existing items/customers only, suggestions otherwise); wired in ShopManagerApp via AssistantMessageConverter
+- tests added: ChatSearchTest QuickRepliesTest ChatRetentionTest ChatNotifyRulesTest PlaybackSpeedsTest ImageSizingTest LinkPreviewTest ChatConversionTest
+- not compiled here (no gradle/kotlinc offline): verify via ci testDebugUnitTest

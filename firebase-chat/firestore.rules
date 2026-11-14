@@ -86,7 +86,7 @@ service cloud.firestore {
 
       allow create: if inChatId(chatId)
         && request.resource.data.keys().hasOnly(
-             ['members', 'names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing', 'clears'])
+             ['members', 'names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing', 'clears', 'pinned'])
         && request.resource.data.members is list
         && request.resource.data.members.size() == 2
         && request.resource.data.members.hasAll(chatId.split('_'))
@@ -94,20 +94,27 @@ service cloud.firestore {
         && userExists(request.resource.data.members[1])
         && request.resource.data.lastFrom == me()
         && request.resource.data.lastTime == request.time
-        && request.resource.data.lastType in ['text', 'voice']
+        && request.resource.data.lastType in ['text', 'voice', 'image']
         && request.resource.data.lastText is string && request.resource.data.lastText.size() <= 120;
 
       allow update: if signedIn() && me() in resource.data.members
         && request.resource.data.members == resource.data.members
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-             ['names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing', 'clears'])
+             ['names', 'lastText', 'lastType', 'lastFrom', 'lastTime', 'unread', 'reads', 'typing', 'clears', 'pinned'])
         // تغيير آخر رسالة = إرسال رسالة: يجب أن أكون المرسل وبوقت الخادم.
         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastTime'])
             || (request.resource.data.lastFrom == me()
                 && request.resource.data.lastTime == request.time
-                && request.resource.data.lastType in ['text', 'voice']
+                && request.resource.data.lastType in ['text', 'voice', 'image']
                 && request.resource.data.lastText is string
                 && request.resource.data.lastText.size() <= 120))
+        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['pinned'])
+            || !('pinned' in request.resource.data)
+            || (request.resource.data.pinned is map
+                && request.resource.data.pinned.keys().hasOnly(['id', 'from', 'type', 'text'])
+                && request.resource.data.pinned.id is string
+                && request.resource.data.pinned.text is string
+                && request.resource.data.pinned.text.size() <= 120))
         // "قرأت" و"أكتب" خاصّان بي أنا فقط (لا أعدّل حالة الطرف الآخر).
         && request.resource.data.get('reads', {}).diff(resource.data.get('reads', {})).affectedKeys().hasOnly([me()])
         && request.resource.data.get('typing', {}).diff(resource.data.get('typing', {})).affectedKeys().hasOnly([me()])
@@ -121,17 +128,25 @@ service cloud.firestore {
 
         allow create: if inChatId(chatId)
           && request.resource.data.keys().hasOnly(
-               ['from', 'type', 'text', 'createdAt', 'audio', 'durationMs', 'wave', 'expireAt', 'reply'])
+               ['from', 'type', 'text', 'createdAt', 'audio', 'durationMs', 'wave', 'expireAt', 'reply', 'image', 'imgW', 'imgH'])
           && request.resource.data.keys().hasAll(['from', 'type', 'text', 'createdAt'])
           && request.resource.data.from == me()
           && request.resource.data.createdAt == request.time
-          && request.resource.data.type in ['text', 'voice']
+          && request.resource.data.type in ['text', 'voice', 'image']
           && request.resource.data.text is string
           && request.resource.data.text.size() <= 2000
           && (
             request.resource.data.type == 'text'
-              ? (request.resource.data.text.size() >= 1 && !('audio' in request.resource.data))
-              : (request.resource.data.audio is string
+              ? (request.resource.data.text.size() >= 1 && !('audio' in request.resource.data) && !('image' in request.resource.data))
+              : request.resource.data.type == 'image'
+              ? (request.resource.data.image is string
+                 && request.resource.data.image.size() > 0
+                 && request.resource.data.image.size() <= 200000
+                 && request.resource.data.imgW is number
+                 && request.resource.data.imgH is number
+                 && !('audio' in request.resource.data))
+              : (!('image' in request.resource.data)
+                 && request.resource.data.audio is string
                  && request.resource.data.audio.size() > 0
                  && request.resource.data.audio.size() <= 900000
                  && request.resource.data.durationMs is number
@@ -155,13 +170,14 @@ service cloud.firestore {
               && request.resource.data.get('reactions', {}).diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([me()]))
           );
 
-        // الحذف: صاحب الرسالة يحذفها للجميع، ولأي طرف حذف الرسالة الصوتية التي انتهت مدتها (تنظيف تلقائي).
+        // الحذف: صاحب الرسالة يحذفها للجميع، ولأي طرف حذف الرسالة الصوتية التي انتهت مدتها، أو أي رسالة أقدم من 30 يوماً (الحذف التلقائي).
         allow delete: if inChatId(chatId)
           && (
             resource.data.from == me()
             || (resource.data.type == 'voice'
                 && resource.data.expireAt is timestamp
                 && resource.data.expireAt < request.time)
+            || resource.data.createdAt < request.time - duration.value(30, 'd')
           );
       }
     }
