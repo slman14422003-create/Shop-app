@@ -7,6 +7,32 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Color
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceTier
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -276,3 +302,177 @@ fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
     }
 }
 
+
+data class BottomNavTab(val icon: ImageVector, val label: String, val page: Int)
+
+private val BottomNavTabs = listOf(
+    BottomNavTab(Icons.Filled.Home, "الرئيسية", 0),
+    BottomNavTab(Icons.Filled.AttachMoney, "الديون", 1),
+    BottomNavTab(Icons.Filled.Inventory2, "المواد", 2),
+    BottomNavTab(Icons.Filled.Forum, "الدردشة", 3)
+)
+
+@Composable
+fun AppBottomBar(
+    selectedPage: Int,
+    onSelectPage: (Int) -> Unit,
+    commandBarVisible: Boolean,
+    onOpenAssistant: () -> Unit,
+    onStartVoice: () -> Unit,
+    onQuickAdd: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .fillMaxWidth()
+            .background(cs.surface)
+    ) {
+        Box(Modifier.fillMaxWidth().height(AppBorderWidth).background(cs.outlineVariant))
+        if (commandBarVisible) {
+            AssistantCommandBar(
+                onOpenAssistant = onOpenAssistant,
+                onStartVoice = onStartVoice,
+                onQuickAdd = onQuickAdd,
+                modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, top = 8.dp)
+            )
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .height(68.dp)
+                .padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BottomNavTabs.forEach { tab ->
+                BottomNavItem(
+                    tab = tab,
+                    selected = selectedPage == tab.page,
+                    onClick = { onSelectPage(tab.page) },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    tab: BottomNavTab,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    val accent = appAccent()
+    val low = LocalPerformanceTier.current == PerformanceTier.LOW
+    val pill by animateColorAsState(
+        targetValue = if (selected) accent.copy(alpha = 0.18f) else Color.Transparent,
+        animationSpec = if (low) snap() else tween(180),
+        label = "bottomNavPill"
+    )
+    Column(
+        modifier
+            .fillMaxHeight()
+            .heightIn(min = AppMinTouchTarget)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            Modifier
+                .width(64.dp)
+                .height(32.dp)
+                .clip(CircleShape)
+                .background(pill),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                tab.icon,
+                contentDescription = null,
+                tint = if (selected) accent else cs.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            tab.label,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
+            fontWeight = FontWeight.Bold,
+            color = if (selected) cs.onSurface else cs.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+fun AssistantCommandBar(
+    onOpenAssistant: () -> Unit,
+    onStartVoice: () -> Unit,
+    onQuickAdd: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = CircleShape,
+        color = cs.surfaceContainerHigh,
+        border = BorderStroke(AppBorderWidth, cs.outlineVariant)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(AppMinTouchTarget)
+                    .clip(CircleShape)
+                    .clickable(role = Role.Button, onClick = onStartVoice),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Mic,
+                    contentDescription = "تحدّث",
+                    tint = cs.onSurface,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 56.dp)
+                    .clickable(role = Role.Button, onClick = onOpenAssistant)
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    "احكي أو اكتب طلبك…",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = AppBodySize),
+                    color = cs.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Box(
+                Modifier
+                    .size(AppMinTouchTarget)
+                    .clip(CircleShape)
+                    .background(appAccent())
+                    .clickable(role = Role.Button, onClick = onQuickAdd),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = "إضافة سريعة",
+                    tint = appOnAccent(),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}

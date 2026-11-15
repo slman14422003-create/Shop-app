@@ -3,6 +3,7 @@ package com.shopmanager.app.ui.debts
 import com.shopmanager.app.ui.common.AppSpace10
 import com.shopmanager.app.ui.common.AppSpace2
 import com.shopmanager.app.ui.common.AppSpace20
+import com.shopmanager.app.ui.common.AppMinTouchTarget
 import com.shopmanager.app.ui.common.AppSpace6
 import com.shopmanager.app.ui.common.AppSpaceLg
 import com.shopmanager.app.ui.common.AppSpaceMd
@@ -10,6 +11,30 @@ import com.shopmanager.app.ui.common.AppSpaceSm
 import com.shopmanager.app.ui.common.AppSpaceXs
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import com.shopmanager.app.data.debts.DebtActivityLog
+import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.ui.common.AppAmountLargeSize
+import com.shopmanager.app.ui.common.AppAmountRowSize
+import com.shopmanager.app.ui.common.AppBorderWidth
+import com.shopmanager.app.ui.common.AppCaptionLargeSize
+import com.shopmanager.app.ui.common.AppCardLargeRadius
+import com.shopmanager.app.ui.common.AppColorPillButton
+import com.shopmanager.app.ui.common.AppOutlinedCard
+import com.shopmanager.app.ui.common.appAccent
+import com.shopmanager.app.ui.common.appAmountStyle
+import com.shopmanager.app.ui.common.appBorderColor
+import com.shopmanager.app.ui.common.appOnAccent
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -98,7 +123,8 @@ fun PersonDetailScreen(
     // يستخدمها تبويب "ملاحظات هامة" - راجع MainActivity، اللي يمررها هون
     // بدل ما يترك القيمة الافتراضية تنشئ نسخة جديدة منفصلة (تصير عندها
     // مستمع Firestore خاص فيها وتخرج عن مزامنة مع باقي الشاشة).
-    notesViewModel: NotesViewModel = viewModel()
+    notesViewModel: NotesViewModel = viewModel(),
+    onQuickAdd: (QuickAddMode) -> Unit = {}
 ) {
     // PERF FIX: debtsForPerson() builds a brand-new callbackFlow on every call.
     // Calling it straight inside collectAsState meant a NEW flow instance on
@@ -154,20 +180,55 @@ fun PersonDetailScreen(
     }
 
     val total = debts.sumOf { it.amount }
+    val scope = rememberCoroutineScope()
+    val currency = AppSettingsState.currencySymbol
+    val overdueDays = remember { SettingsRepository(context).overdueDays }
+    val status = remember(person, total, debts, overdueDays) {
+        classifyPersons(listOf(person.copy(amount = total)), debts, overdueDays, System.currentTimeMillis())[person.id]
+            ?: PersonStatus(DebtBucket.LATER, -1)
+    }
+    val activityEntries by remember { DebtActivityLog.listen(context).catch { emit(emptyList()) } }
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val payments = remember(activityEntries, person.name) {
+        activityEntries.filter {
+            (it.kind == DebtActivityLog.Kind.PAID || it.kind == DebtActivityLog.Kind.PAID_ALL) && it.person == person.name
+        }
+    }
+    val paidTotal = remember(payments) { payments.sumOf { abs(it.amount) } }
+    val timeline = remember(debts, payments) {
+        val parser = DateFormats.get("yyyy-MM-dd", Locale.US, lenient = false)
+        val debtRows = debts.map { d ->
+            val t = if (d.createdAt > 0L) d.createdAt
+            else runCatching { parser.parse(d.date.trim())?.time }.getOrNull() ?: 0L
+            TimelineEntry("d_${d.id}", d.amount, t, d.date, d.note, d)
+        }
+        val printer = DateFormats.get("yyyy-MM-dd", Locale.US)
+        val payRows = payments.map { e ->
+            TimelineEntry("p_${e.id}", -abs(e.amount), e.time, printer.format(Date(e.time)), "", null)
+        }
+        (debtRows + payRows).sortedByDescending { it.time }
+    }
+    var menuOpen by remember { mutableStateOf(false) }
+    var debtMenuKey by remember { mutableStateOf<String?>(null) }
+    val remind: () -> Unit = {
+        if (person.phone.isBlank()) {
+            scope.launch { snackbarHost.showSnackbar("لا يوجد رقم هاتف لهذا العميل") }
+        } else {
+            PhoneUtils.whatsApp(
+                context,
+                person.phone,
+                debtReminderText(person.name, total, status.takeIf { it.bucket == DebtBucket.OVERDUE }?.days, currency)
+            )
+        }
+    }
 
     Scaffold(
-        // Off-pager screen (no bottom nav bar of its own) — the outer app
-        // Scaffold already reserves the real bottom/horizontal safe-area
-        // space one level up in NavHost's padding, so this Scaffold's own
-        // content insets are zeroed to avoid reserving that same space
-        // twice. The TopAppBar below still handles the status bar inset
-        // entirely on its own regardless of this setting.
         contentWindowInsets = WindowInsets(0.dp),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         topBar = {
             ScreenTopBar(
                 title = person.name,
-                reservedIcons = 2,
+                reservedIcons = 1,
                 navigation = {
                     ScreenIconButton(
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
@@ -176,23 +237,86 @@ fun PersonDetailScreen(
                     )
                 },
                 actions = {
-                    AppActionPill(
-                        height = 42.dp,
-                        container = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        actions = listOf(
-                            ActionSpec(Icons.Default.Edit, "تعديل بيانات العميل") {
-                                editNameText = person.name
-                                editPhoneText = person.phone
-                                editPhoneError = false
-                                showEditNameDialog = true
-                            },
-                            ActionSpec(Icons.Default.Delete, "حذف العميل", LocalSemanticColors.current.danger) {
-                                showDeletePersonConfirm = true
-                            }
+                    Box {
+                        ScreenIconButton(
+                            icon = Icons.Default.MoreVert,
+                            contentDescription = "المزيد",
+                            onClick = { menuOpen = true }
                         )
-                    )
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("تعديل بيانات العميل") },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                                onClick = {
+                                    menuOpen = false
+                                    editNameText = person.name
+                                    editPhoneText = person.phone
+                                    editPhoneError = false
+                                    showEditNameDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("حذف العميل", color = LocalSemanticColors.current.danger) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Delete, contentDescription = null, tint = LocalSemanticColors.current.danger)
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    showDeletePersonConfirm = true
+                                }
+                            )
+                        }
+                    }
                 }
             )
+        },
+        bottomBar = {
+            Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)) {
+                Box(Modifier.fillMaxWidth().height(AppBorderWidth).background(appBorderColor()))
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = AppScreenPadding, vertical = AppSpace10),
+                    horizontalArrangement = Arrangement.spacedBy(AppSpace10),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AppColorPillButton(
+                        label = "تسديد",
+                        onClick = { onQuickAdd(QuickAddMode.PAY) },
+                        containerColor = LocalSemanticColors.current.success,
+                        contentColor = appOnAccent(),
+                        enabled = total > 0,
+                        height = 52.dp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    AppColorPillButton(
+                        label = "دين",
+                        onClick = { onQuickAdd(QuickAddMode.DEBT) },
+                        containerColor = appAccent(),
+                        contentColor = appOnAccent(),
+                        outlined = true,
+                        height = 52.dp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Surface(
+                        onClick = remind,
+                        enabled = total > 0,
+                        shape = CircleShape,
+                        color = Color.Transparent,
+                        border = BorderStroke(AppBorderWidth * 1.5f, appBorderColor()),
+                        modifier = Modifier.size(52.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                            Icon(
+                                Icons.Default.NotificationsActive,
+                                contentDescription = "تذكير",
+                                tint = if (total > 0) appAccent() else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
         }
     ) { padding ->
         LazyColumn(
@@ -201,49 +325,44 @@ fun PersonDetailScreen(
             verticalArrangement = Arrangement.spacedBy(AppGroupGap)
         ) {
             item {
-                PersonHeader(
+                BalanceCard(
                     name = person.name,
                     avatarColor = avatarColor,
                     total = total,
-                    debtsCount = debts.size,
+                    status = status,
+                    paidTotal = paidTotal,
                     nf = nf,
                     phone = person.phone,
                     onCall = { PhoneUtils.call(context, person.phone) },
                     onWhatsApp = { PhoneUtils.whatsApp(context, person.phone) },
-                    onSms = { PhoneUtils.sms(context, person.phone) },
-                    onStatement = {
-                        PhoneUtils.whatsApp(
-                            context,
-                            person.phone,
-                            StatementText.build(person.name, debts, total, AppSettingsState.currencySymbol)
-                        )
-                    }
+                    onSms = { PhoneUtils.sms(context, person.phone) }
                 )
             }
 
-            item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
-
-            item {
-                AddDebtCard(
-                    isEditing = editingDebt != null,
-                    amount = amount,
-                    date = date,
-                    note = note,
-                    onAmountChange = { amount = it },
-                    onDateChange = { date = it },
-                    onNoteChange = { note = it },
-                    onCancelEdit = { editingDebt = null; amount = ""; date = today(); note = "" },
-                    onSubmit = {
-                        val a = amount.trim().toDoubleOrNull()
-                        if (a != null && a > 0 && date.isNotBlank()) {
-                            viewModel.addOrUpdateDebt(editingDebt?.id, person.id, a, date, note.trim())
-                            amount = ""
-                            date = today()
-                            note = ""
-                            editingDebt = null
+            if (editingDebt != null) {
+                item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
+                item {
+                    AddDebtCard(
+                        isEditing = true,
+                        amount = amount,
+                        date = date,
+                        note = note,
+                        onAmountChange = { amount = it },
+                        onDateChange = { date = it },
+                        onNoteChange = { note = it },
+                        onCancelEdit = { editingDebt = null; amount = ""; date = today(); note = "" },
+                        onSubmit = {
+                            val a = amount.trim().toDoubleOrNull()
+                            if (a != null && a > 0 && date.isNotBlank()) {
+                                viewModel.addOrUpdateDebt(editingDebt?.id, person.id, a, date, note.trim())
+                                amount = ""
+                                date = today()
+                                note = ""
+                                editingDebt = null
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
 
             item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
@@ -252,7 +371,7 @@ fun PersonDetailScreen(
                 PersonScheduleCard(
                     person = person,
                     totalOwed = total,
-                    currency = AppSettingsState.currencySymbol,
+                    currency = currency,
                     onSetDueDate = { viewModel.saveSchedule(person, it, person.installments) },
                     onAddInstallment = { viewModel.saveSchedule(person, person.dueDate, person.installments + it) },
                     onDeleteInstallment = { removed ->
@@ -264,11 +383,35 @@ fun PersonDetailScreen(
 
             item { Spacer(Modifier.height(AppSectionGap - AppGroupGap)) }
 
-            item { AppSectionTitle("سجل الديون") }
+            item {
+                AppSectionTitle(
+                    text = "سجل الديون",
+                    trailing = {
+                        if (person.phone.isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    PhoneUtils.whatsApp(
+                                        context,
+                                        person.phone,
+                                        StatementText.build(person.name, debts, total, currency)
+                                    )
+                                },
+                                modifier = Modifier.size(AppMinTouchTarget)
+                            ) {
+                                Icon(
+                                    Icons.Default.Description,
+                                    contentDescription = "إرسال كشف الحساب عبر واتساب",
+                                    tint = LocalSemanticColors.current.success
+                                )
+                            }
+                        }
+                    }
+                )
+            }
 
             item { Spacer(Modifier.height(AppSpaceXs)) }
 
-            if (debts.isEmpty()) {
+            if (timeline.isEmpty()) {
                 item {
                     AppRowSurface(shape = RoundedCornerShape(AppGroupLargeRadius)) {
                         Row(
@@ -290,19 +433,25 @@ fun PersonDetailScreen(
                     }
                 }
             } else {
-                itemsIndexed(debts, key = { _, debt -> debt.id }, contentType = { _, _ -> "debt" }) { index, debt ->
-                    DebtRow(
-                        debt = debt,
+                itemsIndexed(timeline, key = { _, e -> e.key }, contentType = { _, _ -> "timeline" }) { index, entry ->
+                    TimelineRow(
+                        entry = entry,
                         nf = nf,
-                        shape = groupedRowShape(index, debts.lastIndex),
+                        currency = currency,
+                        shape = groupedRowShape(index, timeline.lastIndex),
+                        menuOpen = debtMenuKey == entry.key,
+                        onOpenMenu = { debtMenuKey = entry.key },
+                        onDismissMenu = { debtMenuKey = null },
                         onEdit = {
-                            editingDebt = debt
-                            amount = debt.amount.toString()
-                            date = debt.date
-                            note = debt.note
+                            entry.debt?.let { debt ->
+                                editingDebt = debt
+                                amount = debt.amount.toString()
+                                date = debt.date
+                                note = debt.note
+                            }
                         },
-                        onDelete = { deleteDebtTarget = debt.id },
-                        onMarkPaid = { payDebtTarget = debt },
+                        onDelete = { entry.debt?.let { deleteDebtTarget = it.id } },
+                        onMarkPaid = { entry.debt?.let { payDebtTarget = it } },
                         modifier = Modifier.listItemEntrance(index)
                     )
                 }
@@ -519,86 +668,116 @@ fun PersonDetailScreen(
     }
 }
 
+private class TimelineEntry(
+    val key: String,
+    val amount: Double,
+    val time: Long,
+    val dateLabel: String,
+    val note: String,
+    val debt: Debt?
+)
+
 @Composable
-private fun PersonHeader(
+private fun BalanceCard(
     name: String,
     avatarColor: Color,
     total: Double,
-    debtsCount: Int,
+    status: PersonStatus,
+    paidTotal: Double,
     nf: NumberFormat,
     phone: String = "",
     onCall: () -> Unit = {},
     onWhatsApp: () -> Unit = {},
-    onSms: () -> Unit = {},
-    onStatement: () -> Unit = {}
+    onSms: () -> Unit = {}
 ) {
-    // بطاقة الملخص بنفس شكل بطاقة الحساب في الإعدادات: مسطّحة وزواياها كبيرة.
-    AppCard {
-        Column {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = AppSpace20, vertical = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppIconCircle(color = avatarColor, size = 52.dp) {
-                Text(
-                    name.firstOrNull()?.uppercase() ?: "?",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleLarge
-                )
-            }
-            Spacer(Modifier.width(AppSpaceLg))
-            Column(Modifier.weight(1f)) {
+    val semantic = LocalSemanticColors.current
+    val cs = MaterialTheme.colorScheme
+    val currency = AppSettingsState.currencySymbol
+    val chipColor = when (status.bucket) {
+        DebtBucket.OVERDUE -> semantic.danger
+        DebtBucket.THIS_WEEK -> semantic.warning
+        DebtBucket.PAID -> semantic.success
+        DebtBucket.LATER -> cs.onSurfaceVariant
+    }
+    AppOutlinedCard(shape = RoundedCornerShape(AppCardLargeRadius)) {
+        Column(Modifier.padding(AppSpace20)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppIconCircle(color = avatarColor, size = 48.dp) {
+                    Text(
+                        name.firstOrNull()?.uppercase() ?: "?",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(Modifier.width(AppSpaceMd))
                 Text(
                     "إجمالي الديون",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelLarge
+                    modifier = Modifier.weight(1f),
+                    color = cs.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp)
                 )
-                Text(
-                    "${nf.format(total)} ${AppSettingsState.currencySymbol}",
-                    color = MaterialTheme.colorScheme.onSurface,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Box(
+                    Modifier
+                        .clip(CircleShape)
+                        .background(chipColor.copy(alpha = 0.14f))
+                        .padding(horizontal = AppSpaceMd, vertical = 6.dp)
+                ) {
+                    Text(
+                        statusLine(status),
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = AppCaptionLargeSize),
+                        fontWeight = FontWeight.Bold,
+                        color = chipColor,
+                        maxLines = 1
+                    )
+                }
             }
-            Spacer(Modifier.width(AppSpaceMd))
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.onSurface) {
-                Text(
-                    "$debtsCount عملية",
-                    modifier = Modifier.padding(horizontal = AppScreenPadding, vertical = AppSpace6),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.surface
-                )
-            }
-        }
-        // رقم العميل (اختياري): يظهر مع أزرار تواصل سريعة فقط إن كان محفوظاً.
-        if (phone.isNotBlank()) {
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = AppSpace20),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-            )
+            Spacer(Modifier.height(AppSpaceMd))
             Text(
-                "\u200E$phone",
-                modifier = Modifier.padding(start = AppSpace20, end = AppSpace20, top = AppSpaceMd),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "${nf.format(total)} $currency",
+                style = appAmountStyle(AppAmountLargeSize),
+                color = cs.onSurface,
+                maxLines = 1
             )
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = AppScreenPadding, vertical = AppSpace10),
-                horizontalArrangement = Arrangement.spacedBy(AppSpaceSm)
-            ) {
-                ContactActionButton(Modifier.weight(1f), Icons.Default.Call, "اتصال", MaterialTheme.colorScheme.onSurface, onCall)
-                ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Chat, "واتساب", LocalSemanticColors.current.success, onWhatsApp)
-                ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Send, "رسالة", LocalSemanticColors.current.info, onSms)
+            if (paidTotal > 0.0) {
+                val fraction = (paidTotal / (paidTotal + total.coerceAtLeast(0.0))).toFloat().coerceIn(0f, 1f)
+                Spacer(Modifier.height(AppSpaceMd))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(CircleShape)
+                        .background(cs.onSurface.copy(alpha = 0.08f))
+                ) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(fraction.coerceAtLeast(0.02f))
+                            .fillMaxHeight()
+                            .clip(CircleShape)
+                            .background(semantic.success)
+                    )
+                }
+                Spacer(Modifier.height(AppSpace6))
+                Text(
+                    "سُدّد ${nf.format(paidTotal)} من ${nf.format(paidTotal + total.coerceAtLeast(0.0))} $currency",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = AppCaptionLargeSize),
+                    color = cs.onSurfaceVariant
+                )
             }
-            Row(
-                Modifier.fillMaxWidth().padding(start = AppScreenPadding, end = AppScreenPadding, bottom = AppSpace10)
-            ) {
-                ContactActionButton(Modifier.weight(1f), Icons.Default.Description, "إرسال كشف الحساب عبر واتساب", LocalSemanticColors.current.success, onStatement)
+            if (phone.isNotBlank()) {
+                Spacer(Modifier.height(AppSpaceMd))
+                Text(
+                    "\u200E$phone",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurfaceVariant
+                )
+                Spacer(Modifier.height(AppSpace10))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpaceSm)) {
+                    ContactActionButton(Modifier.weight(1f), Icons.Default.Call, "اتصال", cs.onSurface, onCall)
+                    ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Chat, "واتساب", semantic.success, onWhatsApp)
+                    ContactActionButton(Modifier.weight(1f), Icons.AutoMirrored.Filled.Send, "رسالة", semantic.info, onSms)
+                }
             }
-        }
         }
     }
 }
@@ -618,7 +797,7 @@ private fun ContactActionButton(
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(vertical = AppSpace10),
+            Modifier.fillMaxWidth().heightIn(min = AppMinTouchTarget).padding(vertical = AppSpace10),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -695,63 +874,87 @@ private fun AddDebtCard(
 }
 
 @Composable
-private fun DebtRow(
-    debt: Debt,
+private fun TimelineRow(
+    entry: TimelineEntry,
     nf: NumberFormat,
+    currency: String,
     shape: Shape,
+    menuOpen: Boolean,
+    onOpenMenu: () -> Unit,
+    onDismissMenu: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onMarkPaid: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    AppRowSurface(shape = shape, modifier = modifier) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 64.dp)
-                .padding(horizontal = AppScreenPadding, vertical = AppSpace10),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "${nf.format(debt.amount)} ${AppSettingsState.currencySymbol}",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    debt.date,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                if (debt.note.isNotBlank()) {
-                    Row(
-                        Modifier.padding(top = AppSpace2),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            Icons.Default.Notes, contentDescription = null,
-                            modifier = Modifier.size(14.dp).padding(top = AppSpace2),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(Modifier.width(AppSpaceXs))
-                        Text(
-                            debt.note,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
-                        )
+    val semantic = LocalSemanticColors.current
+    val isDebt = entry.amount > 0
+    val tint = if (isDebt) semantic.danger else semantic.success
+    val sign = if (isDebt) "+" else "\u2212"
+    AppRowSurface(shape = shape, modifier = modifier, onClick = if (entry.debt != null) onOpenMenu else null) {
+        Box {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 68.dp)
+                    .padding(horizontal = AppScreenPadding, vertical = AppSpace10),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(tint))
+                Spacer(Modifier.width(AppSpaceMd))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        entry.dateLabel,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp),
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (entry.note.isNotBlank()) {
+                        Row(
+                            Modifier.padding(top = AppSpace2),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                Icons.Default.Notes, contentDescription = null,
+                                modifier = Modifier.size(14.dp).padding(top = AppSpace2),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.width(AppSpaceXs))
+                            Text(
+                                entry.note,
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = AppCaptionLargeSize),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2
+                            )
+                        }
                     }
                 }
-            }
-            Spacer(Modifier.width(AppSpaceSm))
-            AppActionPill(
-                actions = listOf(
-                    ActionSpec(Icons.Default.Check, "تسجيل السداد", LocalSemanticColors.current.success, onMarkPaid),
-                    ActionSpec(Icons.Default.Edit, "تعديل", null, onEdit),
-                    ActionSpec(Icons.Default.Close, "حذف الدين", LocalSemanticColors.current.danger, onDelete)
+                Spacer(Modifier.width(AppSpaceSm))
+                Text(
+                    "\u2066$sign${nf.format(abs(entry.amount))} $currency\u2069",
+                    style = appAmountStyle(AppAmountRowSize),
+                    color = tint,
+                    maxLines = 1,
+                    softWrap = false
                 )
-            )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = onDismissMenu) {
+                DropdownMenuItem(
+                    text = { Text("تسجيل السداد") },
+                    leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, tint = semantic.success) },
+                    onClick = { onDismissMenu(); onMarkPaid() }
+                )
+                DropdownMenuItem(
+                    text = { Text("تعديل") },
+                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                    onClick = { onDismissMenu(); onEdit() }
+                )
+                DropdownMenuItem(
+                    text = { Text("حذف الدين", color = semantic.danger) },
+                    leadingIcon = { Icon(Icons.Default.Close, contentDescription = null, tint = semantic.danger) },
+                    onClick = { onDismissMenu(); onDelete() }
+                )
+            }
         }
     }
 }

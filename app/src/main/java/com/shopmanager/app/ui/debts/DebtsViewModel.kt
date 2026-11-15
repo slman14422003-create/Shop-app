@@ -412,6 +412,43 @@ class DebtsViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun payPartial(person: Person, amount: Double) {
+        val debtsSnapshot = uiState.value.debts.filter { it.personId == person.id }
+        viewModelScope.launch {
+            try {
+                var remaining = minOf(amount, debtsSnapshot.sumOf { it.amount }).coerceAtLeast(0.0)
+                val paidAmount = remaining
+                val ordered = debtsSnapshot
+                    .filter { it.amount > 0 }
+                    .sortedWith(compareBy<Debt>({ it.date }, { it.createdAt }))
+                for (d in ordered) {
+                    if (remaining <= 0.000001) break
+                    if (d.amount <= remaining + 0.000001) {
+                        repo.markDebtAsPaid(d.id)
+                        remaining -= d.amount
+                    } else {
+                        repo.updateDebt(d.id, d.amount - remaining, d.date, d.note)
+                        remaining = 0.0
+                    }
+                }
+                _undo.value = UndoAction { repo.restoreDebts(debtsSnapshot) }
+                if (paidAmount > 0.0) {
+                    logChange("سداد جزئي للعميل \"${person.name}\" بمبلغ ${Formatters.number(paidAmount)}")
+                    logActivity(DebtActivityLog.Kind.PAID, person.name, paidAmount)
+                    if (settings.notificationsEnabled) {
+                        NotificationHelper.showDebtPaidNotification(
+                            getApplication(), person.name, Formatters.number(paidAmount), settings.currencySymbol, person.id
+                        )
+                    }
+                }
+                _message.value = "تم تسجيل السداد ✅"
+                InstantBackupWorker.requestNow(getApplication())
+            } catch (e: Exception) {
+                _message.value = "تعذر تسجيل السداد: ${e.message ?: "تحقق من الاتصال بالإنترنت"}"
+            }
+        }
+    }
+
     fun saveSchedule(person: Person, dueDate: Long, installments: List<Installment>, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {

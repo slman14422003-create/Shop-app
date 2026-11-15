@@ -4,6 +4,32 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.ui.AbsoluteAlignment
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.sp
+import com.shopmanager.app.ui.common.AppBorderWidth
+import com.shopmanager.app.ui.common.AppCaptionLargeSize
+import com.shopmanager.app.ui.common.AppCaptionSize
+import com.shopmanager.app.ui.common.AppCardRadius
+import com.shopmanager.app.ui.common.AppAmountRowSize
+import com.shopmanager.app.ui.common.AppBodyLargeSize
+import com.shopmanager.app.ui.common.AppMinTouchTarget
+import com.shopmanager.app.ui.common.AppPillChip
+import com.shopmanager.app.ui.common.PhoneUtils
+import com.shopmanager.app.ui.common.appAccent
+import com.shopmanager.app.ui.common.appAmountStyle
+import com.shopmanager.app.ui.common.appBorderColor
+import com.shopmanager.app.ui.common.appOnAccent
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -32,7 +58,9 @@ import com.shopmanager.app.data.settings.SettingsRepository
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -97,7 +125,8 @@ fun DebtsScreen(
     addPersonRequested: Boolean = false,
     onAddPersonRequestHandled: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
-    onOpenActivityLog: () -> Unit = {}
+    onOpenActivityLog: () -> Unit = {},
+    onNewDebt: () -> Unit = {}
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
     val message = viewModel.message.collectAsStateWithLifecycle().value
@@ -130,7 +159,8 @@ fun DebtsScreen(
     val payTarget = remember { mutableStateOf<Person?>(null) }
     val showShareChoice = remember { mutableStateOf(false) }
     val showShareConfirm = remember { mutableStateOf(false) }
-    var filter by remember { mutableStateOf(DebtFilter.NEWEST) }
+    var filter by remember { mutableStateOf(DebtFilter.ALL) }
+    var openId by remember { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -196,6 +226,18 @@ fun DebtsScreen(
         // the double-padding and the gap with it.
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onNewDebt,
+                modifier = Modifier.padding(bottom = LocalFloatingBottomNavHeight.current),
+                shape = CircleShape,
+                containerColor = appAccent(),
+                contentColor = appOnAccent(),
+                elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "دين جديد")
+            }
+        },
         topBar = {
             if (isSearching) {
                 // البحث يحلّ محل الشريط كله: رجوع + حقل بحث على شكل حبّة.
@@ -263,79 +305,54 @@ fun DebtsScreen(
             modifier = Modifier.padding(padding)
         ) {
         Column(Modifier.fillMaxSize()) {
-            // REDESIGN ("زر اضافة عميل جديد يجب ان يكون زر عريض مكان شريط
-            // البحث للي شلته"): the permanent search field that used to sit
-            // here moved into the top bar itself (see topBar above, toggled
-            // by the search icon there) — this space is now a wide,
-            // prominent "عميل جديد" button instead, so the single most
-            // common action on this screen (adding a customer) has a clear,
-            // full-width target right under the stats instead of only being
-            // reachable from the small floating "+" beside the nav pill.
-            AppPillButton(
-                label = "عميل جديد",
-                icon = Icons.Default.Add,
-                onClick = { showAddDialog.value = true },
-                height = 44.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = AppScreenPadding, end = AppScreenPadding, top = 2.dp, bottom = 8.dp)
-            )
-
-            // PERF: same remember-keyed fix as the materials tabs — skip
-            // re-filtering the whole person list unless `search` or
-            // `state.persons` actually changed.
-            // Largest debt first; customers with no debt sink to the bottom.
-            // Stable sort, so equal amounts keep their original order.
             val overdueDays = remember { SettingsRepository(context).overdueDays }
-            val overdueIds = remember(state.debts, overdueDays) { overduePersonIds(state.debts, overdueDays) }
-            // "الأحدث" = آخر عميل أُضيف له دين أو أُضيف هو نفسه (وليس تاريخ إنشاء العميل
-            // فقط): عميل قديم أُضيف له دين اليوم يظهر في الأعلى. الدين القديم بلا
-            // createdAt يُستعان بتاريخه المكتوب.
-            val lastAddedAt = remember(state.persons, state.debts) {
-                val dateFormat = DateFormats.get("yyyy-MM-dd", Locale.US, lenient = false)
-                val latestDebt = HashMap<String, Long>()
-                for (d in state.debts) {
-                    val t = if (d.createdAt > 0L) d.createdAt
-                    else runCatching { dateFormat.parse(d.date.trim())?.time }.getOrNull() ?: 0L
-                    if (t > (latestDebt[d.personId] ?: 0L)) latestDebt[d.personId] = t
-                }
-                state.persons.associate { p -> p.id to maxOf(p.createdAt, latestDebt[p.id] ?: 0L) }
+            val statuses = remember(state.persons, state.debts, overdueDays) {
+                classifyPersons(state.persons, state.debts, overdueDays, System.currentTimeMillis())
             }
-            val sortedPersons = remember(state.persons, filter, overdueIds, lastAddedAt) {
-                when (filter) {
-                    DebtFilter.ALL -> state.persons.sortedByDescending { it.amount }
-                    DebtFilter.OVERDUE -> state.persons.filter { it.id in overdueIds }.sortedByDescending { it.amount }
-                    DebtFilter.LARGEST -> state.persons.filter { it.amount > 0 }.sortedByDescending { it.amount }
-                    DebtFilter.NEWEST -> state.persons.sortedByDescending { lastAddedAt[it.id] ?: 0L }
+            val byAmount = remember(state.persons) { state.persons.sortedByDescending { it.amount } }
+            val searched = com.shopmanager.app.ui.common.rememberSmartSearch(byAmount, search.value) { it.name }
+            val groups = remember(searched, statuses, filter) { buildDebtGroups(searched, statuses, filter) }
+            val currency = AppSettingsState.currencySymbol
+
+            val remind: (Person) -> Unit = { p ->
+                if (p.phone.isBlank()) {
+                    scope.launch { snackbarHost.showSnackbar("لا يوجد رقم هاتف لهذا العميل") }
+                } else {
+                    val st = statuses[p.id]
+                    PhoneUtils.whatsApp(
+                        context,
+                        p.phone,
+                        debtReminderText(p.name, p.amount, st?.takeIf { it.bucket == DebtBucket.OVERDUE }?.days, currency)
+                    )
                 }
             }
-            val filtered = com.shopmanager.app.ui.common.rememberSmartSearch(sortedPersons, search.value) { it.name }
 
             if (state.persons.isNotEmpty()) {
                 Row(
                     Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = AppScreenPadding, vertical = 2.dp),
+                        .padding(horizontal = AppScreenPadding),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     DebtFilter.values().forEach { option ->
-                        FilterChip(
+                        AppPillChip(
+                            label = option.label,
                             selected = filter == option,
-                            onClick = { filter = option },
-                            label = { Text(option.label) }
+                            onClick = { filter = option; openId = null },
+                            selectedColor = appAccent(),
+                            selectedContentColor = appOnAccent()
                         )
                     }
                 }
             }
 
-            if (state.isLoading && filtered.isEmpty()) {
-                // التحميل الأول: هياكل صفوف بدل شاشة فارغة/"لا يوجد عملاء" الوامضة.
+            if (state.isLoading && searched.isEmpty()) {
                 com.shopmanager.app.ui.common.SkeletonRowList(
                     kind = com.shopmanager.app.ui.common.SkeletonRowKind.PERSON,
                     count = 7
                 )
-            } else if (filtered.isEmpty()) {
+            } else if (groups.isEmpty()) {
                 Box(Modifier.padding(horizontal = AppScreenPadding)) { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
                 EmptyState(
                     icon = if (search.value.isBlank()) Icons.Default.People else Icons.Default.PersonSearch,
@@ -348,86 +365,41 @@ fun DebtsScreen(
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    // Bottom inset sized off the pill's real measured
-                    // height plus the FAB's own fixed height, so the last
-                    // row in the list scrolls fully clear of both instead
-                    // of stopping underneath either one.
                     contentPadding = PaddingValues(
-                        start = AppScreenPadding, end = AppScreenPadding, top = 2.dp,
-                        bottom = listBottomClearance
+                        start = AppScreenPadding, end = AppScreenPadding, top = 4.dp,
+                        bottom = listBottomClearance + 64.dp
                     ),
-                    verticalArrangement = Arrangement.spacedBy(AppGroupGap)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // الإحصاءات أول عنصر في القائمة: تمرّ مع التمرير فيأخذ العملاء كامل الشاشة.
                     item(key = "stats") { StatsRow(state.totalPersons, state.totalDebts, state.totalAmount) }
-                    itemsIndexed(filtered, key = { _, person -> person.id }, contentType = { _, _ -> "person" }) { index, person ->
-                        val rowShape = groupedRowShape(index, filtered.lastIndex)
-                        val currentPerson by rememberUpdatedState(person)
-                        val swipeState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { value ->
-                                when (value) {
-                                    SwipeToDismissBoxValue.StartToEnd -> {
-                                        if (currentPerson.amount > 0) {
-                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            payTarget.value = currentPerson
-                                        }
-                                    }
-                                    SwipeToDismissBoxValue.EndToStart -> {
-                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        deleteTarget.value = currentPerson
-                                    }
-                                    SwipeToDismissBoxValue.Settled -> Unit
-                                }
-                                false
-                            }
-                        )
-                        SwipeToDismissBox(
-                            state = swipeState,
-                            modifier = Modifier
-                                .animateItem(
-                                    fadeInSpec = null,
-                                    placementSpec = MotionSpecs.reorderSpring(),
-                                    fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
-                                    else MotionSpecs.listItemFadeOut()
-                                )
-                                .listItemEntrance(index),
-                            enableDismissFromStartToEnd = person.amount > 0,
-                            enableDismissFromEndToStart = true,
-                            backgroundContent = {
-                                val direction = swipeState.dismissDirection
-                                val semantic = LocalSemanticColors.current
-                                val paying = direction == SwipeToDismissBoxValue.StartToEnd
-                                val active = direction != SwipeToDismissBoxValue.Settled
-                                Box(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .clip(rowShape)
-                                        .background(
-                                            if (!active) Color.Transparent
-                                            else if (paying) semantic.success.copy(alpha = 0.22f)
-                                            else semantic.danger.copy(alpha = 0.22f)
-                                        )
-                                        .padding(horizontal = 20.dp),
-                                    contentAlignment = if (paying) Alignment.CenterStart else Alignment.CenterEnd
-                                ) {
-                                    if (active) {
-                                        Icon(
-                                            if (paying) Icons.Default.Check else Icons.Default.Close,
-                                            contentDescription = if (paying) "تسجيل سداد" else "حذف",
-                                            tint = if (paying) semantic.success else semantic.danger
-                                        )
-                                    }
-                                }
-                            }
-                        ) {
-                            PersonRow(
-                                person,
-                                rowShape,
-                                Modifier,
-                                overdue = person.id in overdueIds,
-                                onClick = { onOpenPerson(person.id) },
-                                onDelete = { deleteTarget.value = person },
-                                onMarkPaid = { payTarget.value = person }
+                    groups.forEach { group ->
+                        stickyHeader(key = "header_${group.bucket.name}", contentType = "header") {
+                            GroupHeader(group)
+                        }
+                        itemsIndexed(group.persons, key = { _, person -> person.id }, contentType = { _, _ -> "person" }) { index, person ->
+                            val status = statuses[person.id] ?: PersonStatus(DebtBucket.LATER, -1)
+                            SwipeRevealRow(
+                                person = person,
+                                status = status,
+                                revealed = openId == person.id,
+                                onRevealedChange = { open -> openId = if (open) person.id else if (openId == person.id) null else openId },
+                                onClick = {
+                                    if (openId != null) openId = null else onOpenPerson(person.id)
+                                },
+                                onLongClick = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    deleteTarget.value = person
+                                },
+                                onPay = { openId = null; payTarget.value = person },
+                                onRemind = { openId = null; remind(person) },
+                                modifier = Modifier
+                                    .animateItem(
+                                        fadeInSpec = null,
+                                        placementSpec = MotionSpecs.reorderSpring(),
+                                        fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
+                                        else MotionSpecs.listItemFadeOut()
+                                    )
+                                    .listItemEntrance(index)
                             )
                         }
                     }
@@ -547,76 +519,226 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, te
     AppEmptyState(icon = icon, text = text)
 }
 
+private class DebtGroup(val bucket: DebtBucket, val title: String, val persons: List<Person>, val subtotal: Double)
+
+private fun buildDebtGroups(persons: List<Person>, statuses: Map<String, PersonStatus>, filter: DebtFilter): List<DebtGroup> {
+    fun pick(bucket: DebtBucket) = persons.filter { statuses[it.id]?.bucket == bucket }
+    val order = when (filter) {
+        DebtFilter.ALL -> listOf(DebtBucket.OVERDUE, DebtBucket.THIS_WEEK, DebtBucket.LATER, DebtBucket.PAID)
+        DebtFilter.OVERDUE -> listOf(DebtBucket.OVERDUE)
+        DebtFilter.THIS_WEEK -> listOf(DebtBucket.THIS_WEEK)
+        DebtFilter.PAID -> listOf(DebtBucket.PAID)
+    }
+    return order.mapNotNull { bucket ->
+        val list = pick(bucket).let { l ->
+            when (bucket) {
+                DebtBucket.OVERDUE -> l.sortedWith(compareByDescending<Person> { statuses[it.id]?.days ?: 0 }.thenByDescending { it.amount })
+                DebtBucket.THIS_WEEK -> l.sortedWith(compareBy<Person> { statuses[it.id]?.days ?: 0 }.thenByDescending { it.amount })
+                else -> l
+            }
+        }
+        if (list.isEmpty()) null else DebtGroup(
+            bucket,
+            when (bucket) {
+                DebtBucket.OVERDUE -> "متأخر"
+                DebtBucket.THIS_WEEK -> "هالأسبوع"
+                DebtBucket.LATER -> "لاحقاً"
+                DebtBucket.PAID -> "مسدّد"
+            },
+            list,
+            list.sumOf { it.amount }
+        )
+    }
+}
+
 @Composable
-private fun PersonRow(
-    person: Person,
-    shape: Shape,
-    modifier: Modifier = Modifier,
-    overdue: Boolean = false,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
-    onMarkPaid: () -> Unit
-) {
-    val avatarColor = remember(person.name) { avatarColorFor(person.name) }
-    // صف مسطّح متلاصق مع جيرانه (نفس لغة صفوف الإعدادات): بلا حدود ولا ظل.
-    AppRowSurface(shape = shape, modifier = modifier, onClick = onClick) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 60.dp)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AppIconCircle(color = avatarColor, size = 40.dp) {
-                Text(
-                    person.name.firstOrNull()?.uppercase() ?: "?",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    person.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (person.amount > 0) {
-                    Spacer(Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        com.shopmanager.app.ui.common.PillBadge(
-                            text = "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
-                            color = LocalSemanticColors.current.danger
-                        )
-                        if (overdue) {
-                            Spacer(Modifier.width(6.dp))
-                            OverdueTag()
-                        }
-                    }
-                } else {
-                    Text(
-                        "لا يوجد دين حالياً",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = LocalSemanticColors.current.success
-                    )
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            val semantic = LocalSemanticColors.current
-            AppActionPill(
-                height = 36.dp,
-                actions = if (person.amount > 0) {
-                    listOf(
-                        ActionSpec(Icons.Default.Check, "تسجيل سداد كامل الدين", semantic.success, onMarkPaid),
-                        ActionSpec(Icons.Default.Close, "حذف العميل", semantic.danger, onDelete)
-                    )
-                } else {
-                    listOf(ActionSpec(Icons.Default.Close, "حذف العميل", semantic.danger, onDelete))
-                }
+private fun bucketColor(bucket: DebtBucket): Color {
+    val semantic = LocalSemanticColors.current
+    return when (bucket) {
+        DebtBucket.OVERDUE -> semantic.danger
+        DebtBucket.THIS_WEEK -> semantic.warning
+        DebtBucket.LATER -> MaterialTheme.colorScheme.outline
+        DebtBucket.PAID -> semantic.success
+    }
+}
+
+@Composable
+private fun GroupHeader(group: DebtGroup) {
+    val color = bucketColor(group.bucket)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 4.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            group.title,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            Formatters.number(group.persons.size.toDouble()),
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = AppCaptionLargeSize),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.weight(1f))
+        if (group.bucket != DebtBucket.PAID) {
+            Text(
+                "${Formatters.number(group.subtotal)} ${AppSettingsState.currencySymbol}",
+                style = appAmountStyle(15.sp),
+                color = color
             )
         }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SwipeRevealRow(
+    person: Person,
+    status: PersonStatus,
+    revealed: Boolean,
+    onRevealedChange: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onPay: () -> Unit,
+    onRemind: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(AppCardRadius)
+    val canSwipe = person.amount > 0
+    val actionWidth = 176.dp
+    val maxPx = with(LocalDensity.current) { actionWidth.toPx() }
+    val offset = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val low = LocalPerformanceTier.current == PerformanceTier.LOW
+    LaunchedEffect(revealed, canSwipe) {
+        val target = if (revealed && canSwipe) maxPx else 0f
+        if (low) offset.snapTo(target) else offset.animateTo(target, tween(180))
+    }
+    val dragState = rememberDraggableState { delta ->
+        scope.launch { offset.snapTo((offset.value + delta).coerceIn(0f, maxPx)) }
+    }
+    val semantic = LocalSemanticColors.current
+    val cs = MaterialTheme.colorScheme
+
+    Box(modifier.fillMaxWidth().clip(shape)) {
+        if (canSwipe) {
+            Box(Modifier.matchParentSize(), contentAlignment = AbsoluteAlignment.CenterLeft) {
+                Row(Modifier.width(actionWidth).fillMaxHeight()) {
+                    RevealAction(Modifier.weight(1f), Icons.Default.Check, "تسديد", semantic.success, onPay)
+                    RevealAction(Modifier.weight(1f), Icons.Default.NotificationsActive, "تذكير", appAccent(), onRemind)
+                }
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer { translationX = offset.value }
+                .then(
+                    if (canSwipe) Modifier.draggable(
+                        state = dragState,
+                        orientation = Orientation.Horizontal,
+                        onDragStopped = { velocity ->
+                            val open = offset.value > maxPx / 2 || velocity > 1500f
+                            onRevealedChange(open)
+                            val target = if (open) maxPx else 0f
+                            if (low) offset.snapTo(target) else offset.animateTo(target, tween(180))
+                        }
+                    ) else Modifier
+                )
+                .clip(shape)
+                .background(cs.surfaceContainerHigh)
+                .border(AppBorderWidth, appBorderColor(), shape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+        ) {
+            PersonRowContent(person, status)
+        }
+    }
+}
+
+@Composable
+private fun RevealAction(
+    modifier: Modifier,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier
+            .fillMaxHeight()
+            .background(color)
+            .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+            .heightIn(min = AppMinTouchTarget),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = appOnAccent(), modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = AppCaptionLargeSize),
+            fontWeight = FontWeight.Bold,
+            color = appOnAccent()
+        )
+    }
+}
+
+@Composable
+private fun PersonRowContent(person: Person, status: PersonStatus) {
+    val avatarColor = remember(person.name) { avatarColorFor(person.name) }
+    val rail = bucketColor(status.bucket)
+    val cs = MaterialTheme.colorScheme
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+            .heightIn(min = 76.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.width(5.dp).fillMaxHeight().background(rail))
+        Spacer(Modifier.width(12.dp))
+        AppIconCircle(color = avatarColor, size = 44.dp) {
+            Text(
+                person.name.firstOrNull()?.uppercase() ?: "?",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f).padding(vertical = 10.dp)) {
+            Text(
+                person.name,
+                style = MaterialTheme.typography.bodyLarge.copy(fontSize = AppBodyLargeSize),
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                statusLine(status),
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = AppCaptionLargeSize),
+                color = if (status.bucket == DebtBucket.LATER) cs.onSurfaceVariant else rail,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        if (person.amount > 0) {
+            Text(
+                "${Formatters.number(person.amount)} ${AppSettingsState.currencySymbol}",
+                style = appAmountStyle(AppAmountRowSize),
+                color = if (status.bucket == DebtBucket.OVERDUE) rail else cs.onSurface,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+        Spacer(Modifier.width(14.dp))
     }
 }
 
@@ -633,20 +755,8 @@ private fun buildDebtsShareText(persons: List<Person>, totalAmount: Double): Str
 enum class DebtFilter(val label: String) {
     ALL("الكل"),
     OVERDUE("متأخر"),
-    LARGEST("الأكبر"),
-    NEWEST("الأحدث")
-}
-
-private fun overduePersonIds(debts: List<Debt>, days: Int): Set<String> {
-    val limit = System.currentTimeMillis() - days * 86_400_000L
-    val format = DateFormats.get("yyyy-MM-dd", Locale.US, lenient = false)
-    return debts
-        .filter { debt ->
-            val time = runCatching { format.parse(debt.date.trim())?.time }.getOrNull()
-            debt.amount > 0 && time != null && time < limit
-        }
-        .map { it.personId }
-        .toSet()
+    THIS_WEEK("هالأسبوع"),
+    PAID("مسدّد")
 }
 
 @Composable

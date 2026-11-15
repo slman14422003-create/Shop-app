@@ -1,6 +1,19 @@
 package com.shopmanager.app
 
 import androidx.compose.animation.EnterTransition
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import com.shopmanager.app.ui.common.AppBottomBar
+import com.shopmanager.app.ui.common.GlassSnackbarHost
+import com.shopmanager.app.ui.common.showWithOptionalUndo
+import com.shopmanager.app.ui.debts.QuickAddMode
+import com.shopmanager.app.ui.debts.QuickAddRequest
+import com.shopmanager.app.ui.debts.QuickAddSheet
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
@@ -135,6 +148,12 @@ internal fun ShopManagerApp(
     // watches it and opens its "عميل جديد" dialog when it turns true (see
     // DebtsScreen's `addPersonRequested` parameter).
     var addPersonRequested by remember { mutableStateOf(false) }
+    var quickAddRequest by remember { mutableStateOf<QuickAddRequest?>(null) }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) assistantViewModel.startVoice()
+    }
+    val globalSnackHost = remember { SnackbarHostState() }
+    val debtsMessage by debtsViewModel.message.collectAsStateWithLifecycle()
     // Same request/handled pattern as addPersonRequested just above, for
     // the ملاحظات هامة tab's own "+" quick action.
     var addNoteRequested by remember { mutableStateOf(false) }
@@ -310,6 +329,25 @@ internal fun ShopManagerApp(
     // that aren't the main pager, or while the keyboard covers it" rule
     // as before.
     val pillVisible = showBottomBar && !imeVisible
+    val globalSnackActive = showBottomBar && pagerState.currentPage != PAGE_DEBTS
+    LaunchedEffect(debtsMessage, globalSnackActive) {
+        if (globalSnackActive) {
+            debtsMessage?.let {
+                val hasUndo = debtsViewModel.undo.value != null
+                val undone = globalSnackHost.showWithOptionalUndo(it, hasUndo)
+                if (undone) debtsViewModel.performUndo() else debtsViewModel.clearUndo()
+                debtsViewModel.clearMessage()
+            }
+        }
+    }
+    val openAssistantVoice: () -> Unit = {
+        navController.safeNavigate(ROUTE_ASSISTANT)
+        if (ContextCompat.checkSelfPermission(adminContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            assistantViewModel.startVoice()
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
 
     // PERF (low-end tier): a fade still allocates a graphicsLayer and runs
     // a compositor pass every frame of the transition. That's cheap on a
@@ -502,7 +540,12 @@ internal fun ShopManagerApp(
                     // offset = 0 فلا طبقة إضافية. المتوازن والمنخفض: انزلاق خام بلا أي طبقات.
                     Box(Modifier.fillMaxSize()) {
                     when (page) {
-                        PAGE_DASHBOARD -> if (assistantSettings.newHome) AssistantHomeScreen(
+                        PAGE_DASHBOARD -> if (assistantSettings.newHome) Box(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(bottom = if (pillVisible) floatingNavHeight else 0.dp)
+                                .consumeWindowInsets(if (pillVisible) WindowInsets.navigationBars else WindowInsets(0.dp))
+                        ) { AssistantHomeScreen(
                             assistant = assistantViewModel,
                             materialsViewModel = materialsViewModel,
                             onOpenDrawer = { menuOpen = true },
@@ -513,7 +556,7 @@ internal fun ShopManagerApp(
                             onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
                             onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) },
                             onOpenAdmin = requestAdminAccess
-                        ) else DashboardScreen(
+                        ) } else DashboardScreen(
                             debtsViewModel = debtsViewModel,
                             materialsViewModel = materialsViewModel,
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
@@ -524,7 +567,10 @@ internal fun ShopManagerApp(
                             onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
                             onOpenMaterial = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
                             onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
-                            onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) }
+                            onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) },
+                            onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
+                            onPayDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.PAY) },
+                            onNewShortage = { navController.safeNavigate(ROUTE_MATERIAL_CATALOG) }
                         )
                         PAGE_DEBTS -> DebtsScreen(
                             viewModel = debtsViewModel,
@@ -532,7 +578,8 @@ internal fun ShopManagerApp(
                             addPersonRequested = addPersonRequested,
                             onAddPersonRequestHandled = { addPersonRequested = false },
                             onOpenDrawer = { menuOpen = true },
-                            onOpenActivityLog = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) }
+                            onOpenActivityLog = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) },
+                            onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) }
                         )
                         PAGE_MATERIALS -> MaterialsScreen(
                             viewModel = materialsViewModel,
@@ -545,14 +592,21 @@ internal fun ShopManagerApp(
                             onInitialSearchConsumed = { pendingMaterialHighlight = null },
                             onOpenDrawer = { menuOpen = true }
                         )
-                        else -> ChatRoot(
-                            viewModel = chatSessionViewModel,
-                            onOpenDrawer = { menuOpen = true },
-                            onOpenConversation = { uid, name ->
-                                navController.safeNavigate(chatConversationRoute(uid, name))
-                            },
-                            onOpenUserPicker = { navController.safeNavigate(ROUTE_CHAT_USERS) }
-                        )
+                        else -> Box(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(bottom = if (pillVisible) floatingNavHeight else 0.dp)
+                                .consumeWindowInsets(if (pillVisible) WindowInsets.navigationBars else WindowInsets(0.dp))
+                        ) {
+                            ChatRoot(
+                                viewModel = chatSessionViewModel,
+                                onOpenDrawer = { menuOpen = true },
+                                onOpenConversation = { uid, name ->
+                                    navController.safeNavigate(chatConversationRoute(uid, name))
+                                },
+                                onOpenUserPicker = { navController.safeNavigate(ROUTE_CHAT_USERS) }
+                            )
+                        }
                     }
                     }
                 }
@@ -722,70 +776,31 @@ internal fun ShopManagerApp(
                         // المعروضة هون تضل نفس البيانات الحية، وإضافة/تعديل
                         // ملاحظة من هالشاشة ينعكس فورًا بتبويب الملاحظات وبالعكس.
                         notesViewModel = notesViewModel,
-                        onBack = { navController.safePopBackStack() }
+                        onBack = { navController.safePopBackStack() },
+                        onQuickAdd = { mode -> quickAddRequest = QuickAddRequest(mode, person.id) }
                     )
                 }
             }
         }
         } // CompositionLocalProvider
 
-        // Drawn AFTER (so visually on top of) NavHost above — a real
-        // overlay, not a layout slot with its own painted background.
-        if (pillVisible) {
-            // BUG FIXED ("شكل الايقونة فوق الكلمة/التصميم متراكب"): the
-            // hamburger used to be this exact floating glass circle,
-            // pinned to Alignment.TopStart over the *entire* NavHost — in
-            // this app's forced-RTL layout TopStart resolves to the
-            // top-RIGHT corner, which is exactly where every tab's own
-            // header already places its title text (DashboardHeader's
-            // "إدارة المحل", MaterialsHeader's "المواد والأسعار", ...).
-            // The floating circle and the header's own text were two
-            // independent layers drawn in the same corner, so they
-            // visually collided instead of one giving way to the other.
-            // Claude's own top bar never floats a control over live
-            // content like that — its hamburger is a real element laid
-            // out *inside* the bar itself, taking up its own space so
-            // nothing else can ever occupy that spot. Each screen now
-            // draws its own leading hamburger button inline in its own
-            // header/TopAppBar (see DashboardHeader, DebtsScreen's
-            // TopAppBar `navigationIcon`, MaterialsHeader, NotesScreen's
-            // TopAppBar `navigationIcon`) via the `onOpenDrawer` callback
-            // threaded down from here — so this floating overlay button
-            // is gone entirely; nothing replaces it at this layer.
+        CompositionLocalProvider(
+            LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp
+        ) {
+            GlassSnackbarHost(globalSnackHost, Modifier.align(Alignment.BottomCenter))
+        }
 
-            // REDESIGN ("زر ال+ لازم تشيلة لان في فوق زر"): الديون and
-            // المواد both now have their own wide, on-screen "عميل جديد" /
-            // "مادة جديدة" button right in the list (see DebtsScreen /
-            // MaterialsScreen — wired to the same `addPersonRequested` /
-            // ROUTE_MATERIAL_CATALOG actions this floating button used to
-            // trigger), so this shared floating "+" would just be a second,
-            // redundant control for the exact same action on those two
-            // pages. It now only shows on الملاحظات, which has no on-screen
-            // add button of its own yet.
-            // الدردشة المحلية: زر + موجود أعلى شاشتها نفسها، فلا حاجة لزر إضافة سريع عائم على أي صفحة.
-            val quickAction: QuickAction? = null
-            // "من الجهة اليسرى حسب الصورة": rendered via `secondaryAction`,
-            // the opposite end of the same pill row from `quickAction`
-            // above (see FloatingBottomNav's own doc comment on that
-            // param) — only while the المواد والأسعار page's الأسعار tab
-            // is actually the one showing, same as `quickAction` itself is
-            // page-scoped. Label mirrors the old full-width button's own
-            // text ("حفظ N من الأسعار" once something's changed, "حفظ كل
-            // الأسعار" otherwise); tapping it just raises
-            // `savePricesRequested`, which MaterialsScreen watches and
-            // clears once the save actually runs.
-            val secondaryAction: QuickAction? = null
-            FloatingQuickActions(
-                quickAction = quickAction,
-                secondaryAction = secondaryAction,
+        if (pillVisible) {
+            AppBottomBar(
+                selectedPage = pagerState.currentPage,
+                onSelectPage = { page -> openPager(page) },
+                commandBarVisible = pagerState.currentPage != PAGE_NOTES &&
+                    !(pagerState.currentPage == PAGE_DASHBOARD && assistantSettings.newHome),
+                onOpenAssistant = { navController.safeNavigate(ROUTE_ASSISTANT) },
+                onStartVoice = openAssistantVoice,
+                onQuickAdd = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    // Real measured layout height (margins included, since
-                    // this size is taken at FloatingQuickActions' own root
-                    // — see its Box in FloatingBottomNav.kt), converted
-                    // from px to dp with the current screen density. This
-                    // is what LocalFloatingBottomNavHeight above actually
-                    // reflects.
                     .onSizeChanged { size ->
                         floatingNavHeight = with(density) { size.height.toDp() }
                     }
@@ -810,6 +825,14 @@ internal fun ShopManagerApp(
         }
     )
     } // menu overlay Box
+
+    quickAddRequest?.let { request ->
+        QuickAddSheet(
+            viewModel = debtsViewModel,
+            request = request,
+            onDismiss = { quickAddRequest = null }
+        )
+    }
 
     // لوحة المسؤول السرية: PIN gate, triggered from the admin button in the
     // side drawer (see AppDrawerContent's onOpenAdmin above). Rendered as a

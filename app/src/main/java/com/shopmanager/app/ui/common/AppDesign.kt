@@ -1,6 +1,14 @@
 package com.shopmanager.app.ui.common
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.TextUnit
+import com.shopmanager.app.ui.theme.ClaudeOrangeDark
+import com.shopmanager.app.ui.theme.ClaudeOrangeLight
+import com.shopmanager.app.ui.theme.LocalIsDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -79,6 +87,41 @@ val AppSpaceSm = 8.dp
 val AppSpaceMd = 12.dp
 val AppSpaceLg = 16.dp
 val AppSpaceXl = 24.dp
+
+val AppCardRadius = 22.dp
+val AppCardLargeRadius = 24.dp
+val AppBorderWidth = 1.dp
+val AppAmountHeroSize = 40.sp
+val AppAmountLargeSize = 32.sp
+val AppAmountRowSize = 17.sp
+val AppTitleSize = 17.sp
+val AppTitleLargeSize = 24.sp
+val AppBodySize = 15.sp
+val AppBodyLargeSize = 16.sp
+val AppCaptionSize = 12.sp
+val AppCaptionLargeSize = 13.sp
+const val AppTabularFeature = "tnum"
+
+fun TextStyle.tabular(): TextStyle = copy(fontFeatureSettings = AppTabularFeature)
+
+@Composable
+fun appAmountStyle(size: TextUnit): TextStyle =
+    MaterialTheme.typography.titleMedium.copy(
+        fontSize = size,
+        lineHeight = size * 1.2f,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.sp,
+        fontFeatureSettings = AppTabularFeature
+    )
+
+@Composable
+fun appAccent(): Color = if (LocalIsDarkTheme.current) ClaudeOrangeDark else ClaudeOrangeLight
+
+@Composable
+fun appOnAccent(): Color = MaterialTheme.colorScheme.onPrimary
+
+@Composable
+fun appBorderColor(): Color = MaterialTheme.colorScheme.outlineVariant
 
 /** شكل صف داخل مجموعة عمودية: أول/وسط/أخير. */
 fun groupedRowShape(index: Int, lastIndex: Int): Shape {
@@ -493,5 +536,122 @@ fun AppStatsStrip(stats: List<AppStat>, modifier: Modifier = Modifier, compact: 
                 }
             }
         }
+    }
+}
+
+
+@Composable
+fun AppOutlinedCard(
+    modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(AppCardRadius),
+    color: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    borderColor: Color = appBorderColor(),
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    if (onClick != null) {
+        Surface(
+            onClick = onClick,
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            color = color,
+            border = BorderStroke(AppBorderWidth, borderColor),
+            content = content
+        )
+    } else {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            color = color,
+            border = BorderStroke(AppBorderWidth, borderColor),
+            content = content
+        )
+    }
+}
+
+@Composable
+fun AppPillChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selectedColor: Color = MaterialTheme.colorScheme.onSurface,
+    selectedContentColor: Color = MaterialTheme.colorScheme.surface
+) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        modifier
+            .heightIn(min = AppMinTouchTarget)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            Modifier
+                .clip(CircleShape)
+                .background(if (selected) selectedColor else cs.surfaceContainerHigh)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge.copy(fontSize = AppCaptionLargeSize),
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) selectedContentColor else cs.onSurface,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+fun AppColorPillButton(
+    label: String,
+    onClick: () -> Unit,
+    containerColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+    outlined: Boolean = false,
+    height: Dp = 52.dp
+) {
+    val cs = MaterialTheme.colorScheme
+    val inner: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(label, style = MaterialTheme.typography.titleSmall.copy(fontSize = AppBodyLargeSize), fontWeight = FontWeight.Bold, maxLines = 1)
+    }
+    if (outlined) {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            shape = CircleShape,
+            border = BorderStroke(AppBorderWidth * 1.5f, if (enabled) containerColor else cs.onSurface.copy(alpha = 0.12f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = containerColor,
+                disabledContentColor = cs.onSurface.copy(alpha = 0.38f)
+            ),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
+            modifier = modifier.height(height.coerceAtLeast(AppMinTouchTarget)),
+            content = inner
+        )
+    } else {
+        Button(
+            onClick = onClick,
+            enabled = enabled,
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = containerColor,
+                contentColor = contentColor,
+                disabledContainerColor = cs.onSurface.copy(alpha = 0.12f),
+                disabledContentColor = cs.onSurface.copy(alpha = 0.38f)
+            ),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 0.dp),
+            modifier = modifier.height(height.coerceAtLeast(AppMinTouchTarget)),
+            content = inner
+        )
     }
 }
