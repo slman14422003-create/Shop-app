@@ -217,7 +217,7 @@ internal fun MaterialsTabBar(
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    val gold = LocalSemanticColors.current.warning
+    val gold = com.shopmanager.app.ui.common.ImportantRed
     Row(
         modifier
             .fillMaxWidth()

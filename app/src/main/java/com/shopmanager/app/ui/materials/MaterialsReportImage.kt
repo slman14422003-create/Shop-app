@@ -140,7 +140,7 @@ object MaterialsReportImage {
         val pricePaint = text(brandColor, 38f, true, Paint.Align.LEFT)
         val secPaint = text(ink, 38f, true, Paint.Align.RIGHT)
         val secMeta = text(muted, 28f, false, Paint.Align.LEFT)
-        val starPaint = text(Color.parseColor("#F5A623"), 40f, true, Paint.Align.LEFT)
+        val starPaint = text(Color.parseColor("#E5383B"), 40f, true, Paint.Align.LEFT)
         val accent = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = brandColor }
 
         if (items.isEmpty()) {

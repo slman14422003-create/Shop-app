@@ -67,6 +67,7 @@ import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BlurContextMenu
 import com.shopmanager.app.ui.common.BlurMenuAction
+import com.shopmanager.app.ui.common.AppFormDialog
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.GlassSnackbarHost
 import com.shopmanager.app.ui.common.ScreenIconButton
@@ -1046,18 +1047,25 @@ private fun QuantityEntryDialog(
     var important by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    GlassAlertDialog(
-        onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(materialName) },
-        confirmLeading = {
-            com.shopmanager.app.ui.common.ImportantStarButton(
-                checked = important,
-                onCheckedChange = { important = it },
-                enabled = !isSaving
-            )
-        },
-        text = {
-            Column {
+    val showStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
+    AppFormDialog(
+        title = materialName,
+        subtitle = if (important) "مادة هامة جداً" else "إضافة إلى النواقص",
+        headerIcon = if (important) androidx.compose.material.icons.Icons.Filled.Star else androidx.compose.material.icons.Icons.Filled.Spa,
+        emphasisColor = if (important) com.shopmanager.app.ui.common.ImportantRed else androidx.compose.ui.graphics.Color.Unspecified,
+        isSaving = isSaving,
+        onDismiss = onDismiss,
+        onConfirm = {
+            if (quantity <= 0) {
+                error = "أدخل كمية صحيحة"
+            } else {
+                error = null
+                onSave((if (showStepper) quantity else 1).toDouble(), unit.label, notes.trim(), important)
+            }
+        }
+    ) {
+        Column {
+            if (showStepper) {
                 AppSectionTitle("الكمية المطلوبة", Modifier.padding(bottom = 8.dp))
                 QuantityStepper(
                     value = quantity,
@@ -1065,44 +1073,32 @@ private fun QuantityEntryDialog(
                     enabled = !isSaving,
                     onValueChange = { quantity = it.coerceAtLeast(1) }
                 )
-                AppSectionTitle("الوحدة", Modifier.padding(top = 18.dp, bottom = 8.dp))
-                UnitPicker(selected = unit, enabled = !isSaving, onSelected = { unit = it })
-                AppTextField(
-                    value = notes, onValueChange = { notes = it }, enabled = !isSaving,
-                    label = "ملاحظة (اختياري)",
-                    singleLine = false, minLines = 1, maxLines = 3,
-                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
-                )
-                error?.let {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(top = 10.dp, start = 8.dp)
-                    )
-                }
             }
-        },
-        confirmButton = {
-            TextButton(
+            AppSectionTitle("الوحدة", Modifier.padding(top = if (showStepper) 18.dp else 0.dp, bottom = 8.dp))
+            UnitPicker(selected = unit, enabled = !isSaving, onSelected = {
+                unit = it
+                if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
+            })
+            AppTextField(
+                value = notes, onValueChange = { notes = it }, enabled = !isSaving,
+                label = "ملاحظة (اختياري)",
+                singleLine = false, minLines = 1, maxLines = 3,
+                modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
+            )
+            com.shopmanager.app.ui.common.ImportantToggleCard(
+                checked = important,
+                onCheckedChange = { important = it },
                 enabled = !isSaving,
-                shape = RectangleShape,
-                onClick = {
-                    if (quantity <= 0) {
-                        error = "أدخل كمية صحيحة"
-                    } else {
-                        error = null
-                        onSave(quantity.toDouble(), unit.label, notes.trim(), important)
-                    }
-                }
-            ) {
-                if (isSaving) {
-                    com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
-                } else {
-                    Text("حفظ")
-                }
+                modifier = Modifier.padding(top = 14.dp)
+            )
+            error?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                )
             }
-        },
-        dismissButton = { TextButton(enabled = !isSaving, shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
-    )
+        }
+    }
 }

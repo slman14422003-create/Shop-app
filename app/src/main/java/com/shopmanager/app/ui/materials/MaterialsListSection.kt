@@ -388,7 +388,7 @@ internal fun MaterialRow(
     val rowFill = MaterialTheme.colorScheme.surfaceContainerHigh
     // الصف "المهم جداً" يأخذ لمسة ذهبية خفيفة بدل الإطار الملوّن القديم.
     val fill = if (material.important) {
-        LocalSemanticColors.current.warning.copy(alpha = 0.14f).compositeOver(rowFill)
+        com.shopmanager.app.ui.common.ImportantRed.copy(alpha = 0.10f).compositeOver(rowFill)
     } else rowFill
 
     Box(modifier.fillMaxWidth().graphicsLayer { scaleX = scale.value; scaleY = scale.value }) {
@@ -406,7 +406,7 @@ internal fun MaterialRow(
                     .padding(start = AppSpace2, end = AppSpace10, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val gold = LocalSemanticColors.current.warning
+                val gold = com.shopmanager.app.ui.common.ImportantRed
                 val ringColor = if (material.important) gold else MaterialTheme.colorScheme.outlineVariant
                 Box(Modifier.width(46.dp).height(56.dp)) {
                     Box(

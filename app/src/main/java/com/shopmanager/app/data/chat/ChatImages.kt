@@ -7,7 +7,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
 import android.media.ExifInterface
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
+import java.io.ByteArrayInputStream
+import java.nio.ByteBuffer
 import android.util.Base64
 import android.util.LruCache
 import kotlinx.coroutines.Dispatchers
@@ -62,66 +66,90 @@ object ChatImageCodec {
     suspend fun encode(context: Context, uri: Uri): EncodedImage? = withContext(Dispatchers.IO) {
         try {
             encodeBlocking(context.applicationContext, uri)
-        } catch (_: Throwable) {
+        } catch (t: Throwable) {
+            android.util.Log.e("ChatImageCodec", "encode failed", t)
             null
         }
     }
 
+    /**
+     * يقرأ الصورة مرة واحدة إلى الذاكرة (بعض مزودات المحتوى/منتقي الصور لا تتحمل فتح الـ stream
+     * أكثر من مرة)، ثم يفك الترميز بـ BitmapFactory وإن فشل (HEIC/AVIF…) يجرّب ImageDecoder.
+     * حلقة الضغط تقلّل الأبعاد فعلياً في كل دورة بعد الجودة الدنيا، فلا تعود null إلا لو تعذّر فك الصورة نفسها.
+     */
     private fun encodeBlocking(context: Context, uri: Uri): EncodedImage? {
-        val resolver = context.contentResolver
+        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
+        if (bytes.isEmpty()) return null
+
+        var bmp: Bitmap? = null
+        var orientationHandled = false
+
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        val opts = BitmapFactory.Options().apply {
-            inSampleSize = ImageSizing.sampleSize(bounds.outWidth, bounds.outHeight, ImageSizing.MAX_DIM)
-            inPreferredConfig = Bitmap.Config.ARGB_8888
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = ImageSizing.sampleSize(bounds.outWidth, bounds.outHeight, ImageSizing.MAX_DIM)
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            bmp = runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }.getOrNull()
         }
-        var bmp: Bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) } ?: return null
-        val degrees = runCatching {
-            resolver.openInputStream(uri)?.use { s ->
-                when (ExifInterface(s).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+        if (bmp == null && Build.VERSION.SDK_INT >= 28) {
+            bmp = runCatching {
+                ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    val (tw, th) = ImageSizing.scaledSize(info.size.width, info.size.height)
+                    decoder.setTargetSize(tw, th)
+                }
+            }.getOrNull()
+            orientationHandled = bmp != null // ImageDecoder يطبّق اتجاه EXIF بنفسه
+        }
+        var current: Bitmap = bmp ?: return null
+
+        if (!orientationHandled) {
+            val degrees = runCatching {
+                when (ExifInterface(ByteArrayInputStream(bytes)).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL
+                )) {
                     ExifInterface.ORIENTATION_ROTATE_90 -> 90f
                     ExifInterface.ORIENTATION_ROTATE_180 -> 180f
                     ExifInterface.ORIENTATION_ROTATE_270 -> 270f
                     else -> 0f
                 }
-            } ?: 0f
-        }.getOrDefault(0f)
-        if (degrees != 0f) {
-            val m = Matrix().apply { postRotate(degrees) }
-            val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
-            if (rotated !== bmp) bmp.recycle()
-            bmp = rotated
+            }.getOrDefault(0f)
+            if (degrees != 0f) {
+                val m = Matrix().apply { postRotate(degrees) }
+                val rotated = runCatching {
+                    Bitmap.createBitmap(current, 0, 0, current.width, current.height, m, true)
+                }.getOrNull()
+                if (rotated != null && rotated !== current) {
+                    current.recycle()
+                    current = rotated
+                }
+            }
         }
+
         var quality = ImageSizing.START_QUALITY
-        for (attempt in 0 until 10) {
-            val (tw, th) = ImageSizing.scaledSize(bmp.width, bmp.height)
-            val flat = flatten(bmp, tw, th)
+        var dim = ImageSizing.MAX_DIM
+        var last: EncodedImage? = null
+        for (attempt in 0 until 16) {
+            val (tw, th) = ImageSizing.scaledSize(current.width, current.height, dim)
+            val flat = flatten(current, tw, th)
             val out = ByteArrayOutputStream()
             flat.compress(Bitmap.CompressFormat.JPEG, quality, out)
-            val bytes = out.toByteArray()
+            val jpeg = out.toByteArray()
             val w = flat.width
             val h = flat.height
             flat.recycle()
-            if (bytes.size <= ImageSizing.MAX_BYTES) {
-                bmp.recycle()
-                return EncodedImage(Base64.encodeToString(bytes, Base64.NO_WRAP), w, h)
-            }
+            last = EncodedImage(Base64.encodeToString(jpeg, Base64.NO_WRAP), w, h)
+            if (jpeg.size <= ImageSizing.MAX_BYTES) break
             if (quality > ImageSizing.MIN_QUALITY) {
                 quality = ImageSizing.nextQuality(quality)
             } else {
-                val smaller = Bitmap.createScaledBitmap(
-                    bmp,
-                    max(1, (bmp.width * 0.8f).roundToInt()),
-                    max(1, (bmp.height * 0.8f).roundToInt()),
-                    true
-                )
-                if (smaller !== bmp) bmp.recycle()
-                bmp = smaller
+                dim = max(160, (dim * 0.8f).roundToInt())
             }
         }
-        bmp.recycle()
-        return null
+        current.recycle()
+        return last
     }
 
     private fun flatten(src: Bitmap, w: Int, h: Int): Bitmap {

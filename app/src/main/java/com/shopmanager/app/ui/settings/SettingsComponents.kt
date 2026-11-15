@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -175,8 +176,17 @@ private fun SettingsRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (icon != null) {
-                Icon(icon, contentDescription = null, tint = titleColor, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(16.dp))
+                val tone = if (danger) MaterialTheme.colorScheme.error else com.shopmanager.app.ui.common.appAccent()
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(13.dp))
+                        .background(tone.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, contentDescription = null, tint = tone, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(14.dp))
             }
             Column(Modifier.weight(1f)) {
                 Text(title, style = MaterialTheme.typography.bodyLarge, color = titleColor)
@@ -332,39 +342,82 @@ internal fun SettingsTopBar(title: String, onBack: () -> Unit, onInfo: () -> Uni
     }
 }
 
-/** بطاقة الحساب العلوية: الاسم في طرف وشارة الإصدار (حبة بيضاء) في الطرف الآخر. */
 @Composable
 internal fun SettingsAccountCard(name: String, badge: String) {
+    val accent = com.shopmanager.app.ui.common.appAccent()
     Surface(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(GroupLargeRadius),
+        shape = RoundedCornerShape(GroupLargeRadius + 4.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .padding(horizontal = 18.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                name,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.width(12.dp))
-            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.onSurface) {
-                Text(
-                    badge,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.surface
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(accent),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Storefront,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(30.dp)
                 )
             }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(6.dp))
+                Surface(shape = CircleShape, color = accent.copy(alpha = 0.16f)) {
+                    Text(
+                        badge,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accent
+                    )
+                }
+            }
         }
+    }
+}
+
+@Composable
+internal fun SettingsSectionHeader(text: String, modifier: Modifier = Modifier) {
+    val accent = com.shopmanager.app.ui.common.appAccent()
+    Row(
+        modifier
+            .fillMaxWidth()
+            .padding(start = 8.dp, end = 8.dp, top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .width(4.dp)
+                .height(16.dp)
+                .clip(CircleShape)
+                .background(accent)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -407,8 +460,8 @@ internal fun SettingsPillButton(label: String, onClick: () -> Unit) {
         onClick = onClick,
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.onSurface,
-            contentColor = MaterialTheme.colorScheme.surface
+            containerColor = com.shopmanager.app.ui.common.appAccent(),
+            contentColor = Color.White
         ),
         contentPadding = PaddingValues(horizontal = 28.dp),
         modifier = Modifier.height(48.dp)

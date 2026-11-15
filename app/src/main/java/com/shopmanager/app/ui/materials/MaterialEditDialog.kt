@@ -38,7 +38,12 @@ import com.shopmanager.app.ui.common.AppGroupLargeRadius
 import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.groupedRowShape
-import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.common.AppFormDialog
+import com.shopmanager.app.ui.common.ImportantToggleCard
+import com.shopmanager.app.ui.common.appAccent
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.Color
 import com.shopmanager.app.data.performance.MotionSpecs
 
 @Composable
@@ -73,94 +78,74 @@ fun MaterialEditDialog(
     // نص كيلو من 3" -> tapping "نص كيلو" would carry a leftover count.
     val showQuantityStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
 
-    GlassAlertDialog(
-        onDismissRequest = { if (!isSaving) onDismiss() },
-        title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
-        confirmLeading = {
-            com.shopmanager.app.ui.common.ImportantStarButton(
+    val red = com.shopmanager.app.ui.common.ImportantRed
+    AppFormDialog(
+        title = if (initial == null) "إضافة نقص" else "تعديل النقص",
+        subtitle = if (important) "مادة هامة جداً" else "قائمة النواقص",
+        headerIcon = if (important) Icons.Filled.Star else Icons.Filled.Spa,
+        emphasisColor = if (important) red else Color.Unspecified,
+        isSaving = isSaving,
+        onDismiss = onDismiss,
+        onConfirm = {
+            when {
+                name.isBlank() -> error = "يرجى إدخال اسم المادة"
+                quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
+                else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim(), important) }
+            }
+        }
+    ) {
+        Column {
+            Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+                AppTextField(
+                    value = name, onValueChange = { name = it }, enabled = !isSaving,
+                    label = "اسم المادة", modifier = Modifier.fillMaxWidth(),
+                    shape = groupedRowShape(0, 1)
+                )
+                if (showQuantityStepper) {
+                    QuantityStepper(
+                        value = quantity,
+                        unitLabel = unit.label,
+                        enabled = !isSaving,
+                        shape = groupedRowShape(1, 1),
+                        onValueChange = { quantity = it.coerceAtLeast(1) }
+                    )
+                }
+            }
+
+            AppSectionTitle("الوحدة", Modifier.padding(top = 18.dp, bottom = 8.dp))
+            UnitPicker(
+                selected = unit,
+                enabled = !isSaving,
+                onSelected = {
+                    unit = it
+                    if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
+                }
+            )
+
+            AppTextField(
+                value = notes, onValueChange = { notes = it }, enabled = !isSaving,
+                label = "ملاحظة (اختياري)",
+                singleLine = false, minLines = 1, maxLines = 3,
+                modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
+            )
+
+            ImportantToggleCard(
                 checked = important,
                 onCheckedChange = { important = it },
-                enabled = !isSaving
-            )
-        },
-        text = {
-            Column {
-                // الاسم + الكمية كمجموعة صفوف متلاصقة (مثل مجموعات الإعدادات).
-                Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
-                    AppTextField(
-                        value = name, onValueChange = { name = it }, enabled = !isSaving,
-                        label = "اسم المادة", modifier = Modifier.fillMaxWidth(),
-                        shape = groupedRowShape(0, 1)
-                    )
-                    if (showQuantityStepper) {
-                        QuantityStepper(
-                            value = quantity,
-                            unitLabel = unit.label,
-                            enabled = !isSaving,
-                            shape = groupedRowShape(1, 1),
-                            onValueChange = { quantity = it.coerceAtLeast(1) }
-                        )
-                    }
-                }
-
-                AppSectionTitle("الوحدة", Modifier.padding(top = 18.dp, bottom = 8.dp))
-                UnitPicker(
-                    selected = unit,
-                    enabled = !isSaving,
-                    onSelected = {
-                        unit = it
-                        if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
-                    }
-                )
-
-                AppTextField(
-                    value = notes, onValueChange = { notes = it }, enabled = !isSaving,
-                    label = "ملاحظة (اختياري)",
-                    singleLine = false, minLines = 1, maxLines = 3,
-                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
-                )
-
-                error?.let {
-                    Text(
-                        it,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(top = 10.dp, start = 8.dp)
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): TextButton's
-            // default shape is a fully-rounded pill, so even though
-            // GlassAlertDialog's DialogButtonCell already forces this button
-            // to fill its whole half of the row, the ripple/press highlight
-            // itself stayed clipped to that rounded outline instead of the
-            // actual rectangular cell. RectangleShape makes the press
-            // highlight fill the entire square cell, corner to corner.
-            TextButton(
                 enabled = !isSaving,
-                shape = RectangleShape,
-                onClick = {
-                    when {
-                        name.isBlank() -> error = "يرجى إدخال اسم المادة"
-                        quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
-                        else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim(), important) }
-                    }
-                }
-            ) {
-                if (isSaving) {
-                    Row {
-                        com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
-                        Text("  جارِ الحفظ...")
-                    }
-                } else {
-                    Text("حفظ")
-                }
+                modifier = Modifier.padding(top = 14.dp)
+            )
+
+            error?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                )
             }
-        },
-        dismissButton = { TextButton(enabled = !isSaving, shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
-    )
+        }
+    }
 }
 
 /**
@@ -196,6 +181,7 @@ fun QuantityStepper(
             icon = Icons.Default.Remove,
             contentDescription = "إنقاص",
             enabled = enabled && value > 1,
+            filled = false,
             onClick = { onValueChange(value - 1) }
         )
 
@@ -236,28 +222,31 @@ fun QuantityStepper(
             icon = Icons.Default.Add,
             contentDescription = "زيادة",
             enabled = enabled,
+            filled = true,
             onClick = { onValueChange(value + 1) }
         )
     }
 }
 
-/** زر دائري صغير للعدّاد: دائرة بلون surface فوق تعبئة الصف، أيقونة بلون onSurface. */
 @Composable
-private fun StepButton(icon: ImageVector, contentDescription: String, enabled: Boolean, onClick: () -> Unit) {
+private fun StepButton(icon: ImageVector, contentDescription: String, enabled: Boolean, filled: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
+    val accent = appAccent()
+    val bg = if (filled) accent.copy(alpha = if (enabled) 1f else 0.4f) else cs.surface
+    val tint = if (filled) Color.White else cs.onSurface.copy(alpha = if (enabled) 1f else 0.35f)
     Box(
         Modifier
-            .size(40.dp)
+            .size(44.dp)
             .clip(CircleShape)
-            .background(cs.surface)
+            .background(bg)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             icon,
             contentDescription = contentDescription,
-            tint = cs.onSurface.copy(alpha = if (enabled) 1f else 0.35f),
-            modifier = Modifier.size(20.dp)
+            tint = tint,
+            modifier = Modifier.size(22.dp)
         )
     }
 }
@@ -306,12 +295,13 @@ fun UnitPicker(selected: MaterialUnit, enabled: Boolean = true, onSelected: (Mat
 @Composable
 private fun UnitPill(option: MaterialUnit, isSelected: Boolean, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
+    val accent = appAccent()
     val bgColor by animateColorAsState(
-        targetValue = if (isSelected) cs.onSurface else cs.surfaceContainerHighest,
+        targetValue = if (isSelected) accent else cs.surfaceContainerHighest,
         animationSpec = MotionSpecs.quickSpring(), label = "unitPillBg"
     )
     val textColor by animateColorAsState(
-        targetValue = if (isSelected) cs.surface else cs.onSurface,
+        targetValue = if (isSelected) Color.White else cs.onSurface,
         animationSpec = MotionSpecs.quickSpring(), label = "unitPillText"
     )
 
