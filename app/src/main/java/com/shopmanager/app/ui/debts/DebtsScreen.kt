@@ -227,9 +227,12 @@ fun DebtsScreen(
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
         floatingActionButton = {
+            // مع أزرار التنقل (3 أزرار) كان الزر يرتفع زيادة: ارتفاع الشريط العائم المقاس يحوي أصلاً
+            // مساحة شريط النظام السفلي، والـ Scaffold يضيفها مرة ثانية لمكان الزر. نطرحها هنا مرة واحدة.
+            val navBarBottom = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
             FloatingActionButton(
                 onClick = onNewDebt,
-                modifier = Modifier.padding(bottom = LocalFloatingBottomNavHeight.current),
+                modifier = Modifier.padding(bottom = (LocalFloatingBottomNavHeight.current - navBarBottom).coerceAtLeast(0.dp)),
                 shape = CircleShape,
                 containerColor = appAccent(),
                 contentColor = appOnAccent(),
