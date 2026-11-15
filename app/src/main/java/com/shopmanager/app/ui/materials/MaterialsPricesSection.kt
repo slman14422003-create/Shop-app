@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material3.*
-import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier

@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
-import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -211,7 +210,6 @@ internal fun MaterialsSummaryCard(
 @Composable
 internal fun MaterialsTabBar(
     selected: Int,
-    veryCount: Int,
     importantCount: Int,
     regularCount: Int,
     allCount: Int,
@@ -219,8 +217,7 @@ internal fun MaterialsTabBar(
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    val red = com.shopmanager.app.ui.common.ImportantRed
-    val yellow = com.shopmanager.app.ui.common.ImportantYellow
+    val gold = LocalSemanticColors.current.warning
     Row(
         modifier
             .fillMaxWidth()
@@ -230,35 +227,27 @@ internal fun MaterialsTabBar(
         horizontalArrangement = Arrangement.spacedBy(AppSpaceXs)
     ) {
         MaterialsTabButton(
-            label = "جداً ($veryCount)",
+            label = "هامة ($importantCount)",
             selected = selected == 0,
             leadingStar = true,
-            starTint = red,
+            starTint = gold,
             onClick = { onSelect(0) },
             modifier = Modifier.weight(1f)
         )
         MaterialsTabButton(
-            label = "هامة ($importantCount)",
+            label = "الناقصة ($regularCount)",
             selected = selected == 1,
-            leadingStar = true,
-            starTint = yellow,
+            leadingStar = false,
+            starTint = gold,
             onClick = { onSelect(1) },
             modifier = Modifier.weight(1f)
         )
         MaterialsTabButton(
-            label = "ناقصة ($regularCount)",
+            label = "الكل ($allCount)",
             selected = selected == 2,
             leadingStar = false,
-            starTint = yellow,
+            starTint = gold,
             onClick = { onSelect(2) },
-            modifier = Modifier.weight(1f)
-        )
-        MaterialsTabButton(
-            label = "الكل ($allCount)",
-            selected = selected == 3,
-            leadingStar = false,
-            starTint = yellow,
-            onClick = { onSelect(3) },
             modifier = Modifier.weight(1f)
         )
     }
@@ -296,9 +285,9 @@ internal fun MaterialsTabButton(
                 Icons.Filled.Star,
                 contentDescription = null,
                 tint = if (selected) starTint else starTint.copy(alpha = 0.8f),
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(16.dp)
             )
-            Spacer(Modifier.width(AppSpace2))
+            Spacer(Modifier.width(AppSpace6))
         }
         Text(
             label,

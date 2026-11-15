@@ -161,7 +161,6 @@ class MainActivity : FragmentActivity() {
         // recomposes, so there is nothing to jitter while the phone is
         // still busy underneath.
         val splashScreen = installSplashScreen()
-        com.shopmanager.app.ui.common.AppLanguage.init(applicationContext)
         super.onCreate(savedInstanceState)
         // قياس التقطيع في نسخة debug فقط: الإطارات البطيئة تظهر في logcat بالوسم JankStats.
         if (BuildConfig.DEBUG) {
@@ -487,11 +486,6 @@ class MainActivity : FragmentActivity() {
                             CompositionLocalProvider(
                                 LocalPerformanceTier provides performanceTier,
                                 LocalRefreshRateHz provides refreshHz,
-                                com.shopmanager.app.data.performance.LocalScrollJankReporter provides (
-                                    if (performancePreference == PerformanceMode.AUTO && detectedTier != PerformanceTier.LOW)
-                                        ({ detectedTier = DevicePerformance.downgradeCachedTier(applicationContext) })
-                                    else null
-                                ),
                                 // LOW: بلا تأثير الشدّ/التوهج عند آخر القائمة (shader يُرسم كل إطار أثناء السحب).
                                 androidx.compose.foundation.LocalOverscrollFactory provides
                                     (if (performanceTier == PerformanceTier.LOW) null

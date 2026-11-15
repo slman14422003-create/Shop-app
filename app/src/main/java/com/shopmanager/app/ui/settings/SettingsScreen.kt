@@ -18,7 +18,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.outlined.Palette
@@ -47,7 +46,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.lifecycle.repeatOnLifecycle
 import com.shopmanager.app.data.cache.AppCacheManager
 import androidx.compose.material3.*
-import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -428,7 +426,6 @@ fun SettingsScreen(
     // الصفوف الآن تُبنى داخل SettingsGroup.
     // ======================================================================
     var showThemeSheet by remember { mutableStateOf(false) }
-    var showLanguageSheet by remember { mutableStateOf(false) }
     var showPerformanceSheet by remember { mutableStateOf(false) }
     var cacheSizeBytes by remember { mutableStateOf<Long?>(null) }
     var isClearingCache by remember { mutableStateOf(false) }
@@ -519,11 +516,31 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding),
             contentPadding = PaddingValues(start = ScreenGap, end = ScreenGap, top = AppSpace6, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(ScreenGap)
         ) {
             // بطاقة الحساب العلوية (اسم التطبيق + شارة الإصدار)
             item(key = "account", contentType = "card") {
                 SettingsAccountCard(name = "إدارة المحل", badge = "v${appVersion.name}")
+            }
+
+            // بطاقة بحدّ خارجي (مكان "Want more Claude?") — دليل الاستخدام
+            item(key = "guide", contentType = "card") {
+                SettingsPromoCard(
+                    title = "دليل الاستخدام",
+                    description = "تعرّف على كل ميزات التطبيق خطوة بخطوة: الديون والمواد والأسعار والنسخ الاحتياطي.",
+                    buttonLabel = "فتح الدليل",
+                    onClick = onOpenHelp
+                )
+            }
+
+            // المساعد المحلي: اقتراحات استباقية، التأكيد، الأسماء البديلة، حركة الروبوت.
+            item(key = "assistantSettings", contentType = "card") {
+                SettingsPromoCard(
+                    title = "المساعد المحلي",
+                    description = "تحكّم بالاقتراحات الاستباقية والتأكيد الدائم والأسماء البديلة وحركة الروبوت ومسح سجل المحادثة.",
+                    buttonLabel = "إعدادات المساعد",
+                    onClick = onOpenAssistantSettings
+                )
             }
 
             // تنبيه تلقائي: يظهر فقط إذا تعذر تحميل البيانات من الخادم وتوجد
@@ -568,10 +585,6 @@ fun SettingsScreen(
                 }
             }
 
-            item(key = "h_general", contentType = "header") {
-                SettingsSectionHeader("المظهر والعرض")
-            }
-
             // عام: وضع الألوان / العملة / الأداء — كل واحد يفتح ورقة اختيار
             item(key = "general", contentType = "group") {
                 SettingsGroup {
@@ -580,12 +593,6 @@ fun SettingsScreen(
                         title = "وضع الألوان",
                         subtitle = themeLabel,
                         onClick = { showThemeSheet = true }
-                    )
-                    item(
-                        icon = Icons.Outlined.Language,
-                        title = "اللغة",
-                        subtitle = com.shopmanager.app.ui.common.AppLanguage.current.nativeName,
-                        onClick = { showLanguageSheet = true }
                     )
                     item(
                         icon = Icons.Outlined.AttachMoney,
@@ -600,61 +607,6 @@ fun SettingsScreen(
                         onClick = { showPerformanceSheet = true }
                     )
                 }
-            }
-
-            item(key = "h_security", contentType = "header") {
-                SettingsSectionHeader("الأمان والخصوصية")
-            }
-
-            // الحماية
-            item(key = "security", contentType = "group") {
-                SettingsGroup {
-                    switchItem(
-                        icon = if (hasPin) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
-                        title = "قفل برمز PIN",
-                        subtitle = if (hasPin) "مفعّل — يحمي فتح التطبيق على هذا الجهاز فقط"
-                        else "غير مفعّل — فعّله لحماية التطبيق برمز محلي",
-                        checked = hasPin,
-                        onCheckedChange = { on ->
-                            if (on) {
-                                showSetPinDialog = true
-                            } else {
-                                settings.clearPin()
-                                hasPin = false
-                                applySecure()
-                            }
-                        }
-                    )
-                    if (biometricAvailable) {
-                        switchItem(
-                            icon = Icons.Outlined.Fingerprint,
-                            title = "فتح بالبصمة أو الوجه",
-                            subtitle = "بديل أسرع عن كتابة الـ PIN، ويبقى الـ PIN متاحاً دائماً",
-                            checked = biometricOn,
-                            onCheckedChange = { biometricOn = it; settings.biometricEnabled = it }
-                        )
-                    }
-                    if (hasPin) {
-                        switchItem(
-                            icon = Icons.Outlined.Timer,
-                            title = "القفل عند الخروج",
-                            subtitle = "يطلب الرمز أو البصمة كل مرة تخرج من التطبيق أو تُطفئ الشاشة",
-                            checked = autoLockOn,
-                            onCheckedChange = { autoLockOn = it; settings.autoLockOnLeave = it }
-                        )
-                        switchItem(
-                            icon = Icons.Outlined.VisibilityOff,
-                            title = "منع لقطات الشاشة",
-                            subtitle = "يخفي التطبيق في لقطة الشاشة والتسجيل وفي قائمة التطبيقات الأخيرة",
-                            checked = secureOn,
-                            onCheckedChange = { secureOn = it; settings.secureScreen = it; applySecure() }
-                        )
-                    }
-                }
-            }
-
-            item(key = "h_notif", contentType = "header") {
-                SettingsSectionHeader("الإشعارات")
             }
 
             // الإشعارات
@@ -716,54 +668,6 @@ fun SettingsScreen(
                         }
                     }
                 }
-            }
-
-            // تحذير: المفتاح مفعّل لكن النظام يمنع الإشعارات فعلياً
-            if (notificationsEnabled && !systemNotificationsAllowed) {
-                item(key = "notificationsBlocked", contentType = "banner") {
-                    GlassCard(
-                        Modifier
-                            .fillMaxWidth()
-                            .animateItem(
-                                fadeInSpec = MotionSpecs.contentTween(),
-                                placementSpec = MotionSpecs.reorderSpring(),
-                                fadeOutSpec = MotionSpecs.listItemFadeOut()
-                            ),
-                        shape = MaterialTheme.shapes.large,
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    ) {
-                        Column(Modifier.padding(AppSpaceLg)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                                Spacer(Modifier.width(AppSpaceSm))
-                                Text(
-                                    "الإشعارات موقوفة من نظام الجهاز",
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
-                            }
-                            Spacer(Modifier.height(AppSpace6))
-                            Text(
-                                if (blockedChannelLabels.isNotEmpty())
-                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع تحديداً هذه الإشعارات: ${blockedChannelLabels.joinToString("، ")} — لن تصلك حتى تُفعّلها من إعدادات إشعارات التطبيق."
-                                else
-                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع هذا التطبيق تحديداً من إظهار أي إشعار على هذا الجهاز — لن تصلك تنبيهات النواقص أو الديون الجديدة مهما حدث بالتطبيق حتى تُفعّلها من إعدادات الجهاز.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer
-                            )
-                            Spacer(Modifier.height(AppSpace10))
-                            Button(onClick = {
-                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                                context.startActivity(intent)
-                            }) { Text("فتح إعدادات الإشعارات") }
-                        }
-                    }
-                }
-            }
-
-            item(key = "h_sounds", contentType = "header") {
-                SettingsSectionHeader("الأصوات والدردشة")
             }
 
             // مدير أصوات الإشعارات والأذونات
@@ -868,8 +772,95 @@ fun SettingsScreen(
                 }
             }
 
-            item(key = "h_sync", contentType = "header") {
-                SettingsSectionHeader("المزامنة والنسخ الاحتياطي")
+            // تحذير: المفتاح مفعّل لكن النظام يمنع الإشعارات فعلياً
+            if (notificationsEnabled && !systemNotificationsAllowed) {
+                item(key = "notificationsBlocked", contentType = "banner") {
+                    GlassCard(
+                        Modifier
+                            .fillMaxWidth()
+                            .animateItem(
+                                fadeInSpec = MotionSpecs.contentTween(),
+                                placementSpec = MotionSpecs.reorderSpring(),
+                                fadeOutSpec = MotionSpecs.listItemFadeOut()
+                            ),
+                        shape = MaterialTheme.shapes.large,
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Column(Modifier.padding(AppSpaceLg)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
+                                Spacer(Modifier.width(AppSpaceSm))
+                                Text(
+                                    "الإشعارات موقوفة من نظام الجهاز",
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Spacer(Modifier.height(AppSpace6))
+                            Text(
+                                if (blockedChannelLabels.isNotEmpty())
+                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع تحديداً هذه الإشعارات: ${blockedChannelLabels.joinToString("، ")} — لن تصلك حتى تُفعّلها من إعدادات إشعارات التطبيق."
+                                else
+                                    "المفتاح أعلاه مفعّل، لكن نظام أندرويد يمنع هذا التطبيق تحديداً من إظهار أي إشعار على هذا الجهاز — لن تصلك تنبيهات النواقص أو الديون الجديدة مهما حدث بالتطبيق حتى تُفعّلها من إعدادات الجهاز.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(Modifier.height(AppSpace10))
+                            Button(onClick = {
+                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                context.startActivity(intent)
+                            }) { Text("فتح إعدادات الإشعارات") }
+                        }
+                    }
+                }
+            }
+
+            // الحماية
+            item(key = "security", contentType = "group") {
+                SettingsGroup {
+                    switchItem(
+                        icon = if (hasPin) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                        title = "قفل برمز PIN",
+                        subtitle = if (hasPin) "مفعّل — يحمي فتح التطبيق على هذا الجهاز فقط"
+                        else "غير مفعّل — فعّله لحماية التطبيق برمز محلي",
+                        checked = hasPin,
+                        onCheckedChange = { on ->
+                            if (on) {
+                                showSetPinDialog = true
+                            } else {
+                                settings.clearPin()
+                                hasPin = false
+                                applySecure()
+                            }
+                        }
+                    )
+                    if (biometricAvailable) {
+                        switchItem(
+                            icon = Icons.Outlined.Fingerprint,
+                            title = "فتح بالبصمة أو الوجه",
+                            subtitle = "بديل أسرع عن كتابة الـ PIN، ويبقى الـ PIN متاحاً دائماً",
+                            checked = biometricOn,
+                            onCheckedChange = { biometricOn = it; settings.biometricEnabled = it }
+                        )
+                    }
+                    if (hasPin) {
+                        switchItem(
+                            icon = Icons.Outlined.Timer,
+                            title = "القفل عند الخروج",
+                            subtitle = "يطلب الرمز أو البصمة كل مرة تخرج من التطبيق أو تُطفئ الشاشة",
+                            checked = autoLockOn,
+                            onCheckedChange = { autoLockOn = it; settings.autoLockOnLeave = it }
+                        )
+                        switchItem(
+                            icon = Icons.Outlined.VisibilityOff,
+                            title = "منع لقطات الشاشة",
+                            subtitle = "يخفي التطبيق في لقطة الشاشة والتسجيل وفي قائمة التطبيقات الأخيرة",
+                            checked = secureOn,
+                            onCheckedChange = { secureOn = it; settings.secureScreen = it; applySecure() }
+                        )
+                    }
+                }
             }
 
             // المزامنة
@@ -978,10 +969,6 @@ fun SettingsScreen(
                 }
             }
 
-            item(key = "h_app", contentType = "header") {
-                SettingsSectionHeader("التطبيق")
-            }
-
             // التحديثات + الذاكرة المؤقتة
             item(key = "app", contentType = "group") {
                 SettingsGroup {
@@ -1008,30 +995,6 @@ fun SettingsScreen(
                         trailing = if (isClearingCache) SpinnerTrailing else null
                     )
                 }
-            }
-
-            item(key = "h_help", contentType = "header") {
-                SettingsSectionHeader("المساعدة والمساعد")
-            }
-
-            // بطاقة بحدّ خارجي (مكان "Want more Claude?") — دليل الاستخدام
-            item(key = "guide", contentType = "card") {
-                SettingsPromoCard(
-                    title = "دليل الاستخدام",
-                    description = "تعرّف على كل ميزات التطبيق خطوة بخطوة: الديون والمواد والأسعار والنسخ الاحتياطي.",
-                    buttonLabel = "فتح الدليل",
-                    onClick = onOpenHelp
-                )
-            }
-
-            // المساعد المحلي: اقتراحات استباقية، التأكيد، الأسماء البديلة، حركة الروبوت.
-            item(key = "assistantSettings", contentType = "card") {
-                SettingsPromoCard(
-                    title = "المساعد المحلي",
-                    description = "تحكّم بالاقتراحات الاستباقية والتأكيد الدائم والأسماء البديلة وحركة الروبوت ومسح سجل المحادثة.",
-                    buttonLabel = "إعدادات المساعد",
-                    onClick = onOpenAssistantSettings
-                )
             }
         }
     }
@@ -1188,10 +1151,6 @@ fun SettingsScreen(
     // ======================================================================
     // أوراق الاختيار السفلية (بدل سرد كل الخيارات داخل الصفحة)
     // ======================================================================
-    if (showLanguageSheet) {
-        LanguageSheet(onDismiss = { showLanguageSheet = false })
-    }
-
     if (showThemeSheet) {
         ThemeModeSheet(
             current = themeMode,

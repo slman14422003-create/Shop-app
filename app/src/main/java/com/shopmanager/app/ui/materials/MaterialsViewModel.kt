@@ -1,6 +1,5 @@
 package com.shopmanager.app.ui.materials
 
-import com.shopmanager.app.data.materials.level
 import com.shopmanager.app.data.retryOnError
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -328,32 +327,11 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         SelfChangeLedger.markMaterialsDeleted(getApplication(), ids)
     }
 
-    // منع التكرار: المادة لا تُضاف إلا مرة واحدة مهما كانت أهميتها أو وزنها أو وحدتها.
-    private fun dupKey(name: String) =
-        com.shopmanager.app.assistant.engine.ArabicText.normalize(name.trim()).filter { !it.isWhitespace() }
-
-    private fun findDuplicate(name: String, exceptId: String? = null): Material? {
-        val key = dupKey(name)
-        if (key.isEmpty()) return null
-        return uiState.value.materials.firstOrNull { it.id != exceptId && dupKey(it.name) == key }
-    }
-
-    private fun sectionLabel(m: Material) = when (m.level) {
-        2 -> "المواد الهامة جداً"
-        1 -> "المواد الهامة"
-        else -> "المواد العادية"
-    }
-
-    private fun duplicateMessage(m: Material) = "المادة \"${m.name}\" مضافة مسبقاً في قسم ${sectionLabel(m)}"
-
     // BUG FIXED (لا يوجد مؤشر تحميل بواجهة إضافة/تعديل مادة): مثل نفس
     // مشكلة PersonEditDialog قديماً - onDone هون تسمح للواجهة (MaterialEditDialog/
     // QuantityEntryDialog) توقف زر الحفظ وتعرض دائرة تحميل لحد ما الكتابة
     // بفايرستور تخلص فعلياً، بدل ما توهم إنها علقت أو تسمح بضغطات متكررة.
-    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", important: Boolean = false, level: Int = if (important) 1 else 0, checkDuplicate: Boolean = true, onDone: (Boolean) -> Unit = {}) {
-        if (checkDuplicate) {
-            findDuplicate(name)?.let { _message.value = duplicateMessage(it); onDone(false); return }
-        }
+    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", important: Boolean = false, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
                 val topOrder = (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
@@ -364,8 +342,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 // where the live listener could fire first and notify this
                 // same device about the material it just added.
                 val newId = repo.addMaterial(name, quantity, unit, section.value, notes) { id -> markWrittenHere(id, name, quantity, unit) }
-                if (level > 0) repo.setPriority(newId, level, topOrder)
-                learn(name, quantity, unit, level > 0)
+                if (important) repo.setImportant(newId, true, topOrder)
+                learn(name, quantity, unit, important)
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)
@@ -381,14 +359,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             var ok = 0
             val batchId = java.util.UUID.randomUUID().toString().take(12)
             val baseOrder = (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
-            val seen = HashSet<String>()
-            val dups = ArrayList<String>()
             for (p in items) {
-                val dup = findDuplicate(p.name)
-                if (dup != null || !seen.add(dupKey(p.name))) {
-                    dups.add(if (dup != null) "${p.name} (في قسم ${sectionLabel(dup)})" else p.name)
-                    continue
-                }
                 try {
                     val id = repo.addMaterial(p.name, p.quantity, p.unit, section.value, p.notes) { newId ->
                         markWrittenHere(newId, p.name, p.quantity, p.unit)
@@ -401,18 +372,14 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
             if (ok > 0) {
-                _message.value = "تمت إضافة $ok مادة إلى النواقص" +
-                    (if (dups.isNotEmpty()) " • مضافة مسبقاً: ${dups.joinToString("، ")}" else "")
+                _message.value = "تمت إضافة $ok مادة إلى النواقص"
                 InstantBackupWorker.requestNow(getApplication())
-            } else if (dups.isNotEmpty()) {
-                _message.value = "مضافة مسبقاً: ${dups.joinToString("، ")}"
             }
             onDone(ok)
         }
     }
 
     fun updateMaterial(id: String, name: String, quantity: Double, unit: String, notes: String = "", onDone: (Boolean) -> Unit = {}) {
-        findDuplicate(name, exceptId = id)?.let { _message.value = duplicateMessage(it); onDone(false); return }
         viewModelScope.launch {
             try {
                 markWrittenHere(id, name, quantity, unit)
@@ -444,7 +411,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 repo.deleteMaterial(id)
                 if (snapshot != null) {
                     _undo.value = {
-                        addMaterial(snapshot.name, snapshot.quantity, snapshot.unit, snapshot.notes, level = snapshot.level, checkDuplicate = false)
+                        addMaterial(snapshot.name, snapshot.quantity, snapshot.unit, snapshot.notes, snapshot.important)
                     }
                 }
                 _message.value = "تم حذف المادة بنجاح"
@@ -462,20 +429,6 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
      * everything else); toggling off just flips the flag back and leaves
      * its position as-is.
      */
-    fun setLevel(material: Material, level: Int) {
-        viewModelScope.launch {
-            try {
-                val topOrder = if (level > 0) {
-                    (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
-                } else null
-                repo.setPriority(material.id, level, topOrder)
-                InstantBackupWorker.requestNow(getApplication())
-            } catch (e: Exception) {
-                _message.value = "تعذر التحديث: ${e.message ?: "تحقق من الاتصال"}"
-            }
-        }
-    }
-
     fun setImportant(material: Material, important: Boolean) {
         viewModelScope.launch {
             try {

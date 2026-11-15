@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
@@ -42,7 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.OutlinedTextField
@@ -187,8 +191,9 @@ fun AssistantChatScreen(
         }
 
         UndoBarView(assistant)
+        VoiceStatusArea(assistant) { input = it }
         QuickButtonsRow(assistant) { input = it }
-        InputBar(input, { input = it }, ::submit)
+        InputBar(input, { input = it }, ::submit, leading = { MicButton(assistant) })
     }
 
     if (showHelp) HelpSheet(onDismiss = { showHelp = false }) { text ->
@@ -294,40 +299,57 @@ private fun dayLabel(t: Long): String {
 
 @Composable
 internal fun InputBar(value: String, onChange: (String) -> Unit, onSend: () -> Unit, modifier: Modifier = Modifier, leading: (@Composable () -> Unit)? = null) {
+    val cs = MaterialTheme.colorScheme
+    val canSend = value.isNotBlank()
+    // شريط مدمج: حقل بسطر واحد (يكبر حتى 3 أسطر عند الكتابة فقط) وأزرار 44dp بدل حقل TextField
+    // الافتراضي (56dp+ وتلميحه يلتف على سطرين) فيأخذ مساحة أقل من الشاشة.
     Row(
-        modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+        modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (leading != null) leading()
-        TextField(
-            value = value,
-            onValueChange = onChange,
-            modifier = Modifier.weight(1f),
-            placeholder = { Text("اكتب أمرك… مثال: سجل على سامر 20 ألف") },
-            shape = RoundedCornerShape(28.dp),
-            maxLines = 4,
-            colors = TextFieldDefaults.colors(
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            ),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { onSend() })
-        )
+        Box(
+            Modifier
+                .weight(1f)
+                .heightIn(min = 44.dp)
+                .clip(RoundedCornerShape(22.dp))
+                .background(cs.surfaceContainerHigh)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            if (value.isEmpty()) {
+                Text(
+                    "اكتب أمرك… مثال: سجل على سامر 20 ألف",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = cs.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = cs.onSurface),
+                cursorBrush = SolidColor(cs.primary),
+                maxLines = 3,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { onSend() })
+            )
+        }
         Surface(
             onClick = onSend,
-            enabled = value.isNotBlank(),
+            enabled = canSend,
             shape = CircleShape,
-            color = if (value.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.surfaceContainerHighest,
-            modifier = Modifier.size(52.dp)
+            color = if (canSend) cs.onSurface else cs.surfaceContainerHighest,
+            modifier = Modifier.size(44.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     Icons.AutoMirrored.Filled.Send, contentDescription = "إرسال",
-                    tint = if (value.isNotBlank()) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = if (canSend) cs.surface else cs.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }

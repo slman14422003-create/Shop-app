@@ -36,7 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -86,7 +86,7 @@ fun MicButton(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) assistant.startVoice()
     }
-    Box(modifier.size(52.dp), contentAlignment = Alignment.Center) {
+    Box(modifier.size(44.dp), contentAlignment = Alignment.Center) {
         if (listening && LocalPerformanceTier.current != PerformanceTier.LOW) {
             val t = rememberInfiniteTransition(label = "micPulse")
             val p by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "p")
@@ -102,7 +102,7 @@ fun MicButton(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
             },
             shape = CircleShape,
             color = if (listening) AssistantWarnOrange else MaterialTheme.colorScheme.surfaceContainerHighest,
-            modifier = Modifier.size(52.dp)
+            modifier = Modifier.size(44.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(if (listening) Icons.Filled.Stop else Icons.Filled.Mic, contentDescription = if (listening) "إيقاف" else "تحدّث")

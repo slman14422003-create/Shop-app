@@ -81,7 +81,7 @@ fun ShopManagerTheme(
     val semanticColors = remember(useDark) { semanticColorsFor(useDark) }
 
     CompositionLocalProvider(
-        LocalLayoutDirection provides com.shopmanager.app.ui.common.AppLanguage.direction,
+        LocalLayoutDirection provides LayoutDirection.Rtl,
         LocalBrandGradientColors provides gradientColors,
         LocalSemanticColors provides semanticColors,
         LocalIsDarkTheme provides useDark

@@ -607,7 +607,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         val d = _data.value
         val k = ArabicText.stripAl(ArabicText.canonicalToken(token))
         val names = d.persons.map { it.name } + d.materials.map { it.name } + d.prices.keys + d.catalog.map { it.name }
-        return names.firstOrNull { n -> n.trim().split(RX_1_ASSISTANTVIEWMODEL).any { ArabicText.stripAl(ArabicText.canonicalToken(it)) == k } }
+        return names.firstOrNull { n -> n.trim().split(Regex("\\s+")).any { ArabicText.stripAl(ArabicText.canonicalToken(it)) == k } }
     }
 
     fun startListMode() {
@@ -1003,6 +1003,3 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         private const val UNKNOWN_REPLY = "ما فهمت الطلب تماماً 🤔 جرّب صياغة مثل: \"سجل على سامر 20 ألف\" أو اضغط ⋮ ← ما يستطيع المساعد فعله."
     }
 }
-
-// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
-private val RX_1_ASSISTANTVIEWMODEL = Regex("\\s+")

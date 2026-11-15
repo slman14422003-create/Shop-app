@@ -97,7 +97,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -779,12 +779,12 @@ private fun MessageBubble(
                             if (abs(dragPx) >= triggerPx) replyNow.value()
                             crossed = false
                             val from = dragPx
-                            scope.launch { animate(from, 0f, animationSpec = tween(com.shopmanager.app.data.performance.MotionSpecs.baseMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing)) { v, _ -> dragPx = v } }
+                            scope.launch { animate(from, 0f, animationSpec = tween(160)) { v, _ -> dragPx = v } }
                         },
                         onDragCancel = {
                             crossed = false
                             val from = dragPx
-                            scope.launch { animate(from, 0f, animationSpec = tween(com.shopmanager.app.data.performance.MotionSpecs.baseMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing)) { v, _ -> dragPx = v } }
+                            scope.launch { animate(from, 0f, animationSpec = tween(160)) { v, _ -> dragPx = v } }
                         },
                         onHorizontalDrag = { change, delta ->
                             change.consume()
@@ -1398,7 +1398,7 @@ private fun MicButton(
     val lockState = rememberUpdatedState(onLock)
     val endState = rememberUpdatedState(onEnd)
     var lockFraction by remember { mutableFloatStateOf(0f) }
-    val scale by animateFloatAsState(if (recording) 1.25f else 1f, tween(com.shopmanager.app.data.performance.MotionSpecs.fastMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing), label = "micScale")
+    val scale by animateFloatAsState(if (recording) 1.25f else 1f, tween(150), label = "micScale")
 
     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
         if (recording) {

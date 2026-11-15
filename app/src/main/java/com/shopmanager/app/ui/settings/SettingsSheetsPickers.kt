@@ -6,9 +6,6 @@ import androidx.compose.material.icons.outlined.SettingsBrightness
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Language
-import com.shopmanager.app.ui.common.AppLanguage
-import com.shopmanager.app.ui.common.Lang
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
@@ -90,27 +87,6 @@ internal fun PerformanceModeSheet(
                     subtitle = deviceText,
                     onClick = {
                         onRecheck()
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun LanguageSheet(onDismiss: () -> Unit) {
-    val context = LocalContext.current
-    val current = AppLanguage.current
-    SettingsSheet(title = "اختر اللغة", onDismiss = onDismiss) { close ->
-        SettingsGroup {
-            Lang.entries.forEach { lang ->
-                selectItem(
-                    icon = Icons.Outlined.Language,
-                    title = lang.nativeName,
-                    selected = current == lang,
-                    onClick = {
-                        AppLanguage.set(context, lang)
-                        close()
                     }
                 )
             }

@@ -1,14 +1,5 @@
 package com.shopmanager.app.assistant.ui
 
-import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material.icons.outlined.SmartToy
-import androidx.compose.material.icons.outlined.VerifiedUser
-import androidx.compose.ui.graphics.RectangleShape
-import com.shopmanager.app.ui.common.GlassAlertDialog
-import com.shopmanager.app.ui.settings.SettingsGroup
-import com.shopmanager.app.ui.settings.SettingsSectionHeader
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -31,7 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -72,19 +63,14 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
             contentPadding = PaddingValues(horizontal = AppScreenPadding, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            item {
-                SettingsGroup {
-                    switchItem(icon = Icons.Outlined.AutoAwesome, title = "الاقتراحات الاستباقية", subtitle = "اقتراحات على الرئيسية مثل مواد تتكرر في النواقص", checked = s.proactiveSuggestions) { assistant.updateSettings(s.copy(proactiveSuggestions = it)) }
-                    switchItem(icon = Icons.Outlined.VerifiedUser, title = "اطلب تأكيداً دائماً", subtitle = "بطاقة تأكيد قبل أي تنفيذ. الحذف وتعديل السعر والمبالغ غير المعتادة تُؤكَّد دائماً حتى لو أطفأته", checked = s.alwaysConfirm) { assistant.updateSettings(s.copy(alwaysConfirm = it)) }
-                    switchItem(icon = Icons.Outlined.SmartToy, title = "حركة الروبوت", subtitle = "إيقافها يثبّت الروبوت ويوفّر الأداء", checked = s.robotAnimation) { assistant.updateSettings(s.copy(robotAnimation = it)) }
-                    switchItem(icon = Icons.Outlined.Science, title = "وضع التجربة", subtitle = "ينفّذ المساعد كل شيء شكلياً بدون تغيير أي بيانات", checked = s.dryRun) { assistant.updateSettings(s.copy(dryRun = it)) }
-                    switchItem(icon = Icons.Outlined.Home, title = "الرئيسية الجديدة (المساعد)", subtitle = "إيقافها يعيد الشاشة الرئيسية الكلاسيكية", checked = s.newHome) { assistant.updateSettings(s.copy(newHome = it)) }
-                }
-            }
-            item { SettingsSectionHeader("الصوت") }
+            item { SwitchRow("الاقتراحات الاستباقية", "اقتراحات على الرئيسية مثل مواد تتكرر في النواقص", s.proactiveSuggestions) { assistant.updateSettings(s.copy(proactiveSuggestions = it)) } }
+            item { SwitchRow("اطلب تأكيداً دائماً", "بطاقة تأكيد قبل أي تنفيذ. الحذف وتعديل السعر والمبالغ غير المعتادة تُؤكَّد دائماً حتى لو أطفأته", s.alwaysConfirm) { assistant.updateSettings(s.copy(alwaysConfirm = it)) } }
+            item { SwitchRow("حركة الروبوت", "إيقافها يثبّت الروبوت ويوفّر الأداء", s.robotAnimation) { assistant.updateSettings(s.copy(robotAnimation = it)) } }
+            item { SwitchRow("وضع التجربة", "ينفّذ المساعد كل شيء شكلياً بدون تغيير أي بيانات", s.dryRun) { assistant.updateSettings(s.copy(dryRun = it)) } }
             item { VoiceSettingsSection(assistant.voice) }
+            item { SwitchRow("الرئيسية الجديدة (المساعد)", "إيقافها يعيد الشاشة الرئيسية الكلاسيكية", s.newHome) { assistant.updateSettings(s.copy(newHome = it)) } }
 
-            item { SettingsSectionHeader("الأسماء البديلة المتعلَّمة") }
+            item { Text("الأسماء البديلة المتعلَّمة", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
             if (aliases.isEmpty()) {
                 item { Text("لا توجد أسماء متعلَّمة بعد. عندما تؤكد \"تقصد X؟\" يحفظ المساعد التهجئة لاستعمالها لاحقاً.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
@@ -98,7 +84,7 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
                 }
                 item { AppPillButton("مسح كل الأسماء البديلة", { confirmAliases = true }, Modifier.fillMaxWidth(), tonal = true, height = 46.dp) }
             }
-            item { SettingsSectionHeader("القاموس الشخصي") }
+            item { Text("القاموس الشخصي", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AppPillButton("تصدير", {
@@ -114,7 +100,7 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
                     }, Modifier.weight(1f), tonal = true, height = 46.dp)
                 }
             }
-            item { SettingsSectionHeader("جمل ما فهمها المساعد") }
+            item { Text("جمل ما فهمها المساعد", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp)) }
             if (unheard.isEmpty()) {
                 item { Text("لا توجد جمل بعد.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
@@ -132,12 +118,25 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
 }
 
 @Composable
+private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    AppRowSurface(RoundedCornerShape(22.dp)) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = checked, onCheckedChange = onChange)
+        }
+    }
+}
+
+@Composable
 private fun ConfirmDialog(title: String, text: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    GlassAlertDialog(
+    AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(text) },
-        confirmButton = { TextButton(shape = RectangleShape, onClick = onConfirm) { Text("مسح") } },
-        dismissButton = { TextButton(shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
+        confirmButton = { TextButton(onClick = onConfirm) { Text("مسح") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
 }

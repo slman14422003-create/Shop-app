@@ -50,22 +50,30 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         indexesFor(snapshot)
     }
 
+    private fun knownTokenSet(snapshot: EngineSnapshot): Set<String> {
+        val known = HashSet<String>()
+        for (p in snapshot.persons) EntityMatcher.tokensOf(p.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (m in snapshot.materials) EntityMatcher.tokensOf(m.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (a in snapshot.aliases.keys) EntityMatcher.tokensOf(a).forEach { known.add(ArabicText.stripAl(it)) }
+        return known
+    }
+
     fun understand(
         input: String,
         snapshot: EngineSnapshot,
         context: ConversationContext = ConversationContext(),
         options: EngineOptions = EngineOptions()
     ): EngineOutput {
-        val idx = indexesFor(snapshot)
-        val known = idx.known
+        val known = knownTokenSet(snapshot)
         var base = tokenize(input)
         if (options.listMode && base.isNotEmpty() && base[0].norm !in Lexicon.COMMAND_VERBS) {
             base = tokenize(ListMode.asCommandText(input))
         }
         val cleaned = SpellFixer.join(SpellFixer.split(FillerWords.strip(base, known), known), known)
-        val toks = correctTokens(cleaned, idx.known)
+        val toks = correctTokens(cleaned, snapshot)
         val cleanedText = toks.joinToString(" ") { it.raw }
         if (toks.isEmpty()) return output(listOf(Command(Intent.UNKNOWN, rawText = input)), context, snapshot, cleanedText)
+        val idx = indexesFor(snapshot)
 
         val pendChoice = context.pending
         if (pendChoice?.ambiguity != null && pendChoice.ambiguity.options.isNotEmpty()) {
@@ -218,7 +226,7 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
             }
             AmbiguityKind.INTENT -> {
                 val forced = runCatching { Intent.valueOf(option.value) }.getOrNull() ?: return command
-                val toks = correctTokens(tokenize(command.rawText), indexesFor(snapshot).known)
+                val toks = correctTokens(tokenize(command.rawText), snapshot)
                 parseSegment(toks, snapshot, indexesFor(snapshot), context, null, forced, null).copy(fromChoice = true)
             }
         }
@@ -234,11 +242,6 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
     private class Indexes(snapshot: EngineSnapshot) {
         val persons = EntityMatcher.buildIndex(snapshot.persons.map { it.name to it.id }, snapshot.aliases)
         val materials = EntityMatcher.buildIndex(snapshot.materials.map { it.name to null }, snapshot.aliases)
-        val known: Set<String> = HashSet<String>().also { k ->
-            for (p in snapshot.persons) EntityMatcher.tokensOf(p.name).forEach { k.add(ArabicText.stripAl(it)) }
-            for (m in snapshot.materials) EntityMatcher.tokensOf(m.name).forEach { k.add(ArabicText.stripAl(it)) }
-            for (a in snapshot.aliases.keys) EntityMatcher.tokensOf(a).forEach { k.add(ArabicText.stripAl(it)) }
-        }
     }
 
     private fun digitsToAscii(s: String): String {
@@ -257,15 +260,15 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
 
     internal fun tokenize(input: String): List<Tok> {
         var s = digitsToAscii(input.trim())
-        s = s.replace(RX_1_ASSISTANTENGINE, " $1 ")
-        s = s.replace(RX_2_ASSISTANTENGINE, " × ")
-        s = s.replace(RX_3_ASSISTANTENGINE, " - ")
-        s = s.replace(RX_4_ASSISTANTENGINE, " / ")
+        s = s.replace(Regex("([×÷*+=])"), " $1 ")
+        s = s.replace(Regex("(?<=\\d)\\s*[xX]\\s*(?=\\d)"), " × ")
+        s = s.replace(Regex("(?<=\\d)\\s*-\\s*(?=\\d)"), " - ")
+        s = s.replace(Regex("(?<=\\d)\\s*/\\s*(?=\\d)"), " / ")
         s = s.replace("،", " , ").replace("؛", " , ")
-        s = s.replace(RX_5_ASSISTANTENGINE, " , ")
-        s = s.replace(RX_6_ASSISTANTENGINE, " ")
-        s = s.replace(RX_7_ASSISTANTENGINE, " ")
-        return s.split(RX_8_ASSISTANTENGINE).filter { it.isNotEmpty() }.map { Tok(it, ArabicText.canonicalToken(it)) }
+        s = s.replace(Regex("(?<!\\d),|,(?!\\d)"), " , ")
+        s = s.replace(Regex("[؟?!:\"'()\\[\\]{}…]"), " ")
+        s = s.replace(Regex("(?<!\\d)\\.|\\.(?!\\d)"), " ")
+        return s.split(Regex("\\s+")).filter { it.isNotEmpty() }.map { Tok(it, ArabicText.canonicalToken(it)) }
     }
 
     private val verbPool: List<String> by lazy { Lexicon.COMMAND_VERBS.filter { it.length >= 4 } }
@@ -285,8 +288,12 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
     }
 
     /** يصحح خربطة حرف واحد في أفعال الأوامر ووحدات الكمية وكلمات الأهمية، دون المساس بأسماء العملاء والمواد المعروفة. */
-    private fun correctTokens(toks: List<Tok>, known: Set<String>): List<Tok> {
+    private fun correctTokens(toks: List<Tok>, snapshot: EngineSnapshot): List<Tok> {
         if (toks.size < 2) return toks
+        val known = HashSet<String>()
+        for (p in snapshot.persons) EntityMatcher.tokensOf(p.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (m in snapshot.materials) EntityMatcher.tokensOf(m.name).forEach { known.add(ArabicText.stripAl(it)) }
+        for (a in snapshot.aliases.keys) EntityMatcher.tokensOf(a).forEach { known.add(ArabicText.stripAl(it)) }
         val out = ArrayList<Tok>(toks.size)
         for ((i, t) in toks.withIndex()) {
             val w = t.norm
@@ -1373,13 +1380,3 @@ class AssistantEngine(private val fallback: NluFallback? = null) {
         const val MIN_SCORE = 3.0
     }
 }
-
-// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
-private val RX_1_ASSISTANTENGINE = Regex("([×÷*+=])")
-private val RX_2_ASSISTANTENGINE = Regex("(?<=\\d)\\s*[xX]\\s*(?=\\d)")
-private val RX_3_ASSISTANTENGINE = Regex("(?<=\\d)\\s*-\\s*(?=\\d)")
-private val RX_4_ASSISTANTENGINE = Regex("(?<=\\d)\\s*/\\s*(?=\\d)")
-private val RX_5_ASSISTANTENGINE = Regex("(?<!\\d),|,(?!\\d)")
-private val RX_6_ASSISTANTENGINE = Regex("[؟?!:\"'()\\[\\]{}…]")
-private val RX_7_ASSISTANTENGINE = Regex("(?<!\\d)\\.|\\.(?!\\d)")
-private val RX_8_ASSISTANTENGINE = Regex("\\s+")

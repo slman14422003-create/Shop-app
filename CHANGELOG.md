@@ -1,15 +1,3 @@
-## v1.0.1212 — 2026-11-15
-- تحسينات وإصلاحات عامة
-
-## v1.0.1210 — 2026-11-15
-- Upload via GitHub Manager (1)
-
-## v1.0.1209 — 2026-11-15
-- Upload via GitHub Manager (1)
-
-## v1.0.1207 — 2026-11-15
-- Upload via GitHub Manager (1)
-
 ## v1.0.1193 — 2026-11-14
 - Upload via GitHub Manager
 

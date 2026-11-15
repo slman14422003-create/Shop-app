@@ -1,7 +1,5 @@
 package com.shopmanager.app.ui.materials
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,7 +15,7 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -35,18 +33,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialUnit
-import com.shopmanager.app.data.materials.level
 import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppGroupLargeRadius
 import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.groupedRowShape
-import com.shopmanager.app.ui.common.AppFormSheet
-import com.shopmanager.app.ui.common.PrioritySelector
-import com.shopmanager.app.ui.common.appAccent
-import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.ui.graphics.Color
+import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.data.performance.MotionSpecs
 
 @Composable
@@ -54,7 +46,7 @@ fun MaterialEditDialog(
     initial: Material?,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (name: String, quantity: Double, unit: String, notes: String, level: Int) -> Unit
+    onSave: (name: String, quantity: Double, unit: String, notes: String, important: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     // FIX: quantity used to be a free-typed decimal field, which is why
@@ -68,7 +60,7 @@ fun MaterialEditDialog(
     }
     var unit by remember { mutableStateOf(MaterialUnit.fromLabel(initial?.unit ?: MaterialUnit.KG.label)) }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
-    var level by remember { mutableStateOf(initial?.level ?: 0) }
+    var important by remember { mutableStateOf(initial?.important ?: false) }
     var error by remember { mutableStateOf<String?>(null) }
 
     // FIX: a fixed fraction size (نص كيلو، ربع كيلو، لوقية، نص لوقية، ربع
@@ -81,38 +73,37 @@ fun MaterialEditDialog(
     // نص كيلو من 3" -> tapping "نص كيلو" would carry a leftover count.
     val showQuantityStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
 
-    val levelTone = com.shopmanager.app.ui.common.priorityColor(level)
-    var showNote by remember { mutableStateOf(notes.isNotBlank()) }
-    AppFormSheet(
-        title = if (initial == null) "إضافة نقص" else "تعديل النقص",
-        subtitle = when (level) { 2 -> "مادة هامة جداً"; 1 -> "مادة هامة"; else -> "قائمة النواقص" },
-        headerIcon = if (level > 0) Icons.Filled.Star else Icons.Filled.Spa,
-        emphasisColor = if (level > 0) levelTone else Color.Unspecified,
-        isSaving = isSaving,
-        onDismiss = onDismiss,
-        onConfirm = {
-            when {
-                name.isBlank() -> error = "يرجى إدخال اسم المادة"
-                quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
-                else -> { error = null; onSave((initial?.name ?: name).trim(), quantity.toDouble(), unit.label, notes.trim(), level) }
-            }
-        }
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            AppTextField(
-                value = name, onValueChange = { if (initial == null) name = it }, enabled = initial == null && !isSaving,
-                label = "اسم المادة", modifier = Modifier.fillMaxWidth()
+    GlassAlertDialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = { Text(if (initial == null) "إضافة نقص" else "تعديل النقص") },
+        confirmLeading = {
+            com.shopmanager.app.ui.common.ImportantStarButton(
+                checked = important,
+                onCheckedChange = { important = it },
+                enabled = !isSaving
             )
-            if (showQuantityStepper) {
-                QuantityStepper(
-                    value = quantity,
-                    unitLabel = unit.label,
-                    enabled = !isSaving,
-                    onValueChange = { quantity = it.coerceAtLeast(1) }
-                )
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppSectionTitle("الوحدة")
+        },
+        text = {
+            Column {
+                // الاسم + الكمية كمجموعة صفوف متلاصقة (مثل مجموعات الإعدادات).
+                Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
+                    AppTextField(
+                        value = name, onValueChange = { name = it }, enabled = !isSaving,
+                        label = "اسم المادة", modifier = Modifier.fillMaxWidth(),
+                        shape = groupedRowShape(0, 1)
+                    )
+                    if (showQuantityStepper) {
+                        QuantityStepper(
+                            value = quantity,
+                            unitLabel = unit.label,
+                            enabled = !isSaving,
+                            shape = groupedRowShape(1, 1),
+                            onValueChange = { quantity = it.coerceAtLeast(1) }
+                        )
+                    }
+                }
+
+                AppSectionTitle("الوحدة", Modifier.padding(top = 18.dp, bottom = 8.dp))
                 UnitPicker(
                     selected = unit,
                     enabled = !isSaving,
@@ -121,47 +112,55 @@ fun MaterialEditDialog(
                         if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
                     }
                 )
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppSectionTitle("الأهمية")
-                PrioritySelector(level = level, onLevelChange = { level = it }, enabled = !isSaving)
-            }
-            NoteField(notes = notes, onChange = { notes = it }, expanded = showNote, onExpand = { showNote = true }, enabled = !isSaving)
-            error?.let {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-        }
-    }
-}
 
-@Composable
-internal fun NoteField(notes: String, onChange: (String) -> Unit, expanded: Boolean, onExpand: () -> Unit, enabled: Boolean) {
-    if (expanded) {
-        AppTextField(
-            value = notes, onValueChange = onChange, enabled = enabled,
-            label = "ملاحظة (اختياري)",
-            singleLine = false, minLines = 1, maxLines = 3,
-            modifier = Modifier.fillMaxWidth()
-        )
-    } else {
-        Row(
-            Modifier
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(enabled = enabled, role = Role.Button, onClick = onExpand)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("إضافة ملاحظة", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+                AppTextField(
+                    value = notes, onValueChange = { notes = it }, enabled = !isSaving,
+                    label = "ملاحظة (اختياري)",
+                    singleLine = false, minLines = 1, maxLines = 3,
+                    modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
+                )
+
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): TextButton's
+            // default shape is a fully-rounded pill, so even though
+            // GlassAlertDialog's DialogButtonCell already forces this button
+            // to fill its whole half of the row, the ripple/press highlight
+            // itself stayed clipped to that rounded outline instead of the
+            // actual rectangular cell. RectangleShape makes the press
+            // highlight fill the entire square cell, corner to corner.
+            TextButton(
+                enabled = !isSaving,
+                shape = RectangleShape,
+                onClick = {
+                    when {
+                        name.isBlank() -> error = "يرجى إدخال اسم المادة"
+                        quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
+                        else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim(), important) }
+                    }
+                }
+            ) {
+                if (isSaving) {
+                    Row {
+                        com.shopmanager.app.ui.common.AppSpinner(size = 16.dp, color = androidx.compose.material3.LocalContentColor.current)
+                        Text("  جارِ الحفظ...")
+                    }
+                } else {
+                    Text("حفظ")
+                }
+            }
+        },
+        dismissButton = { TextButton(enabled = !isSaving, shape = RectangleShape, onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 /**
@@ -186,7 +185,7 @@ fun QuantityStepper(
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp)
+            .heightIn(min = 84.dp)
             .clip(shape)
             .background(cs.surfaceContainerHighest)
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -197,7 +196,6 @@ fun QuantityStepper(
             icon = Icons.Default.Remove,
             contentDescription = "إنقاص",
             enabled = enabled && value > 1,
-            filled = false,
             onClick = { onValueChange(value - 1) }
         )
 
@@ -238,31 +236,28 @@ fun QuantityStepper(
             icon = Icons.Default.Add,
             contentDescription = "زيادة",
             enabled = enabled,
-            filled = true,
             onClick = { onValueChange(value + 1) }
         )
     }
 }
 
+/** زر دائري صغير للعدّاد: دائرة بلون surface فوق تعبئة الصف، أيقونة بلون onSurface. */
 @Composable
-private fun StepButton(icon: ImageVector, contentDescription: String, enabled: Boolean, filled: Boolean, onClick: () -> Unit) {
+private fun StepButton(icon: ImageVector, contentDescription: String, enabled: Boolean, onClick: () -> Unit) {
     val cs = MaterialTheme.colorScheme
-    val accent = appAccent()
-    val bg = if (filled) accent.copy(alpha = if (enabled) 1f else 0.4f) else cs.surface
-    val tint = if (filled) Color.White else cs.onSurface.copy(alpha = if (enabled) 1f else 0.35f)
     Box(
         Modifier
-            .size(44.dp)
+            .size(40.dp)
             .clip(CircleShape)
-            .background(bg)
+            .background(cs.surface)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             icon,
             contentDescription = contentDescription,
-            tint = tint,
-            modifier = Modifier.size(22.dp)
+            tint = cs.onSurface.copy(alpha = if (enabled) 1f else 0.35f),
+            modifier = Modifier.size(20.dp)
         )
     }
 }
@@ -286,43 +281,46 @@ private val MaterialUnit.pickerLabel: String
  */
 @Composable
 fun UnitPicker(selected: MaterialUnit, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
-    val options = listOf(
-        MaterialUnit.KG, MaterialUnit.HALF_KG, MaterialUnit.QUARTER_KG,
-        MaterialUnit.OKE, MaterialUnit.HALF_OKE, MaterialUnit.QUARTER_OKE,
-        MaterialUnit.NONE
+    val weightRows = listOf(
+        listOf(MaterialUnit.KG, MaterialUnit.HALF_KG, MaterialUnit.QUARTER_KG),
+        listOf(MaterialUnit.OKE, MaterialUnit.HALF_OKE, MaterialUnit.QUARTER_OKE)
     )
-    Row(
-        modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    Column(
+        modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        options.forEach { option ->
-            UnitPill(option = option, isSelected = option == selected, enabled = enabled, onSelected = onSelected)
+        weightRows.forEach { row ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                row.forEach { option ->
+                    UnitPill(option = option, isSelected = option == selected, enabled = enabled, onSelected = onSelected, modifier = Modifier.weight(1f))
+                }
+            }
         }
+        UnitPill(option = MaterialUnit.NONE, isSelected = selected == MaterialUnit.NONE, enabled = enabled, onSelected = onSelected, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun UnitPill(option: MaterialUnit, isSelected: Boolean, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
     val cs = MaterialTheme.colorScheme
-    val accent = appAccent()
     val bgColor by animateColorAsState(
-        targetValue = if (isSelected) accent else cs.surfaceContainerHighest,
+        targetValue = if (isSelected) cs.onSurface else cs.surfaceContainerHighest,
         animationSpec = MotionSpecs.quickSpring(), label = "unitPillBg"
     )
     val textColor by animateColorAsState(
-        targetValue = if (isSelected) Color.White else cs.onSurface,
+        targetValue = if (isSelected) cs.surface else cs.onSurface,
         animationSpec = MotionSpecs.quickSpring(), label = "unitPillText"
     )
 
     Box(
         modifier
-            .height(42.dp)
+            .height(46.dp)
             .clip(CircleShape)
             .background(bgColor)
-            .clickable(enabled = enabled, role = Role.Button, onClick = { onSelected(option) })
-            .padding(horizontal = 18.dp),
+            .clickable(enabled = enabled, role = Role.Button, onClick = { onSelected(option) }),
         contentAlignment = Alignment.Center
     ) {
         Text(

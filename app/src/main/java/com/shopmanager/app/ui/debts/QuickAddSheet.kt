@@ -8,20 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.text.style.TextOverflow
-import com.shopmanager.app.ui.common.avatarColorFor
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -36,7 +25,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -118,16 +107,11 @@ fun QuickAddSheet(
     val recents = remember(state.persons, state.debts) { recentPersons(state.persons, state.debts) }
     val selected = state.persons.firstOrNull { it.id == selectedId }
     val candidates = if (mode == QuickAddMode.PAY) recents.filter { it.amount > 0 } else recents
-    // كل العملاء المسجّلين (الأحدث أولاً) بدل 6 فقط، لتصل لأي عميل بضغطة وتمرير.
     val chips = remember(candidates, selected) {
-        if (selected != null && candidates.none { it.id == selected.id } && (mode == QuickAddMode.DEBT || selected.amount > 0)) {
-            listOf(selected) + candidates
-        } else candidates
-    }
-    val chipsListState = rememberLazyListState()
-    LaunchedEffect(selectedId, mode, chips.size) {
-        val i = chips.indexOfFirst { it.id == selectedId }
-        if (i >= 0) chipsListState.animateScrollToItem(i + if (mode == QuickAddMode.DEBT) 1 else 0)
+        val base = candidates.take(6)
+        if (selected != null && base.none { it.id == selected.id } && (mode == QuickAddMode.DEBT || selected.amount > 0)) {
+            listOf(selected) + base.take(5)
+        } else base
     }
 
     val amount = digits.toDoubleOrNull() ?: 0.0
@@ -198,30 +182,29 @@ fun QuickAddSheet(
                 }
             )
 
-            if (!personLocked) LazyRow(
-                state = chipsListState,
-                modifier = Modifier.fillMaxWidth(),
+            if (!personLocked) Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                contentPadding = PaddingValues(horizontal = 2.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 if (mode == QuickAddMode.DEBT) {
-                    item(key = "new") {
-                        PersonChip(
-                            name = "جديد", subtitle = null, isNew = true, selected = creating,
-                            accent = accent, onAccent = appOnAccent(),
-                            onClick = { creating = !creating; if (creating) selectedId = null }
-                        )
-                    }
+                    AppPillChip(
+                        label = "+ جديد",
+                        selected = creating,
+                        onClick = { creating = !creating; if (creating) selectedId = null },
+                        selectedColor = accent,
+                        selectedContentColor = appOnAccent()
+                    )
                 }
-                items(chips, key = { it.id }) { person ->
-                    PersonChip(
-                        name = person.name,
-                        subtitle = if (person.amount > 0) Formatters.number(person.amount) else null,
-                        isNew = false,
+                chips.forEach { person ->
+                    AppPillChip(
+                        label = person.name,
                         selected = !creating && person.id == selectedId,
-                        accent = accent, onAccent = appOnAccent(),
-                        onClick = { creating = false; selectedId = person.id }
+                        onClick = { creating = false; selectedId = person.id },
+                        selectedColor = accent,
+                        selectedContentColor = appOnAccent()
                     )
                 }
             }
@@ -373,61 +356,4 @@ private fun NumKey(
             .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) { content() }
-}
-
-
-@Composable
-private fun PersonChip(
-    name: String,
-    subtitle: String?,
-    isNew: Boolean,
-    selected: Boolean,
-    accent: androidx.compose.ui.graphics.Color,
-    onAccent: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit
-) {
-    val cs = MaterialTheme.colorScheme
-    val bg by animateColorAsState(if (selected) accent else cs.surfaceContainerHigh, label = "chipBg")
-    val fg = if (selected) onAccent else cs.onSurface
-    Row(
-        Modifier
-            .heightIn(min = 48.dp)
-            .clip(CircleShape)
-            .background(bg)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(start = 6.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier
-                .size(34.dp)
-                .clip(CircleShape)
-                .background(if (selected) onAccent.copy(alpha = 0.22f) else if (isNew) cs.onSurface.copy(alpha = 0.10f) else avatarColorFor(name)),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isNew) Icon(Icons.Filled.Add, null, tint = fg, modifier = Modifier.size(18.dp))
-            else Text(
-                name.trim().take(1),
-                color = if (selected) onAccent else androidx.compose.ui.graphics.Color.White,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-        Column(Modifier.padding(start = 8.dp).widthIn(max = 140.dp)) {
-            Text(
-                name,
-                style = MaterialTheme.typography.labelLarge.copy(fontSize = AppCaptionLargeSize),
-                fontWeight = FontWeight.SemiBold,
-                color = fg,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (subtitle != null) Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp).tabular(),
-                color = fg.copy(alpha = 0.7f),
-                maxLines = 1
-            )
-        }
-    }
 }

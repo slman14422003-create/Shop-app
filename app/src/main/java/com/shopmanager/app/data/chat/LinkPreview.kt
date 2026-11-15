@@ -47,10 +47,10 @@ object HtmlMeta {
             .replace("&lt;", "<")
             .replace("&gt;", ">")
             .replace("&nbsp;", " ")
-        out = RX_1_LINKPREVIEW.replace(out) { m ->
+        out = Regex("&#(\\d{1,6});").replace(out) { m ->
             m.groupValues[1].toIntOrNull()?.let { cp -> runCatching { String(Character.toChars(cp)) }.getOrNull() } ?: m.value
         }
-        out = RX_2_LINKPREVIEW.replace(out) { m ->
+        out = Regex("&#[xX]([0-9a-fA-F]{1,6});").replace(out) { m ->
             m.groupValues[1].toIntOrNull(16)?.let { cp -> runCatching { String(Character.toChars(cp)) }.getOrNull() } ?: m.value
         }
         return out
@@ -182,7 +182,3 @@ object LinkPreviewRepository {
         }
     }
 }
-
-// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
-private val RX_1_LINKPREVIEW = Regex("&#(\\d{1,6});")
-private val RX_2_LINKPREVIEW = Regex("&#[xX]([0-9a-fA-F]{1,6});")

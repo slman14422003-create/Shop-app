@@ -4,10 +4,7 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /** مدخل في فهرس المطابقة: الاسم الأصلي + صيغه المطبَّعة (الاسم الكامل والأسماء البديلة). */
-internal class IndexEntry(val canonical: String, val id: String?, val forms: List<List<String>>, val aliasForms: List<List<String>>) {
-    val formLen: Int = forms.firstOrNull()?.joinToString(" ")?.length ?: 0
-    val formSize: Int = forms.firstOrNull()?.size ?: 0
-}
+internal class IndexEntry(val canonical: String, val id: String?, val forms: List<List<String>>, val aliasForms: List<List<String>>)
 
 internal class SpanMatch(
     val start: Int,
@@ -32,10 +29,8 @@ internal object EntityMatcher {
         else -> MatchLevel.NONE
     }
 
-    private val WS = Regex("\\s+")
-
     fun tokensOf(name: String): List<String> =
-        name.trim().split(WS).filter { it.isNotEmpty() }.map { ArabicText.canonicalToken(it) }
+        name.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.map { ArabicText.canonicalToken(it) }
 
     private fun key(tokens: List<String>): List<String> {
         val kept = tokens.filter { !ArabicText.isTitle(it) }.ifEmpty { tokens }
@@ -70,10 +65,8 @@ internal object EntityMatcher {
     }
 
     /** تشابه بين نص كتبه المستخدم وصيغة اسم محفوظ (كلاهما قائمة توكنات بلا ألقاب). */
-    fun scoreForm(spanIn: List<String>, form: List<String>): Double = scoreKeyed(key(spanIn), form)
-
-    /** نفس [scoreForm] لكن على مقطع جاهز بعد [key] لتفادي إعادة التطبيع لكل مدخل في الفهرس. */
-    fun scoreKeyed(span: List<String>, form: List<String>): Double {
+    fun scoreForm(spanIn: List<String>, form: List<String>): Double {
+        val span = key(spanIn)
         if (span.isEmpty() || form.isEmpty()) return 0.0
         if (span == form) return 1.0
         if (span.size < form.size) {
@@ -103,10 +96,10 @@ internal object EntityMatcher {
 
     private fun entryScore(span: List<String>, e: IndexEntry): Pair<Double, Boolean> {
         var best = 0.0
-        for (f in e.forms) best = max(best, scoreKeyed(span, f))
+        for (f in e.forms) best = max(best, scoreForm(span, f))
         var viaAlias = false
         for (f in e.aliasForms) {
-            val s = scoreKeyed(span, f)
+            val s = scoreForm(span, f)
             if (s >= 0.999 && best < 0.999) { best = 1.0; viaAlias = true }
         }
         return best to viaAlias
@@ -114,17 +107,15 @@ internal object EntityMatcher {
 
     /** أفضل المرشحين لمقطع، مرتبين تنازلياً (بعد حذف الألقاب). */
     fun candidatesFor(span: List<String>, index: List<IndexEntry>, limit: Int = 4): Pair<List<Candidate>, Boolean> {
-        val spanKey = key(span)
-        val spanLen = spanKey.joinToString(" ").length
-        val spanSize = spanKey.size
+        val spanLen = key(span).joinToString(" ").length
         val out = ArrayList<Candidate>()
         var alias = false
         for (e in index) {
-            val formLen = e.formLen
-            if (e.aliasForms.isEmpty() && spanLen > 0 && spanSize == e.formSize &&
-                abs(formLen - spanLen) > max(4, formLen / 2 + 2)
+            val formLen = e.forms.firstOrNull()?.joinToString(" ")?.length ?: 0
+            if (e.aliasForms.isEmpty() && abs(formLen - spanLen) > max(4, formLen / 2 + 2) && spanLen > 0 &&
+                key(span).size == (e.forms.firstOrNull()?.size ?: 0)
             ) continue
-            val (s, a) = entryScore(spanKey, e)
+            val (s, a) = entryScore(span, e)
             if (s >= MEDIUM) { out.add(Candidate(e.canonical, e.id, s)); if (a && s >= 0.999) alias = true }
         }
         out.sortByDescending { it.score }

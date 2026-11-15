@@ -58,7 +58,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 
 /*
  * AppPerformance.kt — ملف الأداء والحركة الوحيد في التطبيق. كل ما يقرر "كم تأثيراً يتحمل هذا الجهاز"
@@ -156,7 +155,7 @@ object DevicePerformance {
     private const val KEY_TIER = "performance_tier"
     private const val KEY_DETECTION_VERSION = "performance_tier_version"
     // ارفع هذا الرقم كلما تغيّر منطق [currentDeviceInfo].
-    private const val CURRENT_DETECTION_VERSION = 5
+    private const val CURRENT_DETECTION_VERSION = 4
 
     private const val LOW_RAM_THRESHOLD_MB = 3072L
     // OpenGL ES 3.0 = 0x30000 (النسخة الرئيسية في أعلى 16 بت).
@@ -183,13 +182,6 @@ object DevicePerformance {
         val tier: PerformanceTier
     )
 
-    @Suppress("DEPRECATION")
-    private fun maxDisplayHz(context: Context): Float = runCatching {
-        val wm = context.getSystemService(Context.WINDOW_SERVICE) as android.view.WindowManager
-        val d = wm.defaultDisplay
-        d.supportedModes.maxOfOrNull { it.refreshRate } ?: d.refreshRate
-    }.getOrDefault(0f)
-
     fun currentDeviceInfo(context: Context): DeviceInfo {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
         val memoryInfo = ActivityManager.MemoryInfo()
@@ -207,13 +199,8 @@ object DevicePerformance {
             memoryClassMb in 1..BALANCED_MEMORY_CLASS_MB
         // الأجهزة القديمة جداً: أندرويد 9 أو أقدم — معالجاتها الرسومية وأنظمتها لا تتحمل أي تأثيرات.
         val veryOld = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
-        // شاشة 60Hz أو أقل على جهاز قديم/محدود: ميزانية الإطار 16.6ms فقط، فنبدأ مباشرة بالوضع الاقتصادي.
-        val maxHz = maxDisplayHz(context)
-        val slowDisplay = maxHz in 1f..61f
-        val oldOrLimited = Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q || totalRamMb in 1..4600L || cores in 1..6
         val tier = when {
             osFlaggedLowRam || weakGpu || weakMemoryClass || veryOld || lowRam -> PerformanceTier.LOW
-            slowDisplay && oldOrLimited -> PerformanceTier.LOW
             midRange -> PerformanceTier.BALANCED
             else -> PerformanceTier.STANDARD
         }
@@ -391,81 +378,6 @@ object FrameJankGuard {
     }
 }
 
-// ───────────────────────── 4.6) رصد تقطع التمرير الفعلي ─────────────────────────
-
-/**
- * يقيس زمن الإطارات **أثناء التمرير فقط** (لا يعمل أي استدعاء إطارات والقائمة ساكنة).
- * أول إطارات كل تمريرة تُتجاهل، وإن تجاوزت نسبة الإطارات البطيئة 25% من 90 إطاراً
- * يُستدعى [onJank] لينزل التطبيق بالمستوى خطوة (ويُحفظ الحكم). يدعم شاشات 60Hz وأقل:
- * ميزانية الإطار تُحسب من min(معدل الشاشة، 60).
- */
-object ScrollJankMeter {
-    private const val WARMUP_FRAMES = 6
-    private const val BATCH_FRAMES = 90
-    private const val JANK_FACTOR = 1.6f
-    private const val JANK_RATIO = 0.25f
-    private const val MAX_GAP_NS = 120_000_000L
-    private var total = 0
-    private var jank = 0
-
-    fun start(refreshHz: () -> Float, onJank: () -> Unit): () -> Unit {
-        val choreographer = Choreographer.getInstance()
-        var active = true
-        var last = 0L
-        var seen = 0
-        val cb = object : Choreographer.FrameCallback {
-            override fun doFrame(frameTimeNanos: Long) {
-                if (!active) return
-                if (last != 0L) {
-                    val delta = frameTimeNanos - last
-                    seen++
-                    if (seen > WARMUP_FRAMES && delta < MAX_GAP_NS) {
-                        val budget = 1_000_000_000f / refreshHz().coerceIn(30f, 60f)
-                        total++
-                        if (delta > budget * JANK_FACTOR) jank++
-                        if (total >= BATCH_FRAMES) {
-                            val bad = jank.toFloat() / total > JANK_RATIO
-                            total = 0
-                            jank = 0
-                            if (bad) { active = false; onJank(); return }
-                        }
-                    }
-                }
-                last = frameTimeNanos
-                choreographer.postFrameCallback(this)
-            }
-        }
-        choreographer.postFrameCallback(cb)
-        return { active = false; choreographer.removeFrameCallback(cb) }
-    }
-}
-
-/** يُستدعى من MainActivity: ينزل بالمستوى حين يرصد [ScrollJankMeter] تقطعاً (وضع «تلقائي» فقط). */
-val LocalScrollJankReporter = staticCompositionLocalOf<(() -> Unit)?> { null }
-
-/** ضعه داخل أي شاشة فيها قائمة طويلة: يقيس التمرير الفعلي ولا يكلّف شيئاً والقائمة ساكنة. */
-@Composable
-fun ScrollJankWatch(state: androidx.compose.foundation.lazy.LazyListState) {
-    val reporter = LocalScrollJankReporter.current ?: return
-    val tier = LocalPerformanceTier.current
-    if (tier == PerformanceTier.LOW) return
-    val hz = LocalRefreshRateHz.current
-    androidx.compose.runtime.LaunchedEffect(state, tier) {
-        androidx.compose.runtime.snapshotFlow { state.isScrollInProgress }.collect { scrolling ->
-            if (!scrolling) return@collect
-            var stop: (() -> Unit)? = null
-            var reported = false
-            stop = ScrollJankMeter.start({ hz }) { reported = true; reporter() }
-            try {
-                androidx.compose.runtime.snapshotFlow { state.isScrollInProgress }.first { !it }
-            } finally {
-                stop?.invoke()
-            }
-            if (reported) return@collect
-        }
-    }
-}
-
 // ───────────────────────── 5) توفير القيم لشجرة Compose ─────────────────────────
 
 /** يُوفَّر مرة واحدة قرب جذر الشجرة (MainActivity)؛ الافتراضي STANDARD كي تعرض المعاينات
@@ -612,14 +524,14 @@ object MotionSpecs {
     @Composable
     fun navMillis(): Int = when (LocalPerformanceTier.current) {
         PerformanceTier.LOW -> 160
-        PerformanceTier.BALANCED -> 300
-        PerformanceTier.STANDARD -> 380
+        PerformanceTier.BALANCED -> 320
+        PerformanceTier.STANDARD -> 400
     }
 
     /** مدة انتقال التبويبات (الـ pager) بالـ ms. */
     @Composable
     fun pagerMillis(): Int = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 160
+        PerformanceTier.LOW -> 175
         PerformanceTier.BALANCED -> 300
         PerformanceTier.STANDARD -> 380
     }
@@ -866,8 +778,7 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
         PerformanceTier.BALANCED -> 6
         PerformanceTier.STANDARD -> MAX_ANIMATED_INDEX
     }
-    val slowDisplay = LocalRefreshRateHz.current < 61f && tier != PerformanceTier.STANDARD
-    val reduce = MotionSpecs.reduceMotion() || slowDisplay
+    val reduce = MotionSpecs.reduceMotion()
     val played = rememberSaveable { mutableStateOf(false) }
     // تُحسب مرة واحدة عند دخول هذا الصف التركيب (لا تتغير بعدها) — وهذا ما
     // يجعل الشرط أدناه ثابتاً ولا يقطع الحركة حين نكتب played = true.

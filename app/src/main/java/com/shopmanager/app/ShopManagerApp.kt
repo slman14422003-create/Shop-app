@@ -45,7 +45,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
-import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -150,6 +149,9 @@ internal fun ShopManagerApp(
     // DebtsScreen's `addPersonRequested` parameter).
     var addPersonRequested by remember { mutableStateOf(false) }
     var quickAddRequest by remember { mutableStateOf<QuickAddRequest?>(null) }
+    val micPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) assistantViewModel.startVoice()
+    }
     val globalSnackHost = remember { SnackbarHostState() }
     val debtsMessage by debtsViewModel.message.collectAsStateWithLifecycle()
     // Same request/handled pattern as addPersonRequested just above, for
@@ -339,6 +341,15 @@ internal fun ShopManagerApp(
             }
         }
     }
+    val openAssistantVoice: () -> Unit = {
+        navController.safeNavigate(ROUTE_ASSISTANT)
+        if (ContextCompat.checkSelfPermission(adminContext, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            assistantViewModel.startVoice()
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     // PERF (low-end tier): a fade still allocates a graphicsLayer and runs
     // a compositor pass every frame of the transition. That's cheap on a
     // Samsung A16-class device but is exactly the kind of per-frame cost
@@ -470,16 +481,14 @@ internal fun ShopManagerApp(
                     // بدل تلاشٍ متقاطع لشاشتين كاملتين = نصف عمل المعالج الرسومي على 40Hz.
                     isLowTier -> ExitTransition.None
                     isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
-                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 } +
-                        scaleOut(pushScaleSpec, targetScale = 0.94f)
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 }
                 }
             },
             popEnterTransition = {
                 when {
                     isLowTier -> EnterTransition.None
                     isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
-                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 } +
-                        scaleIn(pushScaleSpec, initialScale = 0.94f)
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 }
                 }
             },
             popExitTransition = {
@@ -541,9 +550,9 @@ internal fun ShopManagerApp(
                                     val off = kotlin.math.abs(
                                         (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
                                     ).coerceIn(0f, 1f)
+                                    alpha = 1f - 0.65f * off
                                     if (richPagerTransition) {
-                                        alpha = 1f - 0.35f * off
-                                        val sc = 1f - 0.06f * off
+                                        val sc = 1f - 0.08f * off
                                         scaleX = sc
                                         scaleY = sc
                                     }
@@ -560,13 +569,13 @@ internal fun ShopManagerApp(
                             assistant = assistantViewModel,
                             materialsViewModel = materialsViewModel,
                             onOpenDrawer = { menuOpen = true },
+                            onOpenActivity = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) },
                             onOpenChat = { navController.safeNavigate(ROUTE_ASSISTANT) },
                             onNavigateToDebts = { openPager(PAGE_DEBTS) },
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
                             onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
-                            onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
-                            onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
-                            onNewMaterial = { navController.safeNavigate(ROUTE_MATERIAL_CATALOG) }
+                            onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) },
+                            onOpenAdmin = requestAdminAccess
                         ) } else DashboardScreen(
                             debtsViewModel = debtsViewModel,
                             materialsViewModel = materialsViewModel,

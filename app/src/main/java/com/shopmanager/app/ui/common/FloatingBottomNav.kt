@@ -54,7 +54,7 @@ import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -368,7 +368,7 @@ private fun BottomNavItem(
     val low = LocalPerformanceTier.current == PerformanceTier.LOW
     val pill by animateColorAsState(
         targetValue = if (selected) accent else Color.Transparent,
-        animationSpec = if (low) snap() else tween(com.shopmanager.app.data.performance.MotionSpecs.baseMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing),
+        animationSpec = if (low) snap() else tween(200),
         label = "bottomNavPill"
     )
     val content = if (selected) appOnAccent() else cs.onSurfaceVariant

@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.PersonSearch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
-import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +62,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.animation.core.RepeatMode
@@ -311,13 +309,13 @@ fun DebtsScreen(
         ) {
         Column(Modifier.fillMaxSize()) {
             val overdueDays = remember { SettingsRepository(context).overdueDays }
-            val byAmount = remember(state.persons) { state.persons.sortedByDescending { it.amount } }
-            val searched = com.shopmanager.app.ui.common.rememberSmartSearch(byAmount, search.value) { it.name }
-            // كل الحسابات الثقيلة (تصنيف/آخر نشاط/تجميع) على الخيط الخفي؛ الواجهة تستلم النتيجة جاهزة فقط.
-            val statusesState = com.shopmanager.app.ui.common.rememberComputed(state.persons, state.debts, overdueDays) {
+            val statuses = remember(state.persons, state.debts, overdueDays) {
                 classifyPersons(state.persons, state.debts, overdueDays, System.currentTimeMillis())
             }
-            val lastActivityState = com.shopmanager.app.ui.common.rememberComputed(state.persons, state.debts) {
+            val byAmount = remember(state.persons) { state.persons.sortedByDescending { it.amount } }
+            val searched = com.shopmanager.app.ui.common.rememberSmartSearch(byAmount, search.value) { it.name }
+            // آخر نشاط لكل عميل = أحدث دين أُضيف له (وإلا تاريخ إنشاء العميل) — للترتيب «الأحدث أولاً».
+            val lastActivity = remember(state.persons, state.debts) {
                 val latestDebt = HashMap<String, Long>()
                 for (d in state.debts) {
                     val t = maxOf(d.createdAt, 0L)
@@ -325,17 +323,7 @@ fun DebtsScreen(
                 }
                 state.persons.associate { it.id to maxOf(latestDebt[it.id] ?: 0L, it.createdAt) }
             }
-            val statuses = statusesState.value ?: emptyMap()
-            val groupsState = com.shopmanager.app.ui.common.rememberComputed(searched, statusesState.value, filter, lastActivityState.value) {
-                buildDebtGroups(searched, statusesState.value ?: emptyMap(), filter, lastActivityState.value ?: emptyMap())
-            }
-            val groupsReady = statusesState.value != null && lastActivityState.value != null && groupsState.value != null
-            val groups = groupsState.value ?: emptyList()
-            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
-            com.shopmanager.app.data.performance.ScrollJankWatch(listState)
-            LaunchedEffect(listState) {
-                snapshotFlow { listState.isScrollInProgress }.collect { scrolling -> if (scrolling) openId = null }
-            }
+            val groups = remember(searched, statuses, filter, lastActivity) { buildDebtGroups(searched, statuses, filter, lastActivity) }
             val currency = AppSettingsState.currencySymbol
 
             val remind: (Person) -> Unit = { p ->
@@ -371,7 +359,7 @@ fun DebtsScreen(
                 }
             }
 
-            if ((state.isLoading && searched.isEmpty()) || (state.persons.isNotEmpty() && !groupsReady)) {
+            if (state.isLoading && searched.isEmpty()) {
                 com.shopmanager.app.ui.common.SkeletonRowList(
                     kind = com.shopmanager.app.ui.common.SkeletonRowKind.PERSON,
                     count = 7
@@ -389,7 +377,6 @@ fun DebtsScreen(
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    state = listState,
                     contentPadding = PaddingValues(
                         start = AppScreenPadding, end = AppScreenPadding, top = 4.dp,
                         bottom = listBottomClearance + 64.dp
@@ -417,14 +404,14 @@ fun DebtsScreen(
                                 },
                                 onPay = { openId = null; payTarget.value = person },
                                 onRemind = { openId = null; remind(person) },
-                                modifier = (
-                                    if (LocalPerformanceTier.current == PerformanceTier.LOW) Modifier
-                                    else Modifier.animateItem(
+                                modifier = Modifier
+                                    .animateItem(
                                         fadeInSpec = null,
                                         placementSpec = MotionSpecs.reorderSpring(),
-                                        fadeOutSpec = MotionSpecs.listItemFadeOut()
+                                        fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
+                                        else MotionSpecs.listItemFadeOut()
                                     )
-                                    ).listItemEntrance(index)
+                                    .listItemEntrance(index)
                             )
                         }
                     }
@@ -638,90 +625,49 @@ private fun SwipeRevealRow(
 ) {
     val shape = RoundedCornerShape(AppCardRadius)
     val canSwipe = person.amount > 0
-    val actionWidth = 184.dp
-    val density = LocalDensity.current
-    val maxPx = with(density) { actionWidth.toPx() }
-    val overshootPx = with(density) { 28.dp.toPx() }
-    val low = LocalPerformanceTier.current == PerformanceTier.LOW
-    val haptics = LocalHapticFeedback.current
+    val actionWidth = 176.dp
+    val maxPx = with(LocalDensity.current) { actionWidth.toPx() }
+    val offset = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    // موضع البطاقة حالة عادية تُقرأ في مرحلة الرسم فقط (graphicsLayer) — لا إعادة تركيب أثناء السحب
-    // ولا coroutine لكل حركة إصبع.
-    var pos by remember { mutableFloatStateOf(0f) }
-    var settleJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var crossed by remember { mutableStateOf(false) }
-
-    fun settle(target: Float, velocity: Float = 0f) {
-        settleJob?.cancel()
-        if (low) { pos = target; return }
-        settleJob = scope.launch {
-            androidx.compose.animation.core.animate(
-                initialValue = pos,
-                targetValue = target,
-                initialVelocity = velocity,
-                animationSpec = androidx.compose.animation.core.spring(
-                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow * 1.5f
-                )
-            ) { v, _ -> pos = v }
-        }
+    val low = LocalPerformanceTier.current == PerformanceTier.LOW
+    LaunchedEffect(revealed, canSwipe) {
+        val target = if (revealed && canSwipe) maxPx else 0f
+        if (low) offset.snapTo(target) else offset.animateTo(target, tween(180))
     }
-
-    LaunchedEffect(revealed, canSwipe) { settle(if (revealed && canSwipe) maxPx else 0f) }
-
     val dragState = rememberDraggableState { delta ->
-        settleJob?.cancel()
-        val raw = pos + delta
-        // مقاومة مطاطية بعد أقصى فتح بدل التوقف الحاد.
-        pos = when {
-            raw < 0f -> 0f
-            raw > maxPx -> (maxPx + (raw - maxPx) * 0.35f).coerceAtMost(maxPx + overshootPx)
-            else -> raw
-        }
-        val nowCrossed = pos > maxPx * 0.5f
-        if (nowCrossed != crossed) {
-            crossed = nowCrossed
-            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-        }
+        scope.launch { offset.snapTo((offset.value + delta).coerceIn(0f, maxPx)) }
     }
     val semantic = LocalSemanticColors.current
     val cs = MaterialTheme.colorScheme
 
-    Box(modifier.fillMaxWidth()) {
+    Box(modifier.fillMaxWidth().clip(shape)) {
         if (canSwipe) {
-            Row(
-                Modifier
-                    .matchParentSize()
-                    .wrapContentWidth(AbsoluteAlignment.Left)
-                    .width(actionWidth)
-                    .absolutePadding(right = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                RevealAction(Modifier.weight(1f), Icons.Default.Check, "تسديد", semantic.success, 0f, low, { pos / maxPx }, onPay)
-                RevealAction(Modifier.weight(1f), Icons.Default.NotificationsActive, "تذكير", appAccent(), 0.25f, low, { pos / maxPx }, onRemind)
+            Box(Modifier.matchParentSize(), contentAlignment = AbsoluteAlignment.CenterLeft) {
+                Row(Modifier.width(actionWidth).fillMaxHeight()) {
+                    RevealAction(Modifier.weight(1f), Icons.Default.Check, "تسديد", semantic.success, onPay)
+                    RevealAction(Modifier.weight(1f), Icons.Default.NotificationsActive, "تذكير", appAccent(), onRemind)
+                }
             }
         }
         Box(
             Modifier
                 .fillMaxWidth()
-                .graphicsLayer { translationX = pos }
+                .graphicsLayer { translationX = offset.value }
                 .then(
                     if (canSwipe) Modifier.draggable(
                         state = dragState,
                         orientation = Orientation.Horizontal,
                         onDragStopped = { velocity ->
-                            val open = pos > maxPx * 0.45f || velocity > 900f
-                            val close = velocity < -900f
-                            val openFinal = open && !close
-                            crossed = false
-                            onRevealedChange(openFinal)
-                            settle(if (openFinal) maxPx else 0f, velocity)
+                            val open = offset.value > maxPx / 2 || velocity > 1500f
+                            onRevealedChange(open)
+                            val target = if (open) maxPx else 0f
+                            if (low) offset.snapTo(target) else offset.animateTo(target, tween(180))
                         }
                     ) else Modifier
                 )
-                .background(cs.surfaceContainerHigh, shape)
-                .border(AppBorderWidth, appBorderColor(), shape)
                 .clip(shape)
+                .background(cs.surfaceContainerHigh)
+                .border(AppBorderWidth, appBorderColor(), shape)
                 .combinedClickable(onClick = onClick, onLongClick = onLongClick)
         ) {
             PersonRowContent(person, status)
@@ -735,39 +681,24 @@ private fun RevealAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     color: Color,
-    delay: Float,
-    low: Boolean,
-    progress: () -> Float,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(AppCardRadius)
     Column(
         modifier
             .fillMaxHeight()
-            .then(
-                if (low) Modifier else Modifier.graphicsLayer {
-                    val p = ((progress() - delay) / (1f - delay)).coerceIn(0f, 1f)
-                    alpha = p
-                    val sc = 0.8f + 0.2f * p
-                    scaleX = sc
-                    scaleY = sc
-                }
-            )
-            .clip(shape)
-            .background(color.copy(alpha = 0.16f))
+            .background(color)
             .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
             .heightIn(min = AppMinTouchTarget),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(3.dp))
+        Icon(icon, contentDescription = null, tint = appOnAccent(), modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             label,
             style = MaterialTheme.typography.labelMedium.copy(fontSize = AppCaptionLargeSize),
             fontWeight = FontWeight.Bold,
-            color = color,
-            maxLines = 1
+            color = appOnAccent()
         )
     }
 }
@@ -780,15 +711,12 @@ private fun PersonRowContent(person: Person, status: PersonStatus) {
     Row(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 76.dp)
-            .drawBehind {
-                val w = 5.dp.toPx()
-                val x = if (layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl) size.width - w else 0f
-                drawRect(rail, topLeft = androidx.compose.ui.geometry.Offset(x, 0f), size = androidx.compose.ui.geometry.Size(w, size.height))
-            },
+            .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+            .heightIn(min = 76.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Spacer(Modifier.width(17.dp))
+        Box(Modifier.width(5.dp).fillMaxHeight().background(rail))
+        Spacer(Modifier.width(12.dp))
         AppIconCircle(color = avatarColor, size = 44.dp) {
             Text(
                 person.name.firstOrNull()?.uppercase() ?: "?",

@@ -1,6 +1,5 @@
 package com.shopmanager.app.ui.materials
 
-import com.shopmanager.app.data.materials.level
 import com.shopmanager.app.ui.common.AppSpace2
 import com.shopmanager.app.ui.common.AppSpaceSm
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
-import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.ui.Modifier
@@ -271,9 +269,8 @@ fun MaterialsScreen(
                         onEdit = { editingMaterial = it },
                         onDelete = { deleteTarget = it },
                         onToggleImportant = {
-                            val next = (it.level + 1) % 3
-                            if (next > 0 && it.level == 0) viewModel.recordImportant(it.name)
-                            viewModel.setLevel(it, next)
+                            if (!it.important) viewModel.recordImportant(it.name)
+                            viewModel.setImportant(it, !it.important)
                         },
                         groupOf = groupOf
                     )
@@ -298,14 +295,14 @@ fun MaterialsScreen(
             initial = m,
             isSaving = isSavingMaterial,
             onDismiss = { if (!isSavingMaterial) editingMaterial = null },
-            onSave = { name, qty, unit, notes, level ->
+            onSave = { name, qty, unit, notes, important ->
                 isSavingMaterial = true
                 viewModel.updateMaterial(m.id, name, qty, unit, notes) { success ->
                     isSavingMaterial = false
                     if (success) {
-                        if (level != m.level) {
-                            if (level > 0 && m.level == 0) viewModel.recordImportant(name)
-                            viewModel.setLevel(m, level)
+                        if (important != m.important) {
+                            if (important) viewModel.recordImportant(name)
+                            viewModel.setImportant(m, important)
                         }
                         editingMaterial = null
                     }

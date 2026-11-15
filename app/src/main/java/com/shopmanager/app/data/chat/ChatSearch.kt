@@ -28,7 +28,7 @@ object ChatSearch {
     }
 
     private fun foldQuery(q: String): String =
-        fold(q.trim()).text.replace(RX_1_CHATSEARCH, " ")
+        fold(q.trim()).text.replace(Regex("\\s+"), " ")
 
     fun ranges(text: String, query: String): List<IntRange> {
         val q = foldQuery(query)
@@ -69,6 +69,3 @@ object ChatSearch {
         return if (older) (current - 1 + total) % total else (current + 1) % total
     }
 }
-
-// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
-private val RX_1_CHATSEARCH = Regex("\\s+")

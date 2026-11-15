@@ -46,7 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import com.shopmanager.app.ui.common.Text
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -658,7 +658,7 @@ private fun SummaryStep(
                         PillBadge(text = "${p.quantity.toInt()} ${p.unit}".trim(), color = cs.onSurface)
                         if (p.important) {
                             Spacer(Modifier.width(6.dp))
-                            Icon(Icons.Default.Star, contentDescription = null, tint = com.shopmanager.app.ui.common.ImportantYellow, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF5B301), modifier = Modifier.size(20.dp))
                         }
                         IconButton(onClick = { onRemove(p.name) }) {
                             Icon(Icons.Default.Close, contentDescription = "إزالة", tint = cs.error)

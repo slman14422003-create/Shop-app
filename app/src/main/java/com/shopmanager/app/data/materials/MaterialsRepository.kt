@@ -48,7 +48,6 @@ class MaterialsRepository {
                             notes = doc.getString("notes") ?: "",
                             updatedAt = doc.getLong("timestamp") ?: 0L,
                             important = doc.getBoolean("important") ?: false,
-                            veryImportant = doc.getBoolean("veryImportant") ?: false,
                             // Falls back to the write timestamp for any
                             // document written before "order" existed, so
                             // older shortages keep sorting in the
@@ -138,7 +137,6 @@ class MaterialsRepository {
                 "notes" to notes,
                 "timestamp" to now,
                 "important" to false,
-                "veryImportant" to false,
                 // Starts as "now", same as the old add-time sort, so a
                 // freshly added shortage lands at the bottom of the manual
                 // order rather than jumping in wherever a millisecond
@@ -177,16 +175,8 @@ class MaterialsRepository {
      */
     suspend fun setImportant(id: String, important: Boolean, topOrder: Long? = null) =
         withTimeout(WRITE_TIMEOUT_MS) {
-            val base = if (important) mapOf("important" to true, "veryImportant" to false) else mapOf("important" to false)
-            val data = if (topOrder != null) base + ("order" to topOrder) else base
-            db.collection(materialsCollection).document(id).update(data).awaitQueued()
-            Unit
-        }
-
-    suspend fun setPriority(id: String, level: Int, topOrder: Long? = null) =
-        withTimeout(WRITE_TIMEOUT_MS) {
-            val base = mapOf("important" to (level == 1), "veryImportant" to (level == 2))
-            val data = if (topOrder != null && level > 0) base + ("order" to topOrder) else base
+            val data = if (topOrder != null) mapOf("important" to important, "order" to topOrder)
+                else mapOf("important" to important)
             db.collection(materialsCollection).document(id).update(data).awaitQueued()
             Unit
         }
@@ -330,7 +320,6 @@ class MaterialsRepository {
                     notes = doc.getString("notes") ?: "",
                     updatedAt = doc.getLong("timestamp") ?: 0L,
                     important = doc.getBoolean("important") ?: false,
-                            veryImportant = doc.getBoolean("veryImportant") ?: false,
                     order = doc.getLong("order") ?: (doc.getLong("timestamp") ?: 0L)
                 )
             }
@@ -360,7 +349,7 @@ class MaterialsRepository {
             db.collection(materialsCollection).document(it.id) to mapOf(
                 "name" to it.name, "quantity" to it.quantity, "unit" to it.unit,
                 "section" to it.section, "notes" to it.notes, "timestamp" to it.updatedAt,
-                "important" to it.important, "veryImportant" to it.veryImportant, "order" to it.order
+                "important" to it.important, "order" to it.order
             )
         }
         val priceWrites = prices.map { (name, price) ->
