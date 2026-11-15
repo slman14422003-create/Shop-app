@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import com.shopmanager.app.data.materials.level
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -64,7 +65,7 @@ object MaterialsReportImage {
         brandColor: Int,
         groupOf: (String) -> String = { "" }
     ): Uri {
-        val sorted = materials.sortedWith(compareByDescending<Material> { it.important }.thenBy { com.shopmanager.app.ui.common.arabicSortKey(it.name) })
+        val sorted = materials.sortedWith(compareByDescending<Material> { it.level }.thenBy { com.shopmanager.app.ui.common.arabicSortKey(it.name) })
         val byGroup = sorted.groupBy { groupOf(it.name).trim() }
         val items = ArrayList<Item>()
         val hasFolders = byGroup.keys.any { it.isNotEmpty() }
@@ -120,7 +121,7 @@ object MaterialsReportImage {
         val chips = buildList {
             add("${sorted.size} مادة")
             if (hasFolders) add("${byGroup.keys.count { it.isNotEmpty() }} مجلد")
-            val star = sorted.count { it.important }
+            val star = sorted.count { it.level > 0 }
             if (star > 0) add("★ $star هامة")
         }
         val chipText = text(Color.WHITE, 28f, true, Paint.Align.CENTER)
@@ -175,7 +176,8 @@ object MaterialsReportImage {
                     if (price != null) {
                         canvas.drawText("${Formatters.number(price)} $currency", left, top + 72f, pricePaint)
                     }
-                    if (entry.m.important) {
+                    if (entry.m.level > 0) {
+                        starPaint.color = if (entry.m.level == 2) Color.parseColor("#E5383B") else Color.parseColor("#F5A623")
                         val pw = if (price != null) pricePaint.measureText("${Formatters.number(price)} $currency") + 20f else 0f
                         canvas.drawText("★", left + pw, top + 72f, starPaint)
                     }

@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialUnit
+import com.shopmanager.app.data.materials.level
 import com.shopmanager.app.ui.common.AppGroupGap
 import com.shopmanager.app.ui.common.AppGroupLargeRadius
 import com.shopmanager.app.ui.common.AppSectionTitle
@@ -51,7 +52,7 @@ fun MaterialEditDialog(
     initial: Material?,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (name: String, quantity: Double, unit: String, notes: String, important: Boolean) -> Unit
+    onSave: (name: String, quantity: Double, unit: String, notes: String, level: Int) -> Unit
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     // FIX: quantity used to be a free-typed decimal field, which is why
@@ -65,7 +66,7 @@ fun MaterialEditDialog(
     }
     var unit by remember { mutableStateOf(MaterialUnit.fromLabel(initial?.unit ?: MaterialUnit.KG.label)) }
     var notes by remember { mutableStateOf(initial?.notes ?: "") }
-    var important by remember { mutableStateOf(initial?.important ?: false) }
+    var level by remember { mutableStateOf(initial?.level ?: 0) }
     var error by remember { mutableStateOf<String?>(null) }
 
     // FIX: a fixed fraction size (نص كيلو، ربع كيلو، لوقية، نص لوقية، ربع
@@ -78,19 +79,19 @@ fun MaterialEditDialog(
     // نص كيلو من 3" -> tapping "نص كيلو" would carry a leftover count.
     val showQuantityStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
 
-    val red = com.shopmanager.app.ui.common.ImportantRed
+    val levelTone = com.shopmanager.app.ui.common.priorityColor(level)
     AppFormDialog(
         title = if (initial == null) "إضافة نقص" else "تعديل النقص",
-        subtitle = if (important) "مادة هامة جداً" else "قائمة النواقص",
-        headerIcon = if (important) Icons.Filled.Star else Icons.Filled.Spa,
-        emphasisColor = if (important) red else Color.Unspecified,
+        subtitle = when (level) { 2 -> "مادة هامة جداً"; 1 -> "مادة هامة"; else -> "قائمة النواقص" },
+        headerIcon = if (level > 0) Icons.Filled.Star else Icons.Filled.Spa,
+        emphasisColor = if (level > 0) levelTone else Color.Unspecified,
         isSaving = isSaving,
         onDismiss = onDismiss,
         onConfirm = {
             when {
                 name.isBlank() -> error = "يرجى إدخال اسم المادة"
                 quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
-                else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim(), important) }
+                else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim(), level) }
             }
         }
     ) {
@@ -130,10 +131,18 @@ fun MaterialEditDialog(
             )
 
             ImportantToggleCard(
-                checked = important,
-                onCheckedChange = { important = it },
+                checked = level == 1,
+                onCheckedChange = { level = if (it) 1 else 0 },
                 enabled = !isSaving,
+                level = 1,
                 modifier = Modifier.padding(top = 14.dp)
+            )
+            ImportantToggleCard(
+                checked = level == 2,
+                onCheckedChange = { level = if (it) 2 else 0 },
+                enabled = !isSaving,
+                level = 2,
+                modifier = Modifier.padding(top = 10.dp)
             )
 
             error?.let {

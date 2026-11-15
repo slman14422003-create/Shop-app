@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import com.shopmanager.app.data.materials.level
 import com.shopmanager.app.data.retryOnError
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -331,7 +332,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     // مشكلة PersonEditDialog قديماً - onDone هون تسمح للواجهة (MaterialEditDialog/
     // QuantityEntryDialog) توقف زر الحفظ وتعرض دائرة تحميل لحد ما الكتابة
     // بفايرستور تخلص فعلياً، بدل ما توهم إنها علقت أو تسمح بضغطات متكررة.
-    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", important: Boolean = false, onDone: (Boolean) -> Unit = {}) {
+    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", important: Boolean = false, level: Int = if (important) 1 else 0, onDone: (Boolean) -> Unit = {}) {
         viewModelScope.launch {
             try {
                 val topOrder = (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
@@ -342,8 +343,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 // where the live listener could fire first and notify this
                 // same device about the material it just added.
                 val newId = repo.addMaterial(name, quantity, unit, section.value, notes) { id -> markWrittenHere(id, name, quantity, unit) }
-                if (important) repo.setImportant(newId, true, topOrder)
-                learn(name, quantity, unit, important)
+                if (level > 0) repo.setPriority(newId, level, topOrder)
+                learn(name, quantity, unit, level > 0)
                 _message.value = "تمت إضافة النقص بنجاح"
                 InstantBackupWorker.requestNow(getApplication())
                 onDone(true)
@@ -411,7 +412,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
                 repo.deleteMaterial(id)
                 if (snapshot != null) {
                     _undo.value = {
-                        addMaterial(snapshot.name, snapshot.quantity, snapshot.unit, snapshot.notes, snapshot.important)
+                        addMaterial(snapshot.name, snapshot.quantity, snapshot.unit, snapshot.notes, level = snapshot.level)
                     }
                 }
                 _message.value = "تم حذف المادة بنجاح"
@@ -429,6 +430,20 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
      * everything else); toggling off just flips the flag back and leaves
      * its position as-is.
      */
+    fun setLevel(material: Material, level: Int) {
+        viewModelScope.launch {
+            try {
+                val topOrder = if (level > 0) {
+                    (uiState.value.materials.minOfOrNull { it.order } ?: 0L) - 1
+                } else null
+                repo.setPriority(material.id, level, topOrder)
+                InstantBackupWorker.requestNow(getApplication())
+            } catch (e: Exception) {
+                _message.value = "تعذر التحديث: ${e.message ?: "تحقق من الاتصال"}"
+            }
+        }
+    }
+
     fun setImportant(material: Material, important: Boolean) {
         viewModelScope.launch {
             try {

@@ -73,7 +73,7 @@ object AssistantQueries {
                     "النواقص (${Formatters.number(list.size.toDouble())})",
                     list.take(25).map { m ->
                         val q = if (m.quantity > 0) "${Formatters.number(m.quantity)} ${m.unit}".trim() else ""
-                        CardField((if (m.important) "★ " else "") + m.name, q)
+                        CardField((if (m.important || m.veryImportant) "★ " else "") + m.name, q)
                     },
                     if (list.size > 25) "و${list.size - 25} مواد أخرى" else null
                 )

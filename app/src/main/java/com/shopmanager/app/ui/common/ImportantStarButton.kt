@@ -42,16 +42,27 @@ import com.shopmanager.app.ui.theme.LocalIsDarkTheme
 val ImportantRed: Color
     @Composable get() = if (LocalIsDarkTheme.current) Color(0xFFFF5A5F) else Color(0xFFD7263D)
 
+val ImportantYellow: Color
+    @Composable get() = if (LocalIsDarkTheme.current) Color(0xFFFFC53D) else Color(0xFFE0A100)
+
+@Composable
+fun priorityColor(level: Int): Color = when (level) {
+    2 -> ImportantRed
+    1 -> ImportantYellow
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
+}
+
 @Composable
 fun ImportantStarButton(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    size: Dp = 52.dp
+    size: Dp = 52.dp,
+    tone: Color = ImportantYellow
 ) {
     val cs = MaterialTheme.colorScheme
-    val red = ImportantRed
+    val red = tone
     val bg by animateColorAsState(
         targetValue = if (checked) red.copy(alpha = 0.18f) else cs.surfaceContainerHighest,
         label = "starBg"
@@ -87,10 +98,11 @@ fun ImportantToggleCard(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    level: Int = 2
 ) {
     val cs = MaterialTheme.colorScheme
-    val red = ImportantRed
+    val red = priorityColor(level)
     val container by animateColorAsState(
         targetValue = if (checked) red.copy(alpha = 0.12f) else cs.surfaceContainerHighest,
         label = "importantCardBg"
@@ -140,13 +152,17 @@ fun ImportantToggleCard(
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    "مادة هامة جداً",
+                    if (level == 2) "مادة هامة جداً" else "مادة هامة",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = titleColor
                 )
                 Text(
-                    if (checked) "ستظهر في أعلى القائمة بنجمة حمراء" else "ثبّتها في أعلى القائمة بنجمة حمراء",
+                    if (level == 2) {
+                        if (checked) "نجمة حمراء — أهم من الهامة وتظهر أولاً" else "نجمة حمراء — أهم من المادة الهامة"
+                    } else {
+                        if (checked) "نجمة صفراء — تظهر في تبويب الهامة" else "نجمة صفراء — مادة مهمة"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = cs.onSurfaceVariant
                 )

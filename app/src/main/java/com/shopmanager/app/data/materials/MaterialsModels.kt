@@ -63,6 +63,7 @@ data class Material(
     // drives the star's filled/outlined look, the actual position is
     // [order]'s job.
     val important: Boolean = false,
+    val veryImportant: Boolean = false,
     // FEATURE ADDED: manual drag-to-reorder position (see MaterialsList's
     // long-press drag). Ascending sort key - lower comes first. New
     // materials default to `System.currentTimeMillis()` (see
@@ -72,6 +73,10 @@ data class Material(
     // the current minimum, which is what actually moves it to the top.
     val order: Long = 0L
 )
+
+val Material.level: Int get() = if (veryImportant) 2 else if (important) 1 else 0
+
+val Material.flagged: Boolean get() = important || veryImportant
 
 /** A fixed catalog entry (the shop's own standing list of spice names). */
 data class MaterialCatalogItem(
@@ -216,7 +221,7 @@ data class MaterialsPriceBreakdown(
 
 fun List<Material>.priceBreakdown(prices: Map<String, Double>): MaterialsPriceBreakdown =
     MaterialsPriceBreakdown(
-        important = filter { it.important }.priceSummary(prices),
-        regular = filter { !it.important }.priceSummary(prices),
+        important = filter { it.flagged }.priceSummary(prices),
+        regular = filter { !it.flagged }.priceSummary(prices),
         all = priceSummary(prices)
     )

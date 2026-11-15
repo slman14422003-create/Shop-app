@@ -658,7 +658,7 @@ private fun SummaryStep(
                         PillBadge(text = "${p.quantity.toInt()} ${p.unit}".trim(), color = cs.onSurface)
                         if (p.important) {
                             Spacer(Modifier.width(6.dp))
-                            Icon(Icons.Default.Star, contentDescription = null, tint = com.shopmanager.app.ui.common.ImportantRed, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Star, contentDescription = null, tint = com.shopmanager.app.ui.common.ImportantYellow, modifier = Modifier.size(20.dp))
                         }
                         IconButton(onClick = { onRemove(p.name) }) {
                             Icon(Icons.Default.Close, contentDescription = "إزالة", tint = cs.error)

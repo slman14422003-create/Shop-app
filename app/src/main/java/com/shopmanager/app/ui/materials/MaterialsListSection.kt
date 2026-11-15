@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import com.shopmanager.app.data.materials.level
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
@@ -179,16 +180,18 @@ internal fun MaterialsList(
 
     var listTab by rememberSaveable { mutableStateOf(0) }
     val sortedMaterials = remember(materials, searching) {
-        if (searching) materials else materials.sortedArabicBy { it.name }
+        if (searching) materials else materials.sortedArabicBy { it.name }.sortedByDescending { it.level }
     }
-    val importantItems = remember(sortedMaterials) { sortedMaterials.filter { it.important } }
-    val regularItems = remember(sortedMaterials) { sortedMaterials.filter { !it.important } }
+    val veryItems = remember(sortedMaterials) { sortedMaterials.filter { it.level == 2 } }
+    val importantItems = remember(sortedMaterials) { sortedMaterials.filter { it.level == 1 } }
+    val regularItems = remember(sortedMaterials) { sortedMaterials.filter { it.level == 0 } }
     val visibleItems = when (listTab) {
-        0 -> importantItems
-        1 -> regularItems
+        0 -> veryItems
+        1 -> importantItems
+        2 -> regularItems
         else -> sortedMaterials
     }
-    LaunchedEffect(Unit) { if (importantItems.isEmpty()) listTab = 2 }
+    LaunchedEffect(Unit) { if (veryItems.isEmpty()) listTab = if (importantItems.isEmpty()) 3 else 1 }
     val searchSections = remember(visibleItems, suggestionIds, searching) {
         if (!searching) emptyList()
         else {
@@ -229,8 +232,8 @@ internal fun MaterialsList(
             MaterialsSummaryCard(
                 weights = weightSummary,
                 prices = priceSummary,
-                overallWeights = if (listTab == 2) null else allWeights,
-                overallPrices = if (listTab == 2) null else allPrices,
+                overallWeights = if (listTab == 3) null else allWeights,
+                overallPrices = if (listTab == 3) null else allPrices,
                 animate = animateSummary,
                 modifier = Modifier.padding(bottom = AppSpace6)
             )
@@ -238,6 +241,7 @@ internal fun MaterialsList(
         item(key = "listTabs") {
             MaterialsTabBar(
                 selected = listTab,
+                veryCount = veryItems.size,
                 importantCount = importantItems.size,
                 regularCount = regularItems.size,
                 allCount = materials.size,
@@ -248,8 +252,9 @@ internal fun MaterialsList(
         item(key = "listTitle") {
             AppSectionTitle(
                 text = when (listTab) {
-                    0 -> "المواد الهامة (${visibleItems.size})"
-                    1 -> "المواد الناقصة (${visibleItems.size})"
+                    0 -> "المواد الهامة جداً (${visibleItems.size})"
+                    1 -> "المواد الهامة (${visibleItems.size})"
+                    2 -> "المواد الناقصة (${visibleItems.size})"
                     else -> "كل المواد (${visibleItems.size})"
                 },
                 modifier = Modifier.padding(horizontal = 0.dp),
@@ -267,7 +272,7 @@ internal fun MaterialsList(
         if (visibleItems.isEmpty()) {
             item(key = "noImportant") {
                 Text(
-                    if (listTab == 0) "لا توجد مواد هامة\nاضغط على النجمة بجانب أي مادة لتظهر هنا" else "لا توجد مواد هنا",
+                    when (listTab) { 0 -> "لا توجد مواد هامة جداً\nاضغط على النجمة بجانب أي مادة حتى تصير حمراء"; 1 -> "لا توجد مواد هامة\nاضغط على النجمة بجانب أي مادة لتصير صفراء"; else -> "لا توجد مواد هنا" },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
@@ -387,9 +392,8 @@ internal fun MaterialRow(
     )
     val rowFill = MaterialTheme.colorScheme.surfaceContainerHigh
     // الصف "المهم جداً" يأخذ لمسة ذهبية خفيفة بدل الإطار الملوّن القديم.
-    val fill = if (material.important) {
-        com.shopmanager.app.ui.common.ImportantRed.copy(alpha = 0.10f).compositeOver(rowFill)
-    } else rowFill
+    val tone = com.shopmanager.app.ui.common.priorityColor(material.level)
+    val fill = if (material.level > 0) tone.copy(alpha = 0.10f).compositeOver(rowFill) else rowFill
 
     Box(modifier.fillMaxWidth().graphicsLayer { scaleX = scale.value; scaleY = scale.value }) {
         Surface(
@@ -406,14 +410,13 @@ internal fun MaterialRow(
                     .padding(start = AppSpace2, end = AppSpace10, top = 5.dp, bottom = 5.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val gold = com.shopmanager.app.ui.common.ImportantRed
-                val ringColor = if (material.important) gold else MaterialTheme.colorScheme.outlineVariant
+                val ringColor = if (material.level > 0) tone else MaterialTheme.colorScheme.outlineVariant
                 Box(Modifier.width(46.dp).height(56.dp)) {
                     Box(
                         Modifier
                             .align(Alignment.TopCenter)
                             .size(44.dp)
-                            .border(if (material.important) 2.dp else 1.5.dp, ringColor, CircleShape)
+                            .border(if (material.level > 0) 2.dp else 1.5.dp, ringColor, CircleShape)
                             .padding(3.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -432,9 +435,9 @@ internal fun MaterialRow(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            if (material.important) Icons.Filled.Star else Icons.Outlined.StarBorder,
-                            contentDescription = if (material.important) "إلغاء الأهمية" else "وضع كهامة جداً",
-                            tint = if (material.important) gold else MaterialTheme.colorScheme.onSurfaceVariant,
+                            if (material.level > 0) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                            contentDescription = when (material.level) { 0 -> "وضع كمادة هامة"; 1 -> "رفعها إلى هامة جداً"; else -> "إلغاء الأهمية" },
+                            tint = if (material.level > 0) tone else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp)
                         )
                     }

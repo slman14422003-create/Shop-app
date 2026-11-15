@@ -417,9 +417,9 @@ fun MaterialCatalogScreen(viewModel: MaterialsViewModel, onBack: () -> Unit) {
             initialUnit = learned?.second ?: MaterialUnit.KG,
             isSaving = isAddingMaterial,
             onDismiss = { if (!isAddingMaterial) pickedItem = null },
-            onSave = { quantity, unit, notes, important ->
+            onSave = { quantity, unit, notes, level ->
                 isAddingMaterial = true
-                viewModel.addMaterial(item.name, quantity, unit, notes, important) { success ->
+                viewModel.addMaterial(item.name, quantity, unit, notes, level = level) { success ->
                     isAddingMaterial = false
                     if (success) pickedItem = null
                 }
@@ -1035,7 +1035,7 @@ private fun QuantityEntryDialog(
     initialUnit: MaterialUnit = MaterialUnit.KG,
     isSaving: Boolean = false,
     onDismiss: () -> Unit,
-    onSave: (quantity: Double, unit: String, notes: String, important: Boolean) -> Unit
+    onSave: (quantity: Double, unit: String, notes: String, level: Int) -> Unit
 ) {
     // FIX: same free-typed-decimal issue as MaterialEditDialog (see its
     // comment) - this is the dialog actually used every time a new
@@ -1045,15 +1045,15 @@ private fun QuantityEntryDialog(
     var quantity by remember { mutableStateOf(initialQuantity) }
     var unit by remember { mutableStateOf(initialUnit) }
     var notes by remember { mutableStateOf("") }
-    var important by remember { mutableStateOf(false) }
+    var level by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
 
     val showStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
     AppFormDialog(
         title = materialName,
-        subtitle = if (important) "مادة هامة جداً" else "إضافة إلى النواقص",
-        headerIcon = if (important) Icons.Filled.Star else Icons.Filled.Spa,
-        emphasisColor = if (important) com.shopmanager.app.ui.common.ImportantRed else androidx.compose.ui.graphics.Color.Unspecified,
+        subtitle = when (level) { 2 -> "مادة هامة جداً"; 1 -> "مادة هامة"; else -> "إضافة إلى النواقص" },
+        headerIcon = if (level > 0) Icons.Filled.Star else Icons.Filled.Spa,
+        emphasisColor = if (level > 0) com.shopmanager.app.ui.common.priorityColor(level) else androidx.compose.ui.graphics.Color.Unspecified,
         isSaving = isSaving,
         onDismiss = onDismiss,
         onConfirm = {
@@ -1061,7 +1061,7 @@ private fun QuantityEntryDialog(
                 error = "أدخل كمية صحيحة"
             } else {
                 error = null
-                onSave((if (showStepper) quantity else 1).toDouble(), unit.label, notes.trim(), important)
+                onSave((if (showStepper) quantity else 1).toDouble(), unit.label, notes.trim(), level)
             }
         }
     ) {
@@ -1087,10 +1087,18 @@ private fun QuantityEntryDialog(
                 modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
             )
             com.shopmanager.app.ui.common.ImportantToggleCard(
-                checked = important,
-                onCheckedChange = { important = it },
+                checked = level == 1,
+                onCheckedChange = { level = if (it) 1 else 0 },
                 enabled = !isSaving,
+                level = 1,
                 modifier = Modifier.padding(top = 14.dp)
+            )
+            com.shopmanager.app.ui.common.ImportantToggleCard(
+                checked = level == 2,
+                onCheckedChange = { level = if (it) 2 else 0 },
+                enabled = !isSaving,
+                level = 2,
+                modifier = Modifier.padding(top = 10.dp)
             )
             error?.let {
                 Text(

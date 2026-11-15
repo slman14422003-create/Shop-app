@@ -210,6 +210,7 @@ internal fun MaterialsSummaryCard(
 @Composable
 internal fun MaterialsTabBar(
     selected: Int,
+    veryCount: Int,
     importantCount: Int,
     regularCount: Int,
     allCount: Int,
@@ -217,7 +218,8 @@ internal fun MaterialsTabBar(
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    val gold = com.shopmanager.app.ui.common.ImportantRed
+    val red = com.shopmanager.app.ui.common.ImportantRed
+    val yellow = com.shopmanager.app.ui.common.ImportantYellow
     Row(
         modifier
             .fillMaxWidth()
@@ -227,27 +229,35 @@ internal fun MaterialsTabBar(
         horizontalArrangement = Arrangement.spacedBy(AppSpaceXs)
     ) {
         MaterialsTabButton(
-            label = "هامة ($importantCount)",
+            label = "جداً ($veryCount)",
             selected = selected == 0,
             leadingStar = true,
-            starTint = gold,
+            starTint = red,
             onClick = { onSelect(0) },
             modifier = Modifier.weight(1f)
         )
         MaterialsTabButton(
-            label = "الناقصة ($regularCount)",
+            label = "هامة ($importantCount)",
             selected = selected == 1,
-            leadingStar = false,
-            starTint = gold,
+            leadingStar = true,
+            starTint = yellow,
             onClick = { onSelect(1) },
             modifier = Modifier.weight(1f)
         )
         MaterialsTabButton(
-            label = "الكل ($allCount)",
+            label = "ناقصة ($regularCount)",
             selected = selected == 2,
             leadingStar = false,
-            starTint = gold,
+            starTint = yellow,
             onClick = { onSelect(2) },
+            modifier = Modifier.weight(1f)
+        )
+        MaterialsTabButton(
+            label = "الكل ($allCount)",
+            selected = selected == 3,
+            leadingStar = false,
+            starTint = yellow,
+            onClick = { onSelect(3) },
             modifier = Modifier.weight(1f)
         )
     }
@@ -285,9 +295,9 @@ internal fun MaterialsTabButton(
                 Icons.Filled.Star,
                 contentDescription = null,
                 tint = if (selected) starTint else starTint.copy(alpha = 0.8f),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(14.dp)
             )
-            Spacer(Modifier.width(AppSpace6))
+            Spacer(Modifier.width(AppSpace2))
         }
         Text(
             label,

@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import com.shopmanager.app.data.materials.level
 import com.shopmanager.app.ui.common.AppSpace2
 import com.shopmanager.app.ui.common.AppSpaceSm
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -269,8 +270,9 @@ fun MaterialsScreen(
                         onEdit = { editingMaterial = it },
                         onDelete = { deleteTarget = it },
                         onToggleImportant = {
-                            if (!it.important) viewModel.recordImportant(it.name)
-                            viewModel.setImportant(it, !it.important)
+                            val next = (it.level + 1) % 3
+                            if (next > 0 && it.level == 0) viewModel.recordImportant(it.name)
+                            viewModel.setLevel(it, next)
                         },
                         groupOf = groupOf
                     )
@@ -295,14 +297,14 @@ fun MaterialsScreen(
             initial = m,
             isSaving = isSavingMaterial,
             onDismiss = { if (!isSavingMaterial) editingMaterial = null },
-            onSave = { name, qty, unit, notes, important ->
+            onSave = { name, qty, unit, notes, level ->
                 isSavingMaterial = true
                 viewModel.updateMaterial(m.id, name, qty, unit, notes) { success ->
                     isSavingMaterial = false
                     if (success) {
-                        if (important != m.important) {
-                            if (important) viewModel.recordImportant(name)
-                            viewModel.setImportant(m, important)
+                        if (level != m.level) {
+                            if (level > 0 && m.level == 0) viewModel.recordImportant(name)
+                            viewModel.setLevel(m, level)
                         }
                         editingMaterial = null
                     }
