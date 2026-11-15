@@ -19,7 +19,7 @@ object SpeechRanker {
     }
 
     private fun words(text: String): List<String> =
-        text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        text.trim().split(RX_1_SPEECHSUPPORT).filter { it.isNotEmpty() }
 
     private fun isCommonWord(t: String): Boolean =
         Lexicon.isStop(t) || NumberParser.findNumbers(listOf(t)).isNotEmpty() || t[0] in '0'..'9'
@@ -195,3 +195,6 @@ object ListMode {
         return "ضيف " + its.joinToString(" ، ")
     }
 }
+
+// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
+private val RX_1_SPEECHSUPPORT = Regex("\\s+")

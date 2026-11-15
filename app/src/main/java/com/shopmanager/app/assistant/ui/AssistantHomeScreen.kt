@@ -1,6 +1,26 @@
 package com.shopmanager.app.assistant.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import com.shopmanager.app.data.performance.MotionSpecs
+import com.shopmanager.app.ui.common.AnimatedCounterText
+import com.shopmanager.app.ui.common.avatarColorFor
+import java.util.Calendar
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -86,7 +106,9 @@ fun AssistantHomeScreen(
     onNavigateToMaterials: () -> Unit,
     onOpenNotes: () -> Unit,
     onOpenSettings: () -> Unit = {},
-    onOpenAdmin: () -> Unit = {}
+    onOpenAdmin: () -> Unit = {},
+    onNewDebt: () -> Unit = {},
+    onPayDebt: () -> Unit = {}
 ) {
     val data by assistant.data.collectAsStateWithLifecycle()
     val mood by assistant.mood.collectAsStateWithLifecycle()
@@ -117,8 +139,8 @@ fun AssistantHomeScreen(
     )
 
     val cur = data.currency
-    val withDebt = data.persons.filter { it.amount > 0 }
-    val debtTotal = withDebt.sumOf { it.amount }
+    val withDebt = remember(data.persons) { data.persons.filter { it.amount > 0 } }
+    val debtTotal = remember(withDebt) { withDebt.sumOf { it.amount } }
     val shortages = data.materials
     val changedPrices = remember(history) {
         val since = System.currentTimeMillis() - PriceHistoryStore.RECENT_WINDOW_MS
@@ -151,22 +173,128 @@ fun AssistantHomeScreen(
             },
             reservedIcons = 2
         )
+        var pokes by remember { mutableIntStateOf(0) }
+        val greeting = remember(lastReply?.id) { homeGreeting() }
         Column(
             modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = AppScreenPadding, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onOpenChat)) {
-                RobotAvatar(mood, size = 190.dp, animate = settings.robotAnimation, levelState = voiceLevel)
-            }
-            if (shownReply != null) {
-                Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (shownReply.text.isNotBlank()) Text(shownReply.text, style = MaterialTheme.typography.bodyMedium)
-                        shownReply.card?.let { AssistantCardView(shownReply, it, assistant, undoable) }
+            // ---- بطاقة الهيرو: الروبوت + التحية/الرد + إجمالي الديون ----
+            Staggered(0) {
+                Surface(
+                    shape = RoundedCornerShape(32.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.5.dp, borderColor),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { pokes++; onOpenChat() }
+                        ) {
+                            RobotAvatar(mood, size = 150.dp, animate = settings.robotAnimation, levelState = voiceLevel, pokeKey = pokes)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        if (shownReply != null) {
+                            Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceContainerHighest, modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (shownReply.text.isNotBlank()) Text(shownReply.text, style = MaterialTheme.typography.bodyMedium)
+                                    shownReply.card?.let { AssistantCardView(shownReply, it, assistant, undoable) }
+                                }
+                            }
+                        } else {
+                            Text(greeting, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center)
+                            Text("اكتب أو قُل أمرك وأنا أنفّذه", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Surface(
+                            onClick = onNavigateToDebts,
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                                    contentAlignment = Alignment.Center
+                                ) { Icon(Icons.Filled.AccountBalanceWallet, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
+                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                    Text("إجمالي الديون", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(verticalAlignment = Alignment.Bottom) {
+                                        AnimatedCounterText(debtTotal, { Formatters.number(it) }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                        Text(" $cur", Modifier.padding(bottom = 3.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                                Text(
+                                    "${Formatters.number(withDebt.size.toDouble())} عميل",
+                                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
+
+            // ---- إجراءات سريعة ----
+            Staggered(1) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HomeAction("دين جديد", Icons.Filled.Add, Modifier.weight(1f), onNewDebt)
+                    HomeAction("تسديد", Icons.Filled.Payments, Modifier.weight(1f), onPayDebt)
+                }
+            }
+
+            // ---- إحصائيات النواقص والأسعار ----
+            Staggered(2) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    BentoCard(Modifier.weight(1f), borderColor, onNavigateToMaterials) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Inventory2, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("  النواقص", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        AnimatedCounterText(shortages.size.toDouble(), { Formatters.number(it) }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            shortages.sortedByDescending { it.updatedAt }.take(2).joinToString("، ") { it.name }.ifBlank { "ما في نواقص" },
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    BentoCard(Modifier.weight(1f), borderColor, onNavigateToMaterials) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Sell, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("  الأسعار", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        AnimatedCounterText(changedPrices.toDouble(), { Formatters.number(it) }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Text("مواد تغيّر سعرها", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                }
+            }
+
+            // ---- أكثر المدينين (شريط قابل للتمرير) ----
+            val top = remember(withDebt) { withDebt.sortedByDescending { it.amount }.take(8) }
+            if (top.isNotEmpty()) Staggered(3) {
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("أكثر المدينين", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        top.forEach { p ->
+                            Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = onNavigateToDebts) {
+                                Row(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box(Modifier.size(32.dp).clip(CircleShape).background(avatarColorFor(p.name)), contentAlignment = Alignment.Center) {
+                                        Text(p.name.trim().take(1), color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                                    }
+                                    Column(Modifier.padding(start = 8.dp)) {
+                                        Text(p.name, style = MaterialTheme.typography.labelLarge, maxLines = 1, fontWeight = FontWeight.SemiBold)
+                                        Text("${Formatters.number(p.amount)} $cur", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (settings.proactiveSuggestions) {
+                suggestions.take(1).forEach { s -> Staggered(4) { SuggestionRow(s) { cmd -> send(cmd) } } }
+            }
+            Spacer(Modifier.height(4.dp))
         }
         UndoBarView(assistant)
         VoiceStatusArea(assistant) { input = it }
@@ -174,27 +302,7 @@ fun AssistantHomeScreen(
     }
 
     if (showStats) {
-        AppSheet(title = "الإحصائيات", onDismiss = { showStats = false }) {
-            BentoCard(Modifier.fillMaxWidth(), borderColor, { showStats = false; onNavigateToDebts() }) {
-                Text("الديون", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${Formatters.number(debtTotal)} $cur", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("${Formatters.number(withDebt.size.toDouble())} أشخاص عليهم دين", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                BentoCard(Modifier.weight(1f), borderColor, { showStats = false; onNavigateToMaterials() }) {
-                    Text("النواقص", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(Formatters.number(shortages.size.toDouble()), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        shortages.sortedByDescending { it.updatedAt }.take(2).joinToString("، ") { it.name }.ifBlank { "ما في نواقص" },
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1
-                    )
-                }
-                BentoCard(Modifier.weight(1f), borderColor, { showStats = false; onNavigateToMaterials() }) {
-                    Text("الأسعار", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(Formatters.number(changedPrices.toDouble()), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("مواد تغيّر سعرها", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+        AppSheet(title = "المزيد", onDismiss = { showStats = false }) {
             val examples = listOf(
                 AssistantChip("ملخص اليوم"), AssistantChip("شو النواقص"), AssistantChip("مجموع الديون"),
                 AssistantChip("أكثر 5 مدينين"), AssistantChip("سجل دين", "سجل على ", false)
@@ -206,9 +314,6 @@ fun AssistantHomeScreen(
                         modifier = Modifier.clip(CircleShape).clickable { showStats = false; onChip(c, assistant) { input = it } }
                     ) { Text(c.label, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), style = MaterialTheme.typography.labelLarge) }
                 }
-            }
-            if (settings.proactiveSuggestions) {
-                suggestions.take(2).forEach { s -> SuggestionRow(s) { cmd -> showStats = false; send(cmd) } }
             }
             AppRowSurface(RoundedCornerShape(20.dp), onClick = { showStats = false; onOpenNotes() }) {
                 Text("الملاحظات", Modifier.padding(16.dp), style = MaterialTheme.typography.titleSmall)
@@ -272,6 +377,45 @@ private fun SuggestionRow(s: HomeSuggestion, onAsk: (String) -> Unit) {
             if (command != null && names.isNotEmpty()) {
                 AppPillButton("أضفها", { onAsk(command) }, tonal = true, height = 36.dp)
             }
+        }
+    }
+}
+
+
+private fun homeGreeting(): String {
+    val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    return when {
+        h < 5 -> "سهرانين لهلق؟"
+        h < 12 -> "صباح الخير"
+        h < 17 -> "أهلاً بك"
+        h < 21 -> "مساء الخير"
+        else -> "مساء النور"
+    }
+}
+
+/** ظهور متدرّج (تلاشٍ + انزلاق) لكل قسم؛ بلا حركة على الأجهزة الضعيفة. */
+@Composable
+private fun Staggered(index: Int, content: @Composable () -> Unit) {
+    val low = LocalPerformanceTier.current == PerformanceTier.LOW
+    val p = remember { Animatable(if (low) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!low) { delay(index * 70L); p.animateTo(1f, tween(480, easing = MotionSpecs.claudeEasing)) }
+    }
+    Box(Modifier.fillMaxWidth().graphicsLayer { alpha = p.value; translationY = (1f - p.value) * 40f }) { content() }
+}
+
+@Composable
+private fun HomeAction(label: String, icon: ImageVector, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 56.dp),
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.primary
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            Spacer(Modifier.width(8.dp))
+            Text(label, style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
         }
     }
 }

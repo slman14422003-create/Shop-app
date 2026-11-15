@@ -9,6 +9,9 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.runtime.snapshotFlow
 import kotlin.math.sin
+import kotlin.math.cos
+import kotlin.math.abs
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.runtime.State
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -46,6 +49,8 @@ import kotlinx.coroutines.delay
 import kotlin.random.Random
 
 private const val TWO_PI = 6.2831855f
+private const val PI_F = 3.1415927f
+private val CheekPink = Color(0xFFFF8FA3)
 private val HeadFill = Color(0xFF1D1D1F)
 private val ScreenFill = Color(0xFF000000)
 private val EyeColor = Color(0xFFF5F5F5)
@@ -71,8 +76,10 @@ fun RobotAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 140.dp,
     animate: Boolean = true,
-    levelState: State<Float>? = null
+    levelState: State<Float>? = null,
+    pokeKey: Int = 0
 ) {
+    val haloBase = MaterialTheme.colorScheme.primary
     val animated = animate && LocalPerformanceTier.current != PerformanceTier.LOW
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 
@@ -100,6 +107,7 @@ fun RobotAvatar(
     val swayState: State<Float>
     val glowState: State<Float>
     val breatheState: State<Float>
+    val clockState: State<Float>
     if (animated) {
         val t = rememberInfiniteTransition(label = "robot")
         floatState = t.animateFloat(-1f, 1f, infiniteRepeatable(tween(2200, easing = LinearEasing), RepeatMode.Reverse), label = "float")
@@ -115,6 +123,10 @@ fun RobotAvatar(
             glowState = remember { mutableFloatStateOf(0f) }
             breatheState = remember { mutableFloatStateOf(0f) }
         }
+        // الساعة اللانهائية: فقط عند الحاجة (الأداء العالي، أو نقاط التفكير/علامة الاستفهام) لتوفير المعالج في المتوازن.
+        clockState = if (rich || mood == RobotMood.THINKING || mood == RobotMood.CONFUSED)
+            t.animateFloat(0f, 1f, infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart), label = "clock")
+        else remember { mutableFloatStateOf(0f) }
     } else {
         floatState = remember { mutableFloatStateOf(0f) }
         wanderState = remember { mutableFloatStateOf(0f) }
@@ -122,6 +134,48 @@ fun RobotAvatar(
         swayState = remember { mutableFloatStateOf(0f) }
         glowState = remember { mutableFloatStateOf(0f) }
         breatheState = remember { mutableFloatStateOf(0f) }
+        clockState = remember { mutableFloatStateOf(0f) }
+    }
+    // دخول ناعم عند أول ظهور (نبضة نابضة).
+    val intro = remember { Animatable(if (animated) 0f else 1f) }
+    LaunchedEffect(animated) {
+        if (animated) { intro.snapTo(0f); intro.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow)) } else intro.snapTo(1f)
+    }
+    // تلويحة باليد من وقت لآخر (READY فقط، الأداء العالي).
+    val waveArm = remember { Animatable(0f) }
+    LaunchedEffect(rich, mood) {
+        waveArm.snapTo(0f)
+        if (rich && mood == RobotMood.READY) {
+            delay(2500L)
+            while (true) {
+                waveArm.animateTo(1f, tween(320, easing = FastOutSlowInEasing))
+                repeat(3) {
+                    waveArm.animateTo(0.72f, tween(190, easing = FastOutSlowInEasing))
+                    waveArm.animateTo(1f, tween(190, easing = FastOutSlowInEasing))
+                }
+                waveArm.animateTo(0f, tween(380, easing = FastOutSlowInEasing))
+                delay(6500L + Random.nextLong(0L, 4500L))
+            }
+        }
+    }
+    // ذراعان للأعلى عند النجاح + شرارات احتفال.
+    val armsUp = remember { Animatable(0f) }
+    LaunchedEffect(animated, mood) {
+        armsUp.animateTo(if (animated && mood == RobotMood.SUCCESS) 1f else 0f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow))
+    }
+    val burst = remember { Animatable(0f) }
+    LaunchedEffect(animated, mood) {
+        burst.snapTo(0f)
+        if (animated && mood == RobotMood.SUCCESS) burst.animateTo(1f, tween(950, easing = FastOutSlowInEasing))
+    }
+    // قفزة عند اللمس.
+    val hop = remember { Animatable(0f) }
+    LaunchedEffect(pokeKey) {
+        if (pokeKey > 0 && animated) {
+            hop.snapTo(0f)
+            hop.animateTo(1f, tween(150, easing = FastOutSlowInEasing))
+            hop.animateTo(0f, spring(dampingRatio = 0.34f, stiffness = Spring.StiffnessMediumLow))
+        }
     }
     var blink by remember { mutableStateOf(false) }
     LaunchedEffect(animated, mood) {
@@ -175,24 +229,46 @@ fun RobotAvatar(
         val k = kick.value
         val wv = waveState.value
         val lv = levelSmooth.floatValue
+        val h = hop.value
         val jump = when {
             mood == RobotMood.SUCCESS -> -k * w * 0.07f
             listening -> -(k * w * 0.05f + lv * w * 0.018f)
             else -> 0f
-        }
+        } - h * w * 0.09f
         val shake = if (mood == RobotMood.CONFUSED) k * 7f else if (mood == RobotMood.THINKING) k * 3f else 0f
         val listenTilt = if (listening) sin(wv * TWO_PI) * 2.2f + lv * 3f else 0f
-        val tilt = tiltState.value * 2.4f + shake + listenTilt
+        val tilt = tiltState.value * 2.4f + shake + listenTilt + h * 5f
         val breathe = 1f + breatheState.value * 0.014f + if (listening) lv * 0.03f + k * 0.05f else 0f
         val antennaSway = swayState.value * 7f + if (listening) sin(wv * TWO_PI * 2f) * 10f else 0f
         val antennaGlow = if (listening) (wv * 2f) % 1f else glowState.value
-        translate(top = bob + jump) {
-            rotate(tilt, Offset(w * .5f, w * .9f)) {
-                scale(breathe, breathe, Offset(w * .5f, w * .9f)) {
-                    drawRobot(
-                        w, mood, moodColor, outline, wanderState.value, blink, look.value, antennaGlow, antennaSway,
-                        listening = listening, rich = rich, wave = wv, level = lv
-                    )
+        val introV = intro.value
+        val introScale = 0.55f + 0.45f * introV
+
+        // هالة خلف الرأس بلون الحالة (تنبض مع الأداء العالي).
+        if (rich) {
+            val haloColor = if (mood == RobotMood.READY) haloBase else moodColor
+            val a = 0.10f + 0.10f * glowState.value + 0.08f * armsUp.value
+            drawCircle(
+                Brush.radialGradient(listOf(haloColor.copy(alpha = a), Color.Transparent), Offset(w * .5f, w * .45f), w * .62f),
+                w * .62f, Offset(w * .5f, w * .45f)
+            )
+        }
+        // ظل أرضي يتفاعل مع الحركة.
+        run {
+            val sc = (1f + (bob + jump) / (w * 0.06f)).coerceIn(0.6f, 1.15f)
+            val sw = w * 0.36f * sc * introScale
+            drawOval(outline.copy(alpha = 0.22f * sc.coerceAtMost(1f)), Offset(w * .5f - sw / 2f, w * .945f), Size(sw, w * .028f))
+        }
+        scale(introScale, introScale, Offset(w * .5f, w * .95f)) {
+            translate(top = bob + jump) {
+                rotate(tilt, Offset(w * .5f, w * .9f)) {
+                    scale(breathe, breathe, Offset(w * .5f, w * .9f)) {
+                        drawRobot(
+                            w, mood, moodColor, outline, wanderState.value, blink, look.value, antennaGlow, antennaSway,
+                            listening = listening, rich = rich, wave = wv, level = lv,
+                            clock = clockState.value, armWave = waveArm.value, armsUp = armsUp.value, burst = burst.value
+                        )
+                    }
                 }
             }
         }
@@ -202,7 +278,8 @@ fun RobotAvatar(
 private fun DrawScope.drawRobot(
     w: Float, mood: RobotMood, moodColor: Color, outline: Color, wander: Float, blink: Boolean,
     look: Float = 0f, glow: Float = 0f, sway: Float = 0f,
-    listening: Boolean = false, rich: Boolean = false, wave: Float = 0f, level: Float = 0f
+    listening: Boolean = false, rich: Boolean = false, wave: Float = 0f, level: Float = 0f,
+    clock: Float = 0f, armWave: Float = 0f, armsUp: Float = 0f, burst: Float = 0f
 ) {
     val line = Stroke(width = (w * 0.012f).coerceAtLeast(1.5f))
 
@@ -276,9 +353,15 @@ private fun DrawScope.drawRobot(
             val dx = wander * w * .022f
             drawOval(EyeColor, Offset(lx - er + dx, eyeY - er * 1.3f), Size(er * 2, er * 2.6f))
             drawOval(EyeColor, Offset(rx - er + dx, eyeY - er * 1.3f), Size(er * 2, er * 2.6f))
-            drawLine(EyeColor, Offset(w * .45f, w * .5f), Offset(w * .55f, w * .5f), strokeWidth = w * .018f, cap = StrokeCap.Round)
+            for (i in 0..2) {
+                val ph = (clock + i * 0.2f) % 1f
+                val dy = -sin(ph * PI_F) * w * .022f
+                drawCircle(EyeColor, w * .014f, Offset(w * (.44f + i * .06f), w * .505f + dy))
+            }
         }
         RobotMood.SUCCESS -> {
+            drawCircle(CheekPink.copy(alpha = 0.40f), w * .03f, Offset(w * .325f, w * .505f))
+            drawCircle(CheekPink.copy(alpha = 0.40f), w * .03f, Offset(w * .675f, w * .505f))
             for (cx in listOf(lx, rx)) {
                 val p = Path().apply {
                     moveTo(cx - er * 1.2f, eyeY + er * .5f)
@@ -307,6 +390,23 @@ private fun DrawScope.drawRobot(
         }
     }
 
+    // الذراعان (خلف الجسم): تأرجح هادئ، تلويح باليمنى، وارتفاع للأعلى عند النجاح.
+    run {
+        val idle = if (rich) sin(clock * TWO_PI) * 4f else 0f
+        val rightAngle = if (armsUp > 0.01f) -(18f + 150f * armsUp) + sin(clock * TWO_PI * 2f) * 8f * armsUp
+        else -(18f + armWave * 105f) + idle + armWave * sin(clock * TWO_PI * 3f) * 7f
+        val leftAngle = if (armsUp > 0.01f) (18f + 150f * armsUp) - sin(clock * TWO_PI * 2f) * 8f * armsUp else 18f - idle
+        val aw = w * .05f
+        val ah = w * .14f
+        for ((px, ang) in listOf(w * .325f to leftAngle, w * .675f to rightAngle)) {
+            val py = w * .715f
+            rotate(ang, Offset(px, py)) {
+                drawRoundRect(HeadFill, Offset(px - aw / 2f, py - aw * .3f), Size(aw, ah), CornerRadius(aw / 2f))
+                drawRoundRect(outline, Offset(px - aw / 2f, py - aw * .3f), Size(aw, ah), CornerRadius(aw / 2f), style = line)
+            }
+        }
+    }
+
     // الجسم
     drawRoundRect(HeadFill, Offset(w * .31f, w * .675f), Size(w * .38f, w * .24f), CornerRadius(w * .09f))
     drawRoundRect(outline, Offset(w * .31f, w * .675f), Size(w * .38f, w * .24f), CornerRadius(w * .09f), style = line)
@@ -318,6 +418,34 @@ private fun DrawScope.drawRobot(
         }
     } else {
         drawCircle(moodColor, w * .024f, Offset(w * .5f, w * .79f))
+    }
+
+    // شرارات احتفال عند النجاح.
+    if (burst > 0.01f && burst < 0.999f) {
+        val a = (1f - burst).coerceIn(0f, 1f)
+        val st = Stroke(width = (w * .012f).coerceAtLeast(1.5f), cap = StrokeCap.Round)
+        for (i in 0 until 6) {
+            val ang = (i * 60f + 20f) * PI_F / 180f
+            val dist = w * (.34f + .16f * burst)
+            val cx = w * .5f + cos(ang) * dist
+            val cy = w * .44f + sin(ang) * dist * .85f
+            val r = w * .03f * (1f - .4f * burst)
+            val c = (if (i % 2 == 0) Yellow else moodColor).copy(alpha = a)
+            drawLine(c, Offset(cx - r, cy), Offset(cx + r, cy), strokeWidth = st.width, cap = StrokeCap.Round)
+            drawLine(c, Offset(cx, cy - r), Offset(cx, cy + r), strokeWidth = st.width, cap = StrokeCap.Round)
+        }
+    }
+    // علامة استفهام عائمة عند عدم الفهم.
+    if (mood == RobotMood.CONFUSED) {
+        val fy = sin(clock * TWO_PI) * w * .01f
+        val c = moodColor.copy(alpha = 0.55f + 0.35f * abs(sin(clock * PI_F)))
+        val qs = Stroke(width = (w * .016f).coerceAtLeast(1.8f), cap = StrokeCap.Round)
+        val qx = w * .83f
+        val qy = w * .11f + fy
+        val r = w * .04f
+        drawArc(c, 180f, 220f, false, Offset(qx - r, qy - r), Size(r * 2f, r * 2f), style = qs)
+        drawLine(c, Offset(qx + r * .55f, qy + r * .85f), Offset(qx, qy + r * 1.7f), strokeWidth = qs.width, cap = StrokeCap.Round)
+        drawCircle(c, w * .009f, Offset(qx, qy + r * 2.3f))
     }
 }
 

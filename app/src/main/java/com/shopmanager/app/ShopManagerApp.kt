@@ -575,7 +575,9 @@ internal fun ShopManagerApp(
                             onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
                             onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
                             onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) },
-                            onOpenAdmin = requestAdminAccess
+                            onOpenAdmin = requestAdminAccess,
+                            onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
+                            onPayDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.PAY) }
                         ) } else DashboardScreen(
                             debtsViewModel = debtsViewModel,
                             materialsViewModel = materialsViewModel,

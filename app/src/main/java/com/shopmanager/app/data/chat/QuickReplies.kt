@@ -7,7 +7,7 @@ object QuickReplies {
     const val MAX_LEN = 60
 
     fun clean(list: List<String>): List<String> =
-        list.map { it.replace(Regex("\\s+"), " ").trim().take(MAX_LEN) }
+        list.map { it.replace(RX_1_QUICKREPLIES, " ").trim().take(MAX_LEN) }
             .filter { it.isNotEmpty() }
             .distinct()
             .take(MAX_COUNT)
@@ -31,3 +31,6 @@ object QuickReplies {
         return list.filterIndexed { i, _ -> i != index }
     }
 }
+
+// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
+private val RX_1_QUICKREPLIES = Regex("\\s+")

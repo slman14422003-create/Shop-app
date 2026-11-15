@@ -81,4 +81,7 @@ fun chatIdFor(a: String, b: String): String = if (a < b) "${a}_$b" else "${b}_$a
 
 val NAME_REGEX = Regex("^[\\p{L}\\p{N}][\\p{L}\\p{N} _]{1,19}$")
 
-fun cleanName(raw: String): String = raw.trim().replace(Regex("\\s+"), " ")
+fun cleanName(raw: String): String = raw.trim().replace(RX_1_CHATMODELS, " ")
+
+// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
+private val RX_1_CHATMODELS = Regex("\\s+")

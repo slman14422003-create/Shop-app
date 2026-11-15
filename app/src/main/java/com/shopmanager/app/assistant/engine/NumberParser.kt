@@ -62,8 +62,8 @@ object NumberParser {
         val hasComma = tok.contains(',')
         val s = when {
             hasDot && hasComma -> tok.replace(",", "")
-            hasComma -> if (Regex("^\\d{1,3}(,\\d{3})+$").matches(tok)) tok.replace(",", "") else tok.replace(',', '.')
-            hasDot -> if (Regex("^\\d{1,3}(\\.\\d{3})+$").matches(tok)) tok.replace(".", "") else tok
+            hasComma -> if (RX_1_NUMBERPARSER.matches(tok)) tok.replace(",", "") else tok.replace(',', '.')
+            hasDot -> if (RX_2_NUMBERPARSER.matches(tok)) tok.replace(".", "") else tok
             else -> tok
         }
         return s.toDoubleOrNull()
@@ -172,3 +172,7 @@ object NumberParser {
         return NumberMatch(start, end, value)
     }
 }
+
+// PERF: Regex مُجمَّعة مرة واحدة بدل إنشائها مع كل استدعاء.
+private val RX_1_NUMBERPARSER = Regex("^\\d{1,3}(,\\d{3})+$")
+private val RX_2_NUMBERPARSER = Regex("^\\d{1,3}(\\.\\d{3})+$")
