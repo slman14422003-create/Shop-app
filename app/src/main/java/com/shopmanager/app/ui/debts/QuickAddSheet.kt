@@ -96,6 +96,8 @@ fun QuickAddSheet(
 
     var mode by remember { mutableStateOf(request.mode) }
     var selectedId by remember { mutableStateOf(request.personId) }
+    // الفتح من شاشة عميل معيّن: العملية مرتبطة به فقط — لا قائمة أشخاص ولا «+ جديد».
+    val personLocked = request.personId != null
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var digits by remember { mutableStateOf("") }
@@ -103,7 +105,6 @@ fun QuickAddSheet(
     var saving by remember { mutableStateOf(false) }
 
     val recents = remember(state.persons, state.debts) { recentPersons(state.persons, state.debts) }
-    val notes = remember(state.debts) { recentNotes(state.debts) }
     val selected = state.persons.firstOrNull { it.id == selectedId }
     val candidates = if (mode == QuickAddMode.PAY) recents.filter { it.amount > 0 } else recents
     val chips = remember(candidates, selected) {
@@ -176,12 +177,12 @@ fun QuickAddSheet(
                     mode = next
                     if (next == QuickAddMode.PAY) {
                         creating = false
-                        if (selected != null && selected.amount <= 0) selectedId = null
+                        if (!personLocked && selected != null && selected.amount <= 0) selectedId = null
                     }
                 }
             )
 
-            Row(
+            if (!personLocked) Row(
                 Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState()),
@@ -250,23 +251,6 @@ fun QuickAddSheet(
                     },
                     textAlign = TextAlign.Center
                 )
-            }
-
-            if (mode == QuickAddMode.DEBT && notes.isNotEmpty()) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    notes.forEach { text ->
-                        AppPillChip(
-                            label = text,
-                            selected = note == text,
-                            onClick = { note = if (note == text) "" else text }
-                        )
-                    }
-                }
             }
 
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
