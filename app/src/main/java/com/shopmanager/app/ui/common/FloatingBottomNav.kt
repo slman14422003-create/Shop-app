@@ -316,42 +316,41 @@ private val BottomNavTabs = listOf(
 fun AppBottomBar(
     selectedPage: Int,
     onSelectPage: (Int) -> Unit,
-    commandBarVisible: Boolean,
-    onOpenAssistant: () -> Unit,
-    onStartVoice: () -> Unit,
-    onQuickAdd: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    Column(
+    // كبسولة عائمة بزوايا مدوّرة بدل الشريط المسطّح: لا خط فاصل، ولا خلفية ممتدة
+    // لحافة الشاشة، والتبويب المحدّد يتمدّد ليُظهر الأيقونة مع اسمه داخل حبة بلون التطبيق.
+    Box(
         modifier
             .fillMaxWidth()
-            .background(cs.surface)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
-        Box(Modifier.fillMaxWidth().height(AppBorderWidth).background(cs.outlineVariant))
-        if (commandBarVisible) {
-            AssistantCommandBar(
-                onOpenAssistant = onOpenAssistant,
-                onStartVoice = onStartVoice,
-                onQuickAdd = onQuickAdd,
-                modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, top = 8.dp)
-            )
-        }
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .height(68.dp)
-                .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(32.dp),
+            color = cs.surfaceContainerHigh,
+            border = BorderStroke(AppBorderWidth, cs.outlineVariant),
+            shadowElevation = 8.dp
         ) {
-            BottomNavTabs.forEach { tab ->
-                BottomNavItem(
-                    tab = tab,
-                    selected = selectedPage == tab.page,
-                    onClick = { onSelectPage(tab.page) },
-                    modifier = Modifier.weight(1f)
-                )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                BottomNavTabs.forEach { tab ->
+                    val selected = selectedPage == tab.page
+                    BottomNavItem(
+                        tab = tab,
+                        selected = selected,
+                        onClick = { onSelectPage(tab.page) },
+                        modifier = Modifier.weight(if (selected) 1.9f else 1f)
+                    )
+                }
             }
         }
     }
@@ -368,109 +367,38 @@ private fun BottomNavItem(
     val accent = appAccent()
     val low = LocalPerformanceTier.current == PerformanceTier.LOW
     val pill by animateColorAsState(
-        targetValue = if (selected) accent.copy(alpha = 0.18f) else Color.Transparent,
-        animationSpec = if (low) snap() else tween(180),
+        targetValue = if (selected) accent else Color.Transparent,
+        animationSpec = if (low) snap() else tween(200),
         label = "bottomNavPill"
     )
-    Column(
+    val content = if (selected) appOnAccent() else cs.onSurfaceVariant
+    Box(
         modifier
             .fillMaxHeight()
-            .heightIn(min = AppMinTouchTarget)
+            .padding(vertical = 8.dp)
+            .clip(CircleShape)
+            .background(pill)
             .selectable(selected = selected, role = Role.Tab, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            Modifier
-                .width(64.dp)
-                .height(32.dp)
-                .clip(CircleShape)
-                .background(pill),
-            contentAlignment = Alignment.Center
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Icon(
                 tab.icon,
-                contentDescription = null,
-                tint = if (selected) accent else cs.onSurfaceVariant,
+                contentDescription = tab.label,
+                tint = content,
                 modifier = Modifier.size(24.dp)
             )
-        }
-        Spacer(Modifier.height(2.dp))
-        Text(
-            tab.label,
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.sp),
-            fontWeight = FontWeight.Bold,
-            color = if (selected) cs.onSurface else cs.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-fun AssistantCommandBar(
-    onOpenAssistant: () -> Unit,
-    onStartVoice: () -> Unit,
-    onQuickAdd: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val cs = MaterialTheme.colorScheme
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = CircleShape,
-        color = cs.surfaceContainerHigh,
-        border = BorderStroke(AppBorderWidth, cs.outlineVariant)
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                Modifier
-                    .size(AppMinTouchTarget)
-                    .clip(CircleShape)
-                    .clickable(role = Role.Button, onClick = onStartVoice),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.Mic,
-                    contentDescription = "تحدّث",
-                    tint = cs.onSurface,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .heightIn(min = 56.dp)
-                    .clickable(role = Role.Button, onClick = onOpenAssistant)
-                    .padding(horizontal = 8.dp),
-                contentAlignment = Alignment.CenterStart
-            ) {
+            if (selected) {
                 Text(
-                    "احكي أو اكتب طلبك…",
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = AppBodySize),
-                    color = cs.onSurfaceVariant,
+                    tab.label,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                    fontWeight = FontWeight.Bold,
+                    color = content,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
-                )
-            }
-            Box(
-                Modifier
-                    .size(AppMinTouchTarget)
-                    .clip(CircleShape)
-                    .background(appAccent())
-                    .clickable(role = Role.Button, onClick = onQuickAdd),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "إضافة سريعة",
-                    tint = appOnAccent(),
-                    modifier = Modifier.size(24.dp)
                 )
             }
         }

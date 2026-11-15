@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.StickyNote2
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -59,12 +61,9 @@ import com.shopmanager.app.data.performance.MotionSpecs
 private data class MenuEntry(val icon: androidx.compose.ui.graphics.vector.ImageVector, val label: String, val page: Int?, val id: String = "")
 
 private val menuEntries = listOf(
-    MenuEntry(Icons.Default.Home, "الشاشة الرئيسية", 0),
-    MenuEntry(Icons.Default.AttachMoney, "الديون", 1),
-    MenuEntry(Icons.Default.Inventory2, "المواد والأسعار", 2),
-    MenuEntry(Icons.Default.Forum, "الدردشة المحلية", 3),
     MenuEntry(Icons.Default.StickyNote2, "الملاحظات", null, "notes"),
-    MenuEntry(Icons.Default.AutoAwesome, "إيجاد المواد الناقصة", null, "finder")
+    MenuEntry(Icons.Default.Settings, "الإعدادات", null, "settings"),
+    MenuEntry(Icons.Default.AdminPanelSettings, "إعدادات المسؤول", null, "admin")
 )
 
 /**
@@ -75,11 +74,10 @@ private val menuEntries = listOf(
 @Composable
 fun AppMenuPopup(
     visible: Boolean,
-    selectedPage: Int,
     onDismiss: () -> Unit,
-    onSelectPage: (Int) -> Unit,
-    onOpenMissingFinder: () -> Unit,
-    onOpenNotes: () -> Unit
+    onOpenNotes: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenAdmin: () -> Unit
 ) {
     val state = remember { MutableTransitionState(false) }
     state.targetState = visible
@@ -144,16 +142,16 @@ fun AppMenuPopup(
             Column(Modifier.clip(shape)) {
                 menuEntries.forEachIndexed { index, e ->
                     if (index > 0) HorizontalDivider(thickness = 0.5.dp, color = cs.outlineVariant.copy(alpha = 0.6f))
-                    val selected = e.page != null && e.page == selectedPage
+                    val selected = false
                     Row(
                         Modifier
                             .fillMaxWidth()
                             .height(56.dp)
                             .clickable(role = Role.Button) {
-                                when {
-                                    e.page != null -> onSelectPage(e.page)
-                                    e.id == "notes" -> onOpenNotes()
-                                    else -> onOpenMissingFinder()
+                                when (e.id) {
+                                    "notes" -> onOpenNotes()
+                                    "settings" -> onOpenSettings()
+                                    else -> onOpenAdmin()
                                 }
                             }
                             .padding(horizontal = 18.dp),

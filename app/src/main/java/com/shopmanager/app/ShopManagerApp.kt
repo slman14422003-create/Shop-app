@@ -794,11 +794,6 @@ internal fun ShopManagerApp(
             AppBottomBar(
                 selectedPage = pagerState.currentPage,
                 onSelectPage = { page -> openPager(page) },
-                commandBarVisible = pagerState.currentPage != PAGE_NOTES &&
-                    !(pagerState.currentPage == PAGE_DASHBOARD && assistantSettings.newHome),
-                onOpenAssistant = { navController.safeNavigate(ROUTE_ASSISTANT) },
-                onStartVoice = openAssistantVoice,
-                onQuickAdd = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .onSizeChanged { size ->
@@ -809,19 +804,18 @@ internal fun ShopManagerApp(
     }
     AppMenuPopup(
         visible = menuOpen,
-        selectedPage = pagerState.currentPage,
         onDismiss = { menuOpen = false },
-        onSelectPage = { page ->
-            menuOpen = false
-            openPager(page)
-        },
-        onOpenMissingFinder = {
-            menuOpen = false
-            navController.safeNavigate(ROUTE_MISSING_FINDER)
-        },
         onOpenNotes = {
             menuOpen = false
             navController.safeNavigate(ROUTE_NOTES)
+        },
+        onOpenSettings = {
+            menuOpen = false
+            navController.safeNavigate(ROUTE_SETTINGS)
+        },
+        onOpenAdmin = {
+            menuOpen = false
+            requestAdminAccess()
         }
     )
     } // menu overlay Box

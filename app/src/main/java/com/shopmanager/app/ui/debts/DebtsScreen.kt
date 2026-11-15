@@ -534,7 +534,8 @@ private fun buildDebtGroups(persons: List<Person>, statuses: Map<String, PersonS
             when (bucket) {
                 DebtBucket.OVERDUE -> l.sortedWith(compareByDescending<Person> { statuses[it.id]?.days ?: 0 }.thenByDescending { it.amount })
                 DebtBucket.THIS_WEEK -> l.sortedWith(compareBy<Person> { statuses[it.id]?.days ?: 0 }.thenByDescending { it.amount })
-                else -> l
+                // الأحدث أولاً داخل «لاحقاً» و«مسدّد» (المجموعات الأهم تبقى أعلى القائمة دائماً).
+                else -> l.sortedWith(compareByDescending<Person> { it.createdAt }.thenByDescending { it.amount })
             }
         }
         if (list.isEmpty()) null else DebtGroup(
