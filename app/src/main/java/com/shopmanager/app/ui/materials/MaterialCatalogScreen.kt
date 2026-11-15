@@ -67,6 +67,7 @@ import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.BlurContextMenu
 import com.shopmanager.app.ui.common.BlurMenuAction
+import androidx.compose.material.icons.filled.Star
 import com.shopmanager.app.ui.common.AppFormDialog
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.common.GlassSnackbarHost
@@ -1051,7 +1052,7 @@ private fun QuantityEntryDialog(
     AppFormDialog(
         title = materialName,
         subtitle = if (important) "مادة هامة جداً" else "إضافة إلى النواقص",
-        headerIcon = if (important) androidx.compose.material.icons.Icons.Filled.Star else androidx.compose.material.icons.Icons.Filled.Spa,
+        headerIcon = if (important) Icons.Filled.Star else Icons.Filled.Spa,
         emphasisColor = if (important) com.shopmanager.app.ui.common.ImportantRed else androidx.compose.ui.graphics.Color.Unspecified,
         isSaving = isSaving,
         onDismiss = onDismiss,
