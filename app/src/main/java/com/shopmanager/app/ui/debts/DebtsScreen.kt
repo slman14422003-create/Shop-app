@@ -632,7 +632,7 @@ private fun SwipeRevealRow(
     val low = LocalPerformanceTier.current == PerformanceTier.LOW
     LaunchedEffect(revealed, canSwipe) {
         val target = if (revealed && canSwipe) maxPx else 0f
-        if (low) offset.snapTo(target) else offset.animateTo(target, tween(180))
+        if (low) offset.snapTo(target) else offset.animateTo(target, tween(com.shopmanager.app.data.performance.MotionSpecs.baseMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing))
     }
     val dragState = rememberDraggableState { delta ->
         scope.launch { offset.snapTo((offset.value + delta).coerceIn(0f, maxPx)) }
@@ -661,7 +661,7 @@ private fun SwipeRevealRow(
                             val open = offset.value > maxPx / 2 || velocity > 1500f
                             onRevealedChange(open)
                             val target = if (open) maxPx else 0f
-                            if (low) offset.snapTo(target) else offset.animateTo(target, tween(180))
+                            if (low) offset.snapTo(target) else offset.animateTo(target, tween(com.shopmanager.app.data.performance.MotionSpecs.baseMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing))
                         }
                     ) else Modifier
                 )

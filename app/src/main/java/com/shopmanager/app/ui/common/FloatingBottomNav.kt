@@ -368,7 +368,7 @@ private fun BottomNavItem(
     val low = LocalPerformanceTier.current == PerformanceTier.LOW
     val pill by animateColorAsState(
         targetValue = if (selected) accent else Color.Transparent,
-        animationSpec = if (low) snap() else tween(200),
+        animationSpec = if (low) snap() else tween(com.shopmanager.app.data.performance.MotionSpecs.baseMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing),
         label = "bottomNavPill"
     )
     val content = if (selected) appOnAccent() else cs.onSurfaceVariant

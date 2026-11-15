@@ -524,14 +524,14 @@ object MotionSpecs {
     @Composable
     fun navMillis(): Int = when (LocalPerformanceTier.current) {
         PerformanceTier.LOW -> 160
-        PerformanceTier.BALANCED -> 320
-        PerformanceTier.STANDARD -> 400
+        PerformanceTier.BALANCED -> 300
+        PerformanceTier.STANDARD -> 380
     }
 
     /** مدة انتقال التبويبات (الـ pager) بالـ ms. */
     @Composable
     fun pagerMillis(): Int = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 175
+        PerformanceTier.LOW -> 160
         PerformanceTier.BALANCED -> 300
         PerformanceTier.STANDARD -> 380
     }
