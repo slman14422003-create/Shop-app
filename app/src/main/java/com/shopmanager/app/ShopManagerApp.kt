@@ -233,6 +233,7 @@ internal fun ShopManagerApp(
     // tab switch and a screen push now feel like the same design language
     // instead of two different ones stitched together.
     val isLowTierForPager = LocalPerformanceTier.current == PerformanceTier.LOW
+    val richPagerTransition = LocalPerformanceTier.current == PerformanceTier.STANDARD
     val pagerTabAnimationSpec: FiniteAnimationSpec<Float> =
         tween(MotionSpecs.pagerMillis().coerceAtLeast(150), easing = MotionSpecs.navEasing)
 
@@ -538,7 +539,26 @@ internal fun ShopManagerApp(
                     // الأداء القوي فقط: عمق بصري أثناء تبديل التبويب — الصفحة المغادِرة/القادمة
                     // تصغر قليلاً وتخفت. كله داخل graphicsLayer (مرحلة الرسم)، وعند السكون
                     // offset = 0 فلا طبقة إضافية. المتوازن والمنخفض: انزلاق خام بلا أي طبقات.
-                    Box(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                // انتقال ناعم بين التبويبات: الصفحة المغادِرة تصغر قليلاً وتخفت والقادمة
+                                // تكبر وتظهر تدريجياً (عمق بصري). كله transform/alpha داخل مرحلة الرسم،
+                                // وعند السكون offset = 0 فلا يتغيّر شيء. الاقتصادي: بلا أي تأثير.
+                                if (!isLowTierForPager) {
+                                    val off = kotlin.math.abs(
+                                        (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                                    ).coerceIn(0f, 1f)
+                                    alpha = 1f - 0.65f * off
+                                    if (richPagerTransition) {
+                                        val sc = 1f - 0.08f * off
+                                        scaleX = sc
+                                        scaleY = sc
+                                    }
+                                }
+                            }
+                    ) {
                     when (page) {
                         PAGE_DASHBOARD -> if (assistantSettings.newHome) Box(
                             Modifier
