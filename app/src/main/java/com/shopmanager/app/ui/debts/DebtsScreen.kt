@@ -314,7 +314,16 @@ fun DebtsScreen(
             }
             val byAmount = remember(state.persons) { state.persons.sortedByDescending { it.amount } }
             val searched = com.shopmanager.app.ui.common.rememberSmartSearch(byAmount, search.value) { it.name }
-            val groups = remember(searched, statuses, filter) { buildDebtGroups(searched, statuses, filter) }
+            // آخر نشاط لكل عميل = أحدث دين أُضيف له (وإلا تاريخ إنشاء العميل) — للترتيب «الأحدث أولاً».
+            val lastActivity = remember(state.persons, state.debts) {
+                val latestDebt = HashMap<String, Long>()
+                for (d in state.debts) {
+                    val t = maxOf(d.createdAt, 0L)
+                    if (t > (latestDebt[d.personId] ?: 0L)) latestDebt[d.personId] = t
+                }
+                state.persons.associate { it.id to maxOf(latestDebt[it.id] ?: 0L, it.createdAt) }
+            }
+            val groups = remember(searched, statuses, filter, lastActivity) { buildDebtGroups(searched, statuses, filter, lastActivity) }
             val currency = AppSettingsState.currencySymbol
 
             val remind: (Person) -> Unit = { p ->
@@ -524,7 +533,7 @@ private fun EmptyState(icon: androidx.compose.ui.graphics.vector.ImageVector, te
 
 private class DebtGroup(val bucket: DebtBucket, val title: String, val persons: List<Person>, val subtotal: Double)
 
-private fun buildDebtGroups(persons: List<Person>, statuses: Map<String, PersonStatus>, filter: DebtFilter): List<DebtGroup> {
+private fun buildDebtGroups(persons: List<Person>, statuses: Map<String, PersonStatus>, filter: DebtFilter, lastActivity: Map<String, Long>): List<DebtGroup> {
     fun pick(bucket: DebtBucket) = persons.filter { statuses[it.id]?.bucket == bucket }
     val order = when (filter) {
         DebtFilter.ALL -> listOf(DebtBucket.OVERDUE, DebtBucket.THIS_WEEK, DebtBucket.LATER, DebtBucket.PAID)
@@ -538,7 +547,7 @@ private fun buildDebtGroups(persons: List<Person>, statuses: Map<String, PersonS
                 DebtBucket.OVERDUE -> l.sortedWith(compareByDescending<Person> { statuses[it.id]?.days ?: 0 }.thenByDescending { it.amount })
                 DebtBucket.THIS_WEEK -> l.sortedWith(compareBy<Person> { statuses[it.id]?.days ?: 0 }.thenByDescending { it.amount })
                 // الأحدث أولاً داخل «لاحقاً» و«مسدّد» (المجموعات الأهم تبقى أعلى القائمة دائماً).
-                else -> l.sortedWith(compareByDescending<Person> { it.createdAt }.thenByDescending { it.amount })
+                else -> l.sortedWith(compareByDescending<Person> { lastActivity[it.id] ?: 0L }.thenByDescending { it.amount })
             }
         }
         if (list.isEmpty()) null else DebtGroup(
