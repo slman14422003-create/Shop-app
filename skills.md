@@ -60,3 +60,14 @@
 - convert message: AssistantViewModel.planChatConversion/applyChatConversion -> ChatConversion (existing items/customers only, suggestions otherwise); wired in ShopManagerApp via AssistantMessageConverter
 - tests added: ChatSearchTest QuickRepliesTest ChatRetentionTest ChatNotifyRulesTest PlaybackSpeedsTest ImageSizingTest LinkPreviewTest ChatConversionTest
 - not compiled here (no gradle/kotlinc offline): verify via ci testDebugUnitTest
+
+## brand dialog + red important star + settings redesign task
+- new ui/common/AppFormDialog.kt: brand-identity form dialog (accent header tile with icon, title/subtitle, content slot, accent save pill, tonal cancel); emphasisColor switches header tile to red when the item is important
+- ui/common/ImportantStarButton.kt: new ImportantRed color (theme aware), star button now red, new ImportantToggleCard (full-width "important item" row, red border/fill when on)
+- MaterialEditDialog and MaterialCatalogScreen.QuantityEntryDialog (the quantity dialog) now use AppFormDialog + ImportantToggleCard; QuantityEntryDialog also hides the stepper and pins quantity to 1 for fixed fraction units, same rule as MaterialEditDialog
+- QuantityStepper: accent filled plus button, tonal minus; UnitPill: selected pill uses accent fill with white text (also affects MissingFinderScreen)
+- gold star replaced by ImportantRed in MaterialsListSection (ring, star, row tint), MaterialsChrome tab star, MissingFinderScreen summary star, MaterialsReportImage star paint
+- settings: SettingsComponents row icons sit in tinted rounded tiles, account card has accent storefront tile + version chip, new SettingsSectionHeader, accent pill button on promo cards
+- SettingsScreen order is now: account, server banner, display, security, notifications (+blocked banner), sounds and chat, sync and backup, app, help and assistant; LazyColumn spacing 10dp
+- AssistantSettingsScreen: uses SettingsGroup/switchItem rows and SettingsSectionHeader, ConfirmDialog uses GlassAlertDialog
+- not compiled here (no gradle offline): verify via ci
