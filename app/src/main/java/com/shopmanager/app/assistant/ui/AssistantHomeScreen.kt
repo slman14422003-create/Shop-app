@@ -108,7 +108,8 @@ fun AssistantHomeScreen(
     onOpenSettings: () -> Unit = {},
     onOpenAdmin: () -> Unit = {},
     onNewDebt: () -> Unit = {},
-    onPayDebt: () -> Unit = {}
+    onPayDebt: () -> Unit = {},
+    active: Boolean = true
 ) {
     val data by assistant.data.collectAsStateWithLifecycle()
     val mood by assistant.mood.collectAsStateWithLifecycle()
@@ -192,7 +193,7 @@ fun AssistantHomeScreen(
                         Box(
                             Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { pokes++; onOpenChat() }
                         ) {
-                            RobotAvatar(mood, size = 150.dp, animate = settings.robotAnimation, levelState = voiceLevel, pokeKey = pokes)
+                            RobotAvatar(mood, size = 150.dp, animate = settings.robotAnimation && active, levelState = voiceLevel, pokeKey = pokes)
                         }
                         Spacer(Modifier.height(4.dp))
                         if (shownReply != null) {
@@ -382,6 +383,8 @@ private fun SuggestionRow(s: HomeSuggestion, onAsk: (String) -> Unit) {
 }
 
 
+private var homeEntrancePlayed = false
+
 private fun homeGreeting(): String {
     val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     return when {
@@ -397,9 +400,14 @@ private fun homeGreeting(): String {
 @Composable
 private fun Staggered(index: Int, content: @Composable () -> Unit) {
     val low = LocalPerformanceTier.current == PerformanceTier.LOW
-    val p = remember { Animatable(if (low) 1f else 0f) }
+    val skip = low || homeEntrancePlayed
+    val p = remember { Animatable(if (skip) 1f else 0f) }
     LaunchedEffect(Unit) {
-        if (!low) { delay(index * 70L); p.animateTo(1f, tween(480, easing = MotionSpecs.claudeEasing)) }
+        if (!skip) {
+            delay(index * 70L)
+            p.animateTo(1f, tween(480, easing = MotionSpecs.claudeEasing))
+            homeEntrancePlayed = true
+        }
     }
     Box(Modifier.fillMaxWidth().graphicsLayer { alpha = p.value; translationY = (1f - p.value) * 40f }) { content() }
 }

@@ -80,6 +80,7 @@ fun RobotAvatar(
     pokeKey: Int = 0
 ) {
     val haloBase = MaterialTheme.colorScheme.primary
+    val haloCache = remember { HaloCache() }
     val animated = animate && LocalPerformanceTier.current != PerformanceTier.LOW
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 
@@ -248,10 +249,11 @@ fun RobotAvatar(
         if (rich) {
             val haloColor = if (mood == RobotMood.READY) haloBase else moodColor
             val a = 0.10f + 0.10f * glowState.value + 0.08f * armsUp.value
-            drawCircle(
-                Brush.radialGradient(listOf(haloColor.copy(alpha = a), Color.Transparent), Offset(w * .5f, w * .45f), w * .62f),
-                w * .62f, Offset(w * .5f, w * .45f)
-            )
+            if (haloCache.w != w || haloCache.color != haloColor) {
+                haloCache.w = w; haloCache.color = haloColor
+                haloCache.brush = Brush.radialGradient(listOf(haloColor, Color.Transparent), Offset(w * .5f, w * .45f), w * .62f)
+            }
+            haloCache.brush?.let { drawCircle(it, w * .62f, Offset(w * .5f, w * .45f), alpha = a) }
         }
         // ظل أرضي يتفاعل مع الحركة.
         run {
@@ -398,13 +400,8 @@ private fun DrawScope.drawRobot(
         val leftAngle = if (armsUp > 0.01f) (18f + 150f * armsUp) - sin(clock * TWO_PI * 2f) * 8f * armsUp else 18f - idle
         val aw = w * .05f
         val ah = w * .14f
-        for ((px, ang) in listOf(w * .325f to leftAngle, w * .675f to rightAngle)) {
-            val py = w * .715f
-            rotate(ang, Offset(px, py)) {
-                drawRoundRect(HeadFill, Offset(px - aw / 2f, py - aw * .3f), Size(aw, ah), CornerRadius(aw / 2f))
-                drawRoundRect(outline, Offset(px - aw / 2f, py - aw * .3f), Size(aw, ah), CornerRadius(aw / 2f), style = line)
-            }
-        }
+        drawArm(w, w * .325f, leftAngle, aw, ah, outline, line)
+        drawArm(w, w * .675f, rightAngle, aw, ah, outline, line)
     }
 
     // الجسم
@@ -455,4 +452,19 @@ private fun DrawScope.smile(w: Float, color: Color, depth: Float, stroke: Stroke
         quadraticTo(w * .5f, w * (.485f + depth), w * .57f, w * .485f)
     }
     drawPath(p, color, style = stroke)
+}
+
+/** يحفظ فرشاة الهالة بين الإطارات بدل إنشاء shader جديد كل إطار. */
+private class HaloCache {
+    var w: Float = 0f
+    var color: Color = Color.Unspecified
+    var brush: Brush? = null
+}
+
+private fun DrawScope.drawArm(w: Float, px: Float, ang: Float, aw: Float, ah: Float, outline: Color, line: Stroke) {
+    val py = w * .715f
+    rotate(ang, Offset(px, py)) {
+        drawRoundRect(HeadFill, Offset(px - aw / 2f, py - aw * .3f), Size(aw, ah), CornerRadius(aw / 2f))
+        drawRoundRect(outline, Offset(px - aw / 2f, py - aw * .3f), Size(aw, ah), CornerRadius(aw / 2f), style = line)
+    }
 }

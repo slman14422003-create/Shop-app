@@ -579,7 +579,8 @@ internal fun ShopManagerApp(
                             onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) },
                             onOpenAdmin = requestAdminAccess,
                             onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
-                            onPayDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.PAY) }
+                            onPayDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.PAY) },
+                            active = pagerState.currentPage == PAGE_DASHBOARD
                         ) } else DashboardScreen(
                             debtsViewModel = debtsViewModel,
                             materialsViewModel = materialsViewModel,
