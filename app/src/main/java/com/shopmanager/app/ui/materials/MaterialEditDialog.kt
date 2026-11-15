@@ -94,13 +94,13 @@ fun MaterialEditDialog(
             when {
                 name.isBlank() -> error = "يرجى إدخال اسم المادة"
                 quantity <= 0 -> error = "يرجى إدخال كمية صحيحة"
-                else -> { error = null; onSave(name.trim(), quantity.toDouble(), unit.label, notes.trim(), level) }
+                else -> { error = null; onSave((initial?.name ?: name).trim(), quantity.toDouble(), unit.label, notes.trim(), level) }
             }
         }
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             AppTextField(
-                value = name, onValueChange = { name = it }, enabled = !isSaving,
+                value = name, onValueChange = { if (initial == null) name = it }, enabled = initial == null && !isSaving,
                 label = "اسم المادة", modifier = Modifier.fillMaxWidth()
             )
             if (showQuantityStepper) {
