@@ -1049,7 +1049,8 @@ private fun QuantityEntryDialog(
     var error by remember { mutableStateOf<String?>(null) }
 
     val showStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
-    AppFormDialog(
+    var showNote by remember { mutableStateOf(false) }
+    com.shopmanager.app.ui.common.AppFormSheet(
         title = materialName,
         subtitle = when (level) { 2 -> "مادة هامة جداً"; 1 -> "مادة هامة"; else -> "إضافة إلى النواقص" },
         headerIcon = if (level > 0) Icons.Filled.Star else Icons.Filled.Spa,
@@ -1065,9 +1066,8 @@ private fun QuantityEntryDialog(
             }
         }
     ) {
-        Column {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (showStepper) {
-                AppSectionTitle("الكمية المطلوبة", Modifier.padding(bottom = 8.dp))
                 QuantityStepper(
                     value = quantity,
                     unitLabel = unit.label,
@@ -1075,37 +1075,24 @@ private fun QuantityEntryDialog(
                     onValueChange = { quantity = it.coerceAtLeast(1) }
                 )
             }
-            AppSectionTitle("الوحدة", Modifier.padding(top = if (showStepper) 18.dp else 0.dp, bottom = 8.dp))
-            UnitPicker(selected = unit, enabled = !isSaving, onSelected = {
-                unit = it
-                if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
-            })
-            AppTextField(
-                value = notes, onValueChange = { notes = it }, enabled = !isSaving,
-                label = "ملاحظة (اختياري)",
-                singleLine = false, minLines = 1, maxLines = 3,
-                modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
-            )
-            com.shopmanager.app.ui.common.ImportantToggleCard(
-                checked = level == 1,
-                onCheckedChange = { level = if (it) 1 else 0 },
-                enabled = !isSaving,
-                level = 1,
-                modifier = Modifier.padding(top = 14.dp)
-            )
-            com.shopmanager.app.ui.common.ImportantToggleCard(
-                checked = level == 2,
-                onCheckedChange = { level = if (it) 2 else 0 },
-                enabled = !isSaving,
-                level = 2,
-                modifier = Modifier.padding(top = 10.dp)
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppSectionTitle("الوحدة")
+                UnitPicker(selected = unit, enabled = !isSaving, onSelected = {
+                    unit = it
+                    if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
+                })
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppSectionTitle("الأهمية")
+                com.shopmanager.app.ui.common.PrioritySelector(level = level, onLevelChange = { level = it }, enabled = !isSaving)
+            }
+            NoteField(notes = notes, onChange = { notes = it }, expanded = showNote, onExpand = { showNote = true }, enabled = !isSaving)
             error?.let {
                 Text(
                     it,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
         }

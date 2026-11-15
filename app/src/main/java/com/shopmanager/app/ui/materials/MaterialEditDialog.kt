@@ -1,5 +1,7 @@
 package com.shopmanager.app.ui.materials
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,8 +41,8 @@ import com.shopmanager.app.ui.common.AppGroupLargeRadius
 import com.shopmanager.app.ui.common.AppSectionTitle
 import com.shopmanager.app.ui.common.AppTextField
 import com.shopmanager.app.ui.common.groupedRowShape
-import com.shopmanager.app.ui.common.AppFormDialog
-import com.shopmanager.app.ui.common.ImportantToggleCard
+import com.shopmanager.app.ui.common.AppFormSheet
+import com.shopmanager.app.ui.common.PrioritySelector
 import com.shopmanager.app.ui.common.appAccent
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.Star
@@ -80,7 +82,8 @@ fun MaterialEditDialog(
     val showQuantityStepper = unit == MaterialUnit.KG || unit == MaterialUnit.NONE
 
     val levelTone = com.shopmanager.app.ui.common.priorityColor(level)
-    AppFormDialog(
+    var showNote by remember { mutableStateOf(notes.isNotBlank()) }
+    AppFormSheet(
         title = if (initial == null) "إضافة نقص" else "تعديل النقص",
         subtitle = when (level) { 2 -> "مادة هامة جداً"; 1 -> "مادة هامة"; else -> "قائمة النواقص" },
         headerIcon = if (level > 0) Icons.Filled.Star else Icons.Filled.Spa,
@@ -95,64 +98,68 @@ fun MaterialEditDialog(
             }
         }
     ) {
-        Column {
-            Column(verticalArrangement = Arrangement.spacedBy(AppGroupGap)) {
-                AppTextField(
-                    value = name, onValueChange = { name = it }, enabled = !isSaving,
-                    label = "اسم المادة", modifier = Modifier.fillMaxWidth(),
-                    shape = groupedRowShape(0, 1)
-                )
-                if (showQuantityStepper) {
-                    QuantityStepper(
-                        value = quantity,
-                        unitLabel = unit.label,
-                        enabled = !isSaving,
-                        shape = groupedRowShape(1, 1),
-                        onValueChange = { quantity = it.coerceAtLeast(1) }
-                    )
-                }
-            }
-
-            AppSectionTitle("الوحدة", Modifier.padding(top = 18.dp, bottom = 8.dp))
-            UnitPicker(
-                selected = unit,
-                enabled = !isSaving,
-                onSelected = {
-                    unit = it
-                    if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
-                }
-            )
-
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             AppTextField(
-                value = notes, onValueChange = { notes = it }, enabled = !isSaving,
-                label = "ملاحظة (اختياري)",
-                singleLine = false, minLines = 1, maxLines = 3,
-                modifier = Modifier.fillMaxWidth().padding(top = 18.dp)
+                value = name, onValueChange = { name = it }, enabled = !isSaving,
+                label = "اسم المادة", modifier = Modifier.fillMaxWidth()
             )
-
-            ImportantToggleCard(
-                checked = level == 1,
-                onCheckedChange = { level = if (it) 1 else 0 },
-                enabled = !isSaving,
-                level = 1,
-                modifier = Modifier.padding(top = 14.dp)
-            )
-            ImportantToggleCard(
-                checked = level == 2,
-                onCheckedChange = { level = if (it) 2 else 0 },
-                enabled = !isSaving,
-                level = 2,
-                modifier = Modifier.padding(top = 10.dp)
-            )
-
+            if (showQuantityStepper) {
+                QuantityStepper(
+                    value = quantity,
+                    unitLabel = unit.label,
+                    enabled = !isSaving,
+                    onValueChange = { quantity = it.coerceAtLeast(1) }
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppSectionTitle("الوحدة")
+                UnitPicker(
+                    selected = unit,
+                    enabled = !isSaving,
+                    onSelected = {
+                        unit = it
+                        if (it != MaterialUnit.KG && it != MaterialUnit.NONE) quantity = 1
+                    }
+                )
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppSectionTitle("الأهمية")
+                PrioritySelector(level = level, onLevelChange = { level = it }, enabled = !isSaving)
+            }
+            NoteField(notes = notes, onChange = { notes = it }, expanded = showNote, onExpand = { showNote = true }, enabled = !isSaving)
             error?.let {
                 Text(
                     it,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(top = 10.dp, start = 8.dp)
+                    modifier = Modifier.padding(start = 8.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+internal fun NoteField(notes: String, onChange: (String) -> Unit, expanded: Boolean, onExpand: () -> Unit, enabled: Boolean) {
+    if (expanded) {
+        AppTextField(
+            value = notes, onValueChange = onChange, enabled = enabled,
+            label = "ملاحظة (اختياري)",
+            singleLine = false, minLines = 1, maxLines = 3,
+            modifier = Modifier.fillMaxWidth()
+        )
+    } else {
+        Row(
+            Modifier
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .clickable(enabled = enabled, role = Role.Button, onClick = onExpand)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("إضافة ملاحظة", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -179,7 +186,7 @@ fun QuantityStepper(
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 84.dp)
+            .heightIn(min = 72.dp)
             .clip(shape)
             .background(cs.surfaceContainerHighest)
             .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -279,25 +286,20 @@ private val MaterialUnit.pickerLabel: String
  */
 @Composable
 fun UnitPicker(selected: MaterialUnit, enabled: Boolean = true, onSelected: (MaterialUnit) -> Unit, modifier: Modifier = Modifier) {
-    val weightRows = listOf(
-        listOf(MaterialUnit.KG, MaterialUnit.HALF_KG, MaterialUnit.QUARTER_KG),
-        listOf(MaterialUnit.OKE, MaterialUnit.HALF_OKE, MaterialUnit.QUARTER_OKE)
+    val options = listOf(
+        MaterialUnit.KG, MaterialUnit.HALF_KG, MaterialUnit.QUARTER_KG,
+        MaterialUnit.OKE, MaterialUnit.HALF_OKE, MaterialUnit.QUARTER_OKE,
+        MaterialUnit.NONE
     )
-    Column(
-        modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    Row(
+        modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        weightRows.forEach { row ->
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                row.forEach { option ->
-                    UnitPill(option = option, isSelected = option == selected, enabled = enabled, onSelected = onSelected, modifier = Modifier.weight(1f))
-                }
-            }
+        options.forEach { option ->
+            UnitPill(option = option, isSelected = option == selected, enabled = enabled, onSelected = onSelected)
         }
-        UnitPill(option = MaterialUnit.NONE, isSelected = selected == MaterialUnit.NONE, enabled = enabled, onSelected = onSelected, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -316,10 +318,11 @@ private fun UnitPill(option: MaterialUnit, isSelected: Boolean, enabled: Boolean
 
     Box(
         modifier
-            .height(46.dp)
+            .height(42.dp)
             .clip(CircleShape)
             .background(bgColor)
-            .clickable(enabled = enabled, role = Role.Button, onClick = { onSelected(option) }),
+            .clickable(enabled = enabled, role = Role.Button, onClick = { onSelected(option) })
+            .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
