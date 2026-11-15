@@ -79,3 +79,11 @@
 - list row star cycles none -> yellow -> red -> none; row tint and ring use priorityColor(level); tabs are now: very important / important / missing / all; all-tab sorts higher level first
 - report image star color follows level; MissingFinder star stays yellow (level 1); ImportantStarButton has tone param (default yellow)
 - not compiled here: verify via ci
+
+## add-material bottom sheet + decluttered options
+- new ui/common/AppFormSheet.kt: ModalBottomSheet form (same container/shape as debts QuickAddSheet) with header tile, content slot and accent save button; also PrioritySelector (one segmented row: normal / important yellow / very important red)
+- MaterialEditDialog and QuantityEntryDialog now use AppFormSheet instead of the centered dialog; cancel button removed (swipe down or tap outside)
+- layout order: name (edit only), quantity stepper (only for kilo / none), unit chips in one scrolling row, priority selector, optional note (collapsed behind "add note" chip unless it already has text)
+- UnitPicker is now a horizontal scrolling chip row (also used in MissingFinderScreen); QuantityStepper min height 72dp
+- AppFormDialog / ImportantToggleCard kept but no longer used by these screens
+- not compiled here: verify via ci
