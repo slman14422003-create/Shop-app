@@ -350,7 +350,7 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     // مشكلة PersonEditDialog قديماً - onDone هون تسمح للواجهة (MaterialEditDialog/
     // QuantityEntryDialog) توقف زر الحفظ وتعرض دائرة تحميل لحد ما الكتابة
     // بفايرستور تخلص فعلياً، بدل ما توهم إنها علقت أو تسمح بضغطات متكررة.
-    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", important: Boolean = false, level: Int = if (important) 1 else 0, onDone: (Boolean) -> Unit = {}, checkDuplicate: Boolean = true) {
+    fun addMaterial(name: String, quantity: Double, unit: String, notes: String = "", important: Boolean = false, level: Int = if (important) 1 else 0, checkDuplicate: Boolean = true, onDone: (Boolean) -> Unit = {}) {
         if (checkDuplicate) {
             findDuplicate(name)?.let { _message.value = duplicateMessage(it); onDone(false); return }
         }
