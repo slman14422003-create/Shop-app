@@ -50,6 +50,8 @@ import androidx.compose.ui.zIndex
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.quantityLabel
 import com.shopmanager.app.data.materials.weightSummary
+import com.shopmanager.app.data.materials.MaterialsWeightSummary
+import com.shopmanager.app.data.materials.MaterialsPriceSummary
 import com.shopmanager.app.data.materials.linePrice
 import com.shopmanager.app.data.materials.priceSummary
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -216,27 +218,33 @@ internal fun MaterialsList(
     val showSectionHeaders = if (searching) searchSections.size > 1 else sections.any { it.first.isNotEmpty() }
 
     // تُحسب مرة لكل تغيّر فعلي في القائمة المعروضة أو في الأسعار.
-    val weightSummary = remember(visibleItems) { visibleItems.weightSummary() }
-    val priceSummary = remember(visibleItems, prices) { visibleItems.priceSummary(prices) }
-    val allWeights = remember(materials) { materials.weightSummary() }
-    val allPrices = remember(materials, prices) { materials.priceSummary(prices) }
+    // المجاميع تُحسب على الخيط الخفي؛ البطاقة لا تظهر إلا والنتيجة النهائية جاهزة (بلا أرقام وسيطة).
+    val summaries = com.shopmanager.app.ui.common.rememberComputed(visibleItems, materials, prices) {
+        listOf(visibleItems.weightSummary(), visibleItems.priceSummary(prices), materials.weightSummary(), materials.priceSummary(prices))
+    }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    com.shopmanager.app.data.performance.ScrollJankWatch(listState)
 
     LazyColumn(
         Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = AppSpace2, bottom = bottomClearance),
         verticalArrangement = Arrangement.spacedBy(AppGroupGap)
     ) {
         // ملخّص القائمة (الأوزان + إجمالي السعر) وعنوانها: أول عنصرين في القائمة
         // نفسها فيتمرّران معها. يتبعان القائمة المعروضة (يتغيّران مع البحث).
         item(key = "summary") {
-            MaterialsSummaryCard(
-                weights = weightSummary,
-                prices = priceSummary,
-                overallWeights = if (listTab == 3) null else allWeights,
-                overallPrices = if (listTab == 3) null else allPrices,
-                animate = animateSummary,
-                modifier = Modifier.padding(bottom = AppSpace6)
-            )
+            val ready = summaries.value
+            if (ready != null) {
+                MaterialsSummaryCard(
+                    weights = ready[0] as MaterialsWeightSummary,
+                    prices = ready[1] as MaterialsPriceSummary,
+                    overallWeights = if (listTab == 3) null else ready[2] as MaterialsWeightSummary,
+                    overallPrices = if (listTab == 3) null else ready[3] as MaterialsPriceSummary,
+                    animate = animateSummary,
+                    modifier = Modifier.padding(bottom = AppSpace6)
+                )
+            }
         }
         item(key = "listTabs") {
             MaterialsTabBar(

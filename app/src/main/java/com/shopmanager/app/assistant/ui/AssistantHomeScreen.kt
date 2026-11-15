@@ -141,12 +141,14 @@ fun AssistantHomeScreen(
 
     val cur = data.currency
     val withDebt = remember(data.persons) { data.persons.filter { it.amount > 0 } }
-    val debtTotal = remember(withDebt) { withDebt.sumOf { it.amount } }
+    val debtTotalState = com.shopmanager.app.ui.common.rememberComputed(withDebt) { withDebt.sumOf { it.amount } }
+    val debtTotal = debtTotalState.value ?: 0.0
     val shortages = data.materials
-    val changedPrices = remember(history) {
+    val changedPricesState = com.shopmanager.app.ui.common.rememberComputed(history) {
         val since = System.currentTimeMillis() - PriceHistoryStore.RECENT_WINDOW_MS
         history.values.count { l -> l.any { it.at >= since } }
     }
+    val changedPrices = changedPricesState.value ?: 0
 
     val lastReply = messages.lastOrNull()?.takeIf { !it.fromUser }
     val replyKey = lastReply?.id to lastReply?.time
@@ -222,7 +224,7 @@ fun AssistantHomeScreen(
                                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                                     Text("إجمالي الديون", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Row(verticalAlignment = Alignment.Bottom) {
-                                        AnimatedCounterText(debtTotal, { Formatters.number(it) }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                        AnimatedCounterText(debtTotal, { Formatters.number(it) }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, animate = debtTotalState.value != null)
                                         Text(" $cur", Modifier.padding(bottom = 3.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
@@ -263,7 +265,7 @@ fun AssistantHomeScreen(
                             Icon(Icons.Filled.Sell, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("  الأسعار", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        AnimatedCounterText(changedPrices.toDouble(), { Formatters.number(it) }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        AnimatedCounterText(changedPrices.toDouble(), { Formatters.number(it) }, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, animate = changedPricesState.value != null)
                         Text("مواد تغيّر سعرها", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
                 }
