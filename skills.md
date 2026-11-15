@@ -71,3 +71,11 @@
 - SettingsScreen order is now: account, server banner, display, security, notifications (+blocked banner), sounds and chat, sync and backup, app, help and assistant; LazyColumn spacing 10dp
 - AssistantSettingsScreen: uses SettingsGroup/switchItem rows and SettingsSectionHeader, ConfirmDialog uses GlassAlertDialog
 - not compiled here (no gradle offline): verify via ci
+
+## two priority levels task (important vs very important)
+- Material has two separate flags: important (yellow star, "important") and veryImportant (red star, "very important"); Material.level (0/1/2) and Material.flagged helpers in MaterialsModels.kt; old documents keep important=true and read as level 1
+- Firestore field veryImportant added (MaterialsRepository map/add/backup); setPriority(id, level, topOrder) writes both flags (selecting one clears the other); setImportant(true) now means level 1
+- MaterialsViewModel.setLevel and addMaterial(level = ...); dialogs (MaterialEditDialog, QuantityEntryDialog) now show two separate cards (important yellow, very important red) and onSave returns level 0/1/2
+- list row star cycles none -> yellow -> red -> none; row tint and ring use priorityColor(level); tabs are now: very important / important / missing / all; all-tab sorts higher level first
+- report image star color follows level; MissingFinder star stays yellow (level 1); ImportantStarButton has tone param (default yellow)
+- not compiled here: verify via ci
