@@ -87,3 +87,12 @@
 - UnitPicker is now a horizontal scrolling chip row (also used in MissingFinderScreen); QuantityStepper min height 72dp
 - AppFormDialog / ImportantToggleCard kept but no longer used by these screens
 - not compiled here: verify via ci
+
+## merged important tab + off-thread prices + dashboard input bar task
+- MaterialsTabBar: tabs are now important (very important + important merged, label "هامة", shows red star and yellow star) / missing / all; indices 0/1/2; default listTab 0 always (empty-state fallback removed)
+- MaterialsList: flaggedItems = level > 0 sorted level desc then Arabic name, so red rows come first then yellow; in tab 0 (not searching) it renders as one flat section without group headers; star cycle none -> yellow -> red -> none unchanged
+- row line prices now come from rememberComputed (AppCompute single background thread) together with the summaries (index 4 = id -> price map); rows show the price once ready
+- MaterialsScreen: duplicate changed-price snapshotFlow merged into one and run with flowOn(AppCompute.dispatcher); text share builds on AppCompute.dispatcher
+- ShopManagerApp: dashboard (newHome) box reserve is animated in the layout phase: full pill height when the bottom bar is shown, only the nav bar inset when hidden (HIGH tier only, same as AppBottomBar); no recomposition per frame
+- open question: the request line about the "crystal" controlling a level via a tap and stopping it was unclear; not implemented
+- not compiled here: verify via ci

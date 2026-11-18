@@ -55,10 +55,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -397,6 +399,12 @@ internal fun ShopManagerApp(
     val barScroll = rememberBottomBarScrollState()
     val tabScrollTop = remember { TabScrollToTop() }
     LaunchedEffect(pagerState.currentPage) { barScroll.hidden = false }
+    val dashNavInsets = WindowInsets.navigationBars
+    val dashBarHide = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (barScroll.hidden && LocalPerformanceTier.current == PerformanceTier.HIGH) 1f else 0f,
+        animationSpec = MotionSpecs.contentTween(),
+        label = "dashInputShift"
+    )
     val barContext = LocalContext.current
     val barOverdueDays = remember { SettingsRepository(barContext).overdueDays }
     val barDebtsUi by debtsViewModel.uiState.collectAsStateWithLifecycle()
@@ -593,7 +601,14 @@ internal fun ShopManagerApp(
                         PAGE_DASHBOARD -> if (assistantSettings.newHome) Box(
                             Modifier
                                 .fillMaxSize()
-                                .padding(bottom = if (pillVisible) floatingNavHeight else 0.dp)
+                                .layout { measurable, constraints ->
+                                    val full = if (pillVisible) floatingNavHeight.roundToPx() else 0
+                                    val inset = if (pillVisible) dashNavInsets.getBottom(this) else 0
+                                    val reserve = (full + (inset - full) * dashBarHide.value).roundToInt().coerceAtLeast(0)
+                                    val childHeight = (constraints.maxHeight - reserve).coerceAtLeast(0)
+                                    val placeable = measurable.measure(constraints.copy(minHeight = childHeight, maxHeight = childHeight))
+                                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, 0) }
+                                }
                                 .consumeWindowInsets(if (pillVisible) WindowInsets.navigationBars else WindowInsets(0.dp))
                         ) { AssistantHomeScreen(
                             assistant = assistantViewModel,

@@ -230,35 +230,28 @@ internal fun MaterialsTabBar(
         horizontalArrangement = Arrangement.spacedBy(AppSpaceXs)
     ) {
         MaterialsTabButton(
-            label = "جداً ($veryCount)",
+            label = "هامة ($importantCount)",
             selected = selected == 0,
             leadingStar = true,
-            starTint = red,
+            starTint = if (veryCount > 0) red else yellow,
+            secondStarTint = if (veryCount > 0 && veryCount < importantCount) yellow else null,
             onClick = { onSelect(0) },
             modifier = Modifier.weight(1f)
         )
         MaterialsTabButton(
-            label = "هامة ($importantCount)",
+            label = "ناقصة ($regularCount)",
             selected = selected == 1,
-            leadingStar = true,
+            leadingStar = false,
             starTint = yellow,
             onClick = { onSelect(1) },
             modifier = Modifier.weight(1f)
         )
         MaterialsTabButton(
-            label = "ناقصة ($regularCount)",
+            label = "الكل ($allCount)",
             selected = selected == 2,
             leadingStar = false,
             starTint = yellow,
             onClick = { onSelect(2) },
-            modifier = Modifier.weight(1f)
-        )
-        MaterialsTabButton(
-            label = "الكل ($allCount)",
-            selected = selected == 3,
-            leadingStar = false,
-            starTint = yellow,
-            onClick = { onSelect(3) },
             modifier = Modifier.weight(1f)
         )
     }
@@ -271,7 +264,8 @@ internal fun MaterialsTabButton(
     leadingStar: Boolean,
     starTint: androidx.compose.ui.graphics.Color,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    secondStarTint: androidx.compose.ui.graphics.Color? = null
 ) {
     val cs = MaterialTheme.colorScheme
     val bg by androidx.compose.animation.animateColorAsState(
@@ -298,6 +292,14 @@ internal fun MaterialsTabButton(
                 tint = if (selected) starTint else starTint.copy(alpha = 0.8f),
                 modifier = Modifier.size(14.dp)
             )
+            if (secondStarTint != null) {
+                Icon(
+                    Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = if (selected) secondStarTint else secondStarTint.copy(alpha = 0.8f),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
             Spacer(Modifier.width(AppSpace2))
         }
         Text(

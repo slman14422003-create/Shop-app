@@ -20,6 +20,7 @@ import androidx.compose.material3.*
 import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.toArgb
@@ -154,14 +155,6 @@ fun MaterialsScreen(
     // تركيب الشاشة إلا إذا تغيّر الرقم فعلاً، ويُبلَّغ به مرة واحدة عند كل تغيّر.
     val latestPrices by rememberUpdatedState(state.prices)
     val latestOnChangedCount by rememberUpdatedState(onPricesChangedCountChanged)
-    LaunchedEffect(editedPrices) {
-        snapshotFlow {
-            editedPrices.count { (name, value) ->
-                val parsed = value.toPriceOrNull()
-                parsed != null && parsed != latestPrices[name]
-            }
-        }.distinctUntilChanged().collect { latestOnChangedCount(it) }
-    }
     var changedPricesCount by remember { mutableStateOf(0) }
     val savePricesNow: () -> Unit = {
         val toSave = editedPrices.mapNotNull { (name, value) -> value.toPriceOrNull()?.let { name to it } }.toMap()
@@ -176,7 +169,13 @@ fun MaterialsScreen(
                 val parsed = value.toPriceOrNull()
                 parsed != null && parsed != latestPrices[name]
             }
-        }.distinctUntilChanged().collect { changedPricesCount = it }
+        }
+            .distinctUntilChanged()
+            .flowOn(com.shopmanager.app.ui.common.AppCompute.dispatcher)
+            .collect {
+                changedPricesCount = it
+                latestOnChangedCount(it)
+            }
     }
     LaunchedEffect(tab) { onPricesTabActiveChanged(tab == 1) }
     LaunchedEffect(savePricesRequested) {
@@ -353,11 +352,16 @@ fun MaterialsScreen(
                 }
             },
             onPickText = {
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, buildMaterialsShareText(state.materials, state.prices))
+                scope.launch {
+                    val text = withContext(com.shopmanager.app.ui.common.AppCompute.dispatcher) {
+                        buildMaterialsShareText(state.materials, state.prices)
+                    }
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
                 }
-                context.startActivity(Intent.createChooser(intent, "مشاركة قائمة المواد"))
             }
         )
     }

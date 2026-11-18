@@ -189,16 +189,14 @@ internal fun MaterialsList(
     val sortedMaterials = remember(materials, searching) {
         if (searching) materials else materials.sortedArabicBy { it.name }.sortedByDescending { it.level }
     }
-    val veryItems = remember(sortedMaterials) { sortedMaterials.filter { it.level == 2 } }
-    val importantItems = remember(sortedMaterials) { sortedMaterials.filter { it.level == 1 } }
+    val flaggedItems = remember(sortedMaterials) { sortedMaterials.filter { it.level > 0 } }
     val regularItems = remember(sortedMaterials) { sortedMaterials.filter { it.level == 0 } }
+    val veryCount = remember(flaggedItems) { flaggedItems.count { it.level == 2 } }
     val visibleItems = when (listTab) {
-        0 -> veryItems
-        1 -> importantItems
-        2 -> regularItems
+        0 -> flaggedItems
+        1 -> regularItems
         else -> sortedMaterials
     }
-    LaunchedEffect(Unit) { if (veryItems.isEmpty()) listTab = if (importantItems.isEmpty()) 3 else 1 }
     val searchSections = remember(visibleItems, suggestionIds, searching) {
         if (!searching) emptyList()
         else {
@@ -210,8 +208,9 @@ internal fun MaterialsList(
             out
         }
     }
-    val sections = remember(visibleItems, groupOf, searching, searchSections) {
+    val sections = remember(visibleItems, groupOf, searching, searchSections, listTab) {
         if (searching) searchSections
+        else if (listTab == 0) listOf("" to visibleItems)
         else {
             val byGroup = visibleItems.groupBy { groupOf(it.name) }
             val out = ArrayList<Pair<String, List<Material>>>()
@@ -225,8 +224,12 @@ internal fun MaterialsList(
     // تُحسب مرة لكل تغيّر فعلي في القائمة المعروضة أو في الأسعار.
     // المجاميع تُحسب على الخيط الخفي؛ البطاقة لا تظهر إلا والنتيجة النهائية جاهزة (بلا أرقام وسيطة).
     val summaries = com.shopmanager.app.ui.common.rememberComputed(visibleItems, materials, prices) {
-        listOf(visibleItems.weightSummary(), visibleItems.priceSummary(prices), materials.weightSummary(), materials.priceSummary(prices))
+        val linePrices = HashMap<String, Double>(materials.size * 2)
+        for (m in materials) m.linePrice(prices)?.let { linePrices[m.id] = it }
+        listOf(visibleItems.weightSummary(), visibleItems.priceSummary(prices), materials.weightSummary(), materials.priceSummary(prices), linePrices)
     }
+    @Suppress("UNCHECKED_CAST")
+    val linePrices = summaries.value?.get(4) as? Map<String, Double>
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     com.shopmanager.app.data.performance.ScrollJankWatch(listState)
     com.shopmanager.app.ui.common.RegisterScrollToTop(2, listState)
@@ -245,8 +248,8 @@ internal fun MaterialsList(
                 MaterialsSummaryCard(
                     weights = ready[0] as MaterialsWeightSummary,
                     prices = ready[1] as MaterialsPriceSummary,
-                    overallWeights = if (listTab == 3) null else ready[2] as MaterialsWeightSummary,
-                    overallPrices = if (listTab == 3) null else ready[3] as MaterialsPriceSummary,
+                    overallWeights = if (listTab == 2) null else ready[2] as MaterialsWeightSummary,
+                    overallPrices = if (listTab == 2) null else ready[3] as MaterialsPriceSummary,
                     animate = animateSummary,
                     modifier = Modifier.padding(bottom = AppSpace6)
                 )
@@ -255,8 +258,8 @@ internal fun MaterialsList(
         item(key = "listTabs") {
             MaterialsTabBar(
                 selected = listTab,
-                veryCount = veryItems.size,
-                importantCount = importantItems.size,
+                veryCount = veryCount,
+                importantCount = flaggedItems.size,
                 regularCount = regularItems.size,
                 allCount = materials.size,
                 onSelect = { listTab = it },
@@ -266,9 +269,8 @@ internal fun MaterialsList(
         item(key = "listTitle") {
             AppSectionTitle(
                 text = when (listTab) {
-                    0 -> "المواد الهامة جداً (${visibleItems.size})"
-                    1 -> "المواد الهامة (${visibleItems.size})"
-                    2 -> "المواد الناقصة (${visibleItems.size})"
+                    0 -> "المواد الهامة (${visibleItems.size})"
+                    1 -> "المواد الناقصة (${visibleItems.size})"
                     else -> "كل المواد (${visibleItems.size})"
                 },
                 modifier = Modifier.padding(horizontal = 0.dp),
@@ -286,7 +288,7 @@ internal fun MaterialsList(
         if (visibleItems.isEmpty()) {
             item(key = "noImportant") {
                 Text(
-                    when (listTab) { 0 -> "لا توجد مواد هامة جداً\nاضغط على النجمة بجانب أي مادة حتى تصير حمراء"; 1 -> "لا توجد مواد هامة\nاضغط على النجمة بجانب أي مادة لتصير صفراء"; else -> "لا توجد مواد هنا" },
+                    when (listTab) { 0 -> "لا توجد مواد هامة\nاضغط على النجمة بجانب أي مادة لتصير صفراء ثم حمراء"; else -> "لا توجد مواد هنا" },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.bodyMedium,
@@ -328,7 +330,7 @@ internal fun MaterialsList(
                         onEdit = { onEdit(m) },
                         onDelete = { onDelete(m) },
                         onToggleImportant = { onToggleImportant(m) },
-                        linePrice = m.linePrice(prices)
+                        linePrice = linePrices?.get(m.id)
                     )
                 }
             }
