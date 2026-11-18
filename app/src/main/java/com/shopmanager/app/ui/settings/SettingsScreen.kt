@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.settings
 
+import com.shopmanager.app.ui.common.tierAnimateItem
 import com.shopmanager.app.ui.common.AppSpace10
 import com.shopmanager.app.ui.common.AppSpace6
 import com.shopmanager.app.ui.common.AppSpaceLg
@@ -533,11 +534,7 @@ fun SettingsScreen(
                     GlassCard(
                         Modifier
                             .fillMaxWidth()
-                            .animateItem(
-                                fadeInSpec = MotionSpecs.contentTween(),
-                                placementSpec = MotionSpecs.reorderSpring(),
-                                fadeOutSpec = MotionSpecs.listItemFadeOut()
-                            ),
+                            .then(tierAnimateItem()),
                         shape = MaterialTheme.shapes.large,
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     ) {
@@ -724,11 +721,7 @@ fun SettingsScreen(
                     GlassCard(
                         Modifier
                             .fillMaxWidth()
-                            .animateItem(
-                                fadeInSpec = MotionSpecs.contentTween(),
-                                placementSpec = MotionSpecs.reorderSpring(),
-                                fadeOutSpec = MotionSpecs.listItemFadeOut()
-                            ),
+                            .then(tierAnimateItem()),
                         shape = MaterialTheme.shapes.large,
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     ) {

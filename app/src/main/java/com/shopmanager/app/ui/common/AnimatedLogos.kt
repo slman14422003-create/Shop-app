@@ -49,19 +49,19 @@ import kotlin.math.sin
 /**
  * مستوى حركة الرموز بحسب وضع الأداء:
  *  - [NONE]  (الاقتصادي): رسم ثابت فقط، بلا أي حركة ولا حلقات.
- *  - [ONCE]  (المتوازن): حركة دخول واحدة قصيرة ثم يثبت الرسم.
  *  - [LOOP]  (المرتفع): حركة كاملة مستمرة (دوران، تنفّس، جسيمات، لمعان).
  */
 enum class LogoMotion { NONE, ONCE, LOOP }
 
 fun logoMotionFor(tier: PerformanceTier): LogoMotion = when (tier) {
     PerformanceTier.LOW -> LogoMotion.NONE
-    PerformanceTier.BALANCED -> LogoMotion.ONCE
-    PerformanceTier.STANDARD -> LogoMotion.LOOP
+    PerformanceTier.HIGH -> LogoMotion.LOOP
 }
 
+/** LOOP فقط حين المستوى HIGH والـ lifecycle ≥ STARTED؛ وإلا يبقى الرسم ثابتاً. */
 @Composable
-fun rememberLogoMotion(): LogoMotion = logoMotionFor(LocalPerformanceTier.current)
+fun rememberLogoMotion(): LogoMotion =
+    if (com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()) LogoMotion.LOOP else LogoMotion.NONE
 
 private val ClaudeRay = ClaudeOrangeDark
 private val DevTop = Color(0xFF3B4A9E)

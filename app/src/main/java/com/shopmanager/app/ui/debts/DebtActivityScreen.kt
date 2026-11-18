@@ -132,7 +132,7 @@ fun DebtActivityScreen(onBack: () -> Unit) {
                     ),
                     verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
-                    itemsIndexed(entries) { index, entry ->
+                    itemsIndexed(entries, key = { _, e -> e.id }, contentType = { _, _ -> "activity" }) { index, entry ->
                         val (label, icon, color) = when (entry.kind) {
                             Kind.PAID -> Triple("سداد دين", Icons.Default.Check, semantic.success)
                             Kind.PAID_ALL -> Triple("سداد كامل", Icons.Default.Check, semantic.success)

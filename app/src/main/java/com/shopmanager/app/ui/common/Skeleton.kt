@@ -56,9 +56,8 @@ import com.shopmanager.app.data.performance.MotionSpecs
  * surfaceContainerHigh، ونفس هوامش الشاشات.
  *
  * السلوك حسب وضع الأداء (يتبع [LocalPerformanceTier]):
- *  - STANDARD (قوي): لمعة تمسح كل كتلة (تُرسم كلها في مرحلة الرسم، بلا إعادة تركيب).
- *  - BALANCED (متوازن): نبض شفافية ناعم فقط عبر graphicsLayer — بلا gradient shader.
- *  - LOW (اقتصادي): كتل ثابتة تماماً بلا أي حركة ولا مؤقّت.
+ *  - HIGH (قوي) والـ lifecycle ≥ STARTED: لمعة تمسح كل كتلة (تُرسم في مرحلة الرسم، بلا إعادة تركيب).
+ *  - LOW (اقتصادي) أو الواجهة غير ظاهرة: كتل ثابتة تماماً بلا أي حركة ولا مؤقّت.
  *
  * ساعة اللمعة واحدة لكل [SkeletonHost] فتتحرك كل الكتل معاً بتزامن بدل مؤقّت لكل كتلة.
  */
@@ -66,28 +65,16 @@ private val LocalShimmerPhase = compositionLocalOf<State<Float>?> { null }
 
 @Composable
 fun SkeletonHost(content: @Composable () -> Unit) {
-    val tier = LocalPerformanceTier.current
-    val phase: State<Float>? = when (tier) {
-        PerformanceTier.LOW -> null
-        PerformanceTier.BALANCED -> {
-            val t = rememberInfiniteTransition(label = "skeletonPulse")
-            t.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(MotionSpecs.pulseMs, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-                label = "skeletonPulsePhase"
-            )
-        }
-        PerformanceTier.STANDARD -> {
-            val t = rememberInfiniteTransition(label = "skeletonShimmer")
-            t.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(tween(MotionSpecs.shimmerMs, easing = LinearEasing)),
-                label = "skeletonShimmerPhase"
-            )
-        }
-    }
+    val animate = com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()
+    val phase: State<Float>? = if (animate) {
+        val t = rememberInfiniteTransition(label = "skeletonShimmer")
+        t.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(MotionSpecs.shimmerMs, easing = LinearEasing)),
+            label = "skeletonShimmerPhase"
+        )
+    } else null
     CompositionLocalProvider(LocalShimmerPhase provides phase) { content() }
 }
 
@@ -103,12 +90,9 @@ fun SkeletonBox(
     val base = cs.surfaceContainerHighest
     val sheen = cs.onSurface.copy(alpha = 0.10f)
 
-    // الترتيب مهم: graphicsLayer قبل clip/background كي يشمل النبضُ الخلفيةَ نفسها.
-    val layered = if (tier == PerformanceTier.BALANCED && phase != null) {
-        modifier.graphicsLayer { alpha = 0.55f + 0.45f * phase.value }
-    } else modifier
+    val layered = modifier
 
-    val withSheen = if (tier == PerformanceTier.STANDARD && phase != null) {
+    val withSheen = if (tier == PerformanceTier.HIGH && phase != null) {
         Modifier.drawWithContent {
             drawContent()
             val band = size.width * 0.6f
@@ -281,7 +265,7 @@ private const val SPOKES = 12
 /** حركة عوم خفيفة جداً للرموز (الحالات الفارغة) — للأداء القوي فقط؛ غير ذلك لا شيء. */
 @Composable
 fun Modifier.floatingIcon(): Modifier {
-    if (LocalPerformanceTier.current != PerformanceTier.STANDARD) return this
+    if (!com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()) return this
     val t = rememberInfiniteTransition(label = "floatingIcon")
     val dy = t.animateFloat(
         initialValue = -3f,

@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.dashboard
 
+import com.shopmanager.app.ui.common.tierAnimateItem
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -106,13 +107,8 @@ private fun timeBasedGreeting(): TimeGreeting {
 
 @Composable
 private fun LazyItemScope.cardFx(index: Int): Modifier {
-    val low = LocalPerformanceTier.current == PerformanceTier.LOW
     return Modifier
-        .animateItem(
-            fadeInSpec = if (low) null else MotionSpecs.enterSpec<Float>(),
-            placementSpec = MotionSpecs.itemPlacement(),
-            fadeOutSpec = if (low) null else MotionSpecs.listItemFadeOut()
-        )
+        .then(tierAnimateItem())
         .listItemEntrance(index)
 }
 

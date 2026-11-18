@@ -9,11 +9,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.Color
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
@@ -65,7 +64,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -73,6 +71,38 @@ import com.shopmanager.app.ui.theme.LocalSemanticColors
 import com.shopmanager.app.data.performance.MotionSpecs
 import com.shopmanager.app.data.performance.collectDelayedPressedAsState
 import com.shopmanager.app.data.performance.glowBehind
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.outlined.AttachMoney
+import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.runtime.staticCompositionLocalOf
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * The floating pill's actual on-screen height (including its own top/
@@ -175,182 +205,266 @@ private fun GlassSnackbar(data: SnackbarData) {
 }
 
 /**
- * "أزرار عائمة سريعة" (floating quick-action buttons): the small circular
- * add/save buttons that float above the current tab's content, anchored to
- * opposite bottom corners — this app's tab switching itself now happens
- * through the side drawer (see AppDrawerContent.kt) opened by the
- * hamburger button in MainActivity, not through a bottom tab bar. This
- * composable used to also render that tab bar as a glass capsule; it now
- * only positions [quickAction]/[secondaryAction], each shown or hidden
- * independently with a fade+scale as the current page changes.
+ * Describes a floating circular action (quick-add, save). Kept as data so the bar can render every
+ * one of them with the same glass-circle look.
  */
-@Composable
-fun FloatingQuickActions(
-    modifier: Modifier = Modifier,
-    // "زر الإضافة السريع": an optional circular action anchored to the
-    // screen's bottom-end corner (bottom-right in this app's forced-RTL
-    // layout). Passing null (the default — used whenever the current page
-    // has nothing to "add", e.g. the Home tab) hides it with a fade+scale
-    // instead of leaving an empty circle behind.
-    quickAction: QuickAction? = null,
-    // "زر ثانوي من الجهة اليسرى": a second optional circular action,
-    // anchored to the opposite corner (bottom-start) so it never overlaps
-    // `quickAction` on the one screen where both show at once (المواد
-    // والأسعار's الأسعار تبويب: "مادة جديدة" + "حفظ الأسعار"). Same
-    // null-hides-with-fade behavior as `quickAction`.
-    secondaryAction: QuickAction? = null
-) {
-    // Keeps rendering the last non-null action while its own exit
-    // animation plays, so switching to a page with no action (Home) fades
-    // the button away instead of yanking it off-screen the instant
-    // `quickAction` turns null.
-    var lastQuickAction by remember { mutableStateOf<QuickAction?>(null) }
-    LaunchedEffect(quickAction) { if (quickAction != null) lastQuickAction = quickAction }
-    var lastSecondaryAction by remember { mutableStateOf<QuickAction?>(null) }
-    LaunchedEffect(secondaryAction) { if (secondaryAction != null) lastSecondaryAction = secondaryAction }
-
-    // `modifier` is how MainActivity supplies `Modifier.align(BottomCenter)`
-    // over a NavHost that fills the entire screen — this Box only reserves
-    // its own bottom strip (matching the navigation-bar inset plus a
-    // little margin) and never paints a background, so both corners stay
-    // genuinely transparent over whichever tab is showing underneath.
-    // BUG FIXED ("زر اضافة المواد احس مكانه مش ظابط"): 14.dp of bottom
-    // margin sat right at the edge of the list's own last row underneath
-    // it, close enough to read as overlapping/crowding it rather than a
-    // clearly separate floating control. Widened to give the button its
-    // own visible breathing room above the content, same on every screen
-    // that shows a quick-action circle.
-    Box(
-        modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 20.dp, vertical = 22.dp)
-    ) {
-        AnimatedVisibility(
-            visible = quickAction != null,
-            modifier = Modifier.align(Alignment.CenterEnd),
-            enter = MotionSpecs.popEnter(),
-            exit = MotionSpecs.popExit()
-        ) {
-            lastQuickAction?.let { action -> QuickActionFab(action, modifier = Modifier.size(52.dp)) }
-        }
-        AnimatedVisibility(
-            visible = secondaryAction != null,
-            modifier = Modifier.align(Alignment.CenterStart),
-            enter = MotionSpecs.popEnter(),
-            exit = MotionSpecs.popExit()
-        ) {
-            lastSecondaryAction?.let { action -> QuickActionFab(action, modifier = Modifier.size(52.dp)) }
-        }
-    }
-}
-
-/** Describes a floating circular button (quick-add, save, or the drawer's
- * hamburger trigger) — what icon it shows and what happens when it's
- * tapped. Kept as data (rather than a raw `@Composable () -> Unit`) so
- * [QuickActionFab] can give every one of them the same consistent
- * glass-circle look instead of each caller styling its own button. */
 data class QuickAction(
     val icon: ImageVector,
     val contentDescription: String,
     val onClick: () -> Unit
 )
 
-@Composable
-fun QuickActionFab(action: QuickAction, modifier: Modifier = Modifier) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectDelayedPressedAsState()
-    // LAG FIX: قراءة الـ scale في مرحلة الرسم (graphicsLayer) بدل إعادة التركيب كل إطار.
-    val scale = animateFloatAsState(
-        targetValue = if (pressed) MotionSpecs.pressScale() else 1f,
-        animationSpec = MotionSpecs.quickSpring(),
-        label = "quickActionFabScale"
-    )
-    // REDESIGN ("الوان الثيمات بشكل عام بدها تحسين وتباين"): this used to
-    // fill with the same neutral surfaceContainerHigh tone every header
-    // uses (see BrandGradient/Theme.kt's gradientColors) — a flat add
-    // button reading as just another gray circle, low-contrast against a
-    // near-black page in dark mode, exactly like the muddy check/delete
-    // circles fixed in ActionIconButton. The one circular "+" that starts
-    // a new person/material/price-save action is this app's single most
-    // important floating control, so it now fills with the actual brand
-    // accent instead of a neutral tone, with a solid, high-contrast icon
-    // on top — a real call-to-action instead of a hard-to-see disc.
-    val primary = MaterialTheme.colorScheme.primary
-    Box(
-        modifier
-            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
-            .glowBehind(primary)
-            .liquidGlassSurface(
-                CircleShape,
-                baseBrush = androidx.compose.ui.graphics.SolidColor(primary),
-                elevation = 6.dp
-            )
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = action.onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            action.icon,
-            contentDescription = action.contentDescription,
-            tint = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.size(24.dp)
-        )
+// ───────────────────────── مساعدات الشريط السفلي ─────────────────────────
+
+/**
+ * إخفاء الشريط عند التمرير لأسفل وإظهاره عند التمرير لأعلى (HIGH فقط، يُفرض في [AppBottomBar]).
+ * يُمرَّر [connection] إلى `Modifier.nestedScroll` على حاوية الـ NavHost. الإخفاء transform فقط،
+ * فلا يتغير [LocalFloatingBottomNavHeight] ولا تقفز التخطيطات.
+ */
+@Stable
+class BottomBarScrollState {
+    var hidden by mutableStateOf(false)
+
+    val connection = object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            val dy = available.y
+            if (dy < -SCROLL_THRESHOLD_PX) hidden = true else if (dy > SCROLL_THRESHOLD_PX) hidden = false
+            return Offset.Zero
+        }
+    }
+
+    private companion object {
+        const val SCROLL_THRESHOLD_PX = 6f
     }
 }
 
+@Composable
+fun rememberBottomBarScrollState(): BottomBarScrollState = remember { BottomBarScrollState() }
 
-data class BottomNavTab(val icon: ImageVector, val label: String, val page: Int)
+/** سجل "اضغط التبويب المحدد للعودة لأعلى القائمة": كل صفحة تسجّل دالتها عبر [RegisterScrollToTop]. */
+@Stable
+class TabScrollToTop {
+    private val handlers = mutableMapOf<Int, () -> Unit>()
+    fun register(page: Int, action: () -> Unit) { handlers[page] = action }
+    fun unregister(page: Int) { handlers.remove(page) }
+    fun scroll(page: Int) { handlers[page]?.invoke() }
+}
 
-private val BottomNavTabs = listOf(
-    BottomNavTab(Icons.Filled.Home, "الرئيسية", 0),
-    BottomNavTab(Icons.Filled.AttachMoney, "الديون", 1),
-    BottomNavTab(Icons.Filled.Inventory2, "المواد", 2),
-    BottomNavTab(Icons.Filled.Forum, "الدردشة", 3)
+val LocalTabScrollToTop = staticCompositionLocalOf<TabScrollToTop?> { null }
+
+@Composable
+fun RegisterScrollToTop(page: Int, state: LazyListState) {
+    val registry = LocalTabScrollToTop.current ?: return
+    val scope = rememberCoroutineScope()
+    DisposableEffect(registry, page, state) {
+        registry.register(page) { scope.launch { state.animateScrollToItem(0) } }
+        onDispose { registry.unregister(page) }
+    }
+}
+
+// ───────────────────────── الشريط السفلي بأسلوب iPhone ─────────────────────────
+
+data class BottomNavTab(
+    val icon: ImageVector,
+    val selectedIcon: ImageVector,
+    val label: String,
+    val page: Int
 )
 
+private val BottomNavTabs = listOf(
+    BottomNavTab(Icons.Outlined.Home, Icons.Filled.Home, "الرئيسية", 0),
+    BottomNavTab(Icons.Outlined.AttachMoney, Icons.Filled.AttachMoney, "الديون", 1),
+    BottomNavTab(Icons.Outlined.Inventory2, Icons.Filled.Inventory2, "المواد", 2),
+    BottomNavTab(Icons.Outlined.Forum, Icons.Filled.Forum, "الدردشة", 3)
+)
+
+private val BarHeight = 64.dp
+private val BarHairline = 0.5.dp
+private val BadgeRed = Color(0xFFFF3B30)
+
+/**
+ * شريط تنقل بأسلوب iOS:
+ * - تبويبات متساوية العرض، أيقونة فوق تسمية 10sp؛ Outlined عند عدم التحديد وFilled عند التحديد.
+ * - "عدسة" زجاجية منزلقة خلف التبويب المحدد (graphicsLayer translationX، تراعي RTL): نابض في HIGH
+ *   وtween 150ms في LOW. السحب الأفقي على الشريط يبدّل التبويب والعدسة تتبع الإصبع.
+ * - خلفية ضبابية عبر [BlurBackdrop] حين يكون [blurEnabled]، وإلا surfaceContainerHigh معتم؛ حد 0.5dp بلا ظل.
+ * - أيقونة تتصغر 0.88 عند الضغط وتكبر 1.06 عند التحديد (HIGH فقط)، واهتزاز عند تغيّر التبويب.
+ * - شارات حمراء ([badges]: رقم الصفحة ← العدد).
+ * - الضغط على التبويب المحدد ينادي [onReselect] (للعودة لأعلى القائمة).
+ * - [quickAction] زر زجاجي دائري بجانب الكبسولة وبنفس ارتفاعها.
+ * - [hidden]: ينزلق الشريط خارج الشاشة (HIGH فقط) دون تغيير حجمه في التخطيط.
+ */
 @Composable
 fun AppBottomBar(
     selectedPage: Int,
     onSelectPage: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    badges: Map<Int, Int> = emptyMap(),
+    quickAction: QuickAction? = null,
+    onReselect: (Int) -> Unit = {},
+    hidden: Boolean = false
+) {
+    val tier = LocalPerformanceTier.current
+    val high = tier == PerformanceTier.HIGH
+    val hide = animateFloatAsState(
+        targetValue = if (hidden && high) 1f else 0f,
+        animationSpec = MotionSpecs.contentTween(),
+        label = "bottomBarHide"
+    )
+    var lastQuick by remember { mutableStateOf<QuickAction?>(null) }
+    LaunchedEffect(quickAction) { if (quickAction != null) lastQuick = quickAction }
+
+    Row(
+        modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                // يُقرأ في مرحلة الرسم فقط؛ يزيح الشريط بحجمه + هامش النظام السفلي.
+                translationY = (size.height + 24.dp.toPx()) * hide.value
+                alpha = 1f - 0.4f * hide.value
+            }
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        BottomCapsule(
+            selectedPage = selectedPage,
+            onSelectPage = onSelectPage,
+            onReselect = onReselect,
+            badges = badges,
+            modifier = Modifier.weight(1f)
+        )
+        AnimatedVisibility(
+            visible = quickAction != null,
+            enter = MotionSpecs.popEnter(),
+            exit = MotionSpecs.popExit()
+        ) {
+            lastQuick?.let { GlassCircleButton(it) }
+        }
+    }
+}
+
+@Composable
+private fun GlassBackground(shape: androidx.compose.ui.graphics.Shape, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    Box(modifier.clip(shape)) {
+        if (blurEnabled()) {
+            BlurBackdrop(Modifier.matchParentSize(), tint = cs.surfaceContainerHigh.copy(alpha = 0.55f))
+        } else {
+            Box(Modifier.matchParentSize().background(cs.surfaceContainerHigh))
+        }
+    }
+}
+
+@Composable
+private fun BottomCapsule(
+    selectedPage: Int,
+    onSelectPage: (Int) -> Unit,
+    onReselect: (Int) -> Unit,
+    badges: Map<Int, Int>,
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    // كبسولة عائمة بزوايا مدوّرة بدل الشريط المسطّح: لا خط فاصل، ولا خلفية ممتدة
-    // لحافة الشاشة، والتبويب المحدّد يتمدّد ليُظهر الأيقونة مع اسمه داخل حبة بلون التطبيق.
-    Box(
+    val accent = appAccent()
+    val high = LocalPerformanceTier.current == PerformanceTier.HIGH
+    val haptics = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val dirSign = if (rtl) -1f else 1f
+    val count = BottomNavTabs.size
+    val shape = RoundedCornerShape(BarHeight / 2)
+    val selectedIndex = BottomNavTabs.indexOfFirst { it.page == selectedPage }.coerceAtLeast(0)
+
+    // موضع العدسة كفهرس كسري (0..count-1): يتبع الإصبع أثناء السحب، وينزلق للتبويب المحدد بنابض/tween.
+    val lens = remember { Animatable(selectedIndex.toFloat()) }
+    var dragging by remember { mutableStateOf(false) }
+    val lensSpec = if (high) {
+        spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow * 1.6f)
+    } else {
+        tween<Float>(150, easing = MotionSpecs.claudeEasing)
+    }
+    LaunchedEffect(selectedIndex, dragging) {
+        if (!dragging) lens.animateTo(selectedIndex.toFloat(), lensSpec)
+    }
+
+    val currentSelected by rememberUpdatedState(selectedIndex)
+    val currentOnSelect by rememberUpdatedState(onSelectPage)
+
+    BoxWithConstraints(
         modifier
-            .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .height(BarHeight)
+            .border(BarHairline, cs.outlineVariant, shape)
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(32.dp),
-            color = cs.surfaceContainerHigh,
-            border = BorderStroke(AppBorderWidth, cs.outlineVariant),
-            shadowElevation = 8.dp
-        ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(64.dp)
-                    .padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                BottomNavTabs.forEach { tab ->
-                    val selected = selectedPage == tab.page
-                    BottomNavItem(
-                        tab = tab,
-                        selected = selected,
-                        onClick = { onSelectPage(tab.page) },
-                        modifier = Modifier.weight(if (selected) 1.9f else 1f)
+        val tabWidth = maxWidth / count
+        val widthPx = with(androidx.compose.ui.platform.LocalDensity.current) { maxWidth.toPx() }
+        val tabWidthPx = widthPx / count
+
+        GlassBackground(shape, Modifier.matchParentSize())
+
+        // العدسة الزجاجية خلف التبويب المحدد.
+        Box(
+            Modifier
+                .align(Alignment.CenterStart)
+                .padding(vertical = 6.dp, horizontal = 4.dp)
+                .width(tabWidth - 8.dp)
+                .fillMaxHeight()
+                .graphicsLayer { translationX = lens.value * tabWidthPx * dirSign }
+                .clip(CircleShape)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color.White.copy(alpha = 0.20f), accent.copy(alpha = 0.16f))
                     )
-                }
+                )
+                .border(BarHairline, accent.copy(alpha = 0.35f), CircleShape)
+        )
+
+        Row(
+            Modifier
+                .matchParentSize()
+                .pointerInput(count, tabWidthPx, rtl) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragging = true },
+                        onDragEnd = {
+                            val target = lens.value.roundToInt().coerceIn(0, count - 1)
+                            dragging = false
+                            if (target != currentSelected) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                currentOnSelect(BottomNavTabs[target].page)
+                            }
+                        },
+                        onDragCancel = { dragging = false },
+                        onHorizontalDrag = { change, _ ->
+                            change.consume()
+                            val x = change.position.x.coerceIn(0f, size.width.toFloat())
+                            val fromStart = if (rtl) size.width - x else x
+                            val fraction = (fromStart / tabWidthPx - 0.5f).coerceIn(0f, (count - 1).toFloat())
+                            val before = lens.value.roundToInt()
+                            scope.launch { lens.snapTo(fraction) }
+                            if (fraction.roundToInt() != before) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        }
+                    )
+                },
+            horizontalArrangement = Arrangement.Start,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BottomNavTabs.forEach { tab ->
+                val selected = selectedPage == tab.page
+                BottomNavItem(
+                    tab = tab,
+                    selected = selected,
+                    badge = badges[tab.page] ?: 0,
+                    onClick = {
+                        if (selected) {
+                            onReselect(tab.page)
+                        } else {
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onSelectPage(tab.page)
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }
@@ -360,47 +474,125 @@ fun AppBottomBar(
 private fun BottomNavItem(
     tab: BottomNavTab,
     selected: Boolean,
+    badge: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
-    val accent = appAccent()
-    val low = LocalPerformanceTier.current == PerformanceTier.LOW
-    val pill by animateColorAsState(
-        targetValue = if (selected) accent else Color.Transparent,
-        animationSpec = if (low) snap() else tween(com.shopmanager.app.data.performance.MotionSpecs.baseMs, easing = com.shopmanager.app.data.performance.MotionSpecs.claudeEasing),
-        label = "bottomNavPill"
+    val high = LocalPerformanceTier.current == PerformanceTier.HIGH
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val iconScale = animateFloatAsState(
+        targetValue = when {
+            !high -> 1f
+            pressed -> 0.88f
+            selected -> 1.06f
+            else -> 1f
+        },
+        animationSpec = MotionSpecs.quickSpring(),
+        label = "bottomNavIconScale"
     )
-    val content = if (selected) appOnAccent() else cs.onSurfaceVariant
+    val tint = if (selected) appAccent() else cs.onSurfaceVariant
+
     Box(
         modifier
             .fillMaxHeight()
-            .padding(vertical = 8.dp)
-            .clip(CircleShape)
-            .background(pill)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick),
+            .heightIn(min = 48.dp)
+            .selectable(
+                selected = selected,
+                role = Role.Tab,
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick
+            )
+            .semantics {
+                contentDescription = if (badge > 0) "${tab.label}، $badge" else tab.label
+            },
         contentAlignment = Alignment.Center
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Icon(
-                tab.icon,
-                contentDescription = tab.label,
-                tint = content,
-                modifier = Modifier.size(24.dp)
-            )
-            if (selected) {
-                Text(
-                    tab.label,
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
-                    fontWeight = FontWeight.Bold,
-                    color = content,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.graphicsLayer { scaleX = iconScale.value; scaleY = iconScale.value }) {
+                Icon(
+                    imageVector = if (selected) tab.selectedIcon else tab.icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(24.dp)
                 )
+                if (badge > 0) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = (if (rtl) -9 else 9).dp, y = (-6).dp)
+                            .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp)
+                            .clip(CircleShape)
+                            .background(BadgeRed)
+                            .border(1.dp, cs.surfaceContainerHigh, CircleShape)
+                            .padding(horizontal = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (badge > 99) "99+" else badge.toString(),
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                tab.label,
+                color = tint,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+    }
+}
+
+/** زر الإضافة السريع: دائرة زجاجية بجانب الكبسولة وبنفس ارتفاعها، يحلّ محل الزر العائم في الزاوية. */
+@Composable
+private fun GlassCircleButton(action: QuickAction) {
+    val cs = MaterialTheme.colorScheme
+    val high = LocalPerformanceTier.current == PerformanceTier.HIGH
+    val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale = animateFloatAsState(
+        targetValue = if (pressed && high) 0.9f else 1f,
+        animationSpec = MotionSpecs.quickSpring(),
+        label = "bottomQuickScale"
+    )
+    Box(
+        Modifier
+            .size(BarHeight)
+            .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
+            .border(BarHairline, cs.outlineVariant, CircleShape)
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Button,
+                onClickLabel = action.contentDescription,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    action.onClick()
+                }
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        GlassBackground(CircleShape, Modifier.matchParentSize())
+        Icon(
+            action.icon,
+            contentDescription = action.contentDescription,
+            tint = appAccent(),
+            modifier = Modifier.size(26.dp)
+        )
     }
 }

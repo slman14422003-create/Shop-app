@@ -158,7 +158,7 @@ fun LockScreen(settings: SettingsRepository, onUnlocked: () -> Unit) {
         // already-colored one.
         // الهالة الشعاعية (420dp، shader لكل بكسل) للأداء القوي فقط.
         if (com.shopmanager.app.data.performance.LocalPerformanceTier.current ==
-            com.shopmanager.app.data.performance.PerformanceTier.STANDARD
+            com.shopmanager.app.data.performance.PerformanceTier.HIGH
         ) {
             Box(
                 Modifier

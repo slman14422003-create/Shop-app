@@ -129,7 +129,7 @@ private fun HeroIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, page
     LaunchedEffect(pageKey) {
         if (!low) pop.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 260f))
     }
-    val pulse = if (low) null else rememberInfiniteTransition(label = "pulse").animateFloat(
+    val pulse = if (!com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()) null else rememberInfiniteTransition(label = "pulse").animateFloat(
         0f, 1f,
         infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
         label = "pulseValue"

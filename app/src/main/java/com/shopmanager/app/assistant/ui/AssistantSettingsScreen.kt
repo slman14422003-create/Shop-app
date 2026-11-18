@@ -88,7 +88,7 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
             if (aliases.isEmpty()) {
                 item { Text("لا توجد أسماء متعلَّمة بعد. عندما تؤكد \"تقصد X؟\" يحفظ المساعد التهجئة لاستعمالها لاحقاً.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
-                items(aliases.entries.toList(), key = { it.key }) { e ->
+                items(aliases.entries.toList(), key = { it.key }, contentType = { "alias" }) { e ->
                     AppRowSurface(RoundedCornerShape(18.dp)) {
                         Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("${e.key}  ←  ${e.value}", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -118,7 +118,7 @@ fun AssistantSettingsScreen(assistant: AssistantViewModel, onBack: () -> Unit) {
             if (unheard.isEmpty()) {
                 item { Text("لا توجد جمل بعد.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             } else {
-                items(unheard.reversed().take(30), key = { it }) { t ->
+                items(unheard.reversed().take(30), key = { it }, contentType = { "unheard" }) { t ->
                     AppRowSurface(RoundedCornerShape(18.dp)) { Text(t, Modifier.padding(horizontal = 14.dp, vertical = 10.dp), style = MaterialTheme.typography.bodyMedium) }
                 }
                 item { AppPillButton("مسح هذا السجل", { assistant.clearUnheard() }, Modifier.fillMaxWidth(), tonal = true, height = 46.dp) }

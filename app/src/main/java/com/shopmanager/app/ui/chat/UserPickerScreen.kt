@@ -102,7 +102,7 @@ fun UserPickerScreen(
                     contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = 4.dp, bottom = 28.dp),
                     verticalArrangement = Arrangement.spacedBy(AppGroupGap)
                 ) {
-                    itemsIndexed(state.users, key = { _, u -> u.uid }) { index, user ->
+                    itemsIndexed(state.users, key = { _, u -> u.uid }, contentType = { _, _ -> "user" }) { index, user ->
                         UserRow(user, now, groupedRowShape(index, state.users.lastIndex)) { onPick(user.uid, user.name) }
                     }
                 }

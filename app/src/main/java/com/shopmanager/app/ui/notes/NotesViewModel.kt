@@ -14,7 +14,10 @@ import com.shopmanager.app.data.settings.SettingsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
@@ -41,6 +44,7 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
     val hasSyncError: StateFlow<Boolean> = _hasSyncError
 
     val uiState: StateFlow<NotesUiState> = repo.listenNotes()
+        .distinctUntilChanged()
         .map { notes -> NotesUiState(notes = notes, isLoading = false) }
         .onEach { _hasSyncError.value = false }
         .onStart { emit(NotesUiState(isLoading = true)) }
@@ -49,7 +53,8 @@ class NotesViewModel(application: Application) : AndroidViewModel(application) {
             _message.value = "تعذر تحميل الملاحظات: ${e.message ?: "تحقق من الاتصال"}"
             emit(NotesUiState(isLoading = false))
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NotesUiState())
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NotesUiState())
 
     fun clearMessage() { _message.value = null }
 

@@ -41,7 +41,6 @@ import com.shopmanager.app.data.notifications.NotificationHelper
 import com.shopmanager.app.data.notifications.NotificationSync
 import com.shopmanager.app.data.performance.DevicePerformance
 import com.shopmanager.app.data.performance.LocalPerformanceTier
-import com.shopmanager.app.data.performance.FrameJankGuard
 import com.shopmanager.app.data.performance.PerformanceMode
 import com.shopmanager.app.data.performance.PerformanceTier
 import com.shopmanager.app.data.performance.resolvePerformanceTier
@@ -68,6 +67,7 @@ import com.shopmanager.app.data.performance.MotionSpecs
 private const val SPLASH_MIN_DISPLAY_MS = 600L
 
 private const val SPLASH_MIN_DISPLAY_LOW_MS = 650L
+private const val MEMORY_LOW_RECOVERY_MS = 60_000L
 
 private const val UI_SCALE = 1.08f
 
@@ -183,6 +183,8 @@ class MainActivity : FragmentActivity() {
         // color meeting the header's glossy top edge was exactly the
         // visible dividing line.
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        registerThermalListener()
+        com.shopmanager.app.data.chat.ChatImageCodec.configure(applicationContext)
 
         val splashStartTime = System.currentTimeMillis()
 
@@ -192,7 +194,8 @@ class MainActivity : FragmentActivity() {
         pendingNotificationAction = NotificationAction.from(intent)
 
         var isReady by mutableStateOf(false)
-        var detectedTier by mutableStateOf(PerformanceTier.BALANCED)
+        var detectedTier by mutableStateOf(PerformanceTier.LOW)
+        var heavyFx by mutableStateOf(false)
         // Tracks only whether Compose has produced its first frame — NOT
         // whether init is done. The static system splash now only needs to
         // bridge the gap until Compose can draw *something*; from that
@@ -236,7 +239,8 @@ class MainActivity : FragmentActivity() {
             // before `isReady = true` and the person was stuck on the splash
             // forever. Each step is now isolated, and the hand-off to the real
             // UI always happens in the finally block with a safe default tier.
-            var tier = PerformanceTier.BALANCED
+            var tier = PerformanceTier.LOW
+            var heavy = false
             try {
                 runCatching { FirebaseModule.init(applicationContext) }
                 runCatching { NotificationHelper.ensureChannels(applicationContext) }
@@ -246,7 +250,8 @@ class MainActivity : FragmentActivity() {
                 // entry-level hardware — see DevicePerformance for the
                 // detection signals.
                 tier = runCatching { DevicePerformance.detectTier(applicationContext) }
-                    .getOrDefault(PerformanceTier.BALANCED)
+                    .getOrDefault(PerformanceTier.LOW)
+                heavy = runCatching { DevicePerformance.isHeavyFx(applicationContext) }.getOrDefault(false)
 
                 // Weak/economic devices get a lighter, battery-guarded sync
                 // schedule automatically — see BackgroundSyncWorker.schedule.
@@ -269,6 +274,7 @@ class MainActivity : FragmentActivity() {
             } finally {
                 withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
                     detectedTier = tier
+                    heavyFx = heavy
                     isReady = true
                 }
             }
@@ -315,17 +321,20 @@ class MainActivity : FragmentActivity() {
             // pattern as themeMode/onThemeChanged just above.
             var performancePreference by remember { mutableStateOf(settings.performanceMode) }
             val performanceTier by remember {
-                derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference, systemMotionLimit) }
+                derivedStateOf { resolvePerformanceTier(detectedTier, performancePreference, systemMotionLimit, thermalStatus, memoryLow) }
             }
             // الأداء القوي → ~90Hz، الاقتصادي → 60Hz؛ يُعاد التطبيق فور تغيّر الوضع من الإعدادات.
-            LaunchedEffect(performanceTier) { applyRefreshRate(performanceTier) }
+            LaunchedEffect(performanceTier) {
+                com.shopmanager.app.data.performance.PerformanceRuntime.tier = performanceTier
+                applyRefreshRate(performanceTier)
+            }
             // "تلقائي" فقط: إن رُصد تقطع فعلي في الإطارات على هذا الجهاز نزلنا بالمستوى خطوة
             // (ويُحفظ الحكم). المنخفض لا يحتاج رصداً، والاختيار اليدوي (مرتفع/منخفض) لا يُمَس.
             androidx.compose.runtime.DisposableEffect(isReady, performancePreference, detectedTier) {
                 val stop = if (isReady && performancePreference == PerformanceMode.AUTO &&
                     detectedTier != PerformanceTier.LOW
                 ) {
-                    FrameJankGuard.start(refreshHz = { refreshHz }) {
+                    com.shopmanager.app.data.performance.JankMonitor.startStartupGuard(window) {
                         detectedTier = DevicePerformance.downgradeCachedTier(applicationContext)
                     }
                 } else null
@@ -487,6 +496,7 @@ class MainActivity : FragmentActivity() {
                             CompositionLocalProvider(
                                 LocalPerformanceTier provides performanceTier,
                                 LocalRefreshRateHz provides refreshHz,
+                                com.shopmanager.app.data.performance.LocalHeavyFx provides heavyFx,
                                 com.shopmanager.app.data.performance.LocalScrollJankReporter provides (
                                     if (performancePreference == PerformanceMode.AUTO && detectedTier != PerformanceTier.LOW)
                                         ({ detectedTier = DevicePerformance.downgradeCachedTier(applicationContext) })
@@ -672,7 +682,36 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        // RUNNING_LOW (10) وما فوقه: نُفرغ كاشات الصور ونُنزل المستوى مؤقتاً إلى LOW في وضع «تلقائي».
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            com.shopmanager.app.data.performance.BitmapCaches.evictAll()
+            memoryLow = true
+            memoryLowJob?.cancel()
+            memoryLowJob = lifecycleScope.launch {
+                delay(MEMORY_LOW_RECOVERY_MS)
+                memoryLow = false
+            }
+        }
+    }
+
+    private fun registerThermalListener() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        runCatching {
+            val pm = getSystemService(android.os.PowerManager::class.java) ?: return
+            thermalStatus = pm.currentThermalStatus
+            pm.addThermalStatusListener(mainExecutor, thermalListener)
+        }
+    }
+
+    private fun unregisterThermalListener() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        runCatching { getSystemService(android.os.PowerManager::class.java)?.removeThermalStatusListener(thermalListener) }
+    }
+
     override fun onDestroy() {
+        unregisterThermalListener()
         // الخدمة الأمامية (إن وُجدت) تحتفظ بمالكها الخاص فتبقى المستمعات حيّة؛
         // وإلا نغلقها بعد أن يغادر المستخدم التطبيق فعلاً (لا عند تدوير الشاشة).
         if (isFinishing) NotificationSync.onAppClosed()
@@ -693,6 +732,15 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingNotificationAction = NotificationAction.from(intent)
+    }
+
+    // الحرارة (PowerManager.THERMAL_STATUS_*) وضغط الذاكرة — يغذّيان [resolvePerformanceTier].
+    private var thermalStatus by androidx.compose.runtime.mutableIntStateOf(0)
+    private var memoryLow by mutableStateOf(false)
+    private var memoryLowJob: kotlinx.coroutines.Job? = null
+
+    private val thermalListener = android.os.PowerManager.OnThermalStatusChangedListener { status ->
+        thermalStatus = status
     }
 
     /** معدل تحديث الشاشة الفعلي الآن؛ حالة Compose حتى تتفاعل الحركات مع تغيّره. */

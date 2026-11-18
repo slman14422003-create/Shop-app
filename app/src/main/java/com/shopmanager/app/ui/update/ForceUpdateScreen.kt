@@ -149,7 +149,7 @@ fun ForceUpdateScreen(
     // optional update flows still read as one visual family.
     // حركة لانهائية في مرحلة الرسم فقط (بلا while/delay ولا إعادة تركيب)، وتُعطَّل في الوضع الاقتصادي.
     val arrowShift: State<Float> =
-        if (LocalPerformanceTier.current == PerformanceTier.LOW) {
+        if (!com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()) {
             remember { mutableStateOf(0f) }
         } else {
             rememberInfiniteTransition(label = "forceUpdateArrow").animateFloat(

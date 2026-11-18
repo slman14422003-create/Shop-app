@@ -634,7 +634,7 @@ private fun SummaryStep(
             item(key = "title") {
                 AppSectionTitle("المواد الناقصة (${pending.size})", Modifier.padding(bottom = 4.dp))
             }
-            itemsIndexed(pending, key = { _, p -> p.name }) { index, p ->
+            itemsIndexed(pending, key = { _, p -> p.name }, contentType = { _, _ -> "pending" }) { index, p ->
                 AppRowSurface(shape = groupedRowShape(index, pending.lastIndex)) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),

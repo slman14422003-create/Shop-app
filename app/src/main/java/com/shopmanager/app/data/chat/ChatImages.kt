@@ -61,6 +61,15 @@ object ChatImageCodec {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
+    init {
+        com.shopmanager.app.data.performance.BitmapCaches.register { cache.evictAll() }
+    }
+
+    /** حجم الكاش = ~8% من سقف heap التطبيق (memoryClass) بدل رقم ثابت. */
+    fun configure(context: Context) {
+        cache.resize(com.shopmanager.app.data.performance.BitmapCaches.budgetBytes(context, 0.08f))
+    }
+
     fun cached(key: String): Bitmap? = cache.get(key)
 
     suspend fun encode(context: Context, uri: Uri): EncodedImage? = withContext(Dispatchers.IO) {
@@ -162,7 +171,8 @@ object ChatImageCodec {
     }
 
     fun decode(key: String, b64: String, targetDim: Int): Bitmap? {
-        val cacheKey = "$key@$targetDim"
+        val config = com.shopmanager.app.data.performance.PerformanceRuntime.thumbnailConfig
+        val cacheKey = "$key@$targetDim@${config.name}"
         cache.get(cacheKey)?.let { return it }
         if (b64.isEmpty()) return null
         return try {
@@ -172,7 +182,7 @@ object ChatImageCodec {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             val opts = BitmapFactory.Options().apply {
                 inSampleSize = ImageSizing.sampleSize(bounds.outWidth, bounds.outHeight, targetDim)
-                inPreferredConfig = Bitmap.Config.RGB_565
+                inPreferredConfig = config
             }
             val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
             if (bmp != null) cache.put(cacheKey, bmp)

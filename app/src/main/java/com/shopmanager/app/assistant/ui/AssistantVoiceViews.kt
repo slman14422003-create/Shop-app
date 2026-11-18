@@ -87,11 +87,12 @@ fun MicButton(assistant: AssistantViewModel, modifier: Modifier = Modifier) {
         if (granted) assistant.startVoice()
     }
     Box(modifier.size(52.dp), contentAlignment = Alignment.Center) {
-        if (listening && LocalPerformanceTier.current != PerformanceTier.LOW) {
+        if (listening && com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()) {
             val t = rememberInfiniteTransition(label = "micPulse")
-            val p by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "p")
+            val p = t.animateFloat(0f, 1f, infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Restart), label = "p")
             Canvas(Modifier.matchParentSize()) {
-                drawCircle(AssistantWarnOrange.copy(alpha = (1f - p) * 0.45f), radius = size.minDimension / 2f * (1f + p * 0.7f))
+                val pv = p.value
+                drawCircle(AssistantWarnOrange.copy(alpha = (1f - pv) * 0.45f), radius = size.minDimension / 2f * (1f + pv * 0.7f))
             }
         }
         Surface(

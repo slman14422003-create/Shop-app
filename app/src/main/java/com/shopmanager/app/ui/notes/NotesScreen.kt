@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.notes
 
+import com.shopmanager.app.ui.common.tierAnimateItem
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
@@ -253,11 +254,7 @@ fun NotesScreen(
                             note = note,
                             shape = groupedRowShape(index, filtered.lastIndex),
                             modifier = Modifier
-                                .animateItem(
-                                    fadeInSpec = null,
-                                    placementSpec = MotionSpecs.reorderSpring(),
-                                    fadeOutSpec = MotionSpecs.listItemFadeOut()
-                                )
+                                .then(tierAnimateItem())
                                 .listItemEntrance(index),
                             onToggleDone = { viewModel.setDone(note, !note.isDone) },
                             onTogglePinned = { viewModel.setPinned(note, !note.isPinned) },

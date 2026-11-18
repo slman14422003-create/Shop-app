@@ -93,6 +93,10 @@ object LinkPreviewRepository {
     private const val TIMEOUT_MS = 4000
 
     private val cache = LruCache<String, LinkPreviewResult>(40)
+
+    init {
+        com.shopmanager.app.data.performance.BitmapCaches.register { cache.evictAll() }
+    }
     private val gate = Semaphore(2)
 
     fun cached(url: String): LinkPreviewResult? = cache.get(url)
@@ -172,7 +176,7 @@ object LinkPreviewRepository {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
             val opts = BitmapFactory.Options().apply {
                 inSampleSize = ImageSizing.sampleSize(bounds.outWidth, bounds.outHeight, THUMB_DIM)
-                inPreferredConfig = Bitmap.Config.RGB_565
+                inPreferredConfig = com.shopmanager.app.data.performance.PerformanceRuntime.thumbnailConfig
             }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
         } catch (_: Exception) {

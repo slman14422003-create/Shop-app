@@ -83,7 +83,7 @@ fun DebtActivityDialog(onDismiss: () -> Unit) {
                 Text("لا توجد عمليات مسجلة بعد")
             } else {
                 LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(entries) { entry ->
+                    items(entries, key = { it.id }, contentType = { "activity" }) { entry ->
                         val (label, icon, color) = when (entry.kind) {
                             Kind.PAID -> Triple("سداد دين", Icons.Default.Check, semantic.success)
                             Kind.PAID_ALL -> Triple("سداد كامل", Icons.Default.Check, semantic.success)

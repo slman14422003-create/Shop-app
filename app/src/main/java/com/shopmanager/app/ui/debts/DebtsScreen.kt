@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.debts
 
+import com.shopmanager.app.ui.common.tierAnimateItem
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.content.Intent
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -228,21 +229,6 @@ fun DebtsScreen(
         // the double-padding and the gap with it.
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         snackbarHost = { GlassSnackbarHost(snackbarHost) },
-        floatingActionButton = {
-            // مع أزرار التنقل (3 أزرار) كان الزر يرتفع زيادة: ارتفاع الشريط العائم المقاس يحوي أصلاً
-            // مساحة شريط النظام السفلي، والـ Scaffold يضيفها مرة ثانية لمكان الزر. نطرحها هنا مرة واحدة.
-            val navBarBottom = with(LocalDensity.current) { WindowInsets.navigationBars.getBottom(this).toDp() }
-            FloatingActionButton(
-                onClick = onNewDebt,
-                modifier = Modifier.padding(bottom = (LocalFloatingBottomNavHeight.current - navBarBottom).coerceAtLeast(0.dp)),
-                shape = CircleShape,
-                containerColor = appAccent(),
-                contentColor = appOnAccent(),
-                elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "دين جديد")
-            }
-        },
         topBar = {
             if (isSearching) {
                 // البحث يحلّ محل الشريط كله: رجوع + حقل بحث على شكل حبّة.
@@ -333,6 +319,7 @@ fun DebtsScreen(
             val groups = groupsState.value ?: emptyList()
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             com.shopmanager.app.data.performance.ScrollJankWatch(listState)
+            com.shopmanager.app.ui.common.RegisterScrollToTop(1, listState)
             LaunchedEffect(listState) {
                 snapshotFlow { listState.isScrollInProgress }.collect { scrolling -> if (scrolling) openId = null }
             }
@@ -418,12 +405,7 @@ fun DebtsScreen(
                                 onPay = { openId = null; payTarget.value = person },
                                 onRemind = { openId = null; remind(person) },
                                 modifier = (
-                                    if (LocalPerformanceTier.current == PerformanceTier.LOW) Modifier
-                                    else Modifier.animateItem(
-                                        fadeInSpec = null,
-                                        placementSpec = MotionSpecs.reorderSpring(),
-                                        fadeOutSpec = MotionSpecs.listItemFadeOut()
-                                    )
+                                    Modifier.then(tierAnimateItem())
                                     ).listItemEntrance(index)
                             )
                         }
@@ -846,20 +828,19 @@ enum class DebtFilter(val label: String) {
 
 @Composable
 private fun OverdueTag() {
-    val tier = LocalPerformanceTier.current
     val warning = LocalSemanticColors.current.warning
-    val pulse = if (tier == PerformanceTier.STANDARD) {
-        val transition = rememberInfiniteTransition(label = "overduePulse")
-        transition.animateFloat(
+    val animate = com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()
+    val pulse: androidx.compose.runtime.State<Float>? = if (animate) {
+        rememberInfiniteTransition(label = "overduePulse").animateFloat(
             initialValue = 1f,
             targetValue = 0.55f,
             animationSpec = infiniteRepeatable(tween(MotionSpecs.breatheMs), RepeatMode.Reverse),
             label = "overduePulseAlpha"
-        ).value
-    } else 1f
+        )
+    } else null
     Box(
         Modifier
-            .alpha(pulse)
+            .graphicsLayer { alpha = pulse?.value ?: 1f }
             .clip(RoundedCornerShape(50))
             .background(warning.copy(alpha = 0.16f))
             .padding(horizontal = 8.dp, vertical = 2.dp)

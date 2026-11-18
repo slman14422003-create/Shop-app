@@ -6,7 +6,10 @@ import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
-import android.view.Choreographer
+import android.app.Activity
+import android.content.ContextWrapper
+import android.os.Handler
+import android.os.Looper
 import android.view.Display
 import android.view.View
 import android.view.Window
@@ -53,17 +56,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
+import androidx.metrics.performance.JankStats
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 
 /*
  * AppPerformance.kt — ملف الأداء والحركة الوحيد في التطبيق. كل ما يقرر "كم تأثيراً يتحمل هذا الجهاز"
  * وكيف تتحرك الواجهة موجود هنا، بالترتيب:
- *   1) [PerformanceTier] / [PerformanceMode] / [resolvePerformanceTier]: المستويات الثلاثة وكيف يُحسم المستوى الفعلي.
+ *   1) [PerformanceTier] / [PerformanceMode] / [resolvePerformanceTier]: المستويان LOW/HIGH وكيف يُحسم المستوى الفعلي.
  *   2) [SystemMotion]: قيود الحركة من النظام (إزالة الحركة، توفير الطاقة).
  *   3) [DevicePerformance]: كشف قدرة الجهاز (RAM، الأنوية، heap، GPU) مع تخزين الحكم محلياً.
  *   4) [RefreshRatePolicy]: اختيار معدل تحديث الشاشة حسب المستوى.
@@ -77,48 +86,48 @@ enum class PerformanceTier {
     /** الاقتصادي: بلا أي تأثيرات؛ انتقالات تلاشٍ بسيطة فقط. */
     LOW,
 
-    /** المتوازن: حركة ناعمة تُرسم كلها في مرحلة الرسم (transform/alpha فقط)
-     * بلا ظلال ولا تكبير/تصغير للشاشة كاملة ولا حلقات لا نهائية — فتبقى سلسة
-     * دون أن تستهلك المعالج الرسومي. */
-    BALANCED,
-
-    /** القوي (HIGH): كل التأثيرات — انتقالات أغنى، ظلال، لمعان تحميل، رموز متحركة. */
-    STANDARD
+    /** القوي: كل التأثيرات — انتقالات أغنى، لمعان تحميل، رموز متحركة (والضبابية للأجهزة الأقوى فقط عبر [LocalHeavyFx]). */
+    HIGH
 }
 
 /**
- * "تفضيل الأداء" (الإعدادات ← الأداء): ثلاثة خيارات فقط.
- *
- * - AUTO (الافتراضي): يقرر التطبيق وحده. يبدأ من المستوى الذي كشفه [DevicePerformance.detectTier]
- *   (وهو الذي يختار المتوازن [PerformanceTier.BALANCED] تلقائياً للأجهزة المتوسطة)، وينزل
- *   خطوة عند توفير الطاقة، وينزل خطوة أخرى إن رصد [FrameJankGuard] تقطعاً حقيقياً في الإطارات.
- * - HIGH (مرتفع): كل التأثيرات دائماً، حتى لو صُنّف الجهاز LOW تلقائياً.
- * - LOW (منخفض): بلا تأثيرات دائماً (أسرع وأوفر للبطارية، مناسب للأجهزة القديمة).
- *
- * لا يوجد خيار "متوازن" يدوي: المستوى المتوازن صار داخلياً يخص "تلقائي" فقط.
+ * "تفضيل الأداء" (الإعدادات ← الأداء): AUTO (يقرر التطبيق وحده)، HIGH (كل التأثيرات دائماً)، LOW (بلا تأثيرات).
  */
 enum class PerformanceMode { AUTO, HIGH, LOW }
 
 /** قيود الحركة القادمة من النظام نفسه، تُقرأ عند كل عودة للتطبيق. */
 enum class SystemMotionLimit { NONE, POWER_SAVE, ANIMATIONS_OFF }
 
-/** المكان الوحيد الذي يجمع الكشف التلقائي وتفضيل المستخدم وقيود النظام في [PerformanceTier] النهائي. */
+/**
+ * المكان الوحيد الذي يجمع الكشف التلقائي وتفضيل المستخدم وقيود النظام في [PerformanceTier] النهائي.
+ *
+ * - "إزالة الحركة" في النظام: LOW دائماً (تتفوق على أي اختيار).
+ * - AUTO: توفير الطاقة ← LOW، الحرارة ≥ MODERATE ← LOW، ضغط الذاكرة (onTrimMemory ≥ RUNNING_LOW) ← LOW،
+ *   وإلا المستوى المكتشف.
+ * - HIGH/LOW اليدوي: يُحترم كما هو.
+ */
 fun resolvePerformanceTier(
     detected: PerformanceTier,
     mode: PerformanceMode,
-    limit: SystemMotionLimit = SystemMotionLimit.NONE
+    limit: SystemMotionLimit = SystemMotionLimit.NONE,
+    thermalStatus: Int = 0,
+    memoryLow: Boolean = false
 ): PerformanceTier {
-    // "إزالة الحركة" في إعدادات النظام (إتاحة الوصول / خيارات المطوّر): تُحترم دائماً وتتفوق على أي اختيار.
     if (limit == SystemMotionLimit.ANIMATIONS_OFF) return PerformanceTier.LOW
-    val base = when (mode) {
-        PerformanceMode.AUTO -> detected
-        PerformanceMode.HIGH -> PerformanceTier.STANDARD
+    return when (mode) {
+        PerformanceMode.HIGH -> PerformanceTier.HIGH
         PerformanceMode.LOW -> PerformanceTier.LOW
+        PerformanceMode.AUTO -> when {
+            limit == SystemMotionLimit.POWER_SAVE -> PerformanceTier.LOW
+            thermalStatus >= THERMAL_STATUS_MODERATE -> PerformanceTier.LOW
+            memoryLow -> PerformanceTier.LOW
+            else -> detected
+        }
     }
-    // توفير الطاقة: في الوضع التلقائي فقط ننزل من القوي إلى المتوازن (لا نغيّر اختيار المستخدم الصريح).
-    return if (limit == SystemMotionLimit.POWER_SAVE && mode == PerformanceMode.AUTO && base == PerformanceTier.STANDARD)
-        PerformanceTier.BALANCED else base
 }
+
+/** = PowerManager.THERMAL_STATUS_MODERATE (API 29) كثابت كي لا نحتاج فحص الإصدار عند المقارنة. */
+const val THERMAL_STATUS_MODERATE = 2
 
 // ───────────────────────── 2) قيود الحركة من النظام ─────────────────────────
 
@@ -156,7 +165,7 @@ object DevicePerformance {
     private const val KEY_TIER = "performance_tier"
     private const val KEY_DETECTION_VERSION = "performance_tier_version"
     // ارفع هذا الرقم كلما تغيّر منطق [currentDeviceInfo].
-    private const val CURRENT_DETECTION_VERSION = 5
+    private const val CURRENT_DETECTION_VERSION = 6
 
     private const val LOW_RAM_THRESHOLD_MB = 3072L
     // OpenGL ES 3.0 = 0x30000 (النسخة الرئيسية في أعلى 16 بت).
@@ -164,12 +173,10 @@ object DevicePerformance {
     // 96MB وما دون = فئة heap الأجهزة الضعيفة تاريخياً (المتوسط الحديث 192–256MB+).
     private const val LOW_MEMORY_CLASS_MB = 96
 
-    // الجهاز المتوسط → BALANCED تلقائياً: رام ≤ ~6GB (النظام يُبلغ أقل قليلاً من
-    // الاسمي) أو أقل من 8 أنوية أو سقف heap ≤ 160MB. القوي فقط (8GB+/8 أنوية)
-    // يحصل على كل التأثيرات تلقائياً.
-    private const val BALANCED_RAM_THRESHOLD_MB = 7000L
-    private const val BALANCED_CORE_THRESHOLD = 7
-    private const val BALANCED_MEMORY_CLASS_MB = 160
+    // الضبابية (blur) تحتاج جهازاً قوياً حقاً: 6GB+ و8 أنوية+. النظام يُبلغ عن أقل قليلاً من
+    // الرقم الاسمي (جهاز 6GB يُبلغ ~5.5–5.9GB)، فالعتبة 5500MB تعني "6GB اسمياً".
+    private const val HEAVY_FX_RAM_MB = 5500L
+    private const val HEAVY_FX_CORES = 8
 
     /** الإشارات الخام التي يقيسها [detectTier]، تُعرض في الإعدادات ← الأداء ليرى المستخدم
      * سبب التصنيف. تُقاس دائماً من جديد (لا تقرأ التخزين المؤقت). */
@@ -190,11 +197,24 @@ object DevicePerformance {
         d.supportedModes.maxOfOrNull { it.refreshRate } ?: d.refreshRate
     }.getOrDefault(0f)
 
+    private fun totalRamMb(context: Context): Long {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return 0L
+        val mi = ActivityManager.MemoryInfo()
+        am.getMemoryInfo(mi)
+        return mi.totalMem / (1024 * 1024)
+    }
+
+    /** true فقط عند RAM ≥ 6GB (اسمياً) و≥ 8 أنوية: شرط تفعيل الضبابية مع المستوى HIGH. */
+    fun isHeavyFx(context: Context): Boolean =
+        totalRamMb(context) >= HEAVY_FX_RAM_MB && Runtime.getRuntime().availableProcessors() >= HEAVY_FX_CORES
+
+    /** سقف heap التطبيق بالـ MB (لتحجيم كاشات الصور). */
+    fun memoryClassMb(context: Context): Int =
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)?.memoryClass ?: 128
+
     fun currentDeviceInfo(context: Context): DeviceInfo {
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val memoryInfo = ActivityManager.MemoryInfo()
-        activityManager?.getMemoryInfo(memoryInfo)
-        val totalRamMb = memoryInfo.totalMem / (1024 * 1024)
+        val totalRamMb = totalRamMb(context)
         val cores = Runtime.getRuntime().availableProcessors()
         val osFlaggedLowRam = activityManager?.isLowRamDevice == true
         val glEsVersion = activityManager?.deviceConfigurationInfo?.reqGlEsVersion ?: MIN_GL_ES_VERSION
@@ -202,34 +222,25 @@ object DevicePerformance {
         val memoryClassMb = activityManager?.memoryClass ?: (LOW_MEMORY_CLASS_MB + 1)
         val weakMemoryClass = memoryClassMb in 1..LOW_MEMORY_CLASS_MB
         val lowRam = totalRamMb in 1..LOW_RAM_THRESHOLD_MB
-        val midRange = totalRamMb in 1..BALANCED_RAM_THRESHOLD_MB ||
-            cores in 1..BALANCED_CORE_THRESHOLD ||
-            memoryClassMb in 1..BALANCED_MEMORY_CLASS_MB
-        // الأجهزة القديمة جداً: أندرويد 9 أو أقدم — معالجاتها الرسومية وأنظمتها لا تتحمل أي تأثيرات.
+        // الأجهزة القديمة جداً: أندرويد 9 أو أقدم.
         val veryOld = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
-        // شاشة 60Hz أو أقل على جهاز قديم/محدود: ميزانية الإطار 16.6ms فقط، فنبدأ مباشرة بالوضع الاقتصادي.
-        val maxHz = maxDisplayHz(context)
-        val slowDisplay = maxHz in 1f..61f
+        // شاشة 60Hz أو أقل على جهاز قديم/محدود: ميزانية الإطار 16.6ms فقط.
+        val slowDisplay = maxDisplayHz(context) in 1f..61f
         val oldOrLimited = Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q || totalRamMb in 1..4600L || cores in 1..6
-        val tier = when {
-            osFlaggedLowRam || weakGpu || weakMemoryClass || veryOld || lowRam -> PerformanceTier.LOW
-            slowDisplay && oldOrLimited -> PerformanceTier.LOW
-            midRange -> PerformanceTier.BALANCED
-            else -> PerformanceTier.STANDARD
-        }
+        val tier = if (
+            lowRam || osFlaggedLowRam || weakGpu || weakMemoryClass || veryOld || (slowDisplay && oldOrLimited)
+        ) PerformanceTier.LOW else PerformanceTier.HIGH
         return DeviceInfo(totalRamMb, cores, osFlaggedLowRam, weakGpu, memoryClassMb, weakMemoryClass, tier)
     }
 
-    /** يقرأ التصنيف المخزَّن إن كان بنسخة المنطق الحالية، وإلا يقيس من جديد ويحفظ — فلا
-     * يُعاد الاستعلام من ActivityManager في كل تشغيل بارد. */
+    /** يقرأ التصنيف المخزَّن إن كان بنسخة المنطق الحالية، وإلا يقيس من جديد ويحفظ. */
     fun detectTier(context: Context): PerformanceTier {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getInt(KEY_DETECTION_VERSION, -1) == CURRENT_DETECTION_VERSION) {
             prefs.getString(KEY_TIER, null)?.let { cached ->
-                return runCatching { PerformanceTier.valueOf(cached) }.getOrDefault(PerformanceTier.BALANCED)
+                return if (cached == "LOW") PerformanceTier.LOW else PerformanceTier.HIGH
             }
         }
-        // نفس منطق [currentDeviceInfo] تماماً، فلا ينفصل ما يُعرض في الإعدادات عن الحكم المخزَّن.
         val tier = currentDeviceInfo(context).tier
         prefs.edit()
             .putString(KEY_TIER, tier.name)
@@ -238,27 +249,18 @@ object DevicePerformance {
         return tier
     }
 
-    /** ينزل بالتصنيف المخزَّن خطوة واحدة (STANDARD ← BALANCED ← LOW) حين يرصد [FrameJankGuard]
-     * تقطعاً فعلياً على هذا الجهاز، فيستمر الحكم في التشغيلات التالية. زر "إعادة فحص أداء الجهاز"
-     * يمسحه ويقيس من جديد. يُعيد المستوى الجديد. */
+    /** ينزل بالتصنيف المخزَّن من HIGH إلى LOW حين يرصد [JankMonitor] تقطعاً فعلياً. يُعيد المستوى الجديد. */
     fun downgradeCachedTier(context: Context): PerformanceTier {
         val current = detectTier(context)
-        val lower = when (current) {
-            PerformanceTier.STANDARD -> PerformanceTier.BALANCED
-            PerformanceTier.BALANCED -> PerformanceTier.LOW
-            PerformanceTier.LOW -> PerformanceTier.LOW
-        }
-        if (lower != current) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-                .putString(KEY_TIER, lower.name)
-                .putInt(KEY_DETECTION_VERSION, CURRENT_DETECTION_VERSION)
-                .apply()
-        }
-        return lower
+        if (current == PerformanceTier.LOW) return PerformanceTier.LOW
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_TIER, PerformanceTier.LOW.name)
+            .putInt(KEY_DETECTION_VERSION, CURRENT_DETECTION_VERSION)
+            .apply()
+        return PerformanceTier.LOW
     }
 
-    /** يمسح التصنيف المخزَّن ليُقاس من جديد عند الاستدعاء التالي لـ [detectTier]
-     * (زر "إعادة فحص أداء الجهاز" في الإعدادات). */
+    /** يمسح التصنيف المخزَّن ليُقاس من جديد (زر "إعادة فحص أداء الجهاز"). */
     fun resetCachedTier(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .remove(KEY_TIER)
@@ -271,17 +273,15 @@ object DevicePerformance {
 
 /**
  * سياسة معدل التحديث حسب وضع الأداء:
- * - القوي (STANDARD): أقرب وضع إلى 90Hz (ثابت وسلس وأوفر من 120Hz). إن لم يدعم
+ * - القوي (HIGH): أقرب وضع إلى 90Hz (ثابت وسلس وأوفر من 120Hz). إن لم يدعم
  *   الجهاز 90 يُختار أقرب وضع أعلى منه، وإن كانت الشاشة 60Hz فقط تبقى 60 وتتولّى
  *   [com.shopmanager.app.ui.common.MotionSpecs] جعل الحركة أسرع استجابة.
- * - المتوازن (BALANCED): أقرب وضع إلى 60Hz لتوفير الطاقة وثبات توقيت الإطارات.
  * - الاقتصادي (LOW): أقرب وضع إلى 40Hz (تلميح إطارات 40 على أندرويد 15+)، وكل مدد الحركة
  *   مضاعفات 25ms = إطار واحد @40Hz فتتوزع الإطارات بالتساوي.
  * لا يتغير الـ resolution أبداً (نختار فقط من أوضاع بنفس الدقة) لتفادي وميض تبديل الوضع.
  */
 object RefreshRatePolicy {
     private const val HIGH_TARGET_HZ = 90f
-    private const val BALANCED_TARGET_HZ = 60f
     // الاقتصادي: 40Hz — إطارات أقل = حمل أقل على معالج الرسوميات القديم. إن لم يوفّر
     // العرض وضعاً قريباً من 40 يُختار أقرب وضع (غالباً 60) ويُرسَل تلميح إطارات 40 للنظام.
     private const val LOW_TARGET_HZ = 40f
@@ -313,7 +313,7 @@ object RefreshRatePolicy {
 
     private fun choose(modes: List<Display.Mode>, tier: PerformanceTier): Display.Mode? {
         if (modes.isEmpty()) return null
-        return if (tier == PerformanceTier.STANDARD) {
+        return if (tier == PerformanceTier.HIGH) {
             val fast = modes.filter { it.refreshRate >= HIGH_MIN_HZ }
             if (fast.isEmpty()) {
                 modes.maxByOrNull { it.refreshRate }
@@ -323,125 +323,119 @@ object RefreshRatePolicy {
                 )
             }
         } else {
-            val target = if (tier == PerformanceTier.LOW) LOW_TARGET_HZ else BALANCED_TARGET_HZ
-            modes.minWithOrNull(compareBy<Display.Mode>({ abs(it.refreshRate - target) }, { it.refreshRate }))
+            modes.minWithOrNull(compareBy<Display.Mode>({ abs(it.refreshRate - LOW_TARGET_HZ) }, { it.refreshRate }))
         }
     }
 }
 
-// ───────────────────────── 4.5) رصد التقطع الفعلي (تلقائي فقط) ─────────────────────────
+// ───────────────────────── 4.5) رصد التقطع بـ JankStats (androidx.metrics) ─────────────────────────
 
 /**
- * يقيس زمن الإطارات الحقيقي على هذا الجهاز لأول ~25 ثانية بعد جاهزية التطبيق (يتجاهل أول
- * إطارات التشغيل وأي فجوة طويلة = خمول/خلفية). إن تجاوز تقطع الإطارات (إطار > 2.5× زمن إطار
- * الشاشة) نسبة 30% من 150 إطاراً متتالية، يستدعي [onSustainedJank] مرة واحدة ويتوقف.
- * بعد انتهاء النافذة يزيل نفسه كلياً فلا يبقى أي استدعاء إطارات يعمل في الخلفية.
- * يجب استدعاؤه من الخيط الرئيسي؛ يُعيد دالة إيقاف.
+ * JankStats واحد لكل نافذة يُغذّي أي عدد من "المجمِّعات" (بدء التشغيل، التمرير). التتبّع يعمل فقط
+ * ما دام هناك مجمِّع نشط، ويتوقف كلياً بعدها. [JankStats] يرصد الإطارات البطيئة فعلياً
+ * (FrameMetrics على API 24+) بلا Choreographer يدوي، ولا يعمل على الخيط الرئيسي.
  */
-object FrameJankGuard {
-    private const val SAMPLE_WINDOW_MS = 25_000L
-    private const val WARMUP_FRAMES = 45
-    private const val BATCH_FRAMES = 150
-    private const val JANK_FACTOR = 2.5f
-    private const val JANK_RATIO = 0.30f
-    private const val MAX_GAP_NS = 400_000_000L
-
-    fun start(refreshHz: () -> Float, onSustainedJank: () -> Unit): () -> Unit {
-        val choreographer = Choreographer.getInstance()
-        val startedAt = SystemClock.elapsedRealtime()
-        var active = true
-        var lastFrameNs = 0L
+object JankMonitor {
+    private class Collector(
+        val warmupFrames: Int,
+        val batchFrames: Int,
+        val jankRatio: Float,
+        val deadlineMs: Long,
+        val onJank: () -> Unit
+    ) {
         var seen = 0
         var total = 0
         var jank = 0
-        val callback = object : Choreographer.FrameCallback {
-            override fun doFrame(frameTimeNanos: Long) {
-                if (!active) return
-                if (SystemClock.elapsedRealtime() - startedAt > SAMPLE_WINDOW_MS) {
-                    active = false
-                    return
-                }
-                if (lastFrameNs != 0L) {
-                    val delta = frameTimeNanos - lastFrameNs
-                    seen++
-                    if (seen > WARMUP_FRAMES && delta < MAX_GAP_NS) {
-                        val budgetNs = 1_000_000_000f / refreshHz().coerceAtLeast(30f)
-                        total++
-                        if (delta > budgetNs * JANK_FACTOR) jank++
-                        if (total >= BATCH_FRAMES) {
-                            if (jank.toFloat() / total > JANK_RATIO) {
-                                active = false
-                                onSustainedJank()
-                                return
-                            }
-                            total = 0
-                            jank = 0
-                        }
+        @Volatile var done = false
+    }
+
+    private val main = Handler(Looper.getMainLooper())
+    private val executor by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "jank-stats").apply { isDaemon = true } } }
+    private val collectors = CopyOnWriteArrayList<Collector>()
+    private var stats: JankStats? = null
+    private var statsWindow: Window? = null
+
+    @Synchronized
+    private fun ensure(window: Window): JankStats? {
+        if (stats != null && statsWindow === window) return stats
+        stats?.isTrackingEnabled = false
+        statsWindow = window
+        stats = runCatching {
+            JankStats.createAndTrack(window, executor) { frame ->
+                val now = SystemClock.elapsedRealtime()
+                val jank = frame.isJank
+                for (c in collectors) {
+                    if (c.done) continue
+                    if (c.deadlineMs in 1 until now) { finish(c, fire = false); continue }
+                    c.seen++
+                    if (c.seen <= c.warmupFrames) continue
+                    c.total++
+                    if (jank) c.jank++
+                    if (c.total >= c.batchFrames) {
+                        val bad = c.jank.toFloat() / c.total > c.jankRatio
+                        c.total = 0
+                        c.jank = 0
+                        if (bad) finish(c, fire = true)
                     }
                 }
-                lastFrameNs = frameTimeNanos
-                choreographer.postFrameCallback(this)
             }
+        }.getOrNull()
+        stats?.isTrackingEnabled = collectors.isNotEmpty()
+        return stats
+    }
+
+    private fun finish(c: Collector, fire: Boolean) {
+        if (c.done) return
+        c.done = true
+        collectors.remove(c)
+        main.post {
+            if (fire) c.onJank()
+            syncTracking()
         }
-        choreographer.postFrameCallback(callback)
+    }
+
+    @Synchronized
+    private fun syncTracking() {
+        stats?.isTrackingEnabled = collectors.isNotEmpty()
+    }
+
+    private fun start(
+        window: Window,
+        warmupFrames: Int,
+        batchFrames: Int,
+        jankRatio: Float,
+        windowMs: Long,
+        onJank: () -> Unit
+    ): () -> Unit {
+        val s = ensure(window) ?: return {}
+        val deadline = if (windowMs > 0) SystemClock.elapsedRealtime() + windowMs else 0L
+        val c = Collector(warmupFrames, batchFrames, jankRatio, deadline, onJank)
+        collectors.add(c)
+        s.isTrackingEnabled = true
         return {
-            active = false
-            choreographer.removeFrameCallback(callback)
+            c.done = true
+            collectors.remove(c)
+            syncTracking()
         }
     }
+
+    /** أول ~25 ثانية بعد الجاهزية: إن تجاوز التقطع 30% من 150 إطاراً بعد 45 إطار إحماء ← [onSustainedJank] مرة واحدة. */
+    fun startStartupGuard(window: Window, onSustainedJank: () -> Unit): () -> Unit =
+        start(window, warmupFrames = 45, batchFrames = 150, jankRatio = 0.30f, windowMs = 25_000L, onJank = onSustainedJank)
+
+    /** أثناء التمرير فقط: أول 6 إطارات تُتجاهل، و25% من 90 إطاراً بطيئاً ← [onJank]. */
+    fun startScrollWatch(window: Window, onJank: () -> Unit): () -> Unit =
+        start(window, warmupFrames = 6, batchFrames = 90, jankRatio = 0.25f, windowMs = 0L, onJank = onJank)
 }
 
-// ───────────────────────── 4.6) رصد تقطع التمرير الفعلي ─────────────────────────
-
-/**
- * يقيس زمن الإطارات **أثناء التمرير فقط** (لا يعمل أي استدعاء إطارات والقائمة ساكنة).
- * أول إطارات كل تمريرة تُتجاهل، وإن تجاوزت نسبة الإطارات البطيئة 25% من 90 إطاراً
- * يُستدعى [onJank] لينزل التطبيق بالمستوى خطوة (ويُحفظ الحكم). يدعم شاشات 60Hz وأقل:
- * ميزانية الإطار تُحسب من min(معدل الشاشة، 60).
- */
-object ScrollJankMeter {
-    private const val WARMUP_FRAMES = 6
-    private const val BATCH_FRAMES = 90
-    private const val JANK_FACTOR = 1.6f
-    private const val JANK_RATIO = 0.25f
-    private const val MAX_GAP_NS = 120_000_000L
-    private var total = 0
-    private var jank = 0
-
-    fun start(refreshHz: () -> Float, onJank: () -> Unit): () -> Unit {
-        val choreographer = Choreographer.getInstance()
-        var active = true
-        var last = 0L
-        var seen = 0
-        val cb = object : Choreographer.FrameCallback {
-            override fun doFrame(frameTimeNanos: Long) {
-                if (!active) return
-                if (last != 0L) {
-                    val delta = frameTimeNanos - last
-                    seen++
-                    if (seen > WARMUP_FRAMES && delta < MAX_GAP_NS) {
-                        val budget = 1_000_000_000f / refreshHz().coerceIn(30f, 60f)
-                        total++
-                        if (delta > budget * JANK_FACTOR) jank++
-                        if (total >= BATCH_FRAMES) {
-                            val bad = jank.toFloat() / total > JANK_RATIO
-                            total = 0
-                            jank = 0
-                            if (bad) { active = false; onJank(); return }
-                        }
-                    }
-                }
-                last = frameTimeNanos
-                choreographer.postFrameCallback(this)
-            }
-        }
-        choreographer.postFrameCallback(cb)
-        return { active = false; choreographer.removeFrameCallback(cb) }
-    }
-}
-
-/** يُستدعى من MainActivity: ينزل بالمستوى حين يرصد [ScrollJankMeter] تقطعاً (وضع «تلقائي» فقط). */
+/** يُستدعى من MainActivity: ينزل بالمستوى حين يرصد [JankMonitor] تقطعاً (وضع «تلقائي» فقط). */
 val LocalScrollJankReporter = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+private tailrec fun Context.findWindow(): Window? = when (this) {
+    is Activity -> window
+    is ContextWrapper -> baseContext.findWindow()
+    else -> null
+}
 
 /** ضعه داخل أي شاشة فيها قائمة طويلة: يقيس التمرير الفعلي ولا يكلّف شيئاً والقائمة ساكنة. */
 @Composable
@@ -449,31 +443,49 @@ fun ScrollJankWatch(state: androidx.compose.foundation.lazy.LazyListState) {
     val reporter = LocalScrollJankReporter.current ?: return
     val tier = LocalPerformanceTier.current
     if (tier == PerformanceTier.LOW) return
-    val hz = LocalRefreshRateHz.current
-    androidx.compose.runtime.LaunchedEffect(state, tier) {
-        androidx.compose.runtime.snapshotFlow { state.isScrollInProgress }.collect { scrolling ->
-            if (!scrolling) return@collect
-            var stop: (() -> Unit)? = null
-            var reported = false
-            stop = ScrollJankMeter.start({ hz }) { reported = true; reporter() }
-            try {
-                androidx.compose.runtime.snapshotFlow { state.isScrollInProgress }.first { !it }
-            } finally {
+    val window = LocalView.current.context.findWindow() ?: return
+    androidx.compose.runtime.LaunchedEffect(state, tier, window) {
+        var stop: (() -> Unit)? = null
+        try {
+            androidx.compose.runtime.snapshotFlow { state.isScrollInProgress }.collect { scrolling ->
                 stop?.invoke()
+                stop = if (scrolling) JankMonitor.startScrollWatch(window) { reporter() } else null
             }
-            if (reported) return@collect
+        } finally {
+            stop?.invoke()
         }
     }
 }
 
 // ───────────────────────── 5) توفير القيم لشجرة Compose ─────────────────────────
 
-/** يُوفَّر مرة واحدة قرب جذر الشجرة (MainActivity)؛ الافتراضي STANDARD كي تعرض المعاينات
+/** المستوى الفعلي الحالي لغير الـ Composable (مفكّكات الصور، العمال…). يكتبه MainActivity فقط. */
+object PerformanceRuntime {
+    @Volatile var tier: PerformanceTier = PerformanceTier.HIGH
+    val thumbnailConfig: android.graphics.Bitmap.Config
+        get() = if (tier == PerformanceTier.LOW) android.graphics.Bitmap.Config.RGB_565 else android.graphics.Bitmap.Config.ARGB_8888
+}
+
+/** يُوفَّر مرة واحدة قرب جذر الشجرة (MainActivity)؛ الافتراضي HIGH كي تعرض المعاينات
  * وأي شيء خارج الموفّر الواجهة الكاملة. */
-val LocalPerformanceTier = staticCompositionLocalOf { PerformanceTier.STANDARD }
+val LocalPerformanceTier = staticCompositionLocalOf { PerformanceTier.HIGH }
+
+/** true فقط على جهاز RAM ≥ 6GB و≥ 8 أنوية ([DevicePerformance.isHeavyFx]). الضبابية تتطلب HIGH + هذا. */
+val LocalHeavyFx = staticCompositionLocalOf { false }
 
 /** معدل تحديث الشاشة الحالي (Hz) كما يراه التطبيق؛ تقرؤه حركات التطبيق لتضبط سرعتها. */
 val LocalRefreshRateHz = staticCompositionLocalOf { 60f }
+
+/**
+ * الحركات اللانهائية (شعارات، هيكل تحميل، سبلاش، مؤشرات دوّارة) تعمل فقط حين يكون المستوى HIGH
+ * والـ lifecycle ≥ STARTED؛ غير ذلك تبقى ساكنة فلا تُهدر إطارات في الخلفية ولا على الأجهزة الضعيفة.
+ */
+@Composable
+fun rememberInfiniteAnimationsAllowed(): Boolean {
+    val tier = LocalPerformanceTier.current
+    val state by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    return tier == PerformanceTier.HIGH && state.isAtLeast(Lifecycle.State.STARTED)
+}
 
 // ───────────────────────── 6) الحركة الموحّدة ─────────────────────────
 
@@ -486,178 +498,104 @@ val LocalRefreshRateHz = staticCompositionLocalOf { 60f }
  * في القوي بارتداد خفيف جداً). المستوى يغيّر الصلابة والمدد فقط:
  *
  * - LOW (الاقتصادي): بلا نوابض — كل حركة تفاعلية tween قصير جداً (مضاعفات 25ms = إطار @40Hz).
- * - BALANCED (المتوازن): tween بثلاث مدد موحّدة فقط (120/180/240ms) وبمنحنى واحد،
- *   فتتزامن الحركات وتستقر معاً بإيقاع واحد وبعمل رسومي أقل.
- * - STANDARD (القوي): نوابض سريعة لكنها محسوسة، بلا ارتداد.
+ * - HIGH (القوي): نوابض سريعة لكنها محسوسة، بلا ارتداد.
  */
 object MotionSpecs {
 
     /** منحنى Claude.ai: بداية سريعة وتباطؤ ناعم حتى سكون تام بلا ارتداد. */
     val claudeEasing: Easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
 
-    /** منحنى انتقال الشاشات بأسلوب iOS (UINavigationController): بداية سريعة وتباطؤ طويل ناعم بلا ارتداد. */
+    /** منحنى انتقال الشاشات بأسلوب iOS (UINavigationController). */
     val navEasing: Easing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 
-    // ───────────────────────── رموز الزمن الموحّدة (المتوازن) ─────────────────────────
-    // كل حركة في المتوازن تأخذ واحدة فقط من ثلاث مدد: سريعة (تفاعل لحظي)، أساسية
-    // (توسيع/تبديل)، بطيئة (دخول/انتقال).
-    const val balancedFastMs = 120
-    const val balancedBaseMs = 180
-    const val balancedSlowMs = 240
-
     @Composable
-    private fun isBalancedTier(): Boolean = LocalPerformanceTier.current == PerformanceTier.BALANCED
+    private fun isHigh(): Boolean = LocalPerformanceTier.current == PerformanceTier.HIGH
 
-    /** شاشة 60Hz: نرفع صلابة النوابض ~30% ونقصّر المدد ~20% فتصل الحركة لهدفها بإطارات أقل
-     * ويبدو التطبيق أسرع استجابة ("كأنه 90Hz")؛ على 80Hz+ تبقى الأزمنة الأنعم الأصلية. */
+    /** شاشة 60Hz: نرفع صلابة النوابض ~30% ونقصّر المدد ~20% فتصل الحركة لهدفها بإطارات أقل. */
     @Composable
     private fun snap(): Float = if (LocalRefreshRateHz.current < 80f) 1.3f else 1f
 
     @Composable
     fun durationScale(): Float = if (LocalRefreshRateHz.current < 80f) 0.8f else 1f
 
-    /** مضروب مدد الـ tween: القوي 1، المتوازن ~0.85 (أقصر قليلاً). */
-    @Composable
-    fun tierDurationScale(): Float = if (isBalancedTier()) 0.85f * durationScale() else durationScale()
-
     // ───────────────────────── الحركات التفاعلية الصغيرة ─────────────────────────
 
-    /** حجم الانكماش عند الضغط: أخفّ في الأوضاع الأضعف، أوضح في القوي. */
+    /** حجم الانكماش عند الضغط. */
     @Composable
-    fun pressScale(): Float = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 0.95f
-        PerformanceTier.BALANCED -> 0.94f
-        PerformanceTier.STANDARD -> 0.91f
-    }
+    fun pressScale(): Float = if (isHigh()) 0.91f else 0.95f
 
-    /** ضغط الأزرار/الصفوف، وأي حركة قيمة واحدة سريعة (لون/dp) يجب أن تتبع الإحساس نفسه. */
     @Composable
-    fun <T> quickSpring(): FiniteAnimationSpec<T> = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> tween<T>(100, easing = claudeEasing)
-        PerformanceTier.BALANCED -> tween<T>(balancedFastMs, easing = claudeEasing)
-        PerformanceTier.STANDARD -> spring<T>(
+    fun <T> quickSpring(): FiniteAnimationSpec<T> =
+        if (isHigh()) spring<T>(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMediumLow * 2.2f * snap()
-        )
-    }
+        ) else tween<T>(100, easing = claudeEasing)
 
-    /** ترتيب/إدراج/حذف عناصر القوائم (placementSpec في animateItem). */
     @Composable
-    fun reorderSpring(): FiniteAnimationSpec<IntOffset> = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> tween<IntOffset>(150, easing = claudeEasing)
-        PerformanceTier.BALANCED -> tween<IntOffset>(balancedSlowMs, easing = claudeEasing)
-        PerformanceTier.STANDARD -> spring<IntOffset>(
+    fun reorderSpring(): FiniteAnimationSpec<IntOffset> =
+        if (isHigh()) spring<IntOffset>(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMediumLow * 1.6f * snap()
-        )
-    }
+        ) else tween<IntOffset>(150, easing = claudeEasing)
 
-    /** حركة حجم expandVertically/shrinkVertically. */
     @Composable
-    fun expandSpring(): FiniteAnimationSpec<IntSize> = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> tween<IntSize>(125, easing = claudeEasing)
-        PerformanceTier.BALANCED -> tween<IntSize>(balancedBaseMs, easing = claudeEasing)
-        PerformanceTier.STANDARD -> spring<IntSize>(
+    fun expandSpring(): FiniteAnimationSpec<IntSize> =
+        if (isHigh()) spring<IntSize>(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMediumLow * snap()
-        )
-    }
+        ) else tween<IntSize>(125, easing = claudeEasing)
 
-    /** اختفاء الصف عند حذفه/تسديده (fadeOutSpec في animateItem). */
     @Composable
     fun listItemFadeOut(): FiniteAnimationSpec<Float> =
         tween<Float>(durationMillis = fadeMillis(), easing = claudeEasing)
 
     @Composable
-    fun fadeMillis(): Int = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 75
-        PerformanceTier.BALANCED -> balancedFastMs
-        PerformanceTier.STANDARD -> (140 * durationScale()).toInt()
-    }
+    fun fadeMillis(): Int = if (isHigh()) (140 * durationScale()).toInt() else 75
 
-    /**
-     * "Pop in" لكل ما يظهر فوق المحتوى (حوارات، أزرار عائمة، لافتات).
-     * القوي: نابض بارتداد خفيف جداً (0.72) فيبدو العنصر "حياً"؛ المتوازن: tween بالمدة
-     * الأساسية؛ المنخفض: tween قصير 125ms.
-     */
+    /** "Pop in" لكل ما يظهر فوق المحتوى (حوارات، أزرار عائمة، لافتات). */
     @Composable
-    fun popInSpring(): FiniteAnimationSpec<Float> = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> tween<Float>(125, easing = claudeEasing)
-        PerformanceTier.BALANCED -> tween<Float>(balancedBaseMs, easing = claudeEasing)
-        PerformanceTier.STANDARD -> spring<Float>(
-            dampingRatio = 0.72f,
-            stiffness = Spring.StiffnessMedium * snap()
-        )
-    }
+    fun popInSpring(): FiniteAnimationSpec<Float> =
+        if (isHigh()) spring<Float>(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium * snap())
+        else tween<Float>(125, easing = claudeEasing)
 
-    /** تبديل المحتوى في مكانه (تلاشٍ + انزلاق). */
     @Composable
     fun <T> contentTween(): FiniteAnimationSpec<T> = tween(
-        durationMillis = when (LocalPerformanceTier.current) {
-            PerformanceTier.LOW -> 100
-            PerformanceTier.BALANCED -> balancedBaseMs
-            PerformanceTier.STANDARD -> (220 * durationScale()).toInt()
-        },
+        durationMillis = if (isHigh()) (220 * durationScale()).toInt() else 100,
         easing = claudeEasing
     )
 
     // ───────────────────────── التنقل والدخول ─────────────────────────
-    // قاعدة المستويات الثلاثة:
-    //  - STANDARD (قوي): انزلاق + تصغير الشاشة المغطّاة (94%) — أغنى حركة.
-    //  - BALANCED: انزلاق + تلاشٍ فقط، بدون scale للشاشة كاملة (تصغير شاشة
-    //    كاملة بكل بطاقاتها كل إطار هو أغلى جزء رسومياً)، وبمدة أقصر.
-    //  - LOW: تلاشٍ بسيط قصير جداً فقط (بلا انزلاق ولا scale).
+    //  - HIGH: انزلاق + تصغير الشاشة المغطّاة (94%).
+    //  - LOW: تلاشٍ بسيط قصير فقط (بلا انزلاق ولا scale).
 
-    /** مدة انتقال دفع/سحب الشاشة (ms). */
     @Composable
-    fun navMillis(): Int = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 160
-        PerformanceTier.BALANCED -> 300
-        PerformanceTier.STANDARD -> 380
-    }
+    fun navMillis(): Int = if (isHigh()) 380 else 160
 
-    /** مدة انتقال التبويبات (الـ pager) بالـ ms. */
     @Composable
-    fun pagerMillis(): Int = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 160
-        PerformanceTier.BALANCED -> 300
-        PerformanceTier.STANDARD -> 380
-    }
+    fun pagerMillis(): Int = if (isHigh()) 380 else 160
 
-    /** مدة ظهور صف القائمة عند أول عرض (انظر [listItemEntrance]). */
     @Composable
-    fun entranceMillis(): Int = when (LocalPerformanceTier.current) {
-        PerformanceTier.LOW -> 150
-        PerformanceTier.BALANCED -> balancedSlowMs
-        PerformanceTier.STANDARD -> (320 * durationScale()).toInt()
-    }
+    fun entranceMillis(): Int = if (isHigh()) (320 * durationScale()).toInt() else 150
 
-    // ───────────────────────── انتقالات جاهزة (بدل تكرارها في كل شاشة) ─────────────────────────
+    // ───────────────────────── انتقالات جاهزة ─────────────────────────
 
-    /** ظهور منبثق فوق المحتوى: تلاشٍ + تكبير من 0.6 (الأزرار العائمة، اللافتات). */
     @Composable
     fun popEnter(): EnterTransition = fadeIn(popInSpring()) + scaleIn(popInSpring(), initialScale = 0.6f)
 
     @Composable
     fun popExit(): ExitTransition = fadeOut(popInSpring()) + scaleOut(popInSpring(), targetScale = 0.6f)
 
-    /** فتح قسم قابل للطي: تلاشٍ + توسيع عمودي. */
     @Composable
     fun expandEnter(): EnterTransition = fadeIn(contentTween()) + expandVertically(expandSpring())
 
     @Composable
     fun expandExit(): ExitTransition = fadeOut(contentTween()) + shrinkVertically(expandSpring())
 
-    /**
-     * تسليم الشاشة الكاملة (splash ← التطبيق، القفل ← التطبيق). ليست @Composable لأنها تُستدعى من
-     * transitionSpec؛ فيُمرَّر المستوى من الخارج. المتوازن والمنخفض بلا scale للشاشة كاملة.
-     */
+    /** تسليم الشاشة الكاملة (splash ← التطبيق، القفل ← التطبيق). */
     fun handoffTransition(tier: PerformanceTier): ContentTransform = when (tier) {
         PerformanceTier.LOW ->
             fadeIn(tween(90, easing = claudeEasing)) togetherWith fadeOut(tween(90, easing = claudeEasing))
-        PerformanceTier.BALANCED ->
-            fadeIn(tween(220, easing = claudeEasing)) togetherWith fadeOut(tween(160, easing = claudeEasing))
-        PerformanceTier.STANDARD ->
+        PerformanceTier.HIGH ->
             (fadeIn(tween(360, easing = claudeEasing)) +
                 scaleIn(tween(360, easing = claudeEasing), initialScale = 0.96f)) togetherWith
                 (fadeOut(tween(260, easing = claudeEasing)) +
@@ -672,7 +610,7 @@ object MotionSpecs {
     const val emphasizedMs = 360
     const val breatheMs = 1100
     const val cardStaggerMs = 30L
-    const val cardStaggerCount = 5
+    const val cardStaggerCount = 6
 
     /** Standard easing for small, utility motion. */
     val standardEasing: Easing = CubicBezierEasing(0.2f, 0f, 0f, 1f)
@@ -696,11 +634,7 @@ object MotionSpecs {
 
     @Composable
     fun <T> exitSpec(): FiniteAnimationSpec<T> = tween(
-        durationMillis = when (LocalPerformanceTier.current) {
-            PerformanceTier.LOW -> 75
-            PerformanceTier.BALANCED -> balancedFastMs
-            PerformanceTier.STANDARD -> (160 * durationScale()).toInt()
-        },
+        durationMillis = if (isHigh()) (160 * durationScale()).toInt() else 75,
         easing = standardEasing
     )
 
@@ -766,7 +700,7 @@ fun InteractionSource.collectDelayedPressedAsState(delayMs: Long = 60L): State<B
  */
 @Composable
 fun Modifier.sheenSweep(): Modifier {
-    if (LocalPerformanceTier.current != PerformanceTier.STANDARD || MotionSpecs.reduceMotion()) return this
+    if (LocalPerformanceTier.current != PerformanceTier.HIGH || MotionSpecs.reduceMotion()) return this
     val t = rememberInfiniteTransition(label = "sheenSweep")
     val phase = t.animateFloat(
         initialValue = 0f,
@@ -796,7 +730,7 @@ fun Modifier.sheenSweep(): Modifier {
 /** هالة لونية ناعمة خلف الزر العائم (تتجاوز حدوده قليلاً) — ثابتة بلا حركة. */
 @Composable
 fun Modifier.glowBehind(color: Color): Modifier {
-    if (LocalPerformanceTier.current != PerformanceTier.STANDARD) return this
+    if (LocalPerformanceTier.current != PerformanceTier.HIGH) return this
     return this.drawBehind {
         val r = size.minDimension * 0.85f
         drawCircle(
@@ -859,14 +793,9 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
     val tier = LocalPerformanceTier.current
     // حدود الحركة حسب الوضع:
     //  - LOW: أول 4 صفوف فقط وتلاشٍ (alpha) فقط بمدة 150ms (6 إطارات @40Hz) — بلا إزاحة ولا تكبير.
-    //  - BALANCED: أول 6 صفوف، تلاشٍ + صعود 10dp، بمدة SLOW الموحّدة وفاصل 24ms.
-    //  - STANDARD: أول 12 صفاً، تلاشٍ + صعود 22dp + تكبير 0.94→1 (حركة غنية).
-    val maxIndex = when (tier) {
-        PerformanceTier.LOW -> 3
-        PerformanceTier.BALANCED -> 6
-        PerformanceTier.STANDARD -> MAX_ANIMATED_INDEX
-    }
-    val slowDisplay = LocalRefreshRateHz.current < 61f && tier != PerformanceTier.STANDARD
+    //  - HIGH: أول 12 صفاً، تلاشٍ + صعود 22dp + تكبير 0.94→1 (حركة غنية).
+    val maxIndex = if (tier == PerformanceTier.LOW) 3 else MAX_ANIMATED_INDEX
+    val slowDisplay = LocalRefreshRateHz.current < 61f && tier != PerformanceTier.HIGH
     val reduce = MotionSpecs.reduceMotion() || slowDisplay
     val played = rememberSaveable { mutableStateOf(false) }
     // تُحسب مرة واحدة عند دخول هذا الصف التركيب (لا تتغير بعدها) — وهذا ما
@@ -878,11 +807,7 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
     // فالصفوف الساكنة (وهي معظم القائمة) تعود بلا أي طبقة رسومية إضافية.
     var finished by remember { mutableStateOf(!shouldAnimate) }
     val durationMs = MotionSpecs.entranceMillis()
-    val staggerStepMs = when (tier) {
-        PerformanceTier.LOW -> 25L
-        PerformanceTier.BALANCED -> 24L
-        PerformanceTier.STANDARD -> 30L
-    }
+    val staggerStepMs = if (tier == PerformanceTier.LOW) 25L else 30L
 
     if (shouldAnimate) {
         LaunchedEffect(Unit) {
@@ -898,19 +823,15 @@ fun Modifier.listItemEntrance(index: Int): Modifier {
         // القراءة هنا داخل كتلة graphicsLayer (مرحلة الرسم) — لا إعادة تركيب.
         val p = progress.value
         alpha = p
-        // LOW/BALANCED: بلا طبقة خارج الشاشة (offscreen buffer) لتلاشي الصف — يُطبَّق الشفاف على كل رسمة.
-        if (tier != PerformanceTier.STANDARD) {
+        // LOW: بلا طبقة خارج الشاشة (offscreen buffer) لتلاشي الصف — يُطبَّق الشفاف على كل رسمة.
+        if (tier != PerformanceTier.HIGH) {
             compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.ModulateAlpha
         }
-        when (tier) {
-            PerformanceTier.LOW -> Unit
-            PerformanceTier.BALANCED -> translationY = (1f - p) * 10.dp.toPx()
-            PerformanceTier.STANDARD -> {
-                translationY = (1f - p) * 22.dp.toPx()
-                val sc = 0.94f + 0.06f * p
-                scaleX = sc
-                scaleY = sc
-            }
+        if (tier == PerformanceTier.HIGH) {
+            translationY = (1f - p) * 22.dp.toPx()
+            val sc = 0.94f + 0.06f * p
+            scaleX = sc
+            scaleY = sc
         }
     }
 }

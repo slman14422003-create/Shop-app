@@ -81,12 +81,12 @@ fun RobotAvatar(
 ) {
     val haloBase = MaterialTheme.colorScheme.primary
     val haloCache = remember { HaloCache() }
-    val animated = animate && LocalPerformanceTier.current != PerformanceTier.LOW
+    val animated = animate && com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed()
     val outline = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
 
-    // وضع الأداء العالي (STANDARD): حركات إضافية — ميلان الرأس، تمايل الأنتينا ونبض توهّجها،
+    // وضع الأداء العالي (HIGH): حركات إضافية — ميلان الرأس، تمايل الأنتينا ونبض توهّجها،
     // تنفّس الجسم، نظر الروبوت يمنة ويسرة، قفزة عند النجاح وهزّة رأس عند عدم الفهم.
-    val rich = animated && LocalPerformanceTier.current == PerformanceTier.STANDARD
+    val rich = animated && LocalPerformanceTier.current == PerformanceTier.HIGH
     val listening = animated && mood == RobotMood.LISTENING
 
     val waveState: State<Float> = if (listening) {

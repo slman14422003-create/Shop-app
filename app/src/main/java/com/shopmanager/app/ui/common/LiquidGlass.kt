@@ -74,7 +74,7 @@ fun Modifier.liquidGlassSurface(
 ): Modifier {
     // الظل الحقيقي (blur رسومي لكل إطار) للأداء القوي فقط؛ المتوازن والاقتصادي
     // يعتمدان على الفصل بالتدرج اللوني + الحد الرفيع بلا أي ظل.
-    val isHighTier = LocalPerformanceTier.current == PerformanceTier.STANDARD
+    val isHighTier = LocalPerformanceTier.current == PerformanceTier.HIGH
     val isLowTier = LocalPerformanceTier.current == PerformanceTier.LOW
     return this
         .let {

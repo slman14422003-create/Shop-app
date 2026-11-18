@@ -111,17 +111,17 @@ private fun BlurLayer(
 }
 
 @Composable
-fun blurEnabled(strongOnly: Boolean = false): Boolean {
+fun blurEnabled(@Suppress("UNUSED_PARAMETER") strongOnly: Boolean = false): Boolean {
     val tier = LocalPerformanceTier.current
+    val heavy = com.shopmanager.app.data.performance.LocalHeavyFx.current
     val target = (LocalContext.current.findActivity() as? MainActivity)?.blurTarget
-    return target != null && (tier == PerformanceTier.STANDARD || (!strongOnly && tier == PerformanceTier.BALANCED))
+    return target != null && tier == PerformanceTier.HIGH && heavy
 }
 
 @Composable
 fun BlurBackdrop(modifier: Modifier, tint: Color, radius: Float? = null) {
-    val tier = LocalPerformanceTier.current
     val target = (LocalContext.current.findActivity() as? MainActivity)?.blurTarget ?: return
-    val strong = tier == PerformanceTier.STANDARD
+    val strong = true
     BlurLayer(
         target = target,
         radius = radius ?: if (strong) 9f else 5f,
@@ -145,9 +145,10 @@ fun BlurContextMenu(
 ) {
     val context = LocalContext.current
     val tier = LocalPerformanceTier.current
+    val heavy = com.shopmanager.app.data.performance.LocalHeavyFx.current
     val target = (context.findActivity() as? MainActivity)?.blurTarget
-    val strong = target != null && tier == PerformanceTier.STANDARD
-    val normal = target != null && tier == PerformanceTier.BALANCED
+    val strong = target != null && tier == PerformanceTier.HIGH && heavy
+    val normal = false
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.background.luminance() < 0.5f
     val density = LocalDensity.current

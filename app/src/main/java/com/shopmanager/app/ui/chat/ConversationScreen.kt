@@ -126,6 +126,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -1263,12 +1264,12 @@ private fun InputBar(
 @Composable
 private fun RecDot(paused: Boolean) {
     val cs = MaterialTheme.colorScheme
-    val animate = LocalPerformanceTier.current != PerformanceTier.LOW && !paused
-    val pulse = if (animate) {
+    val animate = com.shopmanager.app.data.performance.rememberInfiniteAnimationsAllowed() && !paused
+    val pulse: State<Float>? = if (animate) {
         val t = rememberInfiniteTransition(label = "recPulse")
-        t.animateFloat(0.25f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "recDot").value
-    } else 1f
-    Box(Modifier.size(10.dp).alpha(if (paused) 0.5f else pulse).clip(CircleShape).background(cs.error))
+        t.animateFloat(0.25f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "recDot")
+    } else null
+    Box(Modifier.size(10.dp).graphicsLayer { alpha = if (paused) 0.5f else (pulse?.value ?: 1f) }.clip(CircleShape).background(cs.error))
 }
 
 @Composable

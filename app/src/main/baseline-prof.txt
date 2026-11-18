@@ -24,3 +24,7 @@ Lcom/shopmanager/app/ui/debts/**;
 Lcom/shopmanager/app/ui/materials/**;
 Lcom/shopmanager/app/ui/notes/**;
 Lcom/shopmanager/app/ui/theme/**;
+
+HSPLcom/shopmanager/app/**;->**(**)**
+HSPLandroidx/compose/**;->**(**)**
+Lcom/shopmanager/app/**;

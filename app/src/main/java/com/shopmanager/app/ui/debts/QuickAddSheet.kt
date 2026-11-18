@@ -214,7 +214,7 @@ fun QuickAddSheet(
                         )
                     }
                 }
-                items(chips, key = { it.id }) { person ->
+                items(chips, key = { it.id }, contentType = { "chip" }) { person ->
                     PersonChip(
                         name = person.name,
                         subtitle = if (person.amount > 0) Formatters.number(person.amount) else null,

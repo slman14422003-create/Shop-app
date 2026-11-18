@@ -166,7 +166,7 @@ fun AssistantChatScreen(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(shown, key = { it.id }) { m ->
+                    items(shown, key = { it.id }, contentType = { "msg" }) { m ->
                         val index = messages.indexOf(m)
                         val prev = messages.getOrNull(index - 1)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -1,5 +1,6 @@
 package com.shopmanager.app.ui.materials
 
+import com.shopmanager.app.ui.common.tierAnimateItem
 import com.shopmanager.app.data.materials.level
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
@@ -225,6 +226,7 @@ internal fun MaterialsList(
     }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     com.shopmanager.app.data.performance.ScrollJankWatch(listState)
+    com.shopmanager.app.ui.common.RegisterScrollToTop(2, listState)
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -314,13 +316,7 @@ internal fun MaterialsList(
                 Box(
                     Modifier
                         .fillMaxWidth()
-                        .animateItem(
-                            fadeInSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
-                            else tween(durationMillis = MotionSpecs.fadeMillis(), easing = MotionSpecs.claudeEasing),
-                            placementSpec = MotionSpecs.reorderSpring(),
-                            fadeOutSpec = if (LocalPerformanceTier.current == PerformanceTier.LOW) null
-                            else MotionSpecs.listItemFadeOut()
-                        )
+                        .then(tierAnimateItem())
                         .listItemEntrance(rowIndex)
                 ) {
                     MaterialRow(

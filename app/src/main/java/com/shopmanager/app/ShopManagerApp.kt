@@ -43,6 +43,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import com.shopmanager.app.ui.common.Text
@@ -95,7 +96,11 @@ import com.shopmanager.app.ui.chat.ConversationViewModel
 import com.shopmanager.app.ui.chat.UserPickerScreen
 import com.shopmanager.app.ui.chat.UserPickerViewModel
 import com.shopmanager.app.ui.common.AppMenuPopup
-import com.shopmanager.app.ui.common.FloatingQuickActions
+import com.shopmanager.app.ui.common.LocalTabScrollToTop
+import com.shopmanager.app.ui.common.QuickAction
+import com.shopmanager.app.ui.common.TabScrollToTop
+import com.shopmanager.app.ui.common.rememberBottomBarScrollState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
 import com.shopmanager.app.ui.common.QuickAction
 import com.shopmanager.app.ui.common.WebViewScreen
@@ -231,7 +236,7 @@ internal fun ShopManagerApp(
     // tab switch and a screen push now feel like the same design language
     // instead of two different ones stitched together.
     val isLowTierForPager = LocalPerformanceTier.current == PerformanceTier.LOW
-    val richPagerTransition = LocalPerformanceTier.current == PerformanceTier.STANDARD
+    val richPagerTransition = LocalPerformanceTier.current == PerformanceTier.HIGH
     val pagerTabAnimationSpec: FiniteAnimationSpec<Float> =
         tween(MotionSpecs.pagerMillis().coerceAtLeast(150), easing = MotionSpecs.navEasing)
 
@@ -346,7 +351,6 @@ internal fun ShopManagerApp(
     // A10. On LOW tier screens simply swap with no transition at all.
     val performanceTier = LocalPerformanceTier.current
     val isLowTier = performanceTier == PerformanceTier.LOW
-    val isBalancedTier = performanceTier == PerformanceTier.BALANCED
 
     // ROOT FIX ("الشريط العائم خلفيته لسه بيضاء/سوداء"): a Scaffold(bottomBar
     // = ...) was the actual root cause, not a styling detail inside
@@ -386,10 +390,42 @@ internal fun ShopManagerApp(
     val density = LocalDensity.current
     var floatingNavHeight by remember { mutableStateOf(0.dp) }
 
+    // شريط التنقل: إخفاء عند التمرير لأسفل (HIGH)، شارات، زر الإضافة السريع، "اضغط المحدد للعودة للأعلى".
+    val barScroll = rememberBottomBarScrollState()
+    val tabScrollTop = remember { TabScrollToTop() }
+    LaunchedEffect(pagerState.currentPage) { barScroll.hidden = false }
+    val barContext = LocalContext.current
+    val barOverdueDays = remember { SettingsRepository(barContext).overdueDays }
+    val barDebtsUi by debtsViewModel.uiState.collectAsStateWithLifecycle()
+    val barPersons = barDebtsUi.persons
+    val barDebts = barDebtsUi.debts
+    val overdueCount by com.shopmanager.app.ui.common.rememberComputed(barPersons, barDebts, barOverdueDays) {
+        com.shopmanager.app.ui.debts.classifyPersons(barPersons, barDebts, barOverdueDays, System.currentTimeMillis())
+            .values.count { it.bucket == com.shopmanager.app.ui.debts.DebtBucket.OVERDUE }
+    }
+    val barChatState by chatSessionViewModel.chatList.collectAsStateWithLifecycle()
+    val unreadCount = barChatState.chats.sumOf { it.unread }
+    val barBadges = remember(overdueCount, unreadCount) {
+        mapOf(PAGE_DEBTS to (overdueCount ?: 0), PAGE_NOTES to unreadCount)
+    }
+    val barQuickAction: QuickAction? = when (pagerState.currentPage) {
+        PAGE_DEBTS -> QuickAction(androidx.compose.material.icons.Icons.Filled.Add, "دين جديد") {
+            quickAddRequest = QuickAddRequest(QuickAddMode.DEBT)
+        }
+        PAGE_MATERIALS ->
+            if (materialsPricesTabActive && pricesChangedCount > 0)
+                QuickAction(androidx.compose.material.icons.Icons.Filled.Check, "حفظ الأسعار") { savePricesRequested = true }
+            else QuickAction(androidx.compose.material.icons.Icons.Filled.Add, "مادة جديدة") {
+                navController.safeNavigate(ROUTE_MATERIAL_CATALOG)
+            }
+        else -> null
+    }
+
     Box(Modifier.fillMaxSize()) {
     Box(
         Modifier
             .fillMaxSize()
+            .nestedScroll(barScroll.connection)
     ) {
         // See the BUG FIXED note below (inside NavHost's transition params)
         // for why these are shaped the way they are — declared here, above
@@ -424,7 +460,8 @@ internal fun ShopManagerApp(
         // integrated motion system instead of a one-off for this screen.
         val pushScaleSpec: FiniteAnimationSpec<Float> = tween(navMs, easing = MotionSpecs.claudeEasing)
         CompositionLocalProvider(
-            LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp
+            LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp,
+            LocalTabScrollToTop provides tabScrollTop
         ) {
         NavHost(
             navController = navController,
@@ -453,11 +490,9 @@ internal fun ShopManagerApp(
             //    المغطّاة تنزلق ثلث عرضها لليسار وتُصغَّر إلى 94% (انظر pushScaleSpec).
             //  - سحب (popEnter/popExit): العكس تماماً بنفس pushSlideSpec/pushScaleSpec
             //    (المدة والمنحنى نفسهما، فتتطابق السرعة وليس الاتجاه فقط).
-            // ثلاثة مستويات (انظر MotionSpecs.navMillis):
+            // مستويان (انظر MotionSpecs.navMillis):
             //  - LOW: تلاشٍ متقاطع قصير فقط، بلا انزلاق ولا scale.
-            //  - BALANCED: انزلاق (transform فقط) بلا scale ولا تلاشٍ للشاشة المغطّاة
-            //    — طبقة واحدة مسطّحة تتحرك، فلا تُعاد كتابة ظلال/ألوان كل إطار.
-            //  - STANDARD: انزلاق + تصغير الشاشة المغطّاة إلى 94% (أغنى عمق بصري).
+            //  - HIGH: انزلاق + تصغير الشاشة المغطّاة إلى 94% (أغنى عمق بصري).
             enterTransition = {
                 when {
                     isLowTier -> fadeIn(navFadeSpec)
@@ -469,7 +504,6 @@ internal fun ShopManagerApp(
                     // LOW: طبقة واحدة فقط تتحرك (الشاشة الجديدة تتلاشى فوق القديمة الثابتة)،
                     // بدل تلاشٍ متقاطع لشاشتين كاملتين = نصف عمل المعالج الرسومي على 40Hz.
                     isLowTier -> ExitTransition.None
-                    isBalancedTier -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
                     else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 } +
                         scaleOut(pushScaleSpec, targetScale = 0.94f)
                 }
@@ -477,7 +511,6 @@ internal fun ShopManagerApp(
             popEnterTransition = {
                 when {
                     isLowTier -> EnterTransition.None
-                    isBalancedTier -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth / 4 }
                     else -> slideInHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 } +
                         scaleIn(pushScaleSpec, initialScale = 0.94f)
                 }
@@ -520,7 +553,7 @@ internal fun ShopManagerApp(
                     // عالافتراضي (0) لتفادي أي عبء compose/ذاكرة إضافي مو
                     // ضروري - نفس منطق "دعم الوضعين" اللي يحدد isLowTierForPager
                     // نفسها فوق.
-                    beyondViewportPageCount = if (isLowTierForPager) 0 else 1,
+                    beyondViewportPageCount = 0,
                     // REMOVED ("ميزة التنقل بين الشاشات الغيها"): no
                     // finger-drag between tabs anymore — see the class-level
                     // FIX/REMOVED comment above this composable() block.
@@ -805,6 +838,10 @@ internal fun ShopManagerApp(
             AppBottomBar(
                 selectedPage = pagerState.currentPage,
                 onSelectPage = { page -> openPager(page) },
+                badges = barBadges,
+                quickAction = barQuickAction,
+                onReselect = { page -> tabScrollTop.scroll(page) },
+                hidden = barScroll.hidden,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .onSizeChanged { size ->

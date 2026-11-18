@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.material3.MaterialTheme
 import com.shopmanager.app.ui.common.Text
@@ -48,7 +49,7 @@ fun ChangeHistoryDialog(onDismiss: () -> Unit) {
                 Text("لا توجد عمليات مسجلة بعد")
             } else {
                 LazyColumn(Modifier.heightIn(max = 380.dp)) {
-                    items(entries) { entry ->
+                    itemsIndexed(entries, key = { i, e -> "${e.time}_$i" }, contentType = { _, _ -> "entry" }) { _, entry ->
                         Column(Modifier.padding(vertical = 6.dp)) {
                             Text(entry.text, style = MaterialTheme.typography.bodyMedium)
                             Text(
@@ -78,7 +79,7 @@ fun BackupPickerDialog(
         title = { Text("النسخ المحفوظة على الجهاز") },
         text = {
             LazyColumn(Modifier.heightIn(max = 380.dp)) {
-                items(backups) { backup ->
+                items(backups, key = { it.file.absolutePath }, contentType = { "backup" }) { backup ->
                     TextButton(shape = RectangleShape, onClick = { onPick(backup) }) {
                         Text("${formatDate(backup.createdAt)} — ${backup.personsCount} عميل، ${backup.materialsCount} مادة")
                     }

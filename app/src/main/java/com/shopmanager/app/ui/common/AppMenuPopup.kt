@@ -92,8 +92,8 @@ fun AppMenuPopup(
 
     val transition = updateTransition(state, label = "menuPopup")
     val tier = LocalPerformanceTier.current
-    // الأداء العالي: انبثاق نابض + بلور؛ المتوازن: تلاشٍ وتكبير خفيف بلا بلور؛ المنخفض: ظهور فوري.
-    val rich = tier == PerformanceTier.STANDARD
+    // الأداء العالي: انبثاق نابض + بلور؛ المنخفض: ظهور فوري.
+    val rich = tier == PerformanceTier.HIGH
     val glass = rich && blurEnabled(strongOnly = true)
     val progress = transition.animateFloat(
         transitionSpec = {

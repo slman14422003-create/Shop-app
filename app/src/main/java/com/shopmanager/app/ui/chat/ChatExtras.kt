@@ -192,7 +192,7 @@ fun PinnedBar(pinned: PinnedRef, name: String, onClick: () -> Unit, onUnpin: () 
 fun QuickReplyRow(replies: List<String>, onPick: (String) -> Unit) {
     val cs = MaterialTheme.colorScheme
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        items(replies, key = { it }) { r ->
+        items(replies, key = { it }, contentType = { "reply" }) { r ->
             Text(
                 r,
                 style = MaterialTheme.typography.labelLarge,
