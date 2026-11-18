@@ -63,23 +63,8 @@ fun AnimatedAmount(
     maxLines: Int = 1,
     format: (Double) -> String = { Formatters.number(it) }
 ) {
-    val high = LocalPerformanceTier.current == PerformanceTier.HIGH && !MotionSpecs.reduceMotion()
-    val shown = remember { mutableDoubleStateOf(if (high) 0.0 else amount) }
-    LaunchedEffect(amount, high) {
-        if (!high) {
-            shown.doubleValue = amount
-            return@LaunchedEffect
-        }
-        val start = shown.doubleValue
-        if (start == amount) return@LaunchedEffect
-        val progress = Animatable(0f)
-        progress.animateTo(1f, tween(600, easing = MotionSpecs.claudeEasing)) {
-            shown.doubleValue = start + (amount - start) * this.value
-        }
-        shown.doubleValue = amount
-    }
     Text(
-        text = format(shown.doubleValue) + suffix,
+        text = format(amount) + suffix,
         modifier = modifier,
         style = style.tabular(),
         color = color,

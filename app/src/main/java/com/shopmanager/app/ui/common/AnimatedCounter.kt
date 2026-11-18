@@ -28,15 +28,6 @@ fun AnimatedCounterText(
     fontWeight: FontWeight = FontWeight.Bold,
     animate: Boolean = true
 ) {
-    if (animate && LocalPerformanceTier.current == PerformanceTier.HIGH) {
-        AnimatedAmount(
-            amount = targetValue,
-            modifier = modifier,
-            style = style.copy(fontWeight = fontWeight),
-            format = format
-        )
-        return
-    }
     val currentFormat by rememberUpdatedState(format)
     val text by produceState<String?>(null, targetValue, animate) {
         if (animate) value = withContext(AppCompute.dispatcher) { currentFormat(targetValue) }

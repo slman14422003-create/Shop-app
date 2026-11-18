@@ -96,3 +96,8 @@
 - ShopManagerApp: dashboard (newHome) box reserve is animated in the layout phase: full pill height when the bottom bar is shown, only the nav bar inset when hidden (HIGH tier only, same as AppBottomBar); no recomposition per frame
 - open question: the request line about the "crystal" controlling a level via a tap and stopping it was unclear; not implemented
 - not compiled here: verify via ci
+
+## final numbers only task
+- cause: AnimatedAmount (ui/common/MotionExtras.kt) started at 0 and counted up on HIGH tier, so debt rows, person detail and dashboard hero showed intermediate numbers; AnimatedCounterText routed to it on HIGH tier
+- change: AnimatedAmount now renders format(amount) directly (same signature, all call sites untouched); AnimatedCounterText always uses the AppCompute formatting path
+- not compiled here: verify via ci
