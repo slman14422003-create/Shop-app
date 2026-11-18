@@ -106,7 +106,6 @@ import com.shopmanager.app.ui.common.TabScrollToTop
 import com.shopmanager.app.ui.common.rememberBottomBarScrollState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
-import com.shopmanager.app.ui.common.QuickAction
 import com.shopmanager.app.ui.common.WebViewScreen
 import com.shopmanager.app.ui.common.GlassAlertDialog
 import com.shopmanager.app.ui.settings.SettingsScreen

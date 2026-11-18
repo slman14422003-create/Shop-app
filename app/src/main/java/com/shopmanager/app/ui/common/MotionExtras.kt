@@ -141,8 +141,9 @@ fun ProgressRing(
 ) {
     val high = LocalPerformanceTier.current == PerformanceTier.HIGH
     val animated = remember { Animatable(if (high) 0f else progress) }
+    val entranceMs = MotionSpecs.entranceMillis()
     LaunchedEffect(progress, high) {
-        if (high) animated.animateTo(progress, tween(MotionSpecs.entranceMillis(), easing = MotionSpecs.claudeEasing))
+        if (high) animated.animateTo(progress, tween(entranceMs, easing = MotionSpecs.claudeEasing))
         else animated.snapTo(progress)
     }
     Canvas(modifier.size(size)) {

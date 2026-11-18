@@ -361,7 +361,7 @@ object JankMonitor {
         stats?.isTrackingEnabled = false
         statsWindow = window
         stats = runCatching {
-            JankStats.createAndTrack(window, executor) { frame ->
+            JankStats.createAndTrack(window) { frame ->
                 val now = SystemClock.elapsedRealtime()
                 val jank = frame.isJank
                 for (c in collectors) {
