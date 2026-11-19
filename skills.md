@@ -101,3 +101,22 @@
 - cause: AnimatedAmount (ui/common/MotionExtras.kt) started at 0 and counted up on HIGH tier, so debt rows, person detail and dashboard hero showed intermediate numbers; AnimatedCounterText routed to it on HIGH tier
 - change: AnimatedAmount now renders format(amount) directly (same signature, all call sites untouched); AnimatedCounterText always uses the AppCompute formatting path
 - not compiled here: verify via ci
+
+## drawOutline unresolved reference in LiquidGlass.kt task
+- cause: drawOutline is a DrawScope extension function and was called in drawBehind without its import, so compileDebugKotlin failed at LiquidGlass.kt line 102
+- change: added imports androidx.compose.ui.graphics.drawscope.drawOutline and androidx.compose.ui.graphics.drawscope.Stroke; the call now uses Stroke directly
+- only file touched besides this one: ui/common/LiquidGlass.kt
+- not compiled here: verify via ci
+- correction: the drawOutline import itself failed to resolve (UNRESOLVED_IMPORT) in this Compose version; removed it and draw the rim with drawPath over a Path built from the Outline (Rectangle / Rounded / Generic), Stroke 1dp, same alpha
+- not compiled here: verify via ci
+
+## build, baseline profile and notification improvements task
+- baseline profile: new workflow .github/workflows/baseline-profile.yml (manual dispatch): enables KVM, boots an API 34 x86_64 emulator, runs gradle :app:generateReleaseBaselineProfile -PbaselineProfile=true, validates the generated file (non-empty, at least 100 lines), copies it to app/src/main/baseline-prof.txt, uploads it as an artifact, commits it to main and optionally dispatches release.yml (bot pushes do not trigger push workflows, so dispatch is explicit)
+- isolation: the :baselineprofile module and the androidx.baselineprofile app plugin load only when -PbaselineProfile is passed (settings.gradle.kts include and app/build.gradle.kts apply are conditional), so normal builds and release.yml are unchanged; the plugin is declared apply false in the root build file at 1.5.0 (stable, supports AGP 9 without newDsl=false)
+- normal release builds pick up app/src/main/baseline-prof.txt natively through AGP; R8 rewrites the rules to the obfuscated names
+- generator: BaselineProfileGenerator.kt opens the app, scrolls, visits the four bottom tabs by their text labels, goes back; every gesture is null-safe so onboarding or lock screens cannot fail the run; deps: macro 1.5.0, uiautomator 2.3.0, ext-junit 1.2.1
+- release.yml: setup-gradle cache-read-only on non-main refs
+- notifications (NotificationHelper.kt): setOnlyAlertOnce on overdue, due-reminder and note-done; note-done expires after 6h, debt-paid after 24h
+- already present and left unchanged: R8 full mode, locale filters, JankStats tier downgrade, 60Hz motion scaling in MotionSpecs, grouped notifications with summaries, chat reply and mark-read actions, immutable PendingIntents
+- not done on purpose: abiFilters (would break the x86_64 emulator install), icon library swap, FCM replacement of the realtime service, quiet hours (needs settings UI)
+- not compiled here: verify via ci; first baseline run needs a manual dispatch of Generate Baseline Profile

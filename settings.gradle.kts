@@ -17,3 +17,7 @@ dependencyResolutionManagement {
 rootProject.name = "ShopManager"
 include(":app")
 include(":blurview")
+
+if (gradle.startParameter.projectProperties.containsKey("baselineProfile")) {
+    include(":baselineprofile")
+}
