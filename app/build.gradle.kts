@@ -16,6 +16,12 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val baselineProfileMode = providers.gradleProperty("baselineProfile").isPresent
+
+if (baselineProfileMode) {
+    apply(plugin = "androidx.baselineprofile")
+}
+
 // SIGNING: reads the real Play Store release keystore's credentials from
 // keystore/keystore.properties.local — a file that is NEVER committed
 // (see .gitignore) and must never leave this machine/CI secret store.
@@ -394,4 +400,8 @@ dependencies {
     implementation("androidx.webkit:webkit:1.16.0")
 
     testImplementation("junit:junit:4.13.2")
+}
+
+if (baselineProfileMode) {
+    dependencies.add("baselineProfile", project(":baselineprofile"))
 }

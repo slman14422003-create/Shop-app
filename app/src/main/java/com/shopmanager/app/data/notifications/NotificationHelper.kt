@@ -428,6 +428,8 @@ object NotificationHelper {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setShowWhen(true)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setTimeoutAfter(6L * 60L * 60L * 1000L)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.NoteReminder(noteId, displayTitle)))
             .extend(lockScreenPrivacy(context, NotificationSounds.channelId(context, NotifKind.NOTES), "ملاحظات هامة"))
             .build()
@@ -854,6 +856,7 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pending)
             .build()
         try {
@@ -880,6 +883,7 @@ object NotificationHelper {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
             .setContentIntent(pending)
             .build()
         try {
@@ -908,6 +912,7 @@ object NotificationHelper {
             .setGroup(GROUP_DEBTS)
             .setShowWhen(true)
             .setAutoCancel(true)
+            .setTimeoutAfter(24L * 60L * 60L * 1000L)
             .setContentIntent(buildContentIntent(context, id, NotificationAction.DebtPaid(personName, amount, currencySymbol)))
             .extend(lockScreenPrivacy(context, NotificationSounds.channelId(context, NotifKind.DEBTS), "تنبيهات الديون"))
             .build()

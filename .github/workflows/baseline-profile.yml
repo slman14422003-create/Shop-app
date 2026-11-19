@@ -1,0 +1,116 @@
+name: Generate Baseline Profile
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_after:
+        description: 'شغّل workflow الإصدار بعد حفظ البروفايل'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: baseline-profile
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      GRADLE_OPTS: -Dfile.encoding=UTF-8 -Dorg.gradle.console=plain
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '9.7.1'
+          cache-read-only: false
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Generate profile on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          script: gradle :app:generateReleaseBaselineProfile -PbaselineProfile=true --no-configuration-cache --stacktrace
+
+      - name: Validate generated profile
+        run: |
+          GEN=$(find app/src -path "*generated/baselineProfiles/baseline-prof.txt" -type f | head -n 1)
+          [ -n "$GEN" ] && [ -s "$GEN" ] || { echo "::error::generated baseline-prof.txt is missing or empty"; exit 1; }
+          LINES=$(wc -l < "$GEN")
+          echo "profile lines: $LINES"
+          [ "$LINES" -ge 100 ] || { echo "::error::generated profile has only $LINES lines"; exit 1; }
+          cp "$GEN" app/src/main/baseline-prof.txt
+
+      - name: Upload generated profiles
+        uses: actions/upload-artifact@v7
+        with:
+          name: baseline-profile-${{ github.run_number }}
+          path: |
+            app/src/main/baseline-prof.txt
+            app/src/release/generated/baselineProfiles/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Commit profile
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/baseline-prof.txt
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "no profile changes"
+            exit 0
+          fi
+          git commit -m "perf: update baseline profile"
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin main
+            if git push origin HEAD:main; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep $((attempt * 4))
+          done
+          echo "::error::failed to push baseline profile"
+          exit 1
+
+      - name: Trigger release build
+        if: steps.commit.outputs.changed == 'true' && inputs.release_after
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run release.yml --ref main -f publish=true

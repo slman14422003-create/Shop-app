@@ -64,6 +64,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '9.7.1'
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
       # ─────────────────────────────────────────────────────────────────────
       # توقيع الإصدار (إصلاح مهم): بدون مفتاح ثابت كان AGP يولّد مفتاح debug
