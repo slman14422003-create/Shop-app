@@ -117,6 +117,9 @@ class MainActivity : FragmentActivity() {
     override fun onPostCreate(savedInstanceState: Bundle?) {
         super.onPostCreate(savedInstanceState)
         if (blurTarget != null) return
+        // BlurTarget يعتمد على RenderNode/RecordingCanvas (أندرويد 10+): على أندرويد 7-9 نتخطاه
+        // فيبقى blurTarget = null وتعمل كل الشاشات بخلفيات معتمة بدل الضبابية، بدل انهيار الإقلاع.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
         val content = findViewById<android.view.ViewGroup>(android.R.id.content) ?: return
         val inner = content.getChildAt(0) ?: return
         content.removeViewAt(0)
