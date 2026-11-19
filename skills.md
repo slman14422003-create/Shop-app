@@ -120,3 +120,8 @@
 - already present and left unchanged: R8 full mode, locale filters, JankStats tier downgrade, 60Hz motion scaling in MotionSpecs, grouped notifications with summaries, chat reply and mark-read actions, immutable PendingIntents
 - not done on purpose: abiFilters (would break the x86_64 emulator install), icon library swap, FCM replacement of the realtime service, quiet hours (needs settings UI)
 - not compiled here: verify via ci; first baseline run needs a manual dispatch of Generate Baseline Profile
+
+## baseline run 1 diagnosis
+- result of first run: build, APK packaging and emulator boot succeeded; only :baselineprofile:connectedNonMinifiedReleaseAndroidTest failed ("There were failing tests"), the log does not show which assertion
+- changes: macrobenchmark suppressErrors for emulator in baselineprofile/build.gradle.kts; generator grants POST_NOTIFICATIONS and dismisses first-run dialogs; workflow no longer stops at the gradle failure, it saves logcat plus test reports as artifact baseline-diagnostics-N, then the validate step fails with a clear message if no profile exists
+- next: if it fails again, read the test report from the diagnostics artifact
