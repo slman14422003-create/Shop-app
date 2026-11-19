@@ -1,3 +1,16 @@
+## v1.0.1226 — 2026-11-19
+- perf: update baseline profile
+- Upload via GitHub Manager (2)
+- Upload via GitHub Manager (1)
+- Upload via GitHub Manager (2)
+- Upload via GitHub Manager (1)
+- Upload via GitHub Manager
+- Upload via GitHub Manager (2)
+- Upload via GitHub Manager (1)
+- Delete 23 items
+- Upload via GitHub Manager
+- Upload via GitHub Manager
+
 ## v1.0.1220 — 2026-11-18
 - Upload via GitHub Manager
 
