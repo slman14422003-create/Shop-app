@@ -65,7 +65,22 @@ jobs:
           force-avd-creation: false
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: gradle :app:generateReleaseBaselineProfile -PbaselineProfile=true --no-configuration-cache --stacktrace
+          script: |
+            gradle :app:generateReleaseBaselineProfile -PbaselineProfile=true --no-configuration-cache --stacktrace || true
+            adb logcat -d -v threadtime > logcat.txt || true
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: baseline-diagnostics-${{ github.run_number }}
+          path: |
+            logcat.txt
+            baselineprofile/build/reports/androidTests/
+            baselineprofile/build/outputs/androidTest-results/
+            baselineprofile/build/outputs/connected_android_test_additional_output/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Validate generated profile
         run: |

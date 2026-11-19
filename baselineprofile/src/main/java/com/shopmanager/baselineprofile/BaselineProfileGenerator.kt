@@ -18,9 +18,11 @@ class BaselineProfileGenerator {
 
     @Test
     fun generate() = rule.collect(packageName = PACKAGE_NAME) {
+        device.executeShellCommand("pm grant $PACKAGE_NAME android.permission.POST_NOTIFICATIONS")
         pressHome()
         startActivityAndWait()
         device.waitForIdle()
+        dismissDialogs()
         scrollIfPossible()
         TABS.forEach { label ->
             device.wait(Until.findObject(By.text(label)), TAB_TIMEOUT_MS)?.click()
@@ -28,6 +30,13 @@ class BaselineProfileGenerator {
             scrollIfPossible()
         }
         device.pressBack()
+        device.waitForIdle()
+    }
+
+    private fun MacrobenchmarkScope.dismissDialogs() {
+        DIALOG_BUTTONS.forEach { label ->
+            device.findObject(By.text(label))?.click()
+        }
         device.waitForIdle()
     }
 
@@ -43,6 +52,7 @@ class BaselineProfileGenerator {
     private companion object {
         const val PACKAGE_NAME = "com.shopmanager.app"
         const val TAB_TIMEOUT_MS = 3_000L
+        val DIALOG_BUTTONS = listOf("Allow", "While using the app", "OK", "Skip", "تخطي")
         val TABS = listOf("الديون", "المواد", "الدردشة", "الرئيسية")
     }
 }
