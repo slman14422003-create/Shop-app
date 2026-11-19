@@ -1,0 +1,998 @@
+package com.shopmanager.app
+
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import com.shopmanager.app.ui.common.LocalNavMotionActive
+import com.shopmanager.app.ui.common.AppBottomBar
+import com.shopmanager.app.ui.common.GlassSnackbarHost
+import com.shopmanager.app.ui.common.showWithOptionalUndo
+import com.shopmanager.app.ui.debts.QuickAddMode
+import com.shopmanager.app.ui.debts.QuickAddRequest
+import com.shopmanager.app.ui.debts.QuickAddSheet
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.*
+import com.shopmanager.app.ui.common.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import kotlinx.coroutines.launch
+import com.shopmanager.app.data.notifications.NotificationAction
+import com.shopmanager.app.data.performance.LocalPerformanceTier
+import com.shopmanager.app.data.performance.PerformanceMode
+import com.shopmanager.app.data.performance.PerformanceTier
+import com.shopmanager.app.data.security.AdminPasswordRepository
+import com.shopmanager.app.data.security.PinAttemptThrottle
+import com.shopmanager.app.data.settings.SettingsRepository
+import com.shopmanager.app.ui.admin.AdminPanelScreen
+import com.shopmanager.app.ui.dashboard.DashboardScreen
+import com.shopmanager.app.assistant.AssistantNav
+import com.shopmanager.app.assistant.AssistantViewModel
+import com.shopmanager.app.assistant.engine.Screen as AssistantScreen
+import com.shopmanager.app.assistant.ui.AssistantChatScreen
+import com.shopmanager.app.assistant.ui.AssistantHomeScreen
+import com.shopmanager.app.assistant.ui.AssistantSettingsScreen
+import com.shopmanager.app.ui.debts.DebtsScreen
+import com.shopmanager.app.ui.debts.DebtsViewModel
+import com.shopmanager.app.ui.debts.PersonDetailScreen
+import com.shopmanager.app.ui.common.LocalNavAnimatedScope
+import com.shopmanager.app.ui.common.LocalSharedTransitionScope
+import com.shopmanager.app.ui.lock.BiometricAuth
+import com.shopmanager.app.ui.materials.MaterialCatalogScreen
+import com.shopmanager.app.ui.materials.MaterialsScreen
+import com.shopmanager.app.ui.materials.MaterialsViewModel
+import com.shopmanager.app.ui.notes.NotesScreen
+import com.shopmanager.app.ui.notes.NotesViewModel
+import com.shopmanager.app.ui.chat.ChatRoot
+import com.shopmanager.app.ui.chat.ChatSessionViewModel
+import com.shopmanager.app.ui.chat.ConversationScreen
+import com.shopmanager.app.ui.chat.ConversationViewModel
+import com.shopmanager.app.ui.chat.UserPickerScreen
+import com.shopmanager.app.ui.chat.UserPickerViewModel
+import com.shopmanager.app.ui.common.AppMenuPopup
+import com.shopmanager.app.ui.common.LocalTabScrollToTop
+import com.shopmanager.app.ui.common.QuickAction
+import com.shopmanager.app.ui.common.TabScrollToTop
+import com.shopmanager.app.ui.common.rememberBottomBarScrollState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.shopmanager.app.ui.common.LocalFloatingBottomNavHeight
+import com.shopmanager.app.ui.common.WebViewScreen
+import com.shopmanager.app.ui.common.GlassAlertDialog
+import com.shopmanager.app.ui.settings.SettingsScreen
+import com.shopmanager.app.ui.theme.AppThemeMode
+import com.shopmanager.app.data.performance.MotionSpecs
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
+@Composable
+internal fun ShopManagerApp(
+    settings: SettingsRepository,
+    onThemeChanged: (AppThemeMode) -> Unit,
+    onPerformancePreferenceChanged: (PerformanceMode) -> Unit,
+    onRecheckDevicePerformance: () -> Unit = {},
+    pendingNotificationAction: NotificationAction? = null,
+    onConsumeNotificationAction: () -> Unit = {}
+) {
+    val navController = rememberNavController()
+    // Shared across screens so everyone sees the same live data instead of
+    // spinning up duplicate Firestore listeners per screen.
+    val debtsViewModel: DebtsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val materialsViewModel: MaterialsViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val notesViewModel: NotesViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    // الدردشة المحلية: جلسة واحدة مشتركة (لا تبدأ أي اتصال Firebase قبل فتح تبويب الدردشة فعلاً).
+    val chatSessionViewModel: ChatSessionViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    // المساعد المحلي (بدون إنترنت/Firebase/نموذج لغوي): يُربط بنفس ViewModels المشتركة فلا مستمعين مكررين.
+    val assistantViewModel: AssistantViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    androidx.compose.runtime.LaunchedEffect(assistantViewModel) { assistantViewModel.bind(debtsViewModel, materialsViewModel) }
+    val assistantSettings = assistantViewModel.settings.collectAsStateWithLifecycle().value
+
+    // Hoisted above the NavHost (rather than inside the pager's own
+    // composable) so it survives navigating away to Settings/Help and back,
+    // and so the bottom bar can read/drive the current page directly.
+    val pagerState = rememberPagerState(initialPage = PAGE_DASHBOARD) { 4 }
+    LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow { pagerState.settledPage }.collect { page ->
+            when (page) {
+                PAGE_MATERIALS -> com.shopmanager.app.data.learning.UsageArea.MATERIALS
+                PAGE_NOTES -> com.shopmanager.app.data.learning.UsageArea.NOTES
+                else -> null
+            }?.let { materialsViewModel.recordUsage(it) }
+        }
+    }
+    // REDESIGN ("زر عميل جديد بجانب الشريط السفلي"): the "+" that used to
+    // be each tab's own FloatingActionButton is now a single shared button
+    // rendered as part of FloatingBottomNav itself (see its `quickAction`
+    // param) so it always sits attached to the pill instead of floating
+    // separately over the list. It can't reach into DebtsScreen's own
+    // dialog state directly, so tapping it just raises this flag; DebtsScreen
+    // watches it and opens its "عميل جديد" dialog when it turns true (see
+    // DebtsScreen's `addPersonRequested` parameter).
+    var addPersonRequested by remember { mutableStateOf(false) }
+    var quickAddRequest by remember { mutableStateOf<QuickAddRequest?>(null) }
+    val globalSnackHost = remember { SnackbarHostState() }
+    val debtsMessage by debtsViewModel.message.collectAsStateWithLifecycle()
+    // Same request/handled pattern as addPersonRequested just above, for
+    // the ملاحظات هامة tab's own "+" quick action.
+    var addNoteRequested by remember { mutableStateOf(false) }
+    // "دمج زر حفظ الأسعار مع الشريط السفلي": mirrors addPersonRequested's
+    // own request/handled pattern just above, but for the الأسعار tab's
+    // save action instead — see MaterialsScreen's matching parameters for
+    // the full explanation. `materialsPricesTabActive` and
+    // `pricesChangedCount` are reported live by MaterialsScreen (it owns
+    // the tab state and the in-progress price edits) so the secondary
+    // pill button below only appears, and only shows a changed-count
+    // description, while that specific tab is actually on screen.
+    var materialsPricesTabActive by remember { mutableStateOf(false) }
+    LaunchedEffect(materialsPricesTabActive) {
+        if (materialsPricesTabActive) materialsViewModel.recordUsage(com.shopmanager.app.data.learning.UsageArea.PRICES)
+    }
+    var pricesChangedCount by remember { mutableStateOf(0) }
+    var savePricesRequested by remember { mutableStateOf(false) }
+    // BUG FIXED ("ترابط بين الديون والملاحظات" كان يغطي الأشخاص فقط):
+    // tapping a material-linked note used to only switch to the Materials
+    // tab in general (see the old onOpenMaterials below) — nothing pointed
+    // at the specific item, unlike a person-linked note which opens that
+    // exact customer's page. Same request/handled pattern as
+    // addPersonRequested above: NotesScreen raises this with the linked
+    // material's name, MaterialsScreen consumes it as its initial search.
+    var pendingMaterialHighlight by remember { mutableStateOf<String?>(null) }
+    val pagerScope = rememberCoroutineScope()
+
+    // REDESIGN ("قائمة جانبية بدل الشريط السفلي"): tab switching no longer
+    // happens through a floating pill glued to the screen's bottom edge —
+    // a single hamburger button opens this Material3 side drawer instead,
+    // laid out like Claude's own app drawer (see AppDrawerContent.kt: a
+    // plain icon+label row per destination, الإعدادات pinned below a
+    // divider at the bottom instead of sitting in that same list). The
+    // pager/openPager() machinery underneath is unchanged — the drawer
+    // just drives the same `pagerState` the old pill used to.
+    var menuOpen by remember { mutableStateOf(false) }
+    val drawerScope = rememberCoroutineScope()
+
+    // لوحة المسؤول السرية: PIN-gate state, hoisted up here from
+    // DashboardScreen now that the trigger button lives in the drawer
+    // instead of Home's own header (see the ROUTE_ADMIN comment above).
+    var showAdminPinDialog by remember { mutableStateOf(false) }
+    val adminContext = LocalContext.current
+    val adminThrottle = remember { PinAttemptThrottle(adminContext, "shop_manager_admin_throttle") }
+    val requestAdminAccess: () -> Unit = {
+        // البصمة/الوجه أولاً إن كانت متاحة على الجهاز؛ وإلا (أو عند اختيار "كلمة المرور"
+        // أو فشل النظام) يظهر مربع كلمة المرور بنفس قفل المحاولات.
+        val bioActivity = BiometricAuth.findActivity(adminContext)
+        if (bioActivity != null && BiometricAuth.isAvailable(adminContext) && !adminThrottle.isLocked()) {
+            BiometricAuth.prompt(
+                activity = bioActivity,
+                title = "دخول لوحة المطوّر",
+                subtitle = "أكّد هويتك للمتابعة",
+                negativeText = "استخدام كلمة المرور",
+                onSuccess = {
+                    adminThrottle.registerSuccess()
+                    navController.safeNavigate(ROUTE_ADMIN)
+                },
+                onFailure = { showAdminPinDialog = true }
+            )
+        } else {
+            showAdminPinDialog = true
+        }
+    }
+
+    // BUG FIXED ("ترابط بين جميع الانميشن"): tapping a bottom-nav tab (or a
+    // notification landing on a specific tab) drove the SAME pager as
+    // swiping between Home/Debts/Materials/Notes, but through
+    // `animateScrollToPage()`'s own default spec — a generic Compose
+    // spring, completely unrelated to the deliberately-tuned iOS-style
+    // curve (`MotionSpecs.claudeEasing`/`pushSlideSpec` below) every *pushed* screen
+    // (Settings, Person Detail, ...) already animates with. The two kinds
+    // of navigation in this same app were animating on two unrelated
+    // curves/timings, which is exactly what reads as inconsistent even
+    // though each one individually looked fine. This uses the identical
+    // cubic-bezier shape (and the same LOW-tier "skip it" convention) so a
+    // tab switch and a screen push now feel like the same design language
+    // instead of two different ones stitched together.
+    val isLowTierForPager = LocalPerformanceTier.current == PerformanceTier.LOW
+    val richPagerTransition = LocalPerformanceTier.current == PerformanceTier.HIGH
+    val pagerTabAnimationSpec: FiniteAnimationSpec<Float> =
+        tween(MotionSpecs.pagerMillis().coerceAtLeast(150), easing = MotionSpecs.navEasing)
+
+    @OptIn(ExperimentalFoundationApi::class)
+    fun openPager(page: Int, animate: Boolean = true) {
+        // FIX (تعارض حركتين): كان openPager يشغّل انزلاق الـ pager بالتوازي مع (أ) سحب شاشة مدفوعة
+        // (popUpTo داخل navigateTopLevel) أو (ب) دفع شاشة جديدة فوقه مباشرة (فتح عميل من الرئيسية/الملاحظات)،
+        // فتتحرك الشاشة المغطّاة بحركتين مختلفتين معاً وتظهر اهتزازاً. الآن: الانزلاق المتحرك فقط عندما
+        // نكون فعلاً على الـ pager ولا تُشغَّل حركة تنقل أخرى؛ وإلا يقفز التبويب فوراً خلف الانتقال.
+        val alreadyOnPager = navController.currentDestination?.route == ROUTE_MAIN_PAGER
+        navigateTopLevel(navController, ROUTE_MAIN_PAGER)
+        pagerScope.launch {
+            // LOW: تبديل التبويب فوري — انزلاق صفحتين كاملتين (مع تركيب الصفحة الجديدة في أول
+            // إطار) هو أثقل ما في التنقل على المعالج الرسومي القديم.
+            if (isLowTierForPager || !animate || !alreadyOnPager) pagerState.scrollToPage(page)
+            else {
+                // انتقال بعيد (مثلاً الرئيسية ← الدردشة): نقفز إلى الصفحة المجاورة للهدف أولاً ثم
+                // ننزلق خطوة واحدة فقط، بدل المرور على كل الصفحات الوسيطة وتركيبها أثناء الحركة.
+                val from = pagerState.currentPage
+                if (kotlin.math.abs(page - from) > 1) {
+                    pagerState.scrollToPage(if (page > from) page - 1 else page + 1)
+                }
+                pagerState.animateScrollToPage(page, animationSpec = pagerTabAnimationSpec)
+            }
+        }
+    }
+
+    // أحداث تنقل المساعد (افتح ديون فلان، افتح الإعدادات...).
+    androidx.compose.runtime.LaunchedEffect(assistantViewModel) {
+        assistantViewModel.navEvents.collect { ev ->
+            when (ev) {
+                is AssistantNav.Open -> when (ev.screen) {
+                    AssistantScreen.DEBTS -> openPager(PAGE_DEBTS)
+                    AssistantScreen.MATERIALS -> openPager(PAGE_MATERIALS)
+                    AssistantScreen.HOME -> openPager(PAGE_DASHBOARD)
+                    AssistantScreen.NOTES -> navController.safeNavigate(ROUTE_NOTES)
+                    AssistantScreen.SETTINGS -> navController.safeNavigate(ROUTE_SETTINGS)
+                    AssistantScreen.ACTIVITY -> navController.safeNavigate(ROUTE_DEBT_ACTIVITY)
+                    AssistantScreen.MISSING_FINDER -> navController.safeNavigate(ROUTE_MISSING_FINDER)
+                    AssistantScreen.CATALOG -> navController.safeNavigate(ROUTE_MATERIAL_CATALOG)
+                    AssistantScreen.ASSISTANT -> navController.safeNavigate(ROUTE_ASSISTANT)
+                }
+                is AssistantNav.OpenPerson -> { openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/${ev.personId}") }
+                is AssistantNav.OpenMaterial -> { pendingMaterialHighlight = ev.name; openPager(PAGE_MATERIALS) }
+                AssistantNav.OpenFinder -> navController.safeNavigate(ROUTE_MISSING_FINDER)
+            }
+        }
+    }
+
+    // Tapping a notification should land on the screen it's about, not just
+    // pop a dialog over whatever tab happened to be open. Debts stay on the
+    // الديون tab, the shopping-list one jumps to المواد والأسعار.
+    LaunchedEffect(pendingNotificationAction) {
+        when (pendingNotificationAction) {
+            is NotificationAction.DebtPaid, is NotificationAction.NewDebt -> openPager(PAGE_DEBTS)
+            is NotificationAction.ShoppingList -> openPager(PAGE_MATERIALS)
+            is NotificationAction.NoteReminder -> { openPager(PAGE_DASHBOARD, animate = false); navController.safeNavigate(ROUTE_NOTES) }
+            is NotificationAction.OpenChat -> {
+                navController.safeNavigate(chatConversationRoute(pendingNotificationAction.otherUid, pendingNotificationAction.name))
+                onConsumeNotificationAction()
+            }
+            null -> {}
+        }
+    }
+
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
+    val showBottomBar = currentRoute == ROUTE_MAIN_PAGER
+    // BUG FIXED ("مساحة سوداء فوق الكيبورد بتغطي المادة والسعر"): the
+    // floating pill is a fixed overlay (see the Box below) that never
+    // moves when the keyboard opens — it just ends up sitting underneath
+    // the keyboard, invisible. But every tab that reads
+    // [LocalFloatingBottomNavHeight] (see PricesList/MaterialsList below)
+    // was still reserving that exact same clearance at its own bottom
+    // regardless, on the assumption the pill was still there to avoid.
+    // With the keyboard up that clearance reserves for nothing — it's
+    // dead space between the last visible row and the keyboard, which is
+    // exactly the black gap being reported. `imeVisible` (real-time,
+    // driven by the live `WindowInsets.ime` bottom inset — see the
+    // `adjustResize` manifest fix alongside this one) collapses that
+    // reservation to 0 the instant the keyboard opens, and the pill
+    // itself fades out below rather than sitting there uselessly hidden
+    // behind the keyboard. Kept as its own `pillVisible` flag rather than
+    // folded into `showBottomBar` itself — NavHost's own bottom-inset
+    // toggle just below still needs `showBottomBar` to mean "is this the
+    // pager route", independent of the keyboard, or it would start
+    // double-padding for the exact same reason `adjustResize` was added
+    // for in the first place.
+    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    // Still named `pillVisible` for the smallest possible diff against the
+    // FAB-clearance machinery below ([LocalFloatingBottomNavHeight],
+    // [FloatingQuickActions]) — it now also gates the hamburger menu
+    // button instead of a floating tab pill, same "hide it on screens
+    // that aren't the main pager, or while the keyboard covers it" rule
+    // as before.
+    val pillVisible = showBottomBar && !imeVisible
+    val globalSnackActive = showBottomBar && pagerState.currentPage != PAGE_DEBTS
+    LaunchedEffect(debtsMessage, globalSnackActive) {
+        if (globalSnackActive) {
+            debtsMessage?.let {
+                val hasUndo = debtsViewModel.undo.value != null
+                val undone = globalSnackHost.showWithOptionalUndo(it, hasUndo)
+                if (undone) debtsViewModel.performUndo() else debtsViewModel.clearUndo()
+                debtsViewModel.clearMessage()
+            }
+        }
+    }
+    // PERF (low-end tier): a fade still allocates a graphicsLayer and runs
+    // a compositor pass every frame of the transition. That's cheap on a
+    // Samsung A16-class device but is exactly the kind of per-frame cost
+    // that shows up as stutter on a 2GB/quad-core phone like the Redmi
+    // A10. On LOW tier screens simply swap with no transition at all.
+    val performanceTier = LocalPerformanceTier.current
+    val isLowTier = performanceTier == PerformanceTier.LOW
+
+    // ROOT FIX ("الشريط العائم خلفيته لسه بيضاء/سوداء"): a Scaffold(bottomBar
+    // = ...) was the actual root cause, not a styling detail inside
+    // FloatingBottomNav. Two things about Scaffold made a flat white/black
+    // rectangle unavoidable no matter what color/transparency was tried on
+    // the bar itself:
+    //  1) Scaffold paints its own `containerColor` (default
+    //     colorScheme.background) behind whatever is in the bottomBar slot.
+    //  2) Scaffold shrinks NavHost's content to stop short of that slot
+    //     (via the `padding` it hands down), so there was never any real
+    //     page content behind the bar's transparent side margins either —
+    //     just empty space over that flat Scaffold color.
+    // Both of those were true regardless of FloatingBottomNav's own
+    // background, so nothing changed there could ever fix it. This now
+    // uses a plain Box instead of Scaffold: NavHost fills the *entire*
+    // screen (see the pager tabs' own contentWindowInsets below — Dashboard/
+    // Debts/Materials already reserve their own bottom safe-area space, so
+    // no double-padding), and FloatingBottomNav is layered on top as a true
+    // overlay via Modifier.align(Alignment.BottomCenter). The margins
+    // around the pill are now genuinely transparent over the live page
+    // (list rows, cards) scrolling underneath — never a separately-painted
+    // rectangle.
+    // BUG FIXED ("زر عميل جديد/مادة جديدة صار تحت الشريط"): a direct side
+    // effect of the overlay fix above. Previously the outer Scaffold's
+    // `padding` shrank NavHost so screens never even extended into the
+    // pill's area — a screen's own FloatingActionButton (bottom-end of ITS
+    // OWN Scaffold) naturally landed above the pill with no extra work.
+    // Now that NavHost fills the true screen height, each tab's FAB anchors
+    // to the *real* bottom edge same as the pill does — same strip, so the
+    // pill (drawn after, on top) covers most of it, leaving only the
+    // sliver that peeks out past the pill's own width.
+    // FIX: measure the pill's actual rendered height right where it's
+    // drawn (`onSizeChanged` below — real layout size, not a guessed
+    // constant) and thread it down via [LocalFloatingBottomNavHeight] so
+    // DebtsScreen/MaterialsScreen (the two tabs with a FAB) can pad their
+    // FAB, and every tab's list, clear of it by that exact amount.
+    val density = LocalDensity.current
+    var floatingNavHeight by remember { mutableStateOf(0.dp) }
+
+    // شريط التنقل: إخفاء عند التمرير لأسفل (HIGH)، شارات، زر الإضافة السريع، "اضغط المحدد للعودة للأعلى".
+    val barScroll = rememberBottomBarScrollState()
+    val tabScrollTop = remember { TabScrollToTop() }
+    LaunchedEffect(pagerState.currentPage) { barScroll.hidden = false }
+    val dashNavInsets = WindowInsets.navigationBars
+    val dashBarHide = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (barScroll.hidden && LocalPerformanceTier.current == PerformanceTier.HIGH) 1f else 0f,
+        animationSpec = MotionSpecs.contentTween(),
+        label = "dashInputShift"
+    )
+    val barContext = LocalContext.current
+    val barOverdueDays = remember { SettingsRepository(barContext).overdueDays }
+    val barDebtsUi by debtsViewModel.uiState.collectAsStateWithLifecycle()
+    val barPersons = barDebtsUi.persons
+    val barDebts = barDebtsUi.debts
+    val overdueCount by com.shopmanager.app.ui.common.rememberComputed(barPersons, barDebts, barOverdueDays) {
+        com.shopmanager.app.ui.debts.classifyPersons(barPersons, barDebts, barOverdueDays, System.currentTimeMillis())
+            .values.count { it.bucket == com.shopmanager.app.ui.debts.DebtBucket.OVERDUE }
+    }
+    val barChatState by chatSessionViewModel.chatList.collectAsStateWithLifecycle()
+    val unreadCount = barChatState.chats.sumOf { it.unread }
+    val barBadges = remember(overdueCount, unreadCount) {
+        mapOf(PAGE_DEBTS to (overdueCount ?: 0), PAGE_NOTES to unreadCount)
+    }
+    val barQuickAction: QuickAction? = when (pagerState.currentPage) {
+        PAGE_DEBTS -> QuickAction(androidx.compose.material.icons.Icons.Filled.Add, "دين جديد") {
+            quickAddRequest = QuickAddRequest(QuickAddMode.DEBT)
+        }
+        PAGE_MATERIALS ->
+            if (materialsPricesTabActive && pricesChangedCount > 0)
+                QuickAction(androidx.compose.material.icons.Icons.Filled.Check, "حفظ الأسعار") { savePricesRequested = true }
+            else QuickAction(androidx.compose.material.icons.Icons.Filled.Add, "مادة جديدة") {
+                navController.safeNavigate(ROUTE_MATERIAL_CATALOG)
+            }
+        else -> null
+    }
+
+    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .nestedScroll(barScroll.connection)
+    ) {
+        // See the BUG FIXED note below (inside NavHost's transition params)
+        // for why these are shaped the way they are — declared here, above
+        // NavHost, since a function-call argument list can only contain
+        // `name = value` arguments, not local `val` statements.
+        // CLAUDE.AI-STYLE MOTION: shares [MotionSpecs.claudeEasing] — the
+        // same no-overshoot curve every other transition in the app now
+        // uses — instead of a separately-tuned iOS curve.
+        // الدفع أبطأ قليلاً من الرجوع (340 / 280ms) فيبدو الرجوع أخف وأكثر استجابة.
+        val pushMs = MotionSpecs.navPushMillis()
+        val popMs = MotionSpecs.navPopMillis()
+        // true أثناء انتقال شاشات: يُسقط ظلال البطاقات مؤقتاً (انظر LiquidGlass) ويُقرأ في مرحلة الرسم فقط.
+        val navMotionActive = remember { mutableStateOf(false) }
+        val navEntryNow by navController.currentBackStackEntryAsState()
+        LaunchedEffect(navEntryNow) {
+            val lc = navEntryNow?.lifecycle
+            if (lc == null) navMotionActive.value = false
+            else lc.currentStateFlow.collect { navMotionActive.value = it == androidx.lifecycle.Lifecycle.State.STARTED }
+        }
+        // FIX (اتجاه الانتقال في واجهة RTL): الواجهة كلها مفروضة RTL (انظر Theme.kt) وانتقال تبويبات
+        // المواد/الأسعار يتبع RTL أصلاً، بينما دفع/سحب الشاشات كان بإحداثيات LTR ثابتة: الشاشة الجديدة
+        // تدخل من اليمين وسهم الرجوع (→ في RTL) يشير لنفس الجهة التي تدخل منها، فتتعاكس الحركة مع
+        // السهم ومع بقية التطبيق. الآن dirSign = -1 في RTL: الدفع من اليسار والسحب نحو اليسار.
+        val dirSign = if (androidx.compose.ui.platform.LocalLayoutDirection.current ==
+            androidx.compose.ui.unit.LayoutDirection.Rtl) -1 else 1
+        val pushSlideSpec: FiniteAnimationSpec<IntOffset> = tween(pushMs, easing = MotionSpecs.navEasing)
+        val popSlideSpec: FiniteAnimationSpec<IntOffset> = tween(popMs, easing = MotionSpecs.navEasing)
+        val navFadeSpec: FiniteAnimationSpec<Float> = tween(pushMs, easing = MotionSpecs.navEasing)
+        val popFadeSpec: FiniteAnimationSpec<Float> = tween(popMs, easing = MotionSpecs.navEasing)
+        // REPLACED THE OLD ALPHA-DIM ("الانميشن غير جميل / بدي ياه متكامل
+        // وبلا تقطيع"): the covered screen used to dim via fadeOut/fadeIn
+        // down to 72% alpha while it translated. Animating the *alpha* of a
+        // whole subtree full of Material3 ElevatedCards means every card's
+        // shadow gets re-composited at a shifting opacity on top of
+        // whatever's underneath it, frame by frame — on a weaker GPU that
+        // shows up as visible banding/seams right where the shadows are,
+        // reading as "تقطيع" (choppy) rather than one solid, cohesive
+        // sheet of UI sliding as a unit. Scale reads as pure depth instead
+        // (the same "recede a step back" cue iOS/Claude modals already use
+        // elsewhere in this app) with nothing to re-blend, so it stays a
+        // single flat layer moving — smooth on any GPU, and the *same*
+        // slide+scale language as everything else (see MotionSpecs'
+        // popInSpring/quickSpring), which is what makes it read as one
+        // integrated motion system instead of a one-off for this screen.
+        val pushScaleSpec: FiniteAnimationSpec<Float> = tween(pushMs, easing = MotionSpecs.claudeEasing)
+        val popScaleSpec: FiniteAnimationSpec<Float> = tween(popMs, easing = MotionSpecs.claudeEasing)
+        CompositionLocalProvider(
+            LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp,
+            LocalTabScrollToTop provides tabScrollTop,
+            LocalNavMotionActive provides navMotionActive
+        ) {
+        SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+        NavHost(
+            navController = navController,
+            startDestination = ROUTE_MAIN_PAGER,
+            // Horizontal safe-area (cutouts/rounded corners) always
+            // applies. Bottom safe-area only applies here when there's no
+            // floating nav on screen (Settings, person detail, etc.) —
+            // when the pager IS showing, Dashboard/Debts/Materials each
+            // already reserve their own bottom inset internally (see their
+            // own `contentWindowInsets`), and reserving it a second time
+            // here is exactly what used to create the empty flat-colored
+            // strip behind the bar in the first place.
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                .then(
+                    if (!showBottomBar) {
+                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                    } else {
+                        Modifier
+                    }
+                ),
+            // التنقل: NavHost نفسه يتولى الحركة (دفع وسحب) والرجوع التنبؤي — سحبة الحافة
+            // وزر الرجوع يشغّلان نفس الانتقال تماماً (عكس حركة الدخول):
+            //  - دفع (enter/exit): الشاشة الجديدة تنزلق بكامل العرض من اليمين، والشاشة
+            //    المغطّاة تنزلق ثلث عرضها لليسار وتُصغَّر إلى 94% (انظر pushScaleSpec).
+            //  - سحب (popEnter/popExit): العكس تماماً بنفس pushSlideSpec/pushScaleSpec
+            //    (المدة والمنحنى نفسهما، فتتطابق السرعة وليس الاتجاه فقط).
+            // مستويان (انظر MotionSpecs.navMillis):
+            //  - LOW: تلاشٍ متقاطع قصير فقط، بلا انزلاق ولا scale.
+            //  - HIGH: انزلاق + تصغير الشاشة المغطّاة إلى 94% (أغنى عمق بصري).
+            enterTransition = {
+                when {
+                    isLowTier -> fadeIn(navFadeSpec)
+                    else -> slideInHorizontally(pushSlideSpec) { fullWidth -> dirSign * fullWidth }
+                }
+            },
+            exitTransition = {
+                when {
+                    // LOW: طبقة واحدة فقط تتحرك (الشاشة الجديدة تتلاشى فوق القديمة الثابتة)،
+                    // بدل تلاشٍ متقاطع لشاشتين كاملتين = نصف عمل المعالج الرسومي على 40Hz.
+                    isLowTier -> ExitTransition.None
+                    else -> slideOutHorizontally(pushSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 } +
+                        scaleOut(pushScaleSpec, targetScale = 0.94f)
+                }
+            },
+            popEnterTransition = {
+                when {
+                    isLowTier -> EnterTransition.None
+                    else -> slideInHorizontally(popSlideSpec) { fullWidth -> -dirSign * fullWidth * 3 / 10 } +
+                        scaleIn(popScaleSpec, initialScale = 0.94f)
+                }
+            },
+            popExitTransition = {
+                when {
+                    isLowTier -> fadeOut(popFadeSpec)
+                    else -> slideOutHorizontally(popSlideSpec) { fullWidth -> dirSign * fullWidth }
+                }
+            }
+        ) {
+            screen(navController, ROUTE_MAIN_PAGER) {
+                CompositionLocalProvider(LocalNavAnimatedScope provides this@screen) {
+                // One shared surface for Home, Debts, Materials, and Notes —
+                // `userScrollEnabled = false` below means the user can never
+                // drag between them directly; every switch goes through
+                // `openPager()` (drawer tap / quick action / notification),
+                // which still animates this exact pager with the same
+                // tuned curve (`pagerTabAnimationSpec`). Each row's own
+                // delete action stays a tap (see DeleteIconButton) rather
+                // than a horizontal swipe either way.
+                //
+                // PERF: this used to wrap every page in a per-frame
+                // graphicsLayer that scaled and faded it while dragging.
+                // With list-heavy screens full of ElevatedCards (each one
+                // already its own shadow-casting layer), animating a
+                // scale/alpha transform across the whole subtree on every
+                // scroll frame was expensive. Now that the pager only ever
+                // moves via `animateScrollToPage()` (see `userScrollEnabled`
+                // below) that per-frame drag transform has no reason to
+                // exist at all — the programmatic tab-switch animation is
+                // driven entirely by `pagerTabAnimationSpec` instead.
+                HorizontalPager(
+                    state = pagerState,
+                    // PERF (تنقّل أنعم): compose الصفحة المجاورة (يمين/يسار)
+                    // مسبقًا على الأجهزة العادية/القوية بدل انتظار أول سحبة
+                    // إليها فعليًا - أول سحبة للصفحة التالية هيك ما عندها
+                    // كلفة "compose لأول مرة" وبتبين أنعم فورًا، بنفس روح
+                    // إزالة الـ graphicsLayer لكل صفحة فوق (توفير كلفة
+                    // مكانها بمكان تاني). على أجهزة الأداء الضعيف نضل
+                    // عالافتراضي (0) لتفادي أي عبء compose/ذاكرة إضافي مو
+                    // ضروري - نفس منطق "دعم الوضعين" اللي يحدد isLowTierForPager
+                    // نفسها فوق.
+                    beyondViewportPageCount = 0,
+                    // REMOVED ("ميزة التنقل بين الشاشات الغيها"): no
+                    // finger-drag between tabs anymore — see the class-level
+                    // FIX/REMOVED comment above this composable() block.
+                    userScrollEnabled = false,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    // الأداء القوي فقط: عمق بصري أثناء تبديل التبويب — الصفحة المغادِرة/القادمة
+                    // تصغر قليلاً وتخفت. كله داخل graphicsLayer (مرحلة الرسم)، وعند السكون
+                    // offset = 0 فلا طبقة إضافية. المتوازن والمنخفض: انزلاق خام بلا أي طبقات.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                // انتقال ناعم بين التبويبات: الصفحة المغادِرة تصغر قليلاً وتخفت والقادمة
+                                // تكبر وتظهر تدريجياً (عمق بصري). كله transform/alpha داخل مرحلة الرسم،
+                                // وعند السكون offset = 0 فلا يتغيّر شيء. الاقتصادي: بلا أي تأثير.
+                                if (!isLowTierForPager) {
+                                    val off = kotlin.math.abs(
+                                        (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                                    ).coerceIn(0f, 1f)
+                                    if (richPagerTransition) {
+                                        alpha = 1f - 0.35f * off
+                                        val sc = 1f - 0.06f * off
+                                        scaleX = sc
+                                        scaleY = sc
+                                    }
+                                }
+                            }
+                    ) {
+                    when (page) {
+                        PAGE_DASHBOARD -> if (assistantSettings.newHome) Box(
+                            Modifier
+                                .fillMaxSize()
+                                .layout { measurable, constraints ->
+                                    val full = if (pillVisible) floatingNavHeight.roundToPx() else 0
+                                    val inset = if (pillVisible) dashNavInsets.getBottom(this) else 0
+                                    val reserve = (full + (inset - full) * dashBarHide.value).roundToInt().coerceAtLeast(0)
+                                    val childHeight = (constraints.maxHeight - reserve).coerceAtLeast(0)
+                                    val placeable = measurable.measure(constraints.copy(minHeight = childHeight, maxHeight = childHeight))
+                                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(0, 0) }
+                                }
+                                .consumeWindowInsets(if (pillVisible) WindowInsets.navigationBars else WindowInsets(0.dp))
+                        ) { AssistantHomeScreen(
+                            assistant = assistantViewModel,
+                            materialsViewModel = materialsViewModel,
+                            onOpenDrawer = { menuOpen = true },
+                            onOpenChat = { navController.safeNavigate(ROUTE_ASSISTANT) },
+                            onNavigateToDebts = { openPager(PAGE_DEBTS) },
+                            onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
+                            onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
+                            onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
+                            onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
+                            onNewMaterial = { navController.safeNavigate(ROUTE_MATERIAL_CATALOG) }
+                        ) } else DashboardScreen(
+                            debtsViewModel = debtsViewModel,
+                            materialsViewModel = materialsViewModel,
+                            onNavigateToDebts = { openPager(PAGE_DEBTS) },
+                            onNavigateToMaterials = { openPager(PAGE_MATERIALS) },
+                            onOpenMissingFinder = { navController.safeNavigate(ROUTE_MISSING_FINDER) },
+                            onOpenDrawer = { menuOpen = true },
+                            notesViewModel = notesViewModel,
+                            onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
+                            onOpenMaterial = { materialName -> pendingMaterialHighlight = materialName; openPager(PAGE_MATERIALS) },
+                            onOpenNotes = { navController.safeNavigate(ROUTE_NOTES) },
+                            onOpenSettings = { navController.safeNavigate(ROUTE_SETTINGS) },
+                            onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) },
+                            onPayDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.PAY) },
+                            onNewShortage = { navController.safeNavigate(ROUTE_MATERIAL_CATALOG) }
+                        )
+                        PAGE_DEBTS -> DebtsScreen(
+                            viewModel = debtsViewModel,
+                            onOpenPerson = { personId -> navController.safeNavigate("personDetail/$personId") },
+                            addPersonRequested = addPersonRequested,
+                            onAddPersonRequestHandled = { addPersonRequested = false },
+                            onOpenDrawer = { menuOpen = true },
+                            onOpenActivityLog = { navController.safeNavigate(ROUTE_DEBT_ACTIVITY) },
+                            onNewDebt = { quickAddRequest = QuickAddRequest(QuickAddMode.DEBT) }
+                        )
+                        PAGE_MATERIALS -> MaterialsScreen(
+                            viewModel = materialsViewModel,
+                            onAddNew = { navController.safeNavigate(ROUTE_MATERIAL_CATALOG) },
+                            onPricesTabActiveChanged = { materialsPricesTabActive = it },
+                            onPricesChangedCountChanged = { pricesChangedCount = it },
+                            savePricesRequested = savePricesRequested,
+                            onSavePricesRequestHandled = { savePricesRequested = false },
+                            initialSearchQuery = pendingMaterialHighlight,
+                            onInitialSearchConsumed = { pendingMaterialHighlight = null },
+                            onOpenDrawer = { menuOpen = true }
+                        )
+                        else -> Box(
+                            Modifier
+                                .fillMaxSize()
+                                .padding(bottom = if (pillVisible) floatingNavHeight else 0.dp)
+                                .consumeWindowInsets(if (pillVisible) WindowInsets.navigationBars else WindowInsets(0.dp))
+                        ) {
+                            ChatRoot(
+                                viewModel = chatSessionViewModel,
+                                onOpenDrawer = { menuOpen = true },
+                                onOpenConversation = { uid, name ->
+                                    navController.safeNavigate(chatConversationRoute(uid, name))
+                                },
+                                onOpenUserPicker = { navController.safeNavigate(ROUTE_CHAT_USERS) }
+                            )
+                        }
+                    }
+                    }
+                }
+            }
+            }
+            screen(navController, ROUTE_NOTES) {
+                // شاشة الملاحظات القديمة كما هي، لكن كشاشة مدفوعة: سهم رجوع + زر "+" خاص بها
+                // (زر الإضافة السريع المشترك يظهر فقط على صفحات الـ pager).
+                var addNote by remember { mutableStateOf(false) }
+                Box(Modifier.fillMaxSize()) {
+                    NotesScreen(
+                        viewModel = notesViewModel,
+                        persons = debtsViewModel.uiState.collectAsStateWithLifecycle().value.persons,
+                        materials = materialsViewModel.uiState.collectAsStateWithLifecycle().value.materials,
+                        onOpenPerson = { personId -> openPager(PAGE_DEBTS, animate = false); navController.safeNavigate("personDetail/$personId") },
+                        onOpenMaterials = { materialName ->
+                            pendingMaterialHighlight = materialName
+                            navController.safePopBackStack(force = true)
+                            openPager(PAGE_MATERIALS)
+                        },
+                        addNoteRequested = addNote,
+                        onAddNoteRequestHandled = { addNote = false },
+                        onOpenDrawer = { navController.safePopBackStack() },
+                        navigationIcon = Icons.AutoMirrored.Filled.ArrowBack,
+                        navigationLabel = "رجوع"
+                    )
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(20.dp)
+                            .size(56.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(MaterialTheme.colorScheme.onSurface)
+                            .clickable(role = androidx.compose.ui.semantics.Role.Button) { addNote = true },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, "ملاحظة جديدة", tint = MaterialTheme.colorScheme.surface)
+                    }
+                }
+            }
+            screen(navController, ROUTE_CHAT_USERS) {
+                val vm: UserPickerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+                UserPickerScreen(
+                    viewModel = vm,
+                    onBack = { navController.safePopBackStack() },
+                    onPick = { uid, name ->
+                        navController.navigate(chatConversationRoute(uid, name)) {
+                            popUpTo(ROUTE_CHAT_USERS) { inclusive = true }
+                        }
+                    }
+                )
+            }
+            screen(navController, 
+                ROUTE_CHAT_CONVERSATION,
+                arguments = listOf(
+                    navArgument("otherUid") { type = NavType.StringType },
+                    navArgument("name") { type = NavType.StringType; defaultValue = "" }
+                )
+            ) { entry ->
+                val otherUid = entry.arguments?.getString("otherUid").orEmpty()
+                val nameHint = entry.arguments?.getString("name").orEmpty()
+                val app = LocalContext.current.applicationContext as android.app.Application
+                val vm: ConversationViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                    key = "conversation_$otherUid",
+                    factory = ConversationViewModel.Factory(app, otherUid, nameHint)
+                )
+                val converter = androidx.compose.runtime.remember(assistantViewModel) {
+                    com.shopmanager.app.assistant.AssistantMessageConverter(assistantViewModel)
+                }
+                ConversationScreen(
+                    viewModel = vm,
+                    onBack = { navController.safePopBackStack() },
+                    converter = converter
+                )
+            }
+            screen(navController, ROUTE_MATERIAL_CATALOG) {
+                MaterialCatalogScreen(
+                    viewModel = materialsViewModel,
+                    onBack = { navController.safePopBackStack() }
+                )
+            }
+            screen(navController, ROUTE_DEBT_ACTIVITY) {
+                com.shopmanager.app.ui.debts.DebtActivityScreen(
+                    onBack = { navController.safePopBackStack() }
+                )
+            }
+            screen(navController, ROUTE_MISSING_FINDER) {
+                com.shopmanager.app.ui.materials.MissingFinderScreen(
+                    viewModel = materialsViewModel,
+                    onBack = { navController.safePopBackStack() }
+                )
+            }
+            screen(navController, ROUTE_SETTINGS) {
+                SettingsScreen(
+                    onBack = { navController.safePopBackStack() },
+                    onThemeChanged = onThemeChanged,
+                    onPerformancePreferenceChanged = onPerformancePreferenceChanged,
+                    onRecheckDevicePerformance = onRecheckDevicePerformance,
+                    debtsViewModel = debtsViewModel,
+                    materialsViewModel = materialsViewModel,
+                    onOpenHelp = { navController.safeNavigate(ROUTE_HELP) },
+                    onOpenPrivacyPolicy = { navController.safeNavigate(ROUTE_PRIVACY) },
+                    onOpenAbout = { navController.safeNavigate(ROUTE_ABOUT) },
+                    onOpenAssistantSettings = { navController.safeNavigate(ROUTE_ASSISTANT_SETTINGS) }
+                )
+            }
+            screen(navController, ROUTE_ASSISTANT) {
+                AssistantChatScreen(
+                    assistant = assistantViewModel,
+                    onBack = { navController.safePopBackStack() },
+                    onOpenSettings = { navController.safeNavigate(ROUTE_ASSISTANT_SETTINGS) }
+                )
+            }
+            screen(navController, ROUTE_ASSISTANT_SETTINGS) {
+                AssistantSettingsScreen(assistant = assistantViewModel, onBack = { navController.safePopBackStack() })
+            }
+            screen(navController, ROUTE_ABOUT) {
+                com.shopmanager.app.ui.settings.AboutScreen(
+                    onBack = { navController.safePopBackStack() },
+                    onOpenPrivacyPolicy = { navController.safeNavigate(ROUTE_PRIVACY) },
+                    onOpenHelp = { navController.safeNavigate(ROUTE_HELP) }
+                )
+            }
+            screen(navController, ROUTE_ADMIN) {
+                AdminPanelScreen(
+                    onBack = { navController.safePopBackStack() },
+                    debtsViewModel = debtsViewModel,
+                    materialsViewModel = materialsViewModel,
+                    notesViewModel = notesViewModel
+                )
+            }
+            screen(navController, ROUTE_HELP) {
+                WebViewScreen(
+                    url = "file:///android_asset/help.html",
+                    title = "دليل الاستخدام",
+                    onBack = { navController.safePopBackStack() }
+                )
+            }
+            screen(navController, ROUTE_PRIVACY) {
+                WebViewScreen(
+                    url = "file:///android_asset/privacy.html",
+                    title = "سياسة الخصوصية",
+                    onBack = { navController.safePopBackStack() }
+                )
+            }
+            screen(navController, 
+                ROUTE_PERSON_DETAIL,
+                arguments = listOf(navArgument("personId") { type = NavType.StringType })
+            ) { entry ->
+                val personId = entry.arguments?.getString("personId")
+                val personsState = debtsViewModel.uiState.collectAsStateWithLifecycle().value
+                val person = personsState.persons.find { it.id == personId }
+                // STABILITY FIX: if this customer disappears while their page
+                // is open (deleted from another device, or an unknown id from
+                // a stale notification) the screen used to render NOTHING - a
+                // blank page. Once the first real data has loaded and the
+                // customer still isn't there, leave the page instead.
+                LaunchedEffect(person == null, personsState.isLoading) {
+                    if (person == null && !personsState.isLoading) navController.safePopBackStack(force = true)
+                }
+                if (person != null) {
+                    CompositionLocalProvider(LocalNavAnimatedScope provides this@screen) {
+                    PersonDetailScreen(
+                        person = person,
+                        viewModel = debtsViewModel,
+                        // "ترابط بين الديون والملاحظات": نفس نسخة NotesViewModel
+                        // المشتركة اللي يستخدمها تبويب "ملاحظات هامة" (مو نسخة
+                        // جديدة بـ viewModel() الافتراضي) - عشان الملاحظات
+                        // المعروضة هون تضل نفس البيانات الحية، وإضافة/تعديل
+                        // ملاحظة من هالشاشة ينعكس فورًا بتبويب الملاحظات وبالعكس.
+                        notesViewModel = notesViewModel,
+                        onBack = { navController.safePopBackStack() },
+                        onQuickAdd = { mode -> quickAddRequest = QuickAddRequest(mode, person.id) }
+                    )
+                    }
+                }
+            }
+        }
+        }
+        }
+        } // CompositionLocalProvider
+
+        CompositionLocalProvider(
+            LocalFloatingBottomNavHeight provides if (pillVisible) floatingNavHeight else 0.dp
+        ) {
+            GlassSnackbarHost(globalSnackHost, Modifier.align(Alignment.BottomCenter))
+        }
+
+        if (pillVisible) {
+            AppBottomBar(
+                selectedPage = pagerState.currentPage,
+                onSelectPage = { page -> openPager(page) },
+                badges = barBadges,
+                quickAction = barQuickAction,
+                onReselect = { page -> tabScrollTop.scroll(page) },
+                hidden = barScroll.hidden,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { size ->
+                        floatingNavHeight = with(density) { size.height.toDp() }
+                    }
+            )
+        }
+    }
+    AppMenuPopup(
+        visible = menuOpen,
+        onDismiss = { menuOpen = false },
+        onOpenNotes = {
+            menuOpen = false
+            navController.safeNavigate(ROUTE_NOTES)
+        },
+        onOpenSettings = {
+            menuOpen = false
+            navController.safeNavigate(ROUTE_SETTINGS)
+        },
+        onOpenAdmin = {
+            menuOpen = false
+            requestAdminAccess()
+        }
+    )
+    } // menu overlay Box
+
+    quickAddRequest?.let { request ->
+        QuickAddSheet(
+            viewModel = debtsViewModel,
+            request = request,
+            onDismiss = { quickAddRequest = null }
+        )
+    }
+
+    // لوحة المسؤول السرية: PIN gate, triggered from the admin button in the
+    // side drawer (see AppDrawerContent's onOpenAdmin above). Rendered as a
+    // sibling of the drawer's Box, same reasoning as the notification
+    // dialog just below — a dialog is its own layer, not part of that
+    // layout, and this needs to be reachable regardless of which tab is
+    // currently open underneath it.
+    if (showAdminPinDialog) {
+        AdminPinDialog(
+            throttle = adminThrottle,
+            onDismiss = { showAdminPinDialog = false },
+            onVerify = { entered ->
+                if (adminThrottle.isLocked()) {
+                    AdminPasswordRepository.Outcome.Denied
+                } else {
+                    val outcome = AdminPasswordRepository.verify(entered)
+                    when (outcome) {
+                        is AdminPasswordRepository.Outcome.Granted -> {
+                            adminThrottle.registerSuccess()
+                            showAdminPinDialog = false
+                            navController.safeNavigate(ROUTE_ADMIN)
+                        }
+                        is AdminPasswordRepository.Outcome.Denied -> adminThrottle.registerFailure()
+                        // NotConfigured / Unavailable: ليست محاولة خاطئة — لا تُحتسب ضد المطوّر.
+                        else -> Unit
+                    }
+                    outcome
+                }
+            }
+        )
+    }
+
+    // The confirmation dialog a tapped notification opens the app to show
+    // ("تم تسديد الدين", "عميل جديد", "قائمة المشتريات"). Rendered as a
+    // sibling of the Box above (an AlertDialog is its own system window,
+    // not part of that layout) so it appears on top regardless of which
+    // tab openPager() just switched to.
+    pendingNotificationAction?.let { action ->
+        NotificationActionDialog(action = action, onConsume = onConsumeNotificationAction)
+    }
+}
+
+@Composable
+internal fun NotificationActionDialog(action: NotificationAction, onConsume: () -> Unit) {
+    when (action) {
+        is NotificationAction.DebtPaid -> GlassAlertDialog(
+            onDismissRequest = onConsume,
+            title = { Text("✅ تم سداد دين") },
+            text = { Text("${action.personName} وفى ${action.amount} ${action.currency}") },
+            // BUG FIXED ("بدي الضغطة بشكل مربع كامل وليس دائري"): see
+            // PersonEditDialog.kt's doc comment.
+            confirmButton = { TextButton(shape = RectangleShape, onClick = onConsume) { Text("موافق") } }
+        )
+        is NotificationAction.NewDebt -> GlassAlertDialog(
+            onDismissRequest = onConsume,
+            title = { Text("💰 عميل جديد بالديون") },
+            text = { Text("${action.personName} — ${action.amount} ${action.currency}") },
+            confirmButton = { TextButton(shape = RectangleShape, onClick = onConsume) { Text("موافق") } }
+        )
+        is NotificationAction.ShoppingList -> GlassAlertDialog(
+            onDismissRequest = onConsume,
+            title = { Text("🛒 قائمة المشتريات") },
+            text = {
+                Text(
+                    if (action.materialNames.isEmpty()) "لا توجد مواد ناقصة حالياً"
+                    else action.materialNames.joinToString("، ")
+                )
+            },
+            confirmButton = { TextButton(shape = RectangleShape, onClick = onConsume) { Text("موافق") } }
+        )
+        // Tapping a note's reminder just needs to land on the ملاحظات
+        // هامة tab (already handled by the LaunchedEffect above) - the
+        // note itself is right there in the list, so a confirmation
+        // dialog on top of it would just be a redundant extra tap.
+        is NotificationAction.NoteReminder -> {
+            LaunchedEffect(action) { onConsume() }
+        }
+        is NotificationAction.OpenChat -> Unit
+    }
+}

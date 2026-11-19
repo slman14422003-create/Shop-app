@@ -1,0 +1,20 @@
+# Baseline Profile (حل مؤقت يدوي) مركّز على مسار الإقلاع والشاشة الأولى فقط.
+# السبب: القواعد الواسعة (ui/** لكل الشاشات) تُترجم كوداً لا يُستخدم عند الإقلاع فتكبر عملية dexopt
+# وتستهلك ذاكرة وقت التثبيت بلا فائدة. الملف الحقيقي يُولَّد من تشغيل فعلي: انظر baselineprofile/README.md
+# واستبدل هذا الملف بالناتج.
+HSPLcom/shopmanager/app/MainActivity;->**(**)**
+HSPLcom/shopmanager/app/ShopManagerApplication;->**(**)**
+HSPLcom/shopmanager/app/ShopManagerAppKt;->**(**)**
+HSPLcom/shopmanager/app/AppNavigationKt;->**(**)**
+HSPLcom/shopmanager/app/data/performance/**;->**(**)**
+HSPLcom/shopmanager/app/data/settings/**;->**(**)**
+HSPLcom/shopmanager/app/ui/theme/**;->**(**)**
+HSPLcom/shopmanager/app/ui/splash/**;->**(**)**
+HSPLcom/shopmanager/app/ui/lock/**;->**(**)**
+HSPLcom/shopmanager/app/ui/dashboard/**;->**(**)**
+HSPLcom/shopmanager/app/ui/common/**;->**(**)**
+Lcom/shopmanager/app/MainActivity;
+Lcom/shopmanager/app/ShopManagerApplication;
+Lcom/shopmanager/app/data/performance/**;
+Lcom/shopmanager/app/ui/common/**;
+Lcom/shopmanager/app/ui/dashboard/**;
