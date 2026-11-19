@@ -24,7 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawOutline
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -101,9 +102,15 @@ fun Modifier.liquidGlassSurface(
                     }
                     .drawBehind {
                         if (navActive.value) {
-                            drawOutline(
-                                shapeRef.createOutline(size, layoutDirection, this),
-                                rim.copy(alpha = 0.55f),
+                            val rimOutline = shapeRef.createOutline(size, layoutDirection, this)
+                            val rimPath = when (rimOutline) {
+                                is Outline.Rectangle -> Path().apply { addRect(rimOutline.rect) }
+                                is Outline.Rounded -> Path().apply { addRoundRect(rimOutline.roundRect) }
+                                is Outline.Generic -> rimOutline.path
+                            }
+                            drawPath(
+                                path = rimPath,
+                                color = rim.copy(alpha = 0.55f),
                                 style = Stroke(1.dp.toPx())
                             )
                         }
