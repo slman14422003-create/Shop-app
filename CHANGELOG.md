@@ -1,3 +1,6 @@
+## v1.0.1227 — 2026-11-19
+- Upload via GitHub Manager
+
 ## v1.0.1226 — 2026-11-19
 - perf: update baseline profile
 - Upload via GitHub Manager (2)
