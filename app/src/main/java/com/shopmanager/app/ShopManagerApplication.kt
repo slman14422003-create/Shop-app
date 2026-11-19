@@ -30,7 +30,31 @@ class ShopManagerApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        installCrashLogger()
         if (BuildConfig.DEBUG) enableStrictMode()
+    }
+
+    /**
+     * يحفظ سبب أي انهيار في ملف crash_log.txt (يُستبدل في كل انهيار) داخل
+     * Android/data/com.shopmanager.app/files/ — حتى لو لم يفتح التطبيق إطلاقاً على جهاز قديم
+     * يمكن إرسال هذا الملف لمعرفة السبب الدقيق. يمرّر الانهيار بعدها للمعالج الأصلي كالمعتاد.
+     */
+    private fun installCrashLogger() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { t, e ->
+            runCatching {
+                val dir = getExternalFilesDir(null) ?: filesDir
+                val text = buildString {
+                    append("Android ").append(android.os.Build.VERSION.RELEASE)
+                        .append(" (API ").append(android.os.Build.VERSION.SDK_INT).append(") — ")
+                        .append(android.os.Build.MANUFACTURER).append(' ').append(android.os.Build.MODEL).append('\n')
+                    append("Thread: ").append(t.name).append("\n\n")
+                    append(Log.getStackTraceString(e))
+                }
+                java.io.File(dir, "crash_log.txt").writeText(text)
+            }
+            previous?.uncaughtException(t, e)
+        }
     }
 
     /**

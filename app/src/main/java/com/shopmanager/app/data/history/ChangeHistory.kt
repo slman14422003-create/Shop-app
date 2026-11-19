@@ -36,7 +36,7 @@ object ChangeHistory {
             val o = array.optJSONObject(i) ?: continue
             list.add(ChangeEntry(o.optLong("t"), o.optString("x")))
         }
-        list.reversed()
+        ArrayList(list.asReversed())
     }
 
     fun clear(context: Context) {

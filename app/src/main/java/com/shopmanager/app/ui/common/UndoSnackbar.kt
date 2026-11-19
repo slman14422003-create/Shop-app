@@ -12,7 +12,7 @@ suspend fun SnackbarHostState.showWithOptionalUndo(message: String, hasUndo: Boo
     val result = showSnackbar(
         message = message,
         actionLabel = "تراجع",
-        duration = SnackbarDuration.Long
+        duration = SnackbarDuration.Short
     )
     return result == SnackbarResult.ActionPerformed
 }

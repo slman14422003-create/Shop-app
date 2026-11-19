@@ -210,6 +210,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_25
         targetCompatibility = JavaVersion.VERSION_25
+        // أندرويد 7 (API 24) لا يحتوي java.time وعدة واجهات Java 8+؛ هذا يوفّرها عبر D8 بدل الانهيار.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     // Kotlin's own JVM target (matches JAVA VERSION 25 above) now lives in
@@ -398,6 +400,8 @@ dependencies {
     // is not reliable on Android 11/12 devices — this library picks the
     // right mechanism at runtime).
     implementation("androidx.webkit:webkit:1.16.0")
+
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     testImplementation("junit:junit:4.13.2")
 }

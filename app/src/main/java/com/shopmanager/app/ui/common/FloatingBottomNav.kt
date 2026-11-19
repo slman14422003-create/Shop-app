@@ -160,48 +160,71 @@ val LocalFloatingBottomNavHeight = compositionLocalOf { 0.dp }
  */
 @Composable
 fun GlassSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
+    // مدة قصيرة موحّدة لكل رسائل التطبيق (حذف/إضافة/تعديل…): الرسالة العادية ثانية ونصف،
+    // ومع زر "تراجع" ثانيتان ونصف (تكفي للضغط)، والخطأ ثلاث ثوانٍ. تُغلق قبل مهلة Material الطويلة
+    // (4s/10s) فلا تبقى فوق القائمة وتزعج.
+    val current = hostState.currentSnackbarData
+    LaunchedEffect(current) {
+        current?.let { d ->
+            val ms = when {
+                d.visuals.message.startsWith("خطأ") -> 3000L
+                d.visuals.actionLabel != null -> 2500L
+                else -> 1500L
+            }
+            kotlinx.coroutines.delay(ms)
+            d.dismiss()
+        }
+    }
     SnackbarHost(
         hostState = hostState,
-        modifier = modifier.padding(bottom = LocalFloatingBottomNavHeight.current + 12.dp)
+        modifier = modifier.padding(bottom = LocalFloatingBottomNavHeight.current + 8.dp)
     ) { data -> GlassSnackbar(data) }
 }
 
+/**
+ * نافذة نتيجة مصغّرة: كبسولة بعرض المحتوى فقط (لا تمتد على عرض الشاشة)، ارتفاع ~40dp، في منتصف
+ * الأسفل فوق الشريط السفلي — أقرب موضع للإبهام وأبعد عن عناصر القائمة وحقل البحث. الضغط عليها يغلقها فوراً.
+ */
 @Composable
 private fun GlassSnackbar(data: SnackbarData) {
     val isError = data.visuals.message.startsWith("خطأ")
     val semantic = LocalSemanticColors.current
     val accent = if (isError) semantic.danger else semantic.success
 
-    Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shadowElevation = 0.dp
-    ) {
-        Row(
-            Modifier.padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+        Surface(
+            onClick = { data.dismiss() },
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = 0.dp
         ) {
-            if (isError) {
-                Icon(
-                    Icons.Filled.ErrorOutline,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(22.dp)
+            Row(
+                Modifier
+                    .heightIn(min = 40.dp)
+                    .padding(start = 14.dp, end = if (data.visuals.actionLabel != null) 4.dp else 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (isError) {
+                    Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                } else {
+                    AnimatedCheckmark(size = 18.dp, color = accent)
+                }
+                Text(
+                    data.visuals.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2
                 )
-            } else {
-                AnimatedCheckmark(size = 22.dp, color = accent)
-            }
-            Text(
-                data.visuals.message,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f)
-            )
-            data.visuals.actionLabel?.let { label ->
-                TextButton(onClick = { data.performAction() }) {
-                    Text(label, color = MaterialTheme.colorScheme.primary)
+                data.visuals.actionLabel?.let { label ->
+                    TextButton(
+                        onClick = { data.performAction() },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                        modifier = Modifier.heightIn(min = 36.dp)
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
