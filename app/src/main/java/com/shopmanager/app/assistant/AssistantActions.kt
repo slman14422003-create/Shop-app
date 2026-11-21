@@ -14,7 +14,6 @@ import com.shopmanager.app.data.learning.LearningHub
 import com.shopmanager.app.data.materials.Material
 import com.shopmanager.app.data.materials.MaterialCatalogItem
 import com.shopmanager.app.data.materials.MaterialsRepository
-import com.shopmanager.app.data.materials.PriceHistoryStore
 import com.shopmanager.app.data.notes.ImportantNote
 import com.shopmanager.app.data.notes.NoteLinkType
 import com.shopmanager.app.data.notes.NotesRepository
@@ -250,16 +249,14 @@ class AssistantActions(private val app: Application) {
         val price = cmd.amount ?: error("لا يوجد سعر")
         val key = data.prices.keys.firstOrNull { same(it, m.name) } ?: m.name
         val before = data.prices[key]
-        mats.setPrice(key, price)
-        PriceHistoryStore.record(app, key, before, price)
+        mats.setPrice(key, price, before, recordHistory = true)
         ChangeHistory.log(app, "تعديل سعر $key إلى ${Formatters.number(price)} (المساعد)")
         after()
         val details = "$key: " + (before?.let { "${money(it, data.currency)} ← " } ?: "") + money(price, data.currency)
         return Outcome(
             "تم حفظ السعر", details,
             undo = if (before == null) null else ({
-                mats.setPrice(key, before)
-                PriceHistoryStore.record(app, key, price, before)
+                mats.setPrice(key, before, price, recordHistory = true)
                 after()
             })
         )
@@ -269,7 +266,7 @@ class AssistantActions(private val app: Application) {
         val m = cmd.materials.firstOrNull() ?: error("لا توجد مادة")
         if (data.catalog.any { same(it.name, m.name) }) return Outcome("موجودة مسبقاً", "${m.name} موجودة بالكتالوج", success = false)
         mats.addCatalogItem(m.name)
-        cmd.amount?.let { mats.setPrice(m.name, it); PriceHistoryStore.record(app, m.name, null, it) }
+        cmd.amount?.let { mats.setPrice(m.name, it, null, recordHistory = true) }
         ChangeHistory.log(app, "إضافة مادة جديدة: ${m.name} (المساعد)")
         after()
         val priceText = cmd.amount?.let { " بسعر ${money(it, data.currency)}" } ?: ""

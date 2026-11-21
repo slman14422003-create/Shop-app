@@ -76,6 +76,8 @@ fun MaterialsScreen(
     val message by viewModel.message.collectAsStateWithLifecycle()
     val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val priceHistory by viewModel.priceHistory.collectAsStateWithLifecycle()
+    val profitPercents by viewModel.profitPercents.collectAsStateWithLifecycle()
+    var showChangedPrices by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(0) }
     var search by remember { mutableStateOf("") }
     // REDESIGN ("شريط البحث لازم يكون زر في الشريط العلوي يتوسع بواجهة لحالة
@@ -187,6 +189,7 @@ fun MaterialsScreen(
         }
     }
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         // Edge-to-edge: the status bar is transparent (see
         // SetSystemBarsColor/MainActivity) and this screen's own
@@ -208,7 +211,8 @@ fun MaterialsScreen(
                 searchQuery = search,
                 onSearchQueryChange = { search = it },
                 onSavePrices = { savePricesNow() },
-                pricesChangedCount = changedPricesCount
+                pricesChangedCount = changedPricesCount,
+                onShowChangedPrices = { showChangedPrices = true }
             )
         }
         // REDESIGN: no `floatingActionButton` slot here anymore — "مادة
@@ -288,11 +292,41 @@ fun MaterialsScreen(
                     prices = state.prices,
                     history = priceHistory,
                     edited = editedPrices,
-                    search = search
+                    search = search,
+                    profitPercents = profitPercents,
+                    onSetProfit = viewModel::setProfitPercent
                 )
             }
         }
         }
+    }
+    if (showChangedPrices) {
+        BackHandler { showChangedPrices = false }
+        ChangedPricesOverlay(
+            history = priceHistory,
+            percents = profitPercents,
+            onBack = { showChangedPrices = false },
+            onShare = { items ->
+                scope.launch {
+                    try {
+                        val uri = withContext(Dispatchers.Default) {
+                            ChangedPricesImage.generate(context, items, brandColor)
+                        }
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "image/png"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "مشاركة الأسعار المعدّلة"))
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.widget.Toast.makeText(context, "تعذرت المشاركة", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        )
+    }
     }
 
     editingMaterial?.let { m ->

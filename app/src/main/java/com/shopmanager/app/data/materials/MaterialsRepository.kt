@@ -22,12 +22,23 @@ private const val WRITE_TIMEOUT_MS = 15_000L
  * to Firestore directly, and every write below has a hard timeout so it can
  * never hang the UI indefinitely (e.g. before Firestore rules are published).
  */
+internal fun priceDocId(materialName: String): String {
+    val cleaned = materialName.trim()
+        .replace("/", "\u2215")   // ∕ بدل /
+        .replace("\\", "\u2216")   // ∖ بدل \
+        .ifBlank { "_" }
+    val safe = if (cleaned == "." || cleaned == ".." || (cleaned.startsWith("__") && cleaned.endsWith("__"))) "_$cleaned" else cleaned
+    return if (safe.toByteArray().size > 1400) safe.take(400) else safe
+}
+
 class MaterialsRepository {
 
     private val db: FirebaseFirestore get() = FirebaseModule.materialsDb
     private val materialsCollection = "spices_final_v12"
     private val pricesCollection = "material_prices"
     private val catalogCollection = "materials_catalog"
+    private val profitCollection = "material_profit_percent"
+    private val historyCollection = "material_price_history"
 
     fun listenMaterials(section: String): Flow<List<Material>> = callbackFlow {
         val registration: ListenerRegistration = db.collection(materialsCollection)
@@ -79,6 +90,87 @@ class MaterialsRepository {
                 trySend(prices)
             }
         awaitClose { registration.remove() }
+    }
+
+    fun listenProfitPercents(): Flow<Map<String, Double>> = callbackFlow {
+        val registration: ListenerRegistration = db.collection(profitCollection)
+            .addSnapshotListener(FirebaseModule.snapshotExecutor) { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                val map = HashMap<String, Double>()
+                snapshot?.documents?.forEach { d ->
+                    val percent = d.getDouble("percent") ?: return@forEach
+                    map[(d.getString("name") ?: d.id).trim()] = percent
+                }
+                trySend(map)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    fun listenPriceHistory(): Flow<Map<String, List<PriceChange>>> = callbackFlow {
+        val registration: ListenerRegistration = db.collection(historyCollection)
+            .addSnapshotListener(FirebaseModule.snapshotExecutor) { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                trySend(parseHistory(snapshot?.documents.orEmpty()))
+            }
+        awaitClose { registration.remove() }
+    }
+
+    private fun parseHistory(docs: List<com.google.firebase.firestore.DocumentSnapshot>): Map<String, List<PriceChange>> {
+        val map = HashMap<String, List<PriceChange>>()
+        for (d in docs) {
+            val raw = d.get("changes") as? List<*> ?: continue
+            val list = raw.mapNotNull { e ->
+                val m = e as? Map<*, *> ?: return@mapNotNull null
+                val at = (m["at"] as? Number)?.toLong() ?: return@mapNotNull null
+                val new = (m["new"] as? Number)?.toDouble() ?: return@mapNotNull null
+                PriceChange(at, (m["old"] as? Number)?.toDouble(), new)
+            }.sortedByDescending { it.at }.take(PriceHistoryStore.MAX_PER_MATERIAL)
+            if (list.isNotEmpty()) map[(d.getString("name") ?: d.id).trim()] = list
+        }
+        return map
+    }
+
+    private fun historyData(name: String, list: List<PriceChange>) = mapOf(
+        "name" to name.trim(),
+        "changes" to list.map { c -> mapOf("at" to c.at, "old" to c.oldPrice, "new" to c.newPrice) }
+    )
+
+    /** null = could not read the cloud history; callers then skip history instead of overwriting it. */
+    private suspend fun currentHistory(): Map<String, List<PriceChange>>? = try {
+        withTimeout(5_000L) { parseHistory(db.collection(historyCollection).get().await().documents) }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        if (e is kotlinx.coroutines.TimeoutCancellationException) null else throw e
+    } catch (e: Exception) {
+        null
+    }
+
+    suspend fun setProfitPercent(name: String, percent: Double?) = withTimeout(WRITE_TIMEOUT_MS) {
+        val ref = db.collection(profitCollection).document(priceDocId(name))
+        if (percent == null) ref.delete().awaitQueued()
+        else ref.set(mapOf("name" to name.trim(), "percent" to percent)).awaitQueued()
+        Unit
+    }
+
+    suspend fun mergeLegacyHistory(legacy: Map<String, List<PriceChange>>) = withTimeout(60_000L) {
+        val existing = parseHistory(db.collection(historyCollection).get().await().documents)
+        legacy.entries.chunked(400).forEach { chunk ->
+            val batch = db.batch()
+            chunk.forEach { (name, list) ->
+                val key = name.trim()
+                batch.set(
+                    db.collection(historyCollection).document(priceDocId(key)),
+                    historyData(key, PriceHistoryStore.merge(existing[key].orEmpty(), list))
+                )
+            }
+            batch.commit().awaitQueued(30_000L)
+        }
+        Unit
     }
 
     fun listenCatalog(): Flow<List<MaterialCatalogItem>> = callbackFlow {
@@ -225,36 +317,32 @@ class MaterialsRepository {
         Unit
     }
 
-    /**
-     * BUG FIXED ("Document references must have an even number of segments"):
-     * سعر المادة كان يُحفظ بوثيقة اسمها = اسم المادة، وأسماء مثل
-     * "بذور القرع / اليقطين" فيها "/" فيفهمها Firestore كمسار فرعي ويرفض الحفظ.
-     * الآن معرّف الوثيقة آمن ([priceDocId]) واسم المادة الحقيقي محفوظ داخل
-     * الوثيقة في الحقل "name" (والقراءة تستخدمه، وتعود للمعرّف للوثائق القديمة).
-     */
-    private fun priceDocId(materialName: String): String {
-        val cleaned = materialName.trim()
-            .replace("/", "\u2215")   // ∕ بدل /
-            .replace("\\", "\u2216")   // ∖ بدل \
-            .ifBlank { "_" }
-        val safe = if (cleaned == "." || cleaned == ".." || (cleaned.startsWith("__") && cleaned.endsWith("__"))) "_$cleaned" else cleaned
-        return if (safe.toByteArray().size > 1400) safe.take(400) else safe
-    }
-
     private fun priceData(materialName: String, price: Double) =
         mapOf("name" to materialName.trim(), "price" to price)
 
-    suspend fun setPrice(materialName: String, price: Double) = withTimeout(WRITE_TIMEOUT_MS) {
-        db.collection(pricesCollection).document(priceDocId(materialName)).set(priceData(materialName, price)).awaitQueued()
-        Unit
-    }
+    suspend fun setPrice(materialName: String, price: Double, before: Double? = null, recordHistory: Boolean = false) =
+        setPrices(mapOf(materialName to price), if (before != null) mapOf(materialName to before) else emptyMap(), recordHistory)
 
-    /** يحفظ كل الأسعار المعدّلة دفعة واحدة (عملية ذرية على السحابة: إما كلها أو لا شيء). */
-    suspend fun setPrices(prices: Map<String, Double>) = withTimeout(WRITE_TIMEOUT_MS) {
-        prices.entries.chunked(400).forEach { chunk ->
+    /**
+     * يحفظ كل الأسعار المعدّلة دفعة واحدة (عملية ذرية على السحابة: إما كلها أو لا شيء).
+     * عند [recordHistory] يُكتب سجل التغيّر في نفس الدفعة (قاعدة منع التكرار: نفس السعر الجديد لا يُسجَّل مرتين).
+     */
+    suspend fun setPrices(
+        prices: Map<String, Double>,
+        before: Map<String, Double> = emptyMap(),
+        recordHistory: Boolean = false
+    ) = withTimeout(WRITE_TIMEOUT_MS) {
+        val history = if (recordHistory) currentHistory() else null
+        val at = System.currentTimeMillis()
+        prices.entries.chunked(200).forEach { chunk ->
             val batch = db.batch()
             chunk.forEach { (name, price) ->
                 batch.set(db.collection(pricesCollection).document(priceDocId(name)), priceData(name, price))
+                if (history != null) {
+                    val key = name.trim()
+                    val next = if (key.isEmpty()) null else PriceHistoryStore.next(history[key].orEmpty(), before[name], price, at)
+                    if (next != null) batch.set(db.collection(historyCollection).document(priceDocId(key)), historyData(key, next))
+                }
             }
             batch.commit().awaitQueued()
         }

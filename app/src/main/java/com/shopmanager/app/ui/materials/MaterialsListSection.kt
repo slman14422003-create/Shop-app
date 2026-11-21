@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PriceChange
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material.icons.filled.Spa
@@ -108,12 +109,13 @@ internal fun MaterialsHeader(
     searchQuery: String = "",
     onSearchQueryChange: (String) -> Unit = {},
     onSavePrices: () -> Unit = {},
-    pricesChangedCount: Int = 0
+    pricesChangedCount: Int = 0,
+    onShowChangedPrices: () -> Unit = {}
 ) {
     Column(Modifier.fillMaxWidth()) {
         ScreenTopBar(
             title = if (tab == 0) "المواد والأسعار" else "الأسعار",
-            reservedIcons = 2,
+            reservedIcons = if (tab == 1) 3 else 2,
             navigation = {
                 ScreenIconButton(
                     icon = Icons.Default.Menu,
@@ -125,10 +127,11 @@ internal fun MaterialsHeader(
                 AppActionPill(
                     height = 42.dp,
                     container = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    actions = listOf(
+                    actions = listOfNotNull(
                         if (tab == 0) ActionSpec(Icons.Default.Sell, "الأسعار") { onTogglePrices() }
                         else ActionSpec(Icons.Default.Inventory2, "المواد") { onTogglePrices() },
-                        ActionSpec(Icons.Rounded.Share, "مشاركة") { onShare() }
+                        ActionSpec(Icons.Rounded.Share, "مشاركة") { onShare() },
+                        if (tab == 1) ActionSpec(Icons.Default.PriceChange, "الأسعار المتغيّرة") { onShowChangedPrices() } else null
                     )
                 )
             }

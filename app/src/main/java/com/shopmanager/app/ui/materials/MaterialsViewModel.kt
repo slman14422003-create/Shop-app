@@ -125,7 +125,15 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
     private val usage = LearningHub.usage(application)
     private val learnVersion = MutableStateFlow(0)
 
-    val priceHistory: StateFlow<Map<String, List<PriceChange>>> = PriceHistoryStore.flow(application)
+    val priceHistory: StateFlow<Map<String, List<PriceChange>>> = repo.listenPriceHistory()
+        .distinctUntilChanged()
+        .retryOnError { }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
+    val profitPercents: StateFlow<Map<String, Double>> = repo.listenProfitPercents()
+        .distinctUntilChanged()
+        .retryOnError { }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     init {
         viewModelScope.launch(LearningHub.io) {
@@ -134,8 +142,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             learnVersion.update { it + 1 }
         }
         observeResolved()
-        observePriceChanges()
         observeSharedLearning()
+        viewModelScope.launch(Dispatchers.IO) { PriceHistoryStore.migrateLegacy(getApplication(), repo) }
     }
 
     /**
@@ -147,20 +155,6 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
             finderStore.version.debounce(800).collect {
                 learnVersion.update { v -> v + 1 }
                 if (lastEnterAt != 0L) refreshHomeSuggestions(rotate = false)
-            }
-        }
-    }
-
-    private fun observePriceChanges() {
-        viewModelScope.launch(Dispatchers.Default) {
-            var prev: Map<String, Double>? = null
-            uiState.collect { st ->
-                if (st.isLoading) return@collect
-                val before = prev
-                if (before != null && before.isNotEmpty() && before != st.prices) {
-                    PriceHistoryStore.recordDiff(getApplication(), before, st.prices)
-                }
-                prev = st.prices
             }
         }
     }
@@ -532,8 +526,8 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         val before = uiState.value.prices[materialName]
         viewModelScope.launch {
             try {
-                repo.setPrice(materialName, price)
-                PriceHistoryStore.record(getApplication(), materialName, before, price)
+                // سجل التغيّر يُكتب في نفس الدفعة (هذا الجهاز فقط يكتبه).
+                repo.setPrice(materialName, price, before, recordHistory = true)
                 _message.value = "تم حفظ السعر"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
@@ -548,12 +542,23 @@ class MaterialsViewModel(application: Application) : AndroidViewModel(applicatio
         val before = uiState.value.prices
         viewModelScope.launch {
             try {
-                repo.setPrices(prices)
-                PriceHistoryStore.recordAll(getApplication(), before, prices)
+                repo.setPrices(prices, before, recordHistory = true)
                 _message.value = if (prices.size == 1) "تم حفظ السعر" else "تم حفظ ${prices.size} أسعار"
                 InstantBackupWorker.requestNow(getApplication())
             } catch (e: Exception) {
                 _message.value = "تعذر حفظ الأسعار: ${e.message ?: "تحقق من الاتصال"}"
+            }
+        }
+    }
+
+    fun setProfitPercent(name: String, percent: Double?) {
+        viewModelScope.launch {
+            try {
+                repo.setProfitPercent(name, percent)
+                _message.value = if (percent == null) "تمت إزالة نسبة الربح" else "تم حفظ نسبة الربح"
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                _message.value = "تعذر حفظ نسبة الربح: ${e.message ?: "تحقق من الاتصال"}"
             }
         }
     }

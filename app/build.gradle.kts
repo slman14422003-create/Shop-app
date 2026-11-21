@@ -333,6 +333,8 @@ dependencies {
     // never a debug run.
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
     implementation("androidx.metrics:metrics-performance:1.0.0")
+    implementation("androidx.startup:startup-runtime:1.2.0")
+    implementation("androidx.tracing:tracing-ktx:1.3.0")
     implementation("androidx.activity:activity-compose:1.13.0")
     // FEATURE ADDED (فتح القفل بالبصمة/الوجه): BiometricPrompt needs a
     // FragmentActivity (MainActivity now extends it). fragment-ktx is pinned
@@ -385,7 +387,9 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-common")
 
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
+    implementation("androidx.activity:activity-ktx:1.13.0")
 
     // Free periodic background check for new debts / shortage-list changes
     // (see data/notifications/BackgroundSyncWorker.kt) — no server or paid
@@ -404,6 +408,7 @@ dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
 
 if (baselineProfileMode) {

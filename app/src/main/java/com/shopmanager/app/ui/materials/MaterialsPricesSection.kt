@@ -15,15 +15,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Sell
 import androidx.compose.material3.*
 import com.shopmanager.app.ui.common.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
@@ -82,10 +87,162 @@ internal fun PricesList(
     prices: Map<String, Double>,
     history: Map<String, List<PriceChange>>,
     edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
-    search: String
+    search: String,
+    profitPercents: Map<String, Double> = emptyMap(),
+    onSetProfit: (String, Double?) -> Unit = { _, _ -> }
+) {
+    var subTab by rememberSaveable { mutableStateOf(1) } // 0 = الناقصة، 1 = كل الأسعار
+    var historyTarget by remember { mutableStateOf<String?>(null) }
+    var calcTarget by remember { mutableStateOf<String?>(null) }
+
+    historyTarget?.let { target ->
+        PriceHistoryDialog(
+            name = target,
+            history = history[target.trim()].orEmpty(),
+            onDismiss = { historyTarget = null }
+        )
+    }
+    calcTarget?.let { target ->
+        val base = edited[target]?.toPriceOrNull() ?: prices.priceOf(target)
+        ProfitCalcSheet(
+            name = target,
+            basePrice = base,
+            initialPercent = profitPercents[target.trim()],
+            currency = AppSettingsState.currencySymbol,
+            onSave = { onSetProfit(target, it) },
+            onRemove = { onSetProfit(target, null) },
+            onDismiss = { calcTarget = null }
+        )
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        PricesSubTabs(
+            selected = subTab,
+            onSelect = { subTab = it },
+            modifier = Modifier.padding(start = AppScreenPadding, end = AppScreenPadding, bottom = AppSpaceSm)
+        )
+        if (subTab == 0) {
+            MissingPricesBody(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                catalogItems = catalogItems,
+                materials = materials,
+                prices = prices,
+                history = history,
+                edited = edited,
+                search = search,
+                onShowHistory = { historyTarget = it },
+                onCalc = { calcTarget = it }
+            )
+        } else {
+            AllPricesBody(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                catalogItems = catalogItems,
+                materials = materials,
+                prices = prices,
+                history = history,
+                edited = edited,
+                search = search,
+                onShowHistory = { historyTarget = it },
+                onCalc = { calcTarget = it }
+            )
+        }
+    }
+}
+
+@Composable
+private fun PricesSubTabs(selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier
+            .fillMaxWidth()
+            .clip(CircleShape)
+            .background(cs.surfaceContainerHigh)
+            .padding(AppSpaceXs),
+        horizontalArrangement = Arrangement.spacedBy(AppSpaceXs)
+    ) {
+        MaterialsTabButton(
+            label = "الناقصة",
+            selected = selected == 0,
+            leadingStar = false,
+            starTint = Color.Unspecified,
+            onClick = { onSelect(0) },
+            modifier = Modifier.weight(1f)
+        )
+        MaterialsTabButton(
+            label = "كل الأسعار",
+            selected = selected == 1,
+            leadingStar = false,
+            starTint = Color.Unspecified,
+            onClick = { onSelect(1) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun MissingPricesBody(
+    modifier: Modifier,
+    catalogItems: List<MaterialCatalogItem>,
+    materials: List<Material>,
+    prices: Map<String, Double>,
+    history: Map<String, List<PriceChange>>,
+    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
+    search: String,
+    onShowHistory: (String) -> Unit,
+    onCalc: (String) -> Unit
+) {
+    val currency = AppSettingsState.currencySymbol
+    // الاعتماد على الأسعار المحفوظة فقط: الصف لا يختفي أثناء الكتابة، ويخرج من القائمة بعد الحفظ.
+    val missing = remember(materials, catalogItems, prices) {
+        val catalogByName = catalogItems.associateBy { it.name.trim() }
+        materials
+            .distinctBy { it.name.trim() }
+            .filter { prices.priceOf(it.name) == null }
+            .map { m -> catalogByName[m.name.trim()] ?: MaterialCatalogItem(id = m.name, name = m.name) }
+    }
+    val split = rememberSmartSearchSplit(missing, search) { it.name }
+    val filtered = split.all
+    val shortageByName = remember(materials) { materials.groupBy { it.name.trim() } }
+    val bottomClearance = LocalFloatingBottomNavHeight.current + 32.dp
+
+    if (filtered.isEmpty()) {
+        Box(modifier, contentAlignment = Alignment.Center) {
+            if (search.isNotBlank() && missing.isNotEmpty()) EmptyState(icon = Icons.Default.SearchOff, text = "لا توجد نتائج")
+            else EmptyState(icon = Icons.Default.Sell, text = "لا توجد مواد ناقصة السعر")
+        }
+        return
+    }
+    LazyColumn(
+        modifier,
+        contentPadding = PaddingValues(start = AppScreenPadding, end = AppScreenPadding, top = AppSpace2, bottom = bottomClearance),
+        verticalArrangement = Arrangement.spacedBy(AppGroupGap)
+    ) {
+        item(key = "priceHint") {
+            AppFootnote(
+                "السعر المكتوب هو سعر الكيلو، ويُضرب تلقائياً بوزن المادة في قائمة النواقص (نص كيلو، ربع كيلو، لوقية…)",
+                modifier = Modifier.padding(bottom = AppSpaceSm)
+            )
+        }
+        priceRows(filtered, "n_", currency, prices, edited, history, shortageByName, true, onCalc, onShowHistory)
+    }
+}
+
+@Composable
+private fun AllPricesBody(
+    modifier: Modifier,
+    catalogItems: List<MaterialCatalogItem>,
+    materials: List<Material>,
+    prices: Map<String, Double>,
+    history: Map<String, List<PriceChange>>,
+    edited: androidx.compose.runtime.snapshots.SnapshotStateMap<String, String>,
+    search: String,
+    onShowHistory: (String) -> Unit,
+    onCalc: (String) -> Unit
 ) {
     if (catalogItems.isEmpty()) {
-        EmptyState(icon = Icons.Default.Inventory2, text = "أضف مواد للقائمة الثابتة أولاً لتسعيرها")
+        Box(modifier, contentAlignment = Alignment.Center) {
+            EmptyState(icon = Icons.Default.Inventory2, text = "أضف مواد للقائمة الثابتة أولاً لتسعيرها")
+        }
         return
     }
 
@@ -117,17 +274,8 @@ internal fun PricesList(
         else filtered.filter { it.id !in recentIds && !shortageByName.containsKey(it.name.trim()) }
     }
 
-    var historyTarget by remember { mutableStateOf<String?>(null) }
-    historyTarget?.let { target ->
-        PriceHistoryDialog(
-            name = target,
-            history = history[target.trim()].orEmpty(),
-            onDismiss = { historyTarget = null }
-        )
-    }
-
     val bottomClearance = LocalFloatingBottomNavHeight.current + 32.dp
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier) {
         if (filtered.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 EmptyState(icon = Icons.Default.SearchOff, text = "لا توجد نتائج")
@@ -149,7 +297,7 @@ internal fun PricesList(
                         item(key = "titleMatches") {
                             AppSectionTitle(text = "المطابقة (${split.matches.size})", modifier = Modifier.padding(bottom = AppSpace2))
                         }
-                        priceRows(split.matches, "m_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
+                        priceRows(split.matches, "m_", currency, prices, edited, history, shortageByName, true, onCalc, onShowHistory)
                     }
                     if (split.suggestions.isNotEmpty()) {
                         item(key = "titleSuggestions") {
@@ -158,14 +306,14 @@ internal fun PricesList(
                                 modifier = Modifier.padding(top = if (split.matches.isEmpty()) 0.dp else 10.dp, bottom = AppSpace2)
                             )
                         }
-                        priceRows(split.suggestions, "x_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
+                        priceRows(split.suggestions, "x_", currency, prices, edited, history, shortageByName, true, onCalc, onShowHistory)
                     }
                 } else {
                     if (recentlyEdited.isNotEmpty()) {
                         item(key = "titleRecent") {
                             AppSectionTitle(text = "عُدّلت أسعارها مؤخراً (${recentlyEdited.size})", modifier = Modifier.padding(bottom = AppSpace2))
                         }
-                        priceRows(recentlyEdited, "r_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
+                        priceRows(recentlyEdited, "r_", currency, prices, edited, history, shortageByName, true, onCalc, onShowHistory)
                     }
                     if (inShortage.isNotEmpty()) {
                         item(key = "titleShortage") {
@@ -174,7 +322,7 @@ internal fun PricesList(
                                 modifier = Modifier.padding(top = if (recentlyEdited.isEmpty()) 0.dp else 10.dp, bottom = AppSpace2)
                             )
                         }
-                        priceRows(inShortage, "s_", currency, prices, edited, history, shortageByName, true) { historyTarget = it }
+                        priceRows(inShortage, "s_", currency, prices, edited, history, shortageByName, true, onCalc, onShowHistory)
                     }
                     if (others.isNotEmpty()) {
                         item(key = "titleOthers") {
@@ -184,7 +332,7 @@ internal fun PricesList(
                                 modifier = Modifier.padding(top = if (first) 0.dp else 10.dp, bottom = AppSpace2)
                             )
                         }
-                        priceRows(others, "o_", currency, prices, edited, history, shortageByName, false) { historyTarget = it }
+                        priceRows(others, "o_", currency, prices, edited, history, shortageByName, false, onCalc, onShowHistory)
                     }
                 }
             }
@@ -201,6 +349,7 @@ private fun LazyListScope.priceRows(
     history: Map<String, List<PriceChange>>,
     shortageByName: Map<String, List<Material>>,
     showShortage: Boolean,
+    onCalc: (String) -> Unit,
     onShowHistory: (String) -> Unit
 ) {
     itemsIndexed(list, key = { _, c -> keyPrefix + c.id }, contentType = { _, _ -> "priceRow" }) { rowIndex, item ->
@@ -215,6 +364,7 @@ androidx.compose.foundation.layout.Box(Modifier.then(tierAnimateItem())) {
             effectivePrice = effective,
             history = history[item.name.trim()].orEmpty(),
             onShowHistory = { onShowHistory(item.name) },
+            onCalc = { onCalc(item.name) },
             shortageRows = if (showShortage) shortageByName[item.name.trim()].orEmpty() else emptyList(),
             onValueChange = { edited[item.name] = it.filter { c -> c.isDigit() || c == '.' || c == ',' || c == '٫' } }
         )
@@ -236,6 +386,7 @@ internal fun PriceRow(
     history: List<PriceChange>,
     onShowHistory: () -> Unit,
     shortageRows: List<Material>,
+    onCalc: () -> Unit,
     onValueChange: (String) -> Unit
 ) {
     val avatarColor = remember(item.name) { avatarColorFor(item.name) }
@@ -282,6 +433,17 @@ internal fun PriceRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
+            Spacer(Modifier.width(AppSpaceSm))
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(cs.surfaceContainerHighest)
+                    .clickable(role = Role.Button, onClick = onCalc),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Calculate, contentDescription = "حاسبة الربح", tint = cs.onSurfaceVariant, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(AppSpaceSm))
             BasicTextField(
