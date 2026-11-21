@@ -97,7 +97,7 @@ service cloud.firestore {
       allow read: if true;
       allow delete: if true;
       allow create: if request.resource.data.keys().hasOnly(
-                         ['name', 'quantity', 'unit', 'section', 'notes', 'timestamp', 'important', 'order'])
+                         ['name', 'quantity', 'unit', 'section', 'notes', 'timestamp', 'important', 'veryImportant', 'order'])
                     && request.resource.data.keys().hasAll(['name', 'quantity', 'unit', 'section'])
                     && reqStr(request.resource.data, 'name', 1, 200)
                     && reqNum(request.resource.data, 'quantity', 0, 10000000)
@@ -106,8 +106,9 @@ service cloud.firestore {
                     && optStr(request.resource.data, 'notes', 2000)
                     && optNum(request.resource.data, 'timestamp', 0, 9999999999999)
                     && optNum(request.resource.data, 'order', -9999999999999, 9999999999999)
-                    && optBool(request.resource.data, 'important');
-      allow update: if changedOnly(['name', 'quantity', 'unit', 'section', 'notes', 'timestamp', 'important', 'order'])
+                    && optBool(request.resource.data, 'important')
+                    && optBool(request.resource.data, 'veryImportant');
+      allow update: if changedOnly(['name', 'quantity', 'unit', 'section', 'notes', 'timestamp', 'important', 'veryImportant', 'order'])
                     && reqStr(request.resource.data, 'name', 1, 200)
                     && reqNum(request.resource.data, 'quantity', 0, 10000000)
                     && optStr(request.resource.data, 'unit', 40)
@@ -115,7 +116,8 @@ service cloud.firestore {
                     && optStr(request.resource.data, 'notes', 2000)
                     && optNum(request.resource.data, 'timestamp', 0, 9999999999999)
                     && optNum(request.resource.data, 'order', -9999999999999, 9999999999999)
-                    && optBool(request.resource.data, 'important');
+                    && optBool(request.resource.data, 'important')
+                    && optBool(request.resource.data, 'veryImportant');
     }
 
     match /material_prices/{id} {
@@ -128,6 +130,25 @@ service cloud.firestore {
       allow update: if changedOnly(['name', 'price'])
                     && reqStr(request.resource.data, 'name', 1, 200)
                     && reqNum(request.resource.data, 'price', 0, 1000000000);
+    }
+
+    match /material_profit_percent/{id} {
+      allow read: if true;
+      allow delete: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'percent'])
+                    && request.resource.data.keys().hasAll(['name', 'percent'])
+                    && reqStr(request.resource.data, 'name', 1, 200)
+                    && reqNum(request.resource.data, 'percent', 0, 100000);
+    }
+
+    match /material_price_history/{id} {
+      allow read: if true;
+      allow delete: if true;
+      allow create, update: if request.resource.data.keys().hasOnly(['name', 'changes'])
+                    && request.resource.data.keys().hasAll(['name', 'changes'])
+                    && reqStr(request.resource.data, 'name', 1, 200)
+                    && request.resource.data.changes is list
+                    && request.resource.data.changes.size() <= 10;
     }
 
     match /materials_catalog/{id} {
